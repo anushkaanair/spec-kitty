@@ -70,9 +70,8 @@ ASSERTIONS`` are counts, not lines); function-local containers; the SHA-pinned
 ``charter_path_literal_allowlist.yaml``; the dormant
 ``tests/runtime/_bridge_oracle.py`` pin (outside the ``tests/architectural/``
 scan universe); prose evidence such as ``"decision.py:401; empty stdout"``.
-* **YAML** — a field-name rule over the two YAML allow-lists
-  (``resolution_gate_allowlist.yaml``, ``inline_meta_read_allowlist.yaml``):
-  an int is permitted ONLY as a ``line`` locator (documented
+* **YAML** — a field-name rule over the YAML allow-list
+  ``inline_meta_read_allowlist.yaml``: an int is permitted ONLY as a ``line`` locator (documented
   non-authoritative — no comparison/membership/count logic reads it), a
   ``count`` floor, or any ``*_baseline`` ceiling. Any other int-valued field
   (a comparand key smuggling a hidden position) is a violation.
@@ -160,11 +159,9 @@ _OS_DETECT_TXT_PREFIX = "os-detect-ban-"
 # "looks like a source path".
 _PATHISH_SUFFIX_RE = re.compile(r"\.[A-Za-z0-9]+$")
 
-# The two ratchet allow-list YAMLs this guard's field-name rule scans.
-_YAML_ALLOWLISTS: tuple[str, ...] = (
-    "resolution_gate_allowlist.yaml",
-    "inline_meta_read_allowlist.yaml",
-)
+# The ratchet allow-list YAMLs this guard's field-name rule scans (FR-012
+# retired the orphaned resolution-gate YAML whose consuming gate was deleted).
+_YAML_ALLOWLISTS: tuple[str, ...] = ("inline_meta_read_allowlist.yaml",)
 
 # Field names an int is PERMITTED in: the documented non-authoritative ``line``
 # locator and any ``count`` floor. Anything ending in ``_baseline`` (a
@@ -1081,7 +1078,8 @@ def test_positional_anchor_exemptions_are_pinned_empty() -> None:
 
 def test_no_int_field_ban_in_ratchet_allowlist_yaml() -> None:
     """Standing gate (YAML arm): an int is permitted only in ``line`` / ``count``
-    / ``*_baseline`` across the two ratchet allow-list YAMLs. Any other
+    / ``*_baseline`` across the ratchet allow-list YAMLs in
+    :data:`_YAML_ALLOWLISTS`. Any other
     int-valued field is a smuggled positional anchor.
     """
     violations: list[str] = []
@@ -1773,8 +1771,8 @@ def test_arm_disable_text_line_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_non_vacuity_real_compliant_yamls_stay_green() -> None:
-    """The 2 real, WS1-compliant YAMLs (``line:`` locators + count-floor
-    baselines only) stay GREEN through the actual YAML predicate — the
+    """Every real, WS1-compliant YAML in :data:`_YAML_ALLOWLISTS` (``line:``
+    locators + count-floor baselines only) stays GREEN through the actual YAML predicate — the
     authoritative-vs-diagnostic distinction the contract requires.
     """
     assert len(_YAML_ALLOWLISTS) >= 1, "the YAML arm scans no allow-list (vacuous)"

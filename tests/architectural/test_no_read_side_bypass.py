@@ -863,10 +863,10 @@ _FOUNDATION_SANCTION_SEED: tuple[ContentDescriptor, ...] = (
     # ---- owner of folding this site into that machine-checked set" -- WP08
     # ---- closed resolve_feature_dir_for_mission's reconciliation but left
     # ---- these two rows unclaimed). Both already called the leaf directly
-    # ---- (WP03/WP08 re-pointed them in prior commits) and both already carry
-    # ---- an equivalent entry in resolution_gate_allowlist.yaml's
-    # ---- canonicalizer allow-list -- this closeout adds the two machine-
-    # ---- checked entries the prior WPs deferred, and (separately)
+    # ---- (WP03/WP08 re-pointed them in prior commits); the two
+    # ---- ContentDescriptor entries below, in this same
+    # ---- _FOUNDATION_SANCTION_SEED table, are their machine-checked sanction
+    # ---- -- this closeout adds the two entries the prior WPs deferred, and (separately)
     # ---- _compose_primary_feature_dir itself to _TARGET_CALLEE_NAMES so the
     # ---- ratchet can flag any FUTURE un-sanctioned call to the leaf.
     ContentDescriptor(
@@ -902,10 +902,10 @@ _FOUNDATION_SANCTION_SEED: tuple[ContentDescriptor, ...] = (
         rationale=(
             "FR-005 foundation site 5/5: bare_dir_name is the on-disk composed "
             "dir NAME already returned by resolve_bare_modern_mission_dir_name "
-            "-- already-canonical by provenance, the PERMANENT canonicalizer "
-            "fixture (resolution_gate_allowlist.yaml, qualname "
-            "MissionStatus._find_meta_path, WP08-authored) predating this "
-            "closeout. This same qualname also carries an existing "
+            "-- already-canonical by provenance; this ContentDescriptor entry "
+            "in _FOUNDATION_SANCTION_SEED is its machine-checked sanction "
+            "(qualname MissionStatus._find_meta_path, WP08-authored site). "
+            "This same qualname also carries an existing "
             "candidate_feature_dir_for_mission stay-lenient allow-list entry "
             "above (SC-015's four-site acceptance fixture) -- the token here "
             "names the LEAF, not the kind-blind primitive, so it resolves to "
