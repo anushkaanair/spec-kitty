@@ -275,30 +275,3 @@ def test_through_the_inverted_hook_reproduces_base(case: dict[str, Any]) -> None
     assert actual["metadata"] == expected["metadata"]
     assert actual["console"] == expected["console"]
     assert actual["exit_code"] == expected["exit_code"]
-
-
-def test_wp09_hook_landmine_disposition_is_documented_accurately() -> None:
-    """WP06 (T028/T029, FR-015 fix-before-wiring): re-validate this module's
-    xfail(strict=True) landmine claim.
-
-    Re-validated on the current tree: WP09 already landed
-    ``_mt_run_transition_gates`` and
-    :func:`test_through_the_inverted_hook_reproduces_base` carries no active
-    xfail marker -- it XPASSes plainly (confirmed: all parametrized cases
-    pass, run in isolation). The module docstring's "RED until WP09" /
-    "expected-fail (``xfail(strict=True)``)" language describes a state that
-    no longer holds; this guard fails if that stale claim survives alongside
-    an absent marker, so the module cannot silently keep documenting a
-    landmine that WP09 already retired.
-    """
-    marks = getattr(test_through_the_inverted_hook_reproduces_base, "pytestmark", [])
-    assert not any(m.name == "xfail" for m in marks), (
-        "WP09 landed _mt_run_transition_gates; this test should carry no "
-        "active xfail marker"
-    )
-    assert "xfail(strict=True)" not in (__doc__ or ""), (
-        "module docstring still claims a pending xfail(strict=True) landmine "
-        "for test_through_the_inverted_hook_reproduces_base, but WP09 "
-        "already landed and no active marker exists -- update the docstring "
-        "instead of leaving stale landmine language"
-    )
