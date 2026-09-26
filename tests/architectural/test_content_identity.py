@@ -116,53 +116,64 @@ def test_resolve_allowlist_reports_unavailable_source() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _line_of(source: str, fragment: str) -> int:
+    """1-based number of the one line of *source* containing *fragment* (content anchor)."""
+    (lineno,) = [number for number, text in enumerate(source.splitlines(), start=1) if fragment in text]
+    return lineno
+
+
 def test_blank_line_at_top_shifts_by_one_and_keeps_key() -> None:
+    fragment = "x = root"
     mutated = with_blank_line_at_top(_TWO_JOINS)
-    assert mutated.splitlines()[2] == _TWO_JOINS.splitlines()[1]
-    assert composite_key(mutated, 3) == composite_key(_TWO_JOINS, 2)
+    before, after = _line_of(_TWO_JOINS, fragment), _line_of(mutated, fragment)
+    assert after == before + 1
+    assert composite_key(mutated, after) == composite_key(_TWO_JOINS, before)
 
 
-def _assert_probe_keeps_site(source: str, lineno: int) -> str:
-    mutated = with_probe_above_statement(source, lineno)
+def _assert_probe_keeps_site(source: str, fragment: str) -> list[str]:
+    before = _line_of(source, fragment)
+    mutated = with_probe_above_statement(source, before)
     ast.parse(mutated)
-    assert "# drift-probe" in mutated
-    assert composite_key(mutated, lineno + 2) == composite_key(source, lineno)
-    return mutated
+    after = _line_of(mutated, fragment)
+    assert after == before + 2
+    assert composite_key(mutated, after) == composite_key(source, before)
+    return mutated.splitlines()
 
 
 def test_probe_inside_multiline_call() -> None:
     source = "def f(root):\n    x = g(\n        root / 'built-in',\n    )\n    return x\n"
-    mutated = _assert_probe_keeps_site(source, 3)
-    assert mutated.splitlines()[1:3] == ["    # drift-probe", "    pass"]
+    lines = _assert_probe_keeps_site(source, "root / 'built-in'")
+    assert lines[1:4] == ["    # drift-probe", "    pass", "    x = g("]
 
 
 def test_probe_inside_nested_function() -> None:
     source = "def outer():\n    def inner(root):\n        return root / 'built-in'\n    return inner\n"
-    mutated = _assert_probe_keeps_site(source, 3)
-    assert mutated.splitlines()[2:4] == ["        # drift-probe", "        pass"]
+    lines = _assert_probe_keeps_site(source, "return root")
+    assert lines[2:5] == ["        # drift-probe", "        pass", "        return root / 'built-in'"]
 
 
 def test_probe_on_elif_line_climbs_to_the_enclosing_if() -> None:
     source = "def f(a):\n    if a == 1:\n        return 1\n    elif a == 2:\n        return 2\n    elif a == 3:\n        return 3\n"
-    mutated = _assert_probe_keeps_site(source, 6)
-    assert mutated.splitlines()[1:4] == ["    # drift-probe", "    pass", "    if a == 1:"]
+    lines = _assert_probe_keeps_site(source, "elif a == 3")
+    assert lines[1:4] == ["    # drift-probe", "    pass", "    if a == 1:"]
 
 
 def test_probe_on_decorator_line_goes_above_the_first_decorator() -> None:
     source = "class C:\n    @staticmethod\n    @other\n    def x():\n        return 1\n"
-    mutated = _assert_probe_keeps_site(source, 3)
-    assert mutated.splitlines()[1:4] == ["    # drift-probe", "    pass", "    @staticmethod"]
+    lines = _assert_probe_keeps_site(source, "@other")
+    assert lines[1:4] == ["    # drift-probe", "    pass", "    @staticmethod"]
 
 
 def test_probe_on_decorated_def_line_goes_above_the_decorators() -> None:
     source = "@wrap\ndef x():\n    return 1\n"
-    mutated = _assert_probe_keeps_site(source, 2)
-    assert mutated.splitlines()[0:3] == ["# drift-probe", "pass", "@wrap"]
+    lines = _assert_probe_keeps_site(source, "def x")
+    assert lines[0:3] == ["# drift-probe", "pass", "@wrap"]
 
 
 def test_probe_outside_any_statement_raises() -> None:
-    with pytest.raises(ValueError, match="line 1"):
-        with_probe_above_statement("# only a comment\nx = 1\n", 1)
+    source = "# only a comment\nx = 1\n"
+    with pytest.raises(ValueError, match="not inside any statement"):
+        with_probe_above_statement(source, _line_of(source, "# only"))
 
 
 # ---------------------------------------------------------------------------
