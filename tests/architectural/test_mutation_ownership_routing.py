@@ -67,9 +67,13 @@ import pytest
 from tests.architectural._destructive_op_census import (
     REPO_ROOT,
     SPECIFY_CLI_ROOT,
+    CensusKey,
     assert_changed_argument_is_unexpected,
     assert_partition_survives_drift,
     assert_second_identical_op_is_unexpected,
+    census_keys,
+    census_keys_for_sources,
+    describe_unexpected,
     diff_against_allowlist,
     drop_one_entry,
     enclosing_qualname,
@@ -78,8 +82,8 @@ from tests.architectural._destructive_op_census import (
     iter_py_files,
     parse,
     read_sources,
+    render_census_key,
     scan_planted_source,
-    scan_sources,
     with_leading_argument,
 )
 
@@ -106,7 +110,7 @@ _RESEARCH_PY = SPECIFY_CLI_ROOT / "cli" / "commands" / "research.py"
 _MIGRATIONS_DIR = SPECIFY_CLI_ROOT / "upgrade" / "migrations"
 
 _GUARD_CALL = "guard_destructive_removal("
-_RESEARCH_PY_ALLOWLIST_PREFIX = "src/specify_cli/cli/commands/research.py:"
+_RESEARCH_PY_REL = "src/specify_cli/cli/commands/research.py"
 
 
 def _module_set() -> list[Path]:
@@ -226,42 +230,64 @@ def _live_sources() -> dict[str, str]:
     return read_sources(_module_set())
 
 
-def _scan_module_set() -> dict[str, list[tuple[int, str]]]:
-    return scan_sources(_live_sources(), _find_destructive_ops)
-
-
-def _flatten(live: dict[str, list[tuple[int, str]]]) -> set[str]:
-    return {f"{rel}:{lineno}:{op}" for rel, hits in live.items() for lineno, op in hits}
+def _census_keys(sources: Mapping[str, str]) -> dict[CensusKey, int]:
+    """Content-keyed live census: ``{CensusKey: lineno}`` (the line is diagnostic only)."""
+    return census_keys_for_sources(sources, _find_destructive_ops)
 
 
 # ---------------------------------------------------------------------------
 # The frozen allowlist. Built from a LIVE AST census of the integrated lane
 # tree (post WP01-WP08) reproduced by this file's own scanner. Every entry is a
-# genuinely-safe op with a one-line rationale (NFR-006). Shrink-only: a site
-# that disappears only WARNS; a NEW un-rationalized literal FAILS. Routed
-# fix-sites are ABSENT here on purpose — they carry no raw literal.
+# genuinely-safe op with a one-line rationale (NFR-006). Each entry is keyed by
+# CONTENT, never by line (FR-006): ``CensusKey`` = (repo-relative path,
+# enclosing qualname, normalized token line, op, op_ordinal among identical
+# live sites in that function), so an unrelated line shift never re-pins it.
+# Shrink-only: a site that disappears only WARNS; a NEW un-rationalized
+# literal, a second identical op or a changed argument FAILS. Routed
+# fix-sites are ABSENT here on purpose — they carry no raw literal. Rationale
+# prose that cites an old line ("Re-pinned from :1596") is history, not a key.
 # ---------------------------------------------------------------------------
-_ALLOWLIST: dict[str, str] = {
+_ALLOWLIST: dict[CensusKey, str] = {
     # --- cli/commands/agent/config.py (1): empty-only rmdir after guard ----
-    "src/specify_cli/cli/commands/agent/config.py:168:Path.rmdir": (
+    CensusKey(
+        rel="src/specify_cli/cli/commands/agent/config.py", qualname="_remove_project_agent_surface", token_line="root . rmdir ( )", op="Path.rmdir", op_ordinal=0
+    ): (
         "empty-only rmdir: prunes the now-possibly-empty parent `root` only on the "
         "guard's owned branch (verdict.owned), after guard_destructive_removal already "
         "removed `surface` itself — raises OSError (caught) on a non-empty preserved dir."
     ),
     # --- init.py (4): ephemeral scratch, backup-guarded discard, marker ----
-    "src/specify_cli/cli/commands/init.py:136:Path.unlink": (
+    CensusKey(
+        rel="src/specify_cli/cli/commands/init.py",
+        qualname="_finish_command_delivery",
+        token_line="( project / _PENDING_COMMAND_SKILLS ) . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): (
         "package-state marker: unlinks the .kittify pending-command-skills record only after a "
         "changed-check raises — a machine-written pointer, never user content."
     ),
-    "src/specify_cli/cli/commands/init.py:453:shutil.rmtree": (
+    CensusKey(
+        rel="src/specify_cli/cli/commands/init.py",
+        qualname="_discard_failed_project_scaffold",
+        token_line="shutil . rmtree ( project_path )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): (
         "backup-guarded: _discard_failed_project_scaffold runs back_up_operator_subtrees(...) to "
         "project_path.parent FIRST, so operator subtrees are archived before the scaffold rmtree."
     ),
-    "src/specify_cli/cli/commands/init.py:677:shutil.rmtree": (
+    CensusKey(
+        rel="src/specify_cli/cli/commands/init.py",
+        qualname="_resolve_mission_command_templates_dir",
+        token_line="shutil . rmtree ( resolved_dir )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): (
         "ephemeral scratch: removes the .resolved-command-templates-<mission> resolver scratch dir "
         "this run creates immediately below — package-generated, never user-authored."
     ),
-    "src/specify_cli/cli/commands/init.py:1622:shutil.rmtree": (
+    CensusKey(rel="src/specify_cli/cli/commands/init.py", qualname="init", token_line="shutil . rmtree ( scratch )", op="shutil.rmtree", op_ordinal=0): (
         "ephemeral scratch: best-effort sweep of .kittify/.resolved-* / .merged-* resolver scratch "
         "dirs (name-prefixed, package-generated this run); the #4861 command-templates cleanup just "
         "above is routed through the guard (literal-free). Re-pinned from :1596 (WP02, mission "
@@ -275,173 +301,387 @@ _ALLOWLIST: dict[str, str] = {
         "op-kinds, same count of 4 literals in init.py as base; 136/453/677 unaffected)."
     ),
     # --- m_0_10_0 (3): empty-only rmdir after preserve-all -----------------
-    "src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py:221:Path.rmdir": (
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py",
+        qualname="PythonOnlyMigration._remove_bash_scripts",
+        token_line="kittify_bash . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): (
         "empty-only rmdir (raises on non-empty): removes .kittify/scripts/bash only when it is empty "
         "after the routed guard preserved every unprovable script — cannot lose content."
     ),
-    "src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py:224:Path.rmdir": (
-        "empty-only rmdir: removes .kittify/scripts/powershell only when empty after preserve-all."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py:266:Path.rmdir": (
-        "empty-only rmdir: removes a worktree .kittify/scripts/bash dir only when empty after the routed worktree-script preserve sweep."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py",
+        qualname="PythonOnlyMigration._remove_bash_scripts",
+        token_line="kittify_ps . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: removes .kittify/scripts/powershell only when empty after preserve-all."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py",
+        qualname="PythonOnlyMigration._cleanup_worktree_bash_scripts",
+        token_line="wt_bash . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: removes a worktree .kittify/scripts/bash dir only when empty after the routed worktree-script preserve sweep."),
     # --- m_0_10_2 (1): empty-only rmdir after routed toml sweep ------------
-    "src/specify_cli/upgrade/migrations/m_0_10_2_update_slash_commands.py:67:Path.rmdir": (
-        "empty-only rmdir: removes .kittify/commands only when empty after the routed guard swept the legacy command tomls."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_2_update_slash_commands.py",
+        qualname="_sweep_legacy_command_tomls",
+        token_line="commands_dir . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: removes .kittify/commands only when empty after the routed guard swept the legacy command tomls."),
     # --- m_0_10_8 (7): broken-symlink teardown + one relocation ------------
-    "src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:106:Path.unlink": (
-        "broken-symlink teardown: removes a broken .kittify/memory symlink (is_symlink()-gated) before recreating it — never a real file."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:117:shutil.move": (
-        "relocation: moves root memory/ -> .kittify/memory only when the destination is absent (overwrite-guarded rename, not a delete)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:165:Path.unlink": (
-        "broken-symlink teardown: removes a broken .kittify/AGENTS.md symlink (is_symlink()-gated)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:201:Path.unlink": (
-        "broken-symlink teardown: removes a broken worktree memory symlink (resolve()-checked broken)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:205:Path.unlink": (
-        "broken-symlink teardown: removes a broken worktree memory symlink (OSError/RuntimeError resolve fallback — still symlink-only)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:227:Path.unlink": (
-        "broken-symlink teardown: removes a broken worktree AGENTS.md symlink (resolve()-checked)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:230:Path.unlink": (
-        "broken-symlink teardown: removes a broken worktree AGENTS.md symlink (resolve fallback — symlink-only)."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py",
+        qualname="FixMemoryStructureMigration.apply",
+        token_line="kittify_memory . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("broken-symlink teardown: removes a broken .kittify/memory symlink (is_symlink()-gated) before recreating it — never a real file."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py",
+        qualname="FixMemoryStructureMigration.apply",
+        token_line="shutil . move ( str ( root_memory ) , str ( kittify_memory ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: moves root memory/ -> .kittify/memory only when the destination is absent (overwrite-guarded rename, not a delete)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py",
+        qualname="FixMemoryStructureMigration.apply",
+        token_line="kittify_agents . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("broken-symlink teardown: removes a broken .kittify/AGENTS.md symlink (is_symlink()-gated)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py",
+        qualname="FixMemoryStructureMigration.apply",
+        token_line="wt_memory . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("broken-symlink teardown: removes a broken worktree memory symlink (resolve()-checked broken)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py",
+        qualname="FixMemoryStructureMigration.apply",
+        token_line="wt_memory . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=1,
+    ): ("broken-symlink teardown: removes a broken worktree memory symlink (OSError/RuntimeError resolve fallback — still symlink-only)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py",
+        qualname="FixMemoryStructureMigration.apply",
+        token_line="wt_agents . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("broken-symlink teardown: removes a broken worktree AGENTS.md symlink (resolve()-checked)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py",
+        qualname="FixMemoryStructureMigration.apply",
+        token_line="wt_agents . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=1,
+    ): ("broken-symlink teardown: removes a broken worktree AGENTS.md symlink (resolve fallback — symlink-only)."),
     # --- m_0_2_0 (2): overwrite-guarded relocation -------------------------
-    "src/specify_cli/upgrade/migrations/m_0_2_0_specify_to_kittify.py:63:shutil.move": (
-        "relocation: renames the legacy .specify tree into .kittify (move, not delete)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_2_0_specify_to_kittify.py:74:shutil.move": (
-        "relocation: renames a legacy .specify child into .kittify (move, not delete)."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_2_0_specify_to_kittify.py",
+        qualname="SpecifyToKittifyMigration.apply",
+        token_line="shutil . move ( str ( specify_dir ) , str ( kittify_dir ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: renames the legacy .specify tree into .kittify (move, not delete)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_2_0_specify_to_kittify.py",
+        qualname="SpecifyToKittifyMigration.apply",
+        token_line="shutil . move ( str ( specs_dir ) , str ( kitty_specs_dir ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: renames a legacy .specify child into .kittify (move, not delete)."),
     # --- m_0_6_5 (2): relocation + worktree teardown -----------------------
-    "src/specify_cli/upgrade/migrations/m_0_6_5_commands_rename.py:103:shutil.move": (
-        "relocation: rename_dir moves a package-generated commands dir to its new name (move)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_6_5_commands_rename.py:141:shutil.rmtree": (
-        "worktree teardown: removes a worktree's package-generated .kittify/templates/commands dir (regenerated from main), never operator content."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_6_5_commands_rename.py",
+        qualname="CommandsRenameMigration.apply.rename_dir",
+        token_line="shutil . move ( str ( old ) , str ( new ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: rename_dir moves a package-generated commands dir to its new name (move)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_6_5_commands_rename.py",
+        qualname="CommandsRenameMigration.apply",
+        token_line="shutil . rmtree ( wt_templates_commands )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree's package-generated .kittify/templates/commands dir (regenerated from main), never operator content."),
     # --- m_0_7_2 (1): worktree teardown ------------------------------------
-    "src/specify_cli/upgrade/migrations/m_0_7_2_worktree_commands_dedup.py:69:shutil.rmtree": (
-        "worktree teardown: dedups a worktree's package-generated commands dir that inherits from main."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_7_2_worktree_commands_dedup.py",
+        qualname="WorktreeCommandsDedupMigration.apply",
+        token_line="shutil . rmtree ( wt_commands )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): ("worktree teardown: dedups a worktree's package-generated commands dir that inherits from main."),
     # --- m_0_8_0_remove_active_mission (1): package-state marker -----------
-    "src/specify_cli/upgrade/migrations/m_0_8_0_remove_active_mission.py:53:Path.unlink": (
-        "package-state marker: removes the retired machine-written active-mission pointer file."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_8_0_remove_active_mission.py",
+        qualname="RemoveActiveMissionMigration.apply",
+        token_line="active_mission . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("package-state marker: removes the retired machine-written active-mission pointer file."),
     # --- m_0_8_0_worktree_agents_symlink (1): worktree symlink teardown ----
-    "src/specify_cli/upgrade/migrations/m_0_8_0_worktree_agents_symlink.py:106:Path.unlink": (
-        "worktree teardown: removes a worktree AGENTS symlink before recreating the package-managed link."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_8_0_worktree_agents_symlink.py",
+        qualname="WorktreeAgentsSymlinkMigration.apply",
+        token_line="wt_agents . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree AGENTS symlink before recreating the package-managed link."),
     # --- m_0_9_0 (2): source-after-move + emptiness-checked lane teardown --
-    "src/specify_cli/upgrade/migrations/m_0_9_0_frontmatter_only_lanes.py:251:Path.unlink": (
-        "source-after-move: removes the original task md only after its content was written to the new tasks/ location (relocation, not loss)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_9_0_frontmatter_only_lanes.py:272:shutil.rmtree": (
-        "lane teardown, emptiness-checked: removes a legacy lane dir only after _get_real_contents confirms no real files remain (only .DS_Store/.gitkeep)."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_0_frontmatter_only_lanes.py",
+        qualname="FrontmatterOnlyLanesMigration._migrate_feature",
+        token_line="md_file . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("source-after-move: removes the original task md only after its content was written to the new tasks/ location (relocation, not loss)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_0_frontmatter_only_lanes.py",
+        qualname="FrontmatterOnlyLanesMigration._migrate_feature",
+        token_line="shutil . rmtree ( lane_dir )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): ("lane teardown, emptiness-checked: removes a legacy lane dir only after _get_real_contents confirms no real files remain (only .DS_Store/.gitkeep)."),
     # --- m_0_9_1 (7): source-after-move, lane + worktree teardown ----------
-    "src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:301:Path.unlink": (
-        "source-after-move: removes the original file only after it was relocated to its new path."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:324:shutil.rmtree": (
-        "lane teardown, emptiness-checked: removes a legacy lane dir once its real contents are gone."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:422:Path.unlink": (
-        "worktree teardown: removes a worktree commands symlink that inherits from main."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:425:shutil.rmtree": (
-        "worktree teardown: removes a worktree's package-generated commands dir (inherits from main)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:431:Path.rmdir": (
-        "empty-only rmdir: removes the now-empty parent dir after the worktree commands teardown."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:450:Path.unlink": (
-        "worktree teardown: removes a worktree .kittify/scripts symlink that inherits from main."
-    ),
-    "src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:453:shutil.rmtree": (
-        "worktree teardown: removes a worktree's package-generated .kittify/scripts dir."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py",
+        qualname="CompleteLaneMigration._migrate_remaining_files",
+        token_line="item . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("source-after-move: removes the original file only after it was relocated to its new path."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py",
+        qualname="CompleteLaneMigration._migrate_remaining_files",
+        token_line="shutil . rmtree ( lane_dir )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): ("lane teardown, emptiness-checked: removes a legacy lane dir once its real contents are gone."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py",
+        qualname="CompleteLaneMigration._cleanup_worktrees",
+        token_line="commands_dir . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree commands symlink that inherits from main."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py",
+        qualname="CompleteLaneMigration._cleanup_worktrees",
+        token_line="shutil . rmtree ( commands_dir )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree's package-generated commands dir (inherits from main)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py",
+        qualname="CompleteLaneMigration._cleanup_worktrees",
+        token_line="parent . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: removes the now-empty parent dir after the worktree commands teardown."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py",
+        qualname="CompleteLaneMigration._cleanup_worktrees",
+        token_line="scripts_dir . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree .kittify/scripts symlink that inherits from main."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py",
+        qualname="CompleteLaneMigration._cleanup_worktrees",
+        token_line="shutil . rmtree ( scripts_dir )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree's package-generated .kittify/scripts dir."),
     # --- m_2_0_0 (1): already-content-guarded exemplar ---------------------
-    "src/specify_cli/upgrade/migrations/m_2_0_0_retire_git_hooks.py:127:Path.unlink": (
-        "already-content-guarded exemplar (data-model do-not-change): retires a package-installed git hook only after content identity is confirmed."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_0_retire_git_hooks.py",
+        qualname="RetireGitHooksMigration.apply",
+        token_line="hook_path . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("already-content-guarded exemplar (data-model do-not-change): retires a package-installed git hook only after content identity is confirmed."),
     # --- m_2_0_6 (5): worktree teardown + empty-only rmdir -----------------
-    "src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:416:Path.unlink": (
-        "worktree teardown: removes a worktree commands symlink that inherits from main."
-    ),
-    "src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:418:shutil.rmtree": (
-        "worktree teardown: removes a worktree's package-generated commands dir."
-    ),
-    "src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:421:Path.rmdir": (
-        "empty-only rmdir: removes the now-empty parent dir after the worktree commands teardown."
-    ),
-    "src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:433:Path.unlink": (
-        "worktree teardown: removes a worktree .kittify/scripts symlink that inherits from main."
-    ),
-    "src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:435:shutil.rmtree": (
-        "worktree teardown: removes a worktree's package-generated .kittify/scripts dir."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py",
+        qualname="_cleanup_legacy_worktree_assets",
+        token_line="commands_dir . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree commands symlink that inherits from main."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py",
+        qualname="_cleanup_legacy_worktree_assets",
+        token_line="shutil . rmtree ( commands_dir )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree's package-generated commands dir."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py",
+        qualname="_cleanup_legacy_worktree_assets",
+        token_line="parent . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: removes the now-empty parent dir after the worktree commands teardown."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py",
+        qualname="_cleanup_legacy_worktree_assets",
+        token_line="scripts_dir . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree .kittify/scripts symlink that inherits from main."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py",
+        qualname="_cleanup_legacy_worktree_assets",
+        token_line="shutil . rmtree ( scripts_dir )",
+        op="shutil.rmtree",
+        op_ordinal=0,
+    ): ("worktree teardown: removes a worktree's package-generated .kittify/scripts dir."),
     # --- m_2_0_7 (3): already-guarded exemplar + empty-only rmdir ----------
-    "src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py:93:Path.unlink": (
-        "already-content-guarded exemplar (data-model do-not-change): removes a stale override only when it matches the package default."
-    ),
-    "src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py:135:Path.rmdir": (
-        "empty-only rmdir: prunes an empty override dir after stale-override cleanup."
-    ),
-    "src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py:139:Path.rmdir": (
-        "empty-only rmdir: prunes a second empty override dir after stale-override cleanup."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py",
+        qualname="FixStaleOverridesMigration.apply",
+        token_line="override_file . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("already-content-guarded exemplar (data-model do-not-change): removes a stale override only when it matches the package default."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py",
+        qualname="_cleanup_empty_override_dirs",
+        token_line="dirpath . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: prunes an empty override dir after stale-override cleanup."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py",
+        qualname="_cleanup_empty_override_dirs",
+        token_line="overrides_dir . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: prunes a second empty override dir after stale-override cleanup."),
     # --- m_2_1_3 (1): already-guarded exemplar -----------------------------
-    "src/specify_cli/upgrade/migrations/m_2_1_3_restore_prompt_commands.py:350:Path.unlink": (
-        "already-content-guarded exemplar (data-model do-not-change): removes a stale prompt command under a content check while restoring the package prompts."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_2_1_3_restore_prompt_commands.py",
+        qualname="RestorePromptCommandsMigration.apply",
+        token_line="thin_shim_file . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("already-content-guarded exemplar (data-model do-not-change): removes a stale prompt command under a content check while restoring the package prompts."),
     # --- m_3_1_1 (7): overwrite-guarded renames + empty-only rmdir ---------
-    "src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:224:shutil.move": (
-        "relocation: renames memory/constitution.md -> charter/charter.md into a freshly-mkdir'd charter dir (move)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:240:shutil.move": (
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py",
+        qualname="CharterRenameMigration._normalize_layouts",
+        token_line="shutil . move ( str ( memory_constitution ) , str ( charter_dir / ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: renames memory/constitution.md -> charter/charter.md into a freshly-mkdir'd charter dir (move)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py",
+        qualname="CharterRenameMigration._normalize_layouts",
+        token_line="shutil . move ( str ( item ) , str ( dest ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): (
         "relocation, overwrite-guarded: merges a constitution/ item into charter/ only when the "
         "destination does not exist; a collision is archived by the routed guard, never clobbered (#4862)."
     ),
-    "src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:269:Path.rmdir": (
-        "empty-only rmdir: removes the residual constitution/ dir after colliding items were archived/removed and merged items moved out — empty by construction."
-    ),
-    "src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:279:shutil.move": ("relocation: renames .kittify/constitution/ -> .kittify/charter/ (move)."),
-    "src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:293:shutil.move": ("relocation: renames charter/constitution.md -> charter/charter.md (move)."),
-    "src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:394:shutil.move": (
-        "relocation: renames a per-agent spec-kitty.constitution.md command to spec-kitty.charter.md (move)."
-    ),
-    "src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:419:shutil.move": (
-        "relocation: renames a per-agent constitution-doctrine skill dir to charter-doctrine (move)."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py",
+        qualname="CharterRenameMigration._normalize_layouts",
+        token_line="constitution_dir . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: removes the residual constitution/ dir after colliding items were archived/removed and merged items moved out — empty by construction."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py",
+        qualname="CharterRenameMigration._normalize_layouts",
+        token_line="shutil . move ( str ( constitution_dir ) , str ( charter_dir ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: renames .kittify/constitution/ -> .kittify/charter/ (move)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py",
+        qualname="CharterRenameMigration._normalize_layouts",
+        token_line="shutil . move ( str ( old_md ) , str ( new_md ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: renames charter/constitution.md -> charter/charter.md (move)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py",
+        qualname="CharterRenameMigration._rename_agent_artifacts",
+        token_line="shutil . move ( str ( old_cmd ) , str ( new_cmd ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: renames a per-agent spec-kitty.constitution.md command to spec-kitty.charter.md (move)."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py",
+        qualname="CharterRenameMigration._rename_agent_artifacts",
+        token_line="shutil . move ( str ( old_skill ) , str ( new_skill ) )",
+        op="shutil.move",
+        op_ordinal=0,
+    ): ("relocation: renames a per-agent constitution-doctrine skill dir to charter-doctrine (move)."),
     # --- m_3_1_2 (2): already-guarded exemplar + empty-only rmdir ----------
-    "src/specify_cli/upgrade/migrations/m_3_1_2_globalize_commands.py:158:Path.unlink": (
-        "already-content-guarded exemplar (data-model do-not-change): removes a per-project command under a content/ownership check while globalizing."
-    ),
-    "src/specify_cli/upgrade/migrations/m_3_1_2_globalize_commands.py:171:Path.rmdir": (
-        "empty-only rmdir: prunes the now-empty per-project commands dir after globalization."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_2_globalize_commands.py",
+        qualname="_SafeGlobalizeCommandsBase.apply",
+        token_line="target . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("already-content-guarded exemplar (data-model do-not-change): removes a per-project command under a content/ownership check while globalizing."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_1_2_globalize_commands.py",
+        qualname="_SafeGlobalizeCommandsBase.apply",
+        token_line="agent_dir . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: prunes the now-empty per-project commands dir after globalization."),
     # --- m_3_2_0rc35 (2): already-guarded exemplar + empty-only rmdir ------
-    "src/specify_cli/upgrade/migrations/m_3_2_0rc35_codex_to_skills.py:208:Path.unlink": (
-        "already-content-guarded exemplar (data-model do-not-change): _move_owned_prompts removes a prompt only after confirming package ownership."
-    ),
-    "src/specify_cli/upgrade/migrations/m_3_2_0rc35_codex_to_skills.py:234:Path.rmdir": (
-        "empty-only rmdir: _try_remove_empty_prompts_dir removes the prompts dir only when empty."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_2_0rc35_codex_to_skills.py",
+        qualname="_move_owned_prompts",
+        token_line="p . path . unlink ( )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("already-content-guarded exemplar (data-model do-not-change): _move_owned_prompts removes a prompt only after confirming package ownership."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_2_0rc35_codex_to_skills.py",
+        qualname="_try_remove_empty_prompts_dir",
+        token_line="prompts_dir . rmdir ( )",
+        op="Path.rmdir",
+        op_ordinal=0,
+    ): ("empty-only rmdir: _try_remove_empty_prompts_dir removes the prompts dir only when empty."),
     # --- m_3_2_8 (1): atomic-write temp cleanup ----------------------------
-    "src/specify_cli/upgrade/migrations/m_3_2_8_provision_kitty_env.py:452:os.unlink": (
-        "ephemeral atomic-write temp: removes the just-written tmp file on an os.replace failure — a machine temp this function created, never user content."
-    ),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_2_8_provision_kitty_env.py",
+        qualname="_atomic_write_claudeignore",
+        token_line="os . unlink ( tmp_path )",
+        op="os.unlink",
+        op_ordinal=0,
+    ): ("ephemeral atomic-write temp: removes the just-written tmp file on an os.replace failure — a machine temp this function created, never user content."),
     # --- m_3_3_0 (2): atomic-write temp + non-user machine surface ---------
-    "src/specify_cli/upgrade/migrations/m_3_3_0_op_record_schema_v2.py:230:Path.unlink": (
-        "ephemeral atomic-write temp: finally-block cleanup (missing_ok) of the tmp file _atomic_rewrite created."
-    ),
-    "src/specify_cli/upgrade/migrations/m_3_3_0_op_record_schema_v2.py:266:Path.unlink": (
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_3_0_op_record_schema_v2.py",
+        qualname="_atomic_rewrite",
+        token_line="tmp_path . unlink ( missing_ok = True )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): ("ephemeral atomic-write temp: finally-block cleanup (missing_ok) of the tmp file _atomic_rewrite created."),
+    CensusKey(
+        rel="src/specify_cli/upgrade/migrations/m_3_3_0_op_record_schema_v2.py",
+        qualname="OpRecordSchemaV2Migration.apply",
+        token_line="path . unlink ( missing_ok = True )",
+        op="Path.unlink",
+        op_ordinal=0,
+    ): (
         "non-user machine surface: deletes an unsalvageable machine-written kitty-ops Op record "
         "(missing_ok), per the migration's own salvage plan — not a user asset."
     ),
@@ -508,20 +748,16 @@ def _live_routed_modules() -> set[str]:
 # ---------------------------------------------------------------------------
 
 
-def _census_partition(sources: Mapping[str, str]) -> tuple[set[str], set[str]]:
+def _census_partition(sources: Mapping[str, str]) -> tuple[set[CensusKey], set[CensusKey]]:
     """The gate's one detection + matching path: ``(unexpected, suppressed)``.
 
     Runs the REAL finder over *sources* (``rel -> source``, possibly mutated in
     memory) and partitions the keyed hits against ``_ALLOWLIST``. The gate, the
     line-drift tests and the non-widening tests all go through this seam.
     """
-    live_flat = _flatten(scan_sources(sources, _find_destructive_ops))
-    unexpected, _stale = diff_against_allowlist(live_flat, _ALLOWLIST)
-    return unexpected, live_flat & _ALLOWLIST.keys()
-
-
-def _key_rel(key: str) -> str:
-    return key.rsplit(":", 2)[0]
+    live = _census_keys(sources)
+    unexpected, _stale = diff_against_allowlist(live, _ALLOWLIST)
+    return unexpected, live.keys() & _ALLOWLIST.keys()
 
 
 #: Files-scanned floor (NFR-002): the finder scanned 120 files on the planning
@@ -529,7 +765,7 @@ def _key_rel(key: str) -> str:
 _FILES_SCANNED_FLOOR = 120
 
 #: Every file carrying an allowlisted site; the line-drift test runs per file.
-_DRIFT_FILES: tuple[str, ...] = tuple(sorted({_key_rel(key) for key in _ALLOWLIST}))
+_DRIFT_FILES: tuple[str, ...] = tuple(sorted({key.rel for key in _ALLOWLIST}))
 
 _NON_WIDENING_REL = "src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py"
 _NON_WIDENING_OP = "shutil.move"
@@ -548,7 +784,7 @@ def test_every_destructive_literal_is_allowlisted() -> None:
         "(the guard performs the delete, leaving no raw literal), or — only for a "
         "genuinely-safe op — add a one-line rationale entry to _ALLOWLIST. Do NOT "
         "absorb a still-raw user-content site into the allowlist: "
-        f"{sorted(unexpected)}"
+        f"{describe_unexpected(unexpected, sources, _find_destructive_ops)}"
     )
     assert suppressed, "Non-vacuity: the census suppressed no allowlisted site at all"
     if stale:
@@ -570,10 +806,10 @@ def test_research_py_removal_literals_are_never_allowlisted() -> None:
     of actually deleting the unlink()+touch() fabrication (T021) — the census
     would go green while the #4926 destroyer silently returned. Fail closed,
     independent of the live scan: no
-    ``src/specify_cli/cli/commands/research.py:*`` key may EVER appear in
+    ``CensusKey`` with ``rel == "src/specify_cli/cli/commands/research.py"`` may EVER appear in
     ``_ALLOWLIST``. Makes FR-004/SC-005's "the census refuses to allowlist a
     raw user-content op" claim actually backed for the one module WP02 adds."""
-    research_keys = sorted(key for key in _ALLOWLIST if key.startswith(_RESEARCH_PY_ALLOWLIST_PREFIX))
+    research_keys = sorted(render_census_key(key) for key in _ALLOWLIST if key.rel == _RESEARCH_PY_REL)
     assert not research_keys, (
         "research.py literal(s) present in _ALLOWLIST — its destructive-overwrite "
         "fabrication must be routed through guard_destructive_overwrite (T021), "
@@ -585,7 +821,7 @@ def test_allowlisted_files_exist() -> None:
     """A renamed/deleted allowlisted file must not silently drop out of the scan
     (an absent file reads as zero live hits — a false 'shrink' masking a rename
     the allowlist should track)."""
-    rel_paths = {_key_rel(key) for key in _ALLOWLIST}
+    rel_paths = {key.rel for key in _ALLOWLIST}
     missing = sorted(rel for rel in rel_paths if not (REPO_ROOT / rel).is_file())
     assert not missing, f"Allowlisted file(s) no longer exist: {missing}"
 
@@ -674,10 +910,10 @@ def test_each_routed_module_routes_and_is_allowlist_clean() -> None:
         if _GUARD_CALL not in text:
             no_guard_call.append(rel)
         repo_rel = path.relative_to(REPO_ROOT).as_posix()
-        literals = {f"{repo_rel}:{lineno}:{op}" for lineno, op in _find_destructive_ops(path)}
+        literals = census_keys(repo_rel, text, _find_destructive_ops(path)).keys()
         unexpected = literals - _ALLOWLIST.keys()
         if unexpected:
-            unrouted_literals[rel] = sorted(unexpected)
+            unrouted_literals[rel] = [render_census_key(key) for key in sorted(unexpected)]
 
     assert not no_guard_call, f"Pinned routed module(s) do not call guard_destructive_removal(...): {no_guard_call}"
     assert not unrouted_literals, (
@@ -770,15 +1006,15 @@ def test_removing_an_allowlist_entry_reproduces_a_gate_failure() -> None:
     re-diffing against the ACTUAL live scan reproduces exactly the failure
     ``test_every_destructive_literal_is_allowlisted`` would raise for a genuine
     un-routed regression — proving the primary gate is not vacuously green."""
-    live_flat = _flatten(_scan_module_set())
+    live = _census_keys(_live_sources())
     victim, shrunk_allowlist = drop_one_entry(_ALLOWLIST)
 
-    unexpected, _stale = diff_against_allowlist(live_flat, shrunk_allowlist)
+    unexpected, _stale = diff_against_allowlist(live, shrunk_allowlist)
 
     assert victim in unexpected, (
         f"Self-mutation check failed: removing {victim!r} from the allowlist did "
         "not reproduce a gate failure against the live tree. The census gate is "
-        "vacuous — investigate diff_against_allowlist / _scan_module_set before "
+        "vacuous — investigate diff_against_allowlist / _census_keys before "
         "trusting a green run."
     )
 
@@ -834,7 +1070,7 @@ def test_mutation_census_survives_line_drift(rel: str) -> None:
     statement above every census site) leaves ``(unexpected, suppressed)``
     unchanged. RED on the line-keyed allowlist, GREEN on content keys."""
     source = (REPO_ROOT / rel).read_text(encoding="utf-8")
-    file_keys = [key for key in _ALLOWLIST if _key_rel(key) == rel]
+    file_keys = [key for key in _ALLOWLIST if key.rel == rel]
     assert_partition_survives_drift(rel, source, _census_partition, _site_linenos(rel), file_keys)
 
 

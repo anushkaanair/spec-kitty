@@ -95,6 +95,7 @@ from tests.architectural._destructive_op_census import (
     read_sources,
     render_census_key,
     scan_planted_source,
+    with_duplicated_statement,
     with_leading_argument,
 )
 
@@ -734,3 +735,45 @@ def test_render_census_key_names_identity_line_and_tokens() -> None:
     [(key, lineno)] = census_keys("pkg/mod.py", _TWIN_SOURCE, [(7, _MERGE_ABORT)]).items()
     rendered = render_census_key(key, lineno)
     assert rendered == f"pkg/mod.py::rollback::{_MERGE_ABORT}#0 (line 7) tokens=subprocess . run ( [ , , wt , , ] )"
+
+
+# ---------------------------------------------------------------------------
+# T024 -- real-data ordinal non-widening and actionable failure output.
+# ---------------------------------------------------------------------------
+
+_TWIN_QUALNAME = "_merge_branch_into"
+
+
+def _twin_merge_abort_keys() -> list[CensusKey]:
+    return sorted(key for key in _ALLOWLIST if key.rel == _NON_WIDENING_REL and key.qualname == _TWIN_QUALNAME and key.op == _MERGE_ABORT)
+
+
+def test_duplicating_the_twin_merge_abort_reports_op_ordinal_2() -> None:
+    """``lanes/merge.py::_merge_branch_into`` holds the two exempted
+    ``merge --abort`` twins (``op_ordinal`` 0 and 1). A third identical one is
+    ``op_ordinal=2``: not in the allowlist, so the gate reports it."""
+    twins = _twin_merge_abort_keys()
+    assert [key.op_ordinal for key in twins] == [0, 1], twins
+    source = (REPO_ROOT / _NON_WIDENING_REL).read_text(encoding="utf-8")
+    live = census_keys(_NON_WIDENING_REL, source, _find_destructive_literals(REPO_ROOT / _NON_WIDENING_REL))
+    second_twin_line = live[twins[1]]
+
+    unexpected, suppressed = _census_partition({_NON_WIDENING_REL: with_duplicated_statement(source, second_twin_line)})
+
+    assert unexpected == {twins[1]._replace(op_ordinal=2)}
+    assert set(twins) <= suppressed
+
+
+def test_gate_failure_message_renders_identity_line_and_tokens() -> None:
+    """An unexpected key is rendered as ``rel::qualname::op#ordinal (line N)
+    tokens=...`` so the author can write the ``CensusKey(...)`` literal."""
+    twin = _twin_merge_abort_keys()[1]
+    source = (REPO_ROOT / _NON_WIDENING_REL).read_text(encoding="utf-8")
+    line = census_keys(_NON_WIDENING_REL, source, _find_destructive_literals(REPO_ROOT / _NON_WIDENING_REL))[twin]
+    mutated = with_duplicated_statement(source, line)
+    unexpected, _ = _census_partition({_NON_WIDENING_REL: mutated})
+
+    [rendered] = describe_unexpected(unexpected, {_NON_WIDENING_REL: mutated}, _find_destructive_literals)
+
+    assert rendered.startswith(f"{_NON_WIDENING_REL}::{_TWIN_QUALNAME}::{_MERGE_ABORT}#2 (line ")
+    assert rendered.endswith(f"tokens={twin.token_line}")
