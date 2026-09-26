@@ -34,12 +34,12 @@ from tests.integration.test_placement_partition_golden_path import (
     _init_git_repo as _golden_init_git_repo,
 )
 from tests.runtime._next_mission_scaffold import (
-    _reject_wp_on_status_surface,
-    _seed_wp_lane,
-    _write_wp_task_files,
     advance_to_step,
+    reject_wp_on_status_surface,
     scaffold_coord_software_dev,
     scaffold_software_dev,
+    seed_wp_lane,
+    write_wp_task_files,
 )
 
 pytestmark = [pytest.mark.integration, pytest.mark.git_repo]
@@ -286,7 +286,7 @@ def test_review_reject_redispatches_implement_single_branch(tmp_path: Path) -> N
     )
     advance_to_step(repo, mission_slug, "software-dev", "review")
     feature_dir = repo / "kitty-specs" / mission_slug
-    _reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
+    reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
 
     from runtime.next.runtime_bridge import decide_next_via_runtime, query_current_state
 
@@ -346,7 +346,7 @@ def test_review_reject_redispatches_implement_coord_family(tmp_path: Path, topol
     mission_slug = f"coord-anbu-reject-{topology.value.replace('_', '-')}"
     feature_dir, coord_mission_dir = scaffold_coord_software_dev(repo, mission_slug, topology, wps={"WP01": "for_review"})
     advance_to_step(repo, mission_slug, "software-dev", "review")
-    _reject_wp_on_status_surface(coord_mission_dir, mission_slug, "WP01")
+    reject_wp_on_status_surface(coord_mission_dir, mission_slug, "WP01")
 
     from runtime.next.runtime_bridge import decide_next_via_runtime, query_current_state
 
@@ -472,9 +472,9 @@ def test_multi_wp_dependency_order_reject_redispatch(tmp_path: Path) -> None:
         "## Work Package WP02: depends on WP01\n\n### Requirements\n- FR-001\n\nDo it.\n",
         encoding="utf-8",
     )
-    _seed_wp_lane(feature_dir, mission_slug, "WP02", "planned")
+    seed_wp_lane(feature_dir, mission_slug, "WP02", "planned")
     advance_to_step(repo, mission_slug, "software-dev", "review")
-    _reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
+    reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
 
     from runtime.next.discovery import preview_claimable_wp
     from runtime.next.runtime_bridge import decide_next_via_runtime, query_current_state
@@ -568,7 +568,7 @@ def test_blocked_floor_dependency_walled_has_named_recovery(tmp_path: Path) -> N
         "## Work Package WP02: depends on WP01\n\n### Requirements\n- FR-001\n\nDo it.\n",
         encoding="utf-8",
     )
-    _seed_wp_lane(feature_dir, mission_slug, "WP02", "planned")
+    seed_wp_lane(feature_dir, mission_slug, "WP02", "planned")
     advance_to_step(repo, mission_slug, "software-dev", "implement")
 
     from runtime.next.runtime_bridge import decide_next_via_runtime
@@ -606,7 +606,7 @@ def test_unmaterialized_coord_surfaces_typed_blocked_reason(tmp_path: Path) -> N
     _golden_init_git_repo(repo)
     result = _golden_create_mission(repo, mission_slug, _MissionTopology.COORD)
     # deliberately never materialize the coord worktree (CoordState.UNMATERIALIZED)
-    _write_wp_task_files(result.feature_dir, {"WP01": "planned"})
+    write_wp_task_files(result.feature_dir, {"WP01": "planned"})
     (result.feature_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
     subprocess.run(["git", "-C", str(repo), "add", "-A"], capture_output=True, check=True)
     subprocess.run(
@@ -644,7 +644,7 @@ def test_snapshot_byte_identical_across_redispatch(tmp_path: Path) -> None:
     )
     advance_to_step(repo, mission_slug, "software-dev", "review")
     feature_dir = repo / "kitty-specs" / mission_slug
-    _reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
+    reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
 
     from runtime.next.runtime_bridge import decide_next_via_runtime, get_or_start_run
 
@@ -685,7 +685,7 @@ def test_no_advancing_path_emits_unauthorized_step(tmp_path: Path) -> None:
     mission2 = "042-anbu-neg-reject"
     scaffold_software_dev(repo2, mission2, with_spec=True, with_plan=True, with_tasks_md=True, wps={"WP01": "for_review"})
     advance_to_step(repo2, mission2, "software-dev", "review")
-    _reject_wp_on_status_surface(repo2 / "kitty-specs" / mission2, mission2, "WP01")
+    reject_wp_on_status_surface(repo2 / "kitty-specs" / mission2, mission2, "WP01")
     cases.append((repo2, mission2))
 
     repo3 = tmp_path / "neg-coord"

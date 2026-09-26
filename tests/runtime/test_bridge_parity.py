@@ -53,10 +53,10 @@ from tests.runtime._bridge_oracle import (
     timed_call,
 )
 from tests.runtime._next_mission_scaffold import (
-    _commit_all,
-    _init_git_repo,
-    _provision_mission_type_activations,
     advance_to_step,
+    commit_all,
+    init_git_repo,
+    provision_mission_type_activations,
     scaffold_software_dev,
 )
 
@@ -101,8 +101,8 @@ def scaffold_research(
     with_report: bool = False,
     publication_approved: bool = False,
 ) -> Path:
-    _init_git_repo(repo_root)
-    _provision_mission_type_activations(repo_root, "research")
+    init_git_repo(repo_root)
+    provision_mission_type_activations(repo_root, "research")
     feature_dir = repo_root / "kitty-specs" / mission_slug
     feature_dir.mkdir(parents=True)
     (feature_dir / "meta.json").write_text(json.dumps({"mission_type": "research"}), encoding="utf-8")
@@ -127,7 +127,7 @@ def scaffold_research(
         (feature_dir / "mission-events.jsonl").write_text(
             "\n".join(json.dumps(e, sort_keys=True) for e in events) + "\n", encoding="utf-8"
         )
-    _commit_all(repo_root, "seed research fixture")
+    commit_all(repo_root, "seed research fixture")
     return repo_root
 
 
@@ -142,8 +142,8 @@ def scaffold_documentation(
     with_audit_report: bool = False,
     with_release: bool = False,
 ) -> Path:
-    _init_git_repo(repo_root)
-    _provision_mission_type_activations(repo_root, "documentation")
+    init_git_repo(repo_root)
+    provision_mission_type_activations(repo_root, "documentation")
     feature_dir = repo_root / "kitty-specs" / mission_slug
     feature_dir.mkdir(parents=True)
     (feature_dir / "meta.json").write_text(json.dumps({"mission_type": "documentation"}), encoding="utf-8")
@@ -160,7 +160,7 @@ def scaffold_documentation(
         (feature_dir / "audit-report.md").write_text("# audit report\n", encoding="utf-8")
     if with_release:
         (feature_dir / "release.md").write_text("# release\n", encoding="utf-8")
-    _commit_all(repo_root, "seed documentation fixture")
+    commit_all(repo_root, "seed documentation fixture")
     return repo_root
 
 
@@ -308,7 +308,7 @@ def _build_missing_feature_dir(base: Path) -> tuple[Path, dict[str, Any]]:
 
 def _build_run_start_failure(base: Path) -> tuple[Path, dict[str, Any]]:
     snapshot = base / "snapshot"
-    _init_git_repo(snapshot)
+    init_git_repo(snapshot)
     (snapshot / ".kittify").mkdir(exist_ok=True)
     mission_slug = "099-bogus-mission-type"
     feature_dir = snapshot / "kitty-specs" / mission_slug
@@ -316,7 +316,7 @@ def _build_run_start_failure(base: Path) -> tuple[Path, dict[str, Any]]:
     (feature_dir / "meta.json").write_text(
         json.dumps({"mission_type": "totally-unregistered-mission-type-xyz"}), encoding="utf-8"
     )
-    _commit_all(snapshot, "seed bogus mission type")
+    commit_all(snapshot, "seed bogus mission type")
     return snapshot, {"agent": "pedro", "mission_slug": mission_slug, "result": "success"}
 
 
@@ -375,7 +375,7 @@ def _build_tasks_union_guard_fail_reqmap(base: Path) -> tuple[Path, dict[str, An
         wp_file.read_text(encoding="utf-8").replace("requirement_refs: [FR-001]\n", ""),
         encoding="utf-8",
     )
-    _commit_all(snapshot, "strip requirement_refs")
+    commit_all(snapshot, "strip requirement_refs")
     advance_to_step(snapshot, mission_slug, "software-dev", "tasks")
     return snapshot, {"agent": "pedro", "mission_slug": mission_slug, "result": "success"}
 
@@ -621,17 +621,17 @@ def _seed_input_mission_pending(base: Path, mission_slug: str) -> Path:
     real engine issues the decision — never stubbed.
     """
     snapshot = base / "snapshot"
-    _init_git_repo(snapshot)
+    init_git_repo(snapshot)
     # WP04 fail-closed (C-A1): a project-override mission definition alone
     # does not activate a type -- mission_type_activations is the sole
     # activation authority, so this synthetic "input-mission" custom type
     # must be listed too.
-    _provision_mission_type_activations(snapshot, "input-mission")
+    provision_mission_type_activations(snapshot, "input-mission")
     feature_dir = snapshot / "kitty-specs" / mission_slug
     feature_dir.mkdir(parents=True)
     (feature_dir / "meta.json").write_text(json.dumps({"mission_type": "input-mission"}), encoding="utf-8")
     _write_runtime_input_mission(snapshot, "input-mission")
-    _commit_all(snapshot, "seed input-mission fixture")
+    commit_all(snapshot, "seed input-mission fixture")
     # Issue the first (and only) real step -- collect_input -- so a real
     # decision_required is pending. NOTE: a decision_required does NOT set
     # snapshot.issued_step_id (it is carried in snapshot.pending_decisions
@@ -682,7 +682,7 @@ def _build_dn_corrupt_run_state(base: Path) -> tuple[Path, dict[str, Any]]:
     advance_to_step(snapshot, mission_slug, "software-dev", "specify")
     for state_path in snapshot.rglob("state.json"):
         state_path.write_text("{ this is not valid json ", encoding="utf-8")
-    _commit_all(snapshot, "corrupt run state.json")
+    commit_all(snapshot, "corrupt run state.json")
     return snapshot, {"agent": "pedro", "mission_slug": mission_slug, "result": "success"}
 
 
@@ -699,7 +699,7 @@ def _build_dn_missing_canonical_status(base: Path) -> tuple[Path, dict[str, Any]
     advance_to_step(snapshot, mission_slug, "software-dev", "implement")
     for events in snapshot.rglob("status.events.jsonl"):
         events.unlink()
-    _commit_all(snapshot, "delete canonical status event log")
+    commit_all(snapshot, "delete canonical status event log")
     return snapshot, {"agent": "pedro", "mission_slug": mission_slug, "result": "success"}
 
 
@@ -718,7 +718,7 @@ def _build_dn_block_policy_unreadable_state(base: Path) -> tuple[Path, dict[str,
     for state_path in list(snapshot.rglob("state.json")):
         state_path.unlink()
         state_path.mkdir()
-    _commit_all(snapshot, "block policy + unreadable (dir) state.json")
+    commit_all(snapshot, "block policy + unreadable (dir) state.json")
     return snapshot, {"agent": "pedro", "mission_slug": mission_slug, "result": "success"}
 
 
@@ -750,7 +750,7 @@ def _build_dn_wp_done_no_action_mapped(base: Path) -> tuple[Path, dict[str, Any]
         decide_next_via_runtime("pedro", mission_slug, "success", snapshot)
     else:  # pragma: no cover - fixture-setup guard
         raise AssertionError("fixture setup never reached the issued 'tasks' step")
-    _commit_all(snapshot, "wp done, run advanced to issued tasks step")
+    commit_all(snapshot, "wp done, run advanced to issued tasks step")
     return snapshot, {"agent": "pedro", "mission_slug": mission_slug, "result": "success"}
 
 
