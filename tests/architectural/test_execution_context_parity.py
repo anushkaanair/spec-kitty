@@ -1421,9 +1421,9 @@ def _resolve_context_from_cwd(
 def _fragment_value(context: object, fragment: str, field_name: str) -> object:
     """Read ``context.<fragment>.<field_name>``.
 
-    Raises ``AttributeError`` while the fragment does not exist on the context
-    (the RED state). Once the fragment lands, this returns the resolved value
-    and the surrounding ``xfail`` test flips to XPASS.
+    Every fragment read here has landed on the context, so this returns the
+    resolved value; an ``AttributeError`` means a fragment was removed and the
+    calling parity test fails loudly.
     """
     frag = getattr(context, fragment)
     return getattr(frag, field_name)
@@ -1442,11 +1442,10 @@ def test_dual_cwd_existing_field_parity(parity_repo: tuple[Path, Path, str]) -> 
     **lane-worktree CWD** — and asserts that every field the resolver populates
     *today* (``_EXISTING_PARITY_FIELDS``) is identical.
 
-    This is the non-xfail anchor of the composite-fragment ratchet: it proves
-    the *current* in-process resolution path is CWD-invariant and must remain
-    GREEN throughout the conversion. The fragment-level parity (Identity /
-    BranchRef / StatusSurface / Workspace / ArtifactPlacement / PromptSource)
-    is asserted by the ``xfail`` tests below until each lands.
+    This is the field-level anchor of the composite-fragment ratchet: it proves
+    the in-process resolution path is CWD-invariant. The fragment-level parity
+    (Identity / BranchRef / StatusSurface / read-path / Workspace /
+    ArtifactPlacement) is asserted by the live fragment tests below.
     """
     repo_root, worktree_path, mission_slug = parity_repo
 
@@ -1472,7 +1471,7 @@ def test_dual_cwd_existing_field_parity(parity_repo: tuple[Path, Path, str]) -> 
 
 
 # ---------------------------------------------------------------------------
-# T001/T003 — Fragment-by-fragment parity (xfail until each conversion lands)
+# T001/T003 — Fragment-by-fragment parity (every fragment converged; no xfail)
 # ---------------------------------------------------------------------------
 
 
