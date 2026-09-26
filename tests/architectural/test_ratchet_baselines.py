@@ -34,6 +34,7 @@ Cat-7 deletions, and the Cat-7 baseline at 7.
 
 from __future__ import annotations
 
+import copy
 import importlib
 import subprocess
 import sys
@@ -319,48 +320,18 @@ def _leaf_drift(data: dict[str, Any]) -> tuple[list[str], list[str]]:
     missing = sorted(f"{s}.{leaf}" for s, leaf in enforced - yaml_leaves)
     return unenforced, missing
 
-# Required top-level keys. Each names a test module whose ratchet is
-# tracked. Sub-keys (per-category integers OR a single integer) are
-# defined by the contract.
-_REQUIRED_TOP_LEVEL_KEYS: frozenset[str] = frozenset(
-    {
-        "test_no_dead_modules",
-        "test_migration_chain_integrity",
-        "test_auth_transport_singleton",
-        "test_example_round_trip",
-        "test_no_inert_schema_slots",
-        "test_reference_enum_ratchet",
-        "test_egress_consent_boundary",
-        "test_layer_rules",
-        "test_runtime_charter_doctrine_boundary",
-        "test_doctrine_census",
-        "test_cli_error_surface_seam",
-        "test_mutation_ownership_routing",
-    }
-)
 
-# CLOSED grandfather set for top-level keys that no comparison reads. Now
-# DRAINED to empty (FR-005): the sole tenant, `test_no_dead_symbols`, was an
-# inert YAML block read by no comparison (RL-030), and both it and its whole
-# YAML block were removed by mission `frozen-baseline-toll-reduction-01M0A42D`
-# WP03. With the set empty, `test_no_unregistered_baseline_keys_are_added`
-# rejects ANY unregistered top-level key: re-adding `test_no_dead_symbols`
-# (or any inert key) now reds instead of being silently tolerated. The set is
-# pinned empty by frozenset equality below, so re-widening it costs a visible
-# diff in this file rather than a silent one in the YAML.
-_GRANDFATHERED_UNREGISTERED_KEYS: frozenset[str] = frozenset()
+# Required top-level keys and ``test_no_dead_modules`` categories are DERIVED
+# from ``_SIZE_RATCHETS`` (DIRECTIVE_044: one authority, not parallel lists).
+# Adding a gated ratchet means adding ONE ``_SIZE_RATCHETS`` row; the former
+# closed ``_GRANDFATHERED_UNREGISTERED_KEYS`` set is retired because an
+# unregistered top-level key now surfaces as unenforced leaves in
+# ``test_every_baseline_leaf_is_enforced_by_a_size_ratchet``.
+_REQUIRED_TOP_LEVEL_KEYS: frozenset[str] = frozenset(r.section for r in _SIZE_RATCHETS)
 
 # Per-category sub-keys for test_no_dead_modules (FR-112 refactor).
 _REQUIRED_NO_DEAD_MODULES_CATEGORIES: frozenset[str] = frozenset(
-    {
-        "category_1_auto_discovered_migrations",
-        "category_2_build_schema_generators",
-        "category_3_external_cli_entrypoints",
-        "category_4_backcompat_shims",
-        "category_5_wp_in_flight_adapters",
-        "category_6_frozen_runtime_reexports",
-        "category_7_grandfathered_orphans",
-    }
+    r.leaf for r in _SIZE_RATCHETS if r.section == "test_no_dead_modules"
 )
 
 # FR-004: ``category_1`` is DERIVED, not YAML-pinned. The count of
@@ -491,7 +462,9 @@ def _import_module_attr(module_dotted: str, attr_name: str) -> frozenset[Any]:
 def test_baseline_file_exists_with_required_keys() -> None:
     """AC-6: `_baselines.yaml` must exist with one section per gated test.
 
-    The schema is defined in
+    The required sections and ``test_no_dead_modules`` categories are derived
+    from ``_SIZE_RATCHETS``; there is no second list to register in. The
+    schema is defined in
     ``kitty-specs/slice-f-multi-context-extensibility-01KRX5C8/contracts/
     ratchet-baseline-format.md`` and pinned by C-004.
     """
@@ -500,9 +473,10 @@ def test_baseline_file_exists_with_required_keys() -> None:
     missing = _REQUIRED_TOP_LEVEL_KEYS - set(data.keys())
     assert not missing, (
         f"`_baselines.yaml` is missing required top-level key(s): "
-        f"{sorted(missing)}. Each gated test module's ratchet must be "
-        f"recorded so the meta-test can compare current size against the "
-        f"baseline."
+        f"{sorted(missing)}. Each `_SIZE_RATCHETS` section must be recorded "
+        f"so the meta-test can compare current size against the baseline. "
+        f"To add a gated ratchet, add one `_SIZE_RATCHETS` row plus its YAML "
+        f"leaf."
     )
 
     # test_no_dead_modules must carry per-category sub-keys (FR-112).
@@ -515,9 +489,9 @@ def test_baseline_file_exists_with_required_keys() -> None:
     assert not missing_cats, (
         f"`_baselines.yaml::test_no_dead_modules` is missing per-category "
         f"key(s): {sorted(missing_cats)}. The FR-112 refactor splits the "
-        f"single `_ALLOWLIST` into per-category frozensets so growth in "
-        f"Cat-1 (auto-discovered migrations) cannot disguise Cat-7 "
-        f"grandfathered-orphan regression."
+        f"single `_ALLOWLIST` into per-category frozensets so growth in one "
+        f"category cannot disguise Cat-7 grandfathered-orphan regression; "
+        f"each category is one `_SIZE_RATCHETS` row."
     )
 
 
@@ -619,62 +593,36 @@ def test_growth_fails_shrinkage_warns(
     assert isinstance(data, dict)
 
 
-def test_no_unregistered_baseline_keys_are_added() -> None:
-    """Reverse containment: `test_baseline_file_exists_with_required_keys`
-    checks only for MISSING keys, never for extra.
+def test_leaf_drift_detects_planted_unenforced_leaf() -> None:
+    """NFR-002 self-mutation: ``_leaf_drift`` -- the same pure helper the
+    production leaf test calls -- catches planted drift in both directions.
 
-    A key can therefore sit in `_baselines.yaml` read by no comparison, its
-    growth failing nothing, with this suite green — which is exactly how
-    `test_no_dead_symbols` went unnoticed. This arm closes that.
-
-    **Now fully closed (FR-005).** The `test_no_dead_symbols` inert key and its
-    whole YAML block (RL-030) were removed by mission
-    `frozen-baseline-toll-reduction-01M0A42D` WP03, and
-    `_GRANDFATHERED_UNREGISTERED_KEYS` was drained to empty in lockstep. With
-    the grandfather set empty, ANY unregistered top-level key now reds: a new
-    key that a comparison COULD read must be registered in
-    `_REQUIRED_TOP_LEVEL_KEYS` and in BOTH `single_baselines` lists; a key read
-    by no comparison by design must not be added at all. The set is pinned empty
-    by frozenset equality below, so re-widening it costs a visible diff here
-    instead of a silent one in the YAML.
+    (a) an extra leaf under an existing section, and (b) a re-added
+    ``test_no_dead_symbols`` section (FR-005 re-entry guarantee, formerly
+    ``test_readding_inert_dead_symbols_key_is_now_rejected``, now at leaf
+    granularity) are both reported unenforced; removing an enforced leaf is
+    reported missing.
     """
-    data = _load_baselines()
-    unregistered = set(data) - _REQUIRED_TOP_LEVEL_KEYS
-
-    assert frozenset() == _GRANDFATHERED_UNREGISTERED_KEYS, (
-        "`_GRANDFATHERED_UNREGISTERED_KEYS` is CLOSED and drained to empty "
-        f"(FR-005). Observed {sorted(_GRANDFATHERED_UNREGISTERED_KEYS)}. A new "
-        "inert key that a comparison COULD read must be registered in "
-        "`_REQUIRED_TOP_LEVEL_KEYS` and in BOTH `single_baselines` lists, not "
-        "grandfathered here. Grandfathering is no longer available: an inert key "
-        "read by no comparison must not be added to the YAML at all."
+    planted = copy.deepcopy(_load_baselines())
+    planted["test_layer_rules"]["planted_leaf"] = 1
+    planted["test_no_dead_symbols"] = {"x": 1}
+    assert _leaf_drift(planted) == (
+        ["test_layer_rules.planted_leaf", "test_no_dead_symbols.x"],
+        [],
     )
-    assert unregistered <= _GRANDFATHERED_UNREGISTERED_KEYS, (
-        f"`_baselines.yaml` carries top-level key(s) no comparison reads: "
-        f"{sorted(unregistered - _GRANDFATHERED_UNREGISTERED_KEYS)}. Adding a key "
-        "does NOT make its growth fail anything -- both comparisons run off the "
-        "hardcoded `single_baselines` lists. Register it in "
-        "`_REQUIRED_TOP_LEVEL_KEYS` AND in both lists, or remove it from the YAML."
+
+    removed = copy.deepcopy(_load_baselines())
+    del removed["test_mutation_ownership_routing"]["destructive_op_allowlist"]
+    assert _leaf_drift(removed) == (
+        [],
+        ["test_mutation_ownership_routing.destructive_op_allowlist"],
     )
 
 
-def test_readding_inert_dead_symbols_key_is_now_rejected() -> None:
-    """FR-005 / US4-AC1: with `_GRANDFATHERED_UNREGISTERED_KEYS` drained, the
-    reverse-containment arm now REJECTS a re-added `test_no_dead_symbols` key.
-
-    Exercises the same containment predicate the production arm runs against a
-    synthetic YAML shape carrying the inert key — proving re-entry reds rather
-    than being silently grandfathered (as it was before this WP).
-    """
-    assert not _GRANDFATHERED_UNREGISTERED_KEYS
-    synthetic = dict.fromkeys(_REQUIRED_TOP_LEVEL_KEYS, 0)
-    synthetic["test_no_dead_symbols"] = 1
-    unregistered = set(synthetic) - _REQUIRED_TOP_LEVEL_KEYS
-    assert unregistered == {"test_no_dead_symbols"}
-    assert not (unregistered <= _GRANDFATHERED_UNREGISTERED_KEYS), (
-        "Re-adding `test_no_dead_symbols` must now be REJECTED by the "
-        "reverse-containment arm (grandfather set is empty)."
-    )
+def test_yaml_leaves_refuses_a_scalar_section() -> None:
+    """A top-level scalar has no leaf a comparison could read: refuse it."""
+    with pytest.raises(ValueError, match="test_no_dead_symbols"):
+        _yaml_leaves({"test_no_dead_symbols": 1})
 
 
 def test_decorative_category_1_yaml_matches_frozenset() -> None:
