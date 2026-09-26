@@ -12,7 +12,7 @@ It AST-walks every ``*.py`` under ``src/specify_cli`` and ``src/mission_runtime`
 and reports two classes of callsite (:func:`discover_rows`):
 
 (a) **Blessed resolver calls inside the seam files** (``_RESOLVER_SOURCE_STEMS``):
-    calls to a name in ``RESOLVER_CALLS`` or ``TOPOLOGY_BLIND_CALLS``, tracked
+    calls to a name in ``_RESOLVER_CALLS`` or ``_TOPOLOGY_BLIND_CALLS``, tracked
     so the seam implementations themselves stay correct.
 
 (b) **Raw-bypass joins in every file**: a ``pathlib`` ``/`` join whose right
@@ -23,7 +23,7 @@ and reports two classes of callsite (:func:`discover_rows`):
     ``specs / mission_slug`` when ``specs`` is itself such a join.
 
 A second discriminator, :func:`discover_selection_callsites`, reports every
-DIRECT call to a read-SELECTION name (``SELECTION_READ_CALLS``) whether or not a
+DIRECT call to a read-SELECTION name (``_SELECTION_READ_CALLS``) whether or not a
 ``KITTY_SPECS_DIR`` join is present; the raw-join walker is blind to those.
 
 The seed set is data (``SLUG_NAMES``, ``KITTY_SPECS_NAMES``,
@@ -124,7 +124,7 @@ _SELECTION_SEAM_STEMS: frozenset[str] = frozenset(
 # --------------------------------------------------------------------------- #
 # Seed-set: all blessed resolver function names.
 # --------------------------------------------------------------------------- #
-RESOLVER_CALLS: frozenset[str] = frozenset(
+_RESOLVER_CALLS: frozenset[str] = frozenset(
     {
         "resolve_mission_read_path",
         "candidate_feature_dir_for_mission",
@@ -137,7 +137,7 @@ RESOLVER_CALLS: frozenset[str] = frozenset(
 
 # ``primary_feature_dir_for_mission`` is topology-blind-by-design:
 # it deliberately targets the primary checkout. Tracked in seam files.
-TOPOLOGY_BLIND_CALLS: frozenset[str] = frozenset(
+_TOPOLOGY_BLIND_CALLS: frozenset[str] = frozenset(
     {
         "primary_feature_dir_for_mission",
     }
@@ -158,7 +158,7 @@ TOPOLOGY_BLIND_CALLS: frozenset[str] = frozenset(
 # scanner is BLIND to it. ``discover_selection_callsites()`` catches it by
 # name, regardless of whether a ``KITTY_SPECS_DIR`` join is present.
 # --------------------------------------------------------------------------- #
-SELECTION_READ_CALLS: frozenset[str] = frozenset(
+_SELECTION_READ_CALLS: frozenset[str] = frozenset(
     {
         # WP01 (01KVN754) privatized the worker ``resolve_mission_read_path`` →
         # ``_resolve_mission_read_path`` and #2048 retired the historical
@@ -171,7 +171,7 @@ SELECTION_READ_CALLS: frozenset[str] = frozenset(
     }
 )
 
-ALL_BLESSED_CALLS: frozenset[str] = RESOLVER_CALLS | TOPOLOGY_BLIND_CALLS
+_ALL_BLESSED_CALLS: frozenset[str] = _RESOLVER_CALLS | _TOPOLOGY_BLIND_CALLS
 
 # --------------------------------------------------------------------------- #
 # Raw-bypass seed: local variable names that carry a mission slug and appear
@@ -277,7 +277,7 @@ def _find_blessed_calls_in_seam(tree: ast.AST, rel_path: str) -> list[Resolution
             name = func.id
         elif isinstance(func, ast.Attribute):
             name = func.attr
-        if name is None or name not in ALL_BLESSED_CALLS:
+        if name is None or name not in _ALL_BLESSED_CALLS:
             continue
         # Derive handle_source from the first positional arg (slug param).
         handle_source = "unknown"
@@ -381,7 +381,7 @@ class SelectionRow:
     rel_path: str  # relative to _REPO_ROOT/src
     line: int
     call_name: str
-    in_seam_file: bool  # True when the callsite is inside a RESOLVER_SOURCE_STEMS file
+    in_seam_file: bool  # True when the callsite is inside a _SELECTION_SEAM_STEMS file
 
     def key(self) -> str:
         """Live ``rel:line`` LOCATOR (public shape — NOT the comparand).
@@ -411,7 +411,7 @@ def _find_selection_calls(tree: ast.AST, rel_path: str) -> list[SelectionRow]:
             name = func.id
         elif isinstance(func, ast.Attribute):
             name = func.attr
-        if name is None or name not in SELECTION_READ_CALLS:
+        if name is None or name not in _SELECTION_READ_CALLS:
             continue
         row = SelectionRow(rel_path, node.lineno, name, in_seam)
         if row.key() not in seen:
