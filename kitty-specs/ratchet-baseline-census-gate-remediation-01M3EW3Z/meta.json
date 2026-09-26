@@ -19,7 +19,7 @@
   "friendly_name": "Ratchet, baseline & census gate remediation",
   "mid8": "01M3EW3Z",
   "mission_id": "01M3EW3Z4M4VVXAZMHPDFKPSE5",
-  "mission_number": null,
+  "mission_number": 204,
   "mission_slug": "ratchet-baseline-census-gate-remediation-01M3EW3Z",
   "mission_type": "software-dev",
   "purpose_context": "Epic #5104 groups five test-suite friction issues (#2631, #2972, #3011, #3026, #5085). A grounding squad found that several gates the issues rely on were deleted by earlier sanitation missions, leaving dead scaffolding, vacuous bans, and line-pinned allowlists. This mission restores or retires each gate deliberately and closes the positional-anchor scope hole.",
