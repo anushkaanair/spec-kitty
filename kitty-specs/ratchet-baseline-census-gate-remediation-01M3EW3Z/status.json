@@ -1,7 +1,7 @@
 {
-  "event_count": 71,
-  "last_event_id": "01M3FJ1DXW3SJ8T3AM3FV3BGZY",
-  "materialized_at": "2026-09-26T19:10:58.492698+00:00",
+  "event_count": 72,
+  "last_event_id": "01M3FJ2NC22WRS0063QXSSVWTS",
+  "materialized_at": "2026-09-26T19:11:38.882526+00:00",
   "mission_number": "",
   "mission_slug": "ratchet-baseline-census-gate-remediation-01M3EW3Z",
   "mission_type": "",
@@ -12,9 +12,9 @@
     "canceled": 0,
     "claimed": 0,
     "done": 0,
-    "for_review": 1,
+    "for_review": 0,
     "in_progress": 0,
-    "in_review": 0,
+    "in_review": 1,
     "planned": 1
   },
   "work_packages": {
@@ -317,18 +317,21 @@
     "WP10": {
       "actor": "claude",
       "agent": "claude",
-      "agent_profile": "python-pedro",
+      "agent_profile": "reviewer-renata",
       "agent_profile_version": "1.0",
       "force_count": 0,
       "implementer_of_record": "claude",
-      "lane": "for_review",
-      "last_event_id": "01M3FJ1DXW3SJ8T3AM3FV3BGZY",
-      "last_transition_at": "2026-09-26T19:10:58.492698+00:00",
+      "lane": "in_review",
+      "last_event_id": "01M3FJ2NC22WRS0063QXSSVWTS",
+      "last_transition_at": "2026-09-26T19:11:38.882526+00:00",
       "model": "__resolved_model_absent__",
+      "notes": [
+        "FR-015 delivered: markers via copied packs mirror + SPEC_KITTY_PACKS_ROOT, renamed to test_context_bootstrap_markers.py. RED 1896b8cc lists exactly the 10 expected offenders; GREEN 0. Markers module 10 passed. charter+doctrine serial and -n2 loadfile: 9 failed/6139 passed/37 skipped in both orders, all 9 red on base src (linked-worktree/root env). test-fast 4 failed (known #4873 x3, #5126)/2305 passed. terminology 90 passed. ruff check/format exit 0, mypy 0 issues. context_contract.py AST-equal. Tracer design-decisions-961426612930."
+      ],
       "provider": "__resolved_provider_absent__",
-      "role": "implementer",
-      "shell_pid": 13792,
-      "shell_pid_created_at": "1790438766.86",
+      "role": "reviewer",
+      "shell_pid": 7211,
+      "shell_pid_created_at": "1790449889.72",
       "subtasks": {
         "T054": "done",
         "T055": "done",
