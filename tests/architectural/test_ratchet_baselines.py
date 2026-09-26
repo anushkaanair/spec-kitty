@@ -39,6 +39,7 @@ import subprocess
 import sys
 import warnings
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -119,6 +120,205 @@ class BaselinesFile(BaseModel):
 
 _BASELINES_PATH = Path(__file__).parent / "_baselines.yaml"
 
+
+# ---------------------------------------------------------------------------
+# The ONE size-ratchet comparison table (FR-011, DIRECTIVE_044)
+# ---------------------------------------------------------------------------
+# Each row binds one ``_baselines.yaml`` leaf (``section.leaf``) to the live
+# gated symbol (``module.attr``) whose ``len()`` it caps. A leaf is ENFORCED
+# iff it has a row here: both comparison arms iterate this table, so there is
+# no second list to keep in step. Modules are stored as dotted strings and
+# resolved lazily through ``_import_module_attr`` (never a module object), so
+# importing this fast-tier gate never drags in the round-trip corpus.
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _SizeRatchet:
+    """One enforced baseline leaf: ``len(module.attr) > yaml[section][leaf]`` fails."""
+
+    section: str
+    leaf: str
+    module: str
+    attr: str
+
+
+_NO_DEAD_MODULES_MODULE = "tests.architectural.test_no_dead_modules"
+
+_SIZE_RATCHETS: tuple[_SizeRatchet, ...] = (
+    # test_no_dead_modules: per-category comparison (FR-112 refactor).
+    _SizeRatchet(
+        "test_no_dead_modules",
+        "category_2_build_schema_generators",
+        _NO_DEAD_MODULES_MODULE,
+        "_CATEGORY_2_BUILD_SCHEMA_GENERATORS",
+    ),
+    _SizeRatchet(
+        "test_no_dead_modules",
+        "category_3_external_cli_entrypoints",
+        _NO_DEAD_MODULES_MODULE,
+        "_CATEGORY_3_EXTERNAL_CLI_ENTRYPOINTS",
+    ),
+    _SizeRatchet(
+        "test_no_dead_modules",
+        "category_4_backcompat_shims",
+        _NO_DEAD_MODULES_MODULE,
+        "_CATEGORY_4_BACKCOMPAT_SHIMS",
+    ),
+    _SizeRatchet(
+        "test_no_dead_modules",
+        "category_5_wp_in_flight_adapters",
+        _NO_DEAD_MODULES_MODULE,
+        "_CATEGORY_5_WP_IN_FLIGHT_ADAPTERS",
+    ),
+    _SizeRatchet(
+        "test_no_dead_modules",
+        "category_6_frozen_runtime_reexports",
+        _NO_DEAD_MODULES_MODULE,
+        "_CATEGORY_6_FROZEN_RUNTIME_REEXPORTS",
+    ),
+    _SizeRatchet(
+        "test_no_dead_modules",
+        "category_7_grandfathered_orphans",
+        _NO_DEAD_MODULES_MODULE,
+        "_CATEGORY_7_GRANDFATHERED_ORPHANS",
+    ),
+    # Runtime outbound ledgers (PR #3888): independent caps, not derived from
+    # the live import sets.
+    _SizeRatchet(
+        "test_layer_rules",
+        "mission_runtime_allowed_specify_cli",
+        "tests.architectural.test_layer_rules",
+        "_MISSION_RUNTIME_ALLOWED_SPECIFY_CLI",
+    ),
+    _SizeRatchet(
+        "test_layer_rules",
+        "runtime_allowed_specify_cli",
+        "tests.architectural.test_layer_rules",
+        "_RUNTIME_ALLOWED_SPECIFY_CLI",
+    ),
+    _SizeRatchet(
+        "test_runtime_charter_doctrine_boundary",
+        "lazy_baseline_allowlist",
+        "tests.architectural.test_runtime_charter_doctrine_boundary",
+        "_LAZY_BASELINE_ALLOWLIST",
+    ),
+    _SizeRatchet(
+        "test_doctrine_census",
+        "orphan_reached_exceptions",
+        "tests.architectural.test_doctrine_census",
+        "ORPHAN_REACHED_EXCEPTIONS",
+    ),
+    _SizeRatchet(
+        "test_migration_chain_integrity",
+        "known_line_jumps",
+        "tests.architectural.test_migration_chain_integrity",
+        "_KNOWN_LINE_JUMPS",
+    ),
+    _SizeRatchet(
+        "test_auth_transport_singleton",
+        "allowed_direct_httpx_files",
+        "tests.architectural.test_auth_transport_singleton",
+        "_TRANSPORT_ALLOWLIST",
+    ),
+    # FR-141: legacy contract allowlist for the round-trip gate.
+    _SizeRatchet(
+        "test_example_round_trip",
+        "legacy_contract_allowlist",
+        "tests.contract.test_example_round_trip",
+        "_LEGACY_CONTRACT_ALLOWLIST",
+    ),
+    # doctrine-silence-guards-01KYFV7Q WP01: frozen shrink-only baseline of
+    # declared doctrine slots that nothing populates. Debt with named owners,
+    # not an allowlist -- the module's own ALLOWLIST is permanently empty.
+    _SizeRatchet(
+        "test_no_inert_schema_slots",
+        "baseline_entries",
+        "tests.architectural._inert_slots",
+        "BASELINE_SLOTS",
+    ),
+    # Charter Burn-down Policy (a): the four `<kind>_reference.type` enum
+    # baselines, flattened to one slot per permitted member. Shrink-only --
+    # the 9-vs-7 split is unadjudicated (#2976), so it should narrow.
+    _SizeRatchet(
+        "test_reference_enum_ratchet",
+        "baseline_members",
+        "tests.architectural.test_reference_enum_ratchet",
+        "BASELINE_MEMBER_SLOTS",
+    ),
+    # #3030 egress boundary. Both sets are registered, not just the
+    # work-list: the allowlist is the surface an author would edit to
+    # silence that gate, so growing it must cost the same visible diff.
+    _SizeRatchet(
+        "test_egress_consent_boundary",
+        "egress_allowlist_files",
+        "tests.architectural.test_egress_consent_boundary",
+        "_EGRESS_ALLOWLIST_FILES",
+    ),
+    # Shrink-only: growth here would mean a NEW unconsented egress path,
+    # which is the P0 that mission exists to close. Never record one.
+    _SizeRatchet(
+        "test_egress_consent_boundary",
+        "known_ungated_files",
+        "tests.architectural.test_egress_consent_boundary",
+        "_KNOWN_UNGATED_FILES",
+    ),
+    # FR-011 (#4746/#2899) construction gate: the justified raw-read
+    # residuals allowlist is the surface an author would edit to silence
+    # the gate's Part (b) scan, so growing it must cost this same diff; fixing
+    # one residual should be locked in as a lower baseline.
+    _SizeRatchet(
+        "test_cli_error_surface_seam",
+        "justified_raw_read_residuals",
+        "tests.architectural.test_cli_error_surface_seam",
+        "_JUSTIFIED_RESIDUALS",
+    ),
+    # WP09 non-vacuous FS-op ownership-routing gate: the frozen allowlist of
+    # genuinely-safe raw destructive ops is the surface an author would edit
+    # to silence the census, so growing it must cost the same visible diff.
+    _SizeRatchet(
+        "test_mutation_ownership_routing",
+        "destructive_op_allowlist",
+        "tests.architectural.test_mutation_ownership_routing",
+        "_ALLOWLIST",
+    ),
+)
+
+
+def _enforced_leaves() -> frozenset[tuple[str, str]]:
+    """Every ``(section, leaf)`` a size comparison enforces, derived from the table."""
+    return frozenset((r.section, r.leaf) for r in _SIZE_RATCHETS)
+
+
+def _yaml_leaves(data: dict[str, Any]) -> frozenset[tuple[str, str]]:
+    """Flatten a baselines mapping into its ``(section, leaf)`` pairs.
+
+    Every top-level value must be a mapping of leaves; a scalar section has no
+    leaf a comparison could read, so it is refused rather than silently skipped.
+    """
+    leaves: set[tuple[str, str]] = set()
+    for section, body in data.items():
+        if not isinstance(body, dict):
+            raise ValueError(
+                f"`_baselines.yaml::{section}` must be a mapping of leaf -> "
+                f"integer baseline; got {type(body).__name__}."
+            )
+        leaves.update((section, leaf) for leaf in body)
+    return frozenset(leaves)
+
+
+def _leaf_drift(data: dict[str, Any]) -> tuple[list[str], list[str]]:
+    """Return ``(unenforced, missing)`` as sorted ``"section.leaf"`` strings.
+
+    *unenforced*: leaves in the YAML that no ``_SIZE_RATCHETS`` row compares.
+    *missing*: rows whose leaf the YAML does not carry.
+    """
+    yaml_leaves = _yaml_leaves(data)
+    enforced = _enforced_leaves()
+    unenforced = sorted(f"{s}.{leaf}" for s, leaf in yaml_leaves - enforced)
+    missing = sorted(f"{s}.{leaf}" for s, leaf in enforced - yaml_leaves)
+    return unenforced, missing
+
 # Required top-level keys. Each names a test module whose ratchet is
 # tracked. Sub-keys (per-category integers OR a single integer) are
 # defined by the contract.
@@ -162,10 +362,6 @@ _REQUIRED_NO_DEAD_MODULES_CATEGORIES: frozenset[str] = frozenset(
         "category_7_grandfathered_orphans",
     }
 )
-
-# Dotted path of the gated dead-module test whose per-category frozensets this
-# meta-test introspects.
-_NO_DEAD_MODULES_MODULE = "tests.architectural.test_no_dead_modules"
 
 # FR-004: ``category_1`` is DERIVED, not YAML-pinned. The count of
 # auto-discovered migration modules with no static importer is validated for
@@ -322,6 +518,26 @@ def test_baseline_file_exists_with_required_keys() -> None:
         f"single `_ALLOWLIST` into per-category frozensets so growth in "
         f"Cat-1 (auto-discovered migrations) cannot disguise Cat-7 "
         f"grandfathered-orphan regression."
+    )
+
+
+def test_every_baseline_leaf_is_enforced_by_a_size_ratchet() -> None:
+    """FR-011 (#3026 defect class): every ``_baselines.yaml`` leaf is enforced.
+
+    A leaf is enforced iff it has a ``_SIZE_RATCHETS`` row, and every row is
+    compared by the growth arm with a failing ``>``. Enforcement is therefore by
+    construction -- not a key-name search, not a hand registry of allowed keys.
+    Both directions are checked: a YAML leaf with no row (unenforced), and a
+    row whose leaf the YAML no longer carries (missing).
+    """
+    unenforced, missing = _leaf_drift(_load_baselines())
+    assert (unenforced, missing) == ([], []), (
+        f"`_baselines.yaml` leaf drift.\n"
+        f"Unenforced leaves {unenforced}: no comparison fails when the live "
+        f"size exceeds it: make it enforcing by adding a `_SIZE_RATCHETS` row, "
+        f"or delete it.\n"
+        f"Missing leaves {missing}: a `_SIZE_RATCHETS` row reads a leaf the "
+        f"YAML does not carry: restore the leaf or remove the row."
     )
 
 
