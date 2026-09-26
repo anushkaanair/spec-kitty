@@ -87,11 +87,11 @@
     {
       "criterion_id": "FR-009",
       "description": "Verify FR-009 is satisfied",
-      "proof_type": "automated_test",
-      "evidence": null,
-      "pass_fail": "pending",
-      "verified_by": null,
-      "verified_at": null,
+      "proof_type": "script",
+      "evidence": "grep -rn 'surface_resolution_audit|rekey_inventory|resolution_gate_allowlist' src tests docs pyproject.toml: only immutable historical records (.kittify/evidence, docs/reports/test-sanitation/*01KZME3P dispositions, docs/plans research note citing an earlier-deleted test); pyproject exclusions removed (-17 lines)",
+      "pass_fail": "pass",
+      "verified_by": "reviewer-renata",
+      "verified_at": "2026-09-26T22:55:33.746081+00:00",
       "notes": "TODO: replace with a real acceptance criterion"
     },
     {
