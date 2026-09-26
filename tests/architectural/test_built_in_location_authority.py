@@ -113,11 +113,15 @@ rationale.
 from __future__ import annotations
 
 import ast
+import functools
+from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
+from tests.architectural._ratchet_keys import CompositeKey, composite_key
 from tests.architectural.conftest import SourceFile
 
 pytestmark = [pytest.mark.architectural]
@@ -374,6 +378,63 @@ def _rel(path: Path) -> Path:
     return path.relative_to(_REPO_ROOT)
 
 
+class _JoinSite(NamedTuple):
+    """One built-in join finding: its content identity plus its current line."""
+
+    key: CompositeKey
+    lineno: int
+
+
+@functools.cache
+def _joins_in_source(source: str) -> frozenset[int]:
+    """Parse *source* once per distinct text and return its built-in join lines.
+
+    Cached on the source text so the drift tests, which rescan the whole tree
+    with a single file mutated, only re-parse the mutated file.
+    """
+    return frozenset(_find_builtin_joins(ast.parse(source)))
+
+
+def _join_sites(sources: Mapping[Path, str]) -> list[_JoinSite]:
+    """Every built-in join outside the authority file, keyed by content identity."""
+    sites: list[_JoinSite] = []
+    for abs_path, source in sorted(sources.items()):
+        rel = _rel(abs_path)
+        if rel == _AUTHORITY_FILE:
+            continue
+        for lineno in sorted(_joins_in_source(source)):
+            qualname, token_line = composite_key(source, lineno)
+            sites.append(_JoinSite((rel.as_posix(), qualname, token_line), lineno))
+    return sites
+
+
+def _partition_join_sites(sources: Mapping[Path, str]) -> tuple[list[_JoinSite], list[_JoinSite]]:
+    """Split the join findings in *sources* into ``(unexpected, suppressed)`` sites."""
+    unexpected: list[_JoinSite] = []
+    suppressed: list[_JoinSite] = []
+    for site in _join_sites(sources):
+        rel_path = Path(site.key[0])
+        bucket = suppressed if (rel_path, site.lineno) in _KNOWN_JOIN_ALLOWLIST else unexpected
+        bucket.append(site)
+    return unexpected, suppressed
+
+
+def _join_partition(sources: Mapping[Path, str]) -> tuple[Counter[CompositeKey], Counter[CompositeKey]]:
+    """The gate's detection path as content identities: ``(unexpected, suppressed)``.
+
+    Multisets of composite keys (line numbers dropped), so two runs over
+    sources that differ only by line drift compare equal when the allowlist is
+    drift-tolerant.
+    """
+    unexpected, suppressed = _partition_join_sites(sources)
+    return Counter(site.key for site in unexpected), Counter(site.key for site in suppressed)
+
+
+def _sources_of(src_source_tree: Mapping[Path, SourceFile]) -> dict[Path, str]:
+    """A private, mutable ``{abs_path: source}`` copy of the read-only session cache."""
+    return {abs_path: entry.source for abs_path, entry in src_source_tree.items()}
+
+
 def test_no_builtin_path_joins_outside_pack_paths_authority(
     src_source_tree: Mapping[Path, SourceFile],
 ) -> None:
@@ -382,22 +443,13 @@ def test_no_builtin_path_joins_outside_pack_paths_authority(
     Any other ``src/`` module constructing a ``resolve_pack_root("built-in")
     / …`` join (direct or variable-indirected) or a ``<path> / "built-in"``
     filesystem join is a sixth resolver being reborn -- the exact regression
-    class this gate exists to prevent. See the module docstring for the ONE
-    documented, narrowly-allowlisted exception.
+    class this gate exists to prevent. See the module docstring for the
+    documented, narrowly-allowlisted exceptions.
     """
-    violations: dict[str, list[int]] = {}
+    unexpected, _ = _partition_join_sites(_sources_of(src_source_tree))
 
-    for abs_path, entry in sorted(src_source_tree.items()):
-        rel = _rel(abs_path)
-        if rel == _AUTHORITY_FILE:
-            continue
-        offending_lines = _find_builtin_joins(entry.tree)
-        remaining = sorted(lineno for lineno in offending_lines if (rel, lineno) not in _KNOWN_JOIN_ALLOWLIST)
-        if remaining:
-            violations[rel.as_posix()] = remaining
-
-    if violations:
-        details = "\n".join(f"  {path}: lines {lines}" for path, lines in sorted(violations.items()))
+    if unexpected:
+        details = "\n".join(f"  {site.key[0]}:{site.lineno}  [{site.key[1]}] {site.key[2]}" for site in unexpected)
         pytest.fail(
             "Found built-in path join(s) outside the charter.offering.pack_paths authority.\n"
             "Route through built_in_dir(kind) (per-kind) or built_in_root() (bare root)\n"
@@ -406,6 +458,101 @@ def test_no_builtin_path_joins_outside_pack_paths_authority(
             "(NFR-002).\n\n"
             f"Violations:\n{details}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Allowlist integrity: fail-on-stale (FR-007) and line-drift tolerance (NFR-001)
+# ---------------------------------------------------------------------------
+
+#: The distinct files the join allowlist exempts a site in -- the drift test's
+#: parameter set, derived from the allowlist itself.
+_DRIFT_FILES: tuple[str, ...] = tuple(sorted({rel.as_posix() for rel, _ in _KNOWN_JOIN_ALLOWLIST}))
+
+#: Floor on ``_DRIFT_FILES`` so the drift proof cannot pass over a shrunken set.
+_DRIFT_FILES_FLOOR = 3
+
+#: Floor on the allowlist size so the stale test cannot pass over an empty list.
+_JOIN_ALLOWLIST_FLOOR = 4
+
+
+def _allowlist_count_for(rel_posix: str) -> int:
+    return sum(1 for rel, _ in _KNOWN_JOIN_ALLOWLIST if rel.as_posix() == rel_posix)
+
+
+def _count_for(keys: Counter[CompositeKey], rel_posix: str) -> int:
+    return sum(count for key, count in keys.items() if key[0] == rel_posix)
+
+
+def test_join_allowlist_entries_each_suppress_a_live_join(
+    src_source_tree: Mapping[Path, SourceFile],
+) -> None:
+    """FR-007 (hand-curated policy): every allowlist entry must suppress a live join.
+
+    Resolving is not enough: an entry whose site no longer holds a built-in
+    join is dead weight that could silently re-bless a future violation.
+    """
+    live = {(Path(site.key[0]), site.lineno) for site in _join_sites(_sources_of(src_source_tree))}
+    checked = 0
+    stale: list[str] = []
+    for rel, lineno in sorted(_KNOWN_JOIN_ALLOWLIST):
+        checked += 1
+        if (rel, lineno) not in live:
+            stale.append(f"  {rel.as_posix()}:{lineno} suppresses no live built-in join")
+    assert checked == len(_KNOWN_JOIN_ALLOWLIST) >= _JOIN_ALLOWLIST_FLOOR
+    assert not stale, "Stale join allowlist entries (delete them):\n" + "\n".join(stale)
+
+
+def test_join_drift_files_meet_floor(src_source_tree: Mapping[Path, SourceFile]) -> None:
+    """NFR-002: the drift parameter set is non-trivial and every file in it is live."""
+    assert len(_DRIFT_FILES) >= _DRIFT_FILES_FLOOR
+    _, suppressed = _join_partition(_sources_of(src_source_tree))
+    empty = [rel for rel in _DRIFT_FILES if _count_for(suppressed, rel) < 1]
+    assert not empty, f"Drift files with no suppressed join on the unmutated tree: {empty}"
+
+
+@pytest.mark.parametrize("rel_posix", _DRIFT_FILES)
+def test_join_allowlist_survives_line_drift(
+    rel_posix: str,
+    src_source_tree: Mapping[Path, SourceFile],
+) -> None:
+    """NFR-001: a blank line above the exempted sites changes nothing the gate sees."""
+    sources = _sources_of(src_source_tree)
+    baseline = _join_partition(sources)
+    expected = _allowlist_count_for(rel_posix)
+    assert _count_for(baseline[1], rel_posix) == expected, (
+        f"{rel_posix}: {_count_for(baseline[1], rel_posix)} suppressed join(s) on the unmutated tree, expected {expected}"
+    )
+
+    target = _REPO_ROOT / rel_posix
+    mutated = dict(sources)
+    mutated[target] = "\n" + sources[target]
+    drifted = _join_partition(mutated)
+
+    assert drifted == baseline, f"{rel_posix}: blank-line drift changed the gate's partition.\nbefore: {baseline}\nafter:  {drifted}"
+    assert _count_for(drifted[1], rel_posix) == expected
+
+
+#: The formerly pinned ``src/kernel/paths.py`` line (a dead ``(file, lineno)``
+#: pin: ``if is_windows():`` inside ``get_kittify_home``).
+_FORMER_PIN_FILE = "src/kernel/paths.py"
+_FORMER_PIN_LINE = 88
+
+
+def test_new_join_at_formerly_pinned_line_is_caught(
+    src_source_tree: Mapping[Path, SourceFile],
+) -> None:
+    """A dead line pin must never re-bless a new violation planted at that line."""
+    sources = _sources_of(src_source_tree)
+    target = _REPO_ROOT / _FORMER_PIN_FILE
+    lines = sources[target].splitlines(keepends=True)
+    planted = '    _probe = Path("root") / "built-in"\n'
+    lines.insert(_FORMER_PIN_LINE - 1, planted)
+    mutated_source = "".join(lines)
+    sources[target] = mutated_source
+
+    planted_key = (_FORMER_PIN_FILE, *composite_key(mutated_source, _FORMER_PIN_LINE))
+    unexpected, suppressed = _join_partition(sources)
+    assert planted_key in unexpected, f"planted join at {_FORMER_PIN_FILE}:{_FORMER_PIN_LINE} was not reported (suppressed: {planted_key in suppressed})"
 
 
 def test_negative_bite_direct_and_variable_indirected_joins_are_caught() -> None:
