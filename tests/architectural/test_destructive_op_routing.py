@@ -67,6 +67,7 @@ from __future__ import annotations
 
 import ast as _ast
 import warnings
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -76,6 +77,9 @@ from tests.architectural._destructive_op_census import (
     SPECIFY_CLI_ROOT,
     SRC_ROOT,
     argv_tokens,
+    assert_changed_argument_is_unexpected,
+    assert_partition_survives_drift,
+    assert_second_identical_op_is_unexpected,
     diff_against_allowlist,
     drop_one_entry,
     enclosing_qualname,
@@ -83,7 +87,10 @@ from tests.architectural._destructive_op_census import (
     module_string_constants,
     ordered_subsequence,
     parse,
+    read_sources,
     scan_planted_source,
+    scan_sources,
+    with_leading_argument,
 )
 
 pytestmark = pytest.mark.architectural
@@ -133,14 +140,13 @@ def _find_destructive_literals(path: Path) -> list[tuple[int, str]]:
     return hits
 
 
+def _live_sources() -> dict[str, str]:
+    """``{repo-rel path: source}`` for every file the census scans."""
+    return read_sources(iter_py_files(SPECIFY_CLI_ROOT))
+
+
 def _scan_repo_for_destructive_literals() -> dict[str, list[tuple[int, str]]]:
-    violations: dict[str, list[tuple[int, str]]] = {}
-    for py_file in iter_py_files(SPECIFY_CLI_ROOT):
-        hits = _find_destructive_literals(py_file)
-        if hits:
-            rel = py_file.relative_to(REPO_ROOT).as_posix()
-            violations[rel] = hits
-    return violations
+    return scan_sources(_live_sources(), _find_destructive_literals)
 
 
 def _flatten(live: dict[str, list[tuple[int, str]]]) -> set[str]:
@@ -256,13 +262,39 @@ _ALLOWLIST: dict[str, str] = {
 }
 
 
+def _census_partition(sources: Mapping[str, str]) -> tuple[set[str], set[str]]:
+    """The gate's one detection + matching path: ``(unexpected, suppressed)``.
+
+    Runs the REAL finder over *sources* (``rel -> source``, possibly mutated in
+    memory) and partitions the keyed hits against ``_ALLOWLIST``. The gate, the
+    line-drift tests and the non-widening tests all go through this seam.
+    """
+    live_flat = _flatten(scan_sources(sources, _find_destructive_literals))
+    unexpected, _stale = diff_against_allowlist(live_flat, _ALLOWLIST)
+    return unexpected, live_flat & _ALLOWLIST.keys()
+
+
+def _key_rel(key: str) -> str:
+    return key.rsplit(":", 2)[0]
+
+
+#: Files-scanned floor (NFR-002): the finder scanned 1013 files on the planning
+#: base (3717c7ea). A scan that silently shrinks below it is vacuous.
+_FILES_SCANNED_FLOOR = 1013
+
+#: Every file carrying an allowlisted site; the line-drift test runs per file.
+_DRIFT_FILES: tuple[str, ...] = tuple(sorted({_key_rel(key) for key in _ALLOWLIST}))
+
+
 def test_destructive_commands_only_at_allowlisted_or_guard_sites() -> None:
     """NFR-006/FR-007/INV-3: every destructive-command literal under
     ``src/specify_cli/`` is either inside the guard's own implementation or
     a member of the frozen, rationalized allowlist. A NEW site fails; a
     disappeared site only warns (shrink-only ratchet)."""
-    live_flat = _flatten(_scan_repo_for_destructive_literals())
-    unexpected, stale = diff_against_allowlist(live_flat, _ALLOWLIST)
+    sources = _live_sources()
+    assert len(sources) >= _FILES_SCANNED_FLOOR, f"census scanned {len(sources)} files, below the pinned floor {_FILES_SCANNED_FLOOR}"
+    unexpected, suppressed = _census_partition(sources)
+    stale = set(_ALLOWLIST) - suppressed
 
     assert not unexpected, (
         "New destructive git command literal(s) found outside the routed "
@@ -271,6 +303,7 @@ def test_destructive_commands_only_at_allowlisted_or_guard_sites() -> None:
         "Route the site through the guard, or add a rationale entry to "
         f"_ALLOWLIST in this file: {sorted(unexpected)}"
     )
+    assert suppressed, "Non-vacuity: the census suppressed no allowlisted site at all"
     if stale:
         warnings.warn(
             f"Shrink-only allowlist: the following site(s) no longer carry a raw destructive-command literal -- safe to delete from _ALLOWLIST: {sorted(stale)}",
@@ -283,7 +316,7 @@ def test_allowlisted_files_exist() -> None:
     """Sanity: a renamed/deleted allowlisted file must not silently drop out
     of the scan (an absent file reads as zero live hits, i.e. a false
     "shrink", masking a rename the allowlist should track by path)."""
-    rel_paths = {key.rsplit(":", 2)[0] for key in _ALLOWLIST}
+    rel_paths = {_key_rel(key) for key in _ALLOWLIST}
     missing = sorted(rel for rel in rel_paths if not (REPO_ROOT / rel).is_file())
     assert not missing, f"Allowlisted file(s) no longer exist: {missing}"
 
@@ -522,3 +555,52 @@ def test_removing_a_known_predicate_reproduces_a_gate_failure() -> None:
         "predicate baseline did not reproduce a gate failure against the "
         "live seam scan -- the no-new-predicate check is vacuous."
     )
+
+
+# ---------------------------------------------------------------------------
+# Line-drift tolerance (NFR-001) and non-widening (FR-006) through the seam.
+# ---------------------------------------------------------------------------
+
+_NON_WIDENING_REL = "src/specify_cli/lanes/merge.py"
+
+
+def _site_linenos(rel: str, op: str | None = None) -> list[int]:
+    return sorted(lineno for lineno, hit_op in _find_destructive_literals(REPO_ROOT / rel) if op is None or hit_op == op)
+
+
+def test_destructive_drift_files_cover_the_allowlist() -> None:
+    """Companion floor: the drift test runs over at least the 15 allowlisted files."""
+    assert len(_DRIFT_FILES) >= 15, _DRIFT_FILES
+
+
+@pytest.mark.parametrize("rel", _DRIFT_FILES)
+def test_destructive_census_survives_line_drift(rel: str) -> None:
+    """NFR-001: an unrelated line shift (blank line at the top; a probe
+    statement above every census site) leaves ``(unexpected, suppressed)``
+    unchanged. RED on the line-keyed allowlist, GREEN on content keys."""
+    source = (REPO_ROOT / rel).read_text(encoding="utf-8")
+    file_keys = [key for key in _ALLOWLIST if _key_rel(key) == rel]
+    assert_partition_survives_drift(rel, source, _census_partition, _site_linenos(rel), file_keys)
+
+
+def test_second_identical_op_in_exempted_function_fails() -> None:
+    """Non-widening guard: duplicating an exempted ``merge --abort`` statement
+    inside its function is reported as unexpected. GREEN on the line-keyed base
+    (a new line already yields a new key) and must stay GREEN on content keys
+    (``op_ordinal`` makes the duplicate a new key)."""
+    source = (REPO_ROOT / _NON_WIDENING_REL).read_text(encoding="utf-8")
+    lineno = _site_linenos(_NON_WIDENING_REL, _MERGE_ABORT)[0]
+    assert_second_identical_op_is_unexpected(_NON_WIDENING_REL, source, _census_partition, lineno)
+
+
+def test_changed_argument_on_exempted_op_fails() -> None:
+    """Non-widening guard: adding a NAME element to an exempted argv literal
+    (same line, so the line count is unchanged) makes the site unexpected and
+    its old entry stale. RED on the line-keyed base (the ``path:line:op`` key
+    silently keeps blessing the changed argument); GREEN on content keys (the
+    token line changes). Editing only a string element would not change the
+    tokens: ``composite_key`` strips strings."""
+    source = (REPO_ROOT / _NON_WIDENING_REL).read_text(encoding="utf-8")
+    lineno = _site_linenos(_NON_WIDENING_REL, _MERGE_ABORT)[0]
+    mutated = with_leading_argument(source, lineno, (_ast.List, _ast.Tuple))
+    assert_changed_argument_is_unexpected(_NON_WIDENING_REL, source, _census_partition, mutated)

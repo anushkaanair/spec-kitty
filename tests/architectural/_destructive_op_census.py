@@ -24,15 +24,19 @@ each gate keeps its own classifier, module set, and ``_ALLOWLIST``.
 from __future__ import annotations
 
 import ast as _ast
-from collections.abc import Callable, Mapping
+import tempfile
+from collections.abc import Callable, Hashable, Iterable, Mapping
 from pathlib import Path
 from typing import TypeVar
+
+from tests.architectural._content_identity import with_blank_line_at_top, with_probe_above_statement
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "src"
 SPECIFY_CLI_ROOT = SRC_ROOT / "specify_cli"
 
 _T = TypeVar("_T")
+_K = TypeVar("_K", bound=Hashable)
 
 
 # ---------------------------------------------------------------------------
@@ -219,3 +223,196 @@ def drop_one_entry(allowlist: Mapping[str, str]) -> tuple[str, dict[str, str]]:
     victim = next(iter(allowlist))
     shrunk = {k: v for k, v in allowlist.items() if k != victim}
     return victim, shrunk
+
+
+# ---------------------------------------------------------------------------
+# Drift / non-widening harness: run a gate's REAL finder over in-memory sources
+# ---------------------------------------------------------------------------
+
+#: A census hit: ``(lineno, op)`` as every gate's finder reports it.
+Hit = tuple[int, str]
+
+_PROBE_ARGUMENT = "_census_probe_arg"
+
+
+def scan_sources(sources: Mapping[str, str], finder: Callable[[Path], list[Hit]]) -> dict[str, list[Hit]]:
+    """Run *finder* over every ``rel -> source`` pair; key the hits by *rel*.
+
+    The finders take a ``Path``, so each (possibly mutated) source is written to
+    a temporary copy at the same repo-relative path and scanned there. The hits
+    are keyed with the ORIGINAL repo-relative path, so the gate, the drift
+    tests and the non-widening tests all share one detection path. Files with
+    no hit are omitted, exactly as the on-disk scans do.
+    """
+    live: dict[str, list[Hit]] = {}
+    with tempfile.TemporaryDirectory(prefix="census-scan-") as tmp:
+        root = Path(tmp)
+        for rel, source in sources.items():
+            copy = root / rel
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            copy.write_text(source, encoding="utf-8")
+            hits = finder(copy)
+            if hits:
+                live[rel] = hits
+    return live
+
+
+def read_sources(paths: Iterable[Path]) -> dict[str, str]:
+    """``{repo-relative posix path: source text}`` for *paths* (unreadable files skipped)."""
+    sources: dict[str, str] = {}
+    for path in paths:
+        try:
+            sources[path.relative_to(REPO_ROOT).as_posix()] = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+    return sources
+
+
+def with_probes_above_sites(source: str, linenos: Iterable[int]) -> str:
+    """Insert a drift probe above the statement of every site in *linenos*.
+
+    Applied bottom-up so each earlier site's line number is still valid when
+    its probe is inserted (WP02's :func:`with_probe_above_statement` inserts
+    one probe per call).
+    """
+    for lineno in sorted(set(linenos), reverse=True):
+        source = with_probe_above_statement(source, lineno)
+    return source
+
+
+def _smallest_stmt_spanning(tree: _ast.AST, lineno: int) -> _ast.stmt:
+    best: _ast.stmt | None = None
+    for node in _ast.walk(tree):
+        if not isinstance(node, _ast.stmt):
+            continue
+        end = node.end_lineno if node.end_lineno is not None else node.lineno
+        if node.lineno <= lineno <= end and (best is None or end - node.lineno < (best.end_lineno or best.lineno) - best.lineno):
+            best = node
+    if best is None:
+        raise ValueError(f"line {lineno} is not inside any statement")
+    return best
+
+
+def with_duplicated_statement(source: str, lineno: int) -> str:
+    """Duplicate the innermost statement containing *lineno* directly below itself.
+
+    Models "a second identical op in an exempted function": same enclosing
+    function, same tokens, same op, one more occurrence.
+    """
+    stmt = _smallest_stmt_spanning(_ast.parse(source), lineno)
+    lines = source.splitlines(keepends=True)
+    end = stmt.end_lineno if stmt.end_lineno is not None else stmt.lineno
+    block = lines[stmt.lineno - 1 : end]
+    return "".join([*lines[:end], *block, *lines[end:]])
+
+
+def _insertion_offset(source_line: str, node: _ast.expr) -> int:
+    """Column just inside the node's opening bracket / call parenthesis."""
+    if isinstance(node, _ast.Call):
+        func_end = node.func.end_col_offset or 0
+        return source_line.index("(", func_end) + 1
+    col = node.col_offset
+    return col + 1 if source_line[col] in "[(" else col
+
+
+def _callee_name(node: _ast.expr) -> str | None:
+    if not isinstance(node, _ast.Call):
+        return None
+    func = node.func
+    if isinstance(func, _ast.Attribute):
+        return func.attr
+    return func.id if isinstance(func, _ast.Name) else None
+
+
+def with_leading_argument(
+    source: str,
+    lineno: int,
+    node_types: tuple[type[_ast.expr], ...],
+    *,
+    callee: str | None = None,
+) -> str:
+    """Insert ``_census_probe_arg, `` as the first element/argument of the
+    first *node_types* node starting on *lineno* (restricted to calls whose
+    callee name is *callee*, when given).
+
+    Models "a changed argument on an exempted op": the line count is unchanged
+    (so a ``path:line:op`` key keeps blessing the site), but the op's token line
+    gains a NAME token, so a content key for the edited op no longer matches.
+    Changing only a string literal would NOT do: ``composite_key`` strips
+    strings, so the token line would be identical.
+    """
+    tree = _ast.parse(source)
+    candidates = [n for n in _ast.walk(tree) if isinstance(n, node_types) and n.lineno == lineno and (callee is None or _callee_name(n) == callee)]
+    if not candidates:
+        raise ValueError(f"no {node_types!r} node starts on line {lineno}")
+    node = min(candidates, key=lambda n: n.col_offset)
+    lines = source.splitlines(keepends=True)
+    line = lines[lineno - 1]
+    offset = _insertion_offset(line, node)
+    lines[lineno - 1] = f"{line[:offset]}{_PROBE_ARGUMENT}, {line[offset:]}"
+    return "".join(lines)
+
+
+def _describe(keys: Iterable[object]) -> list[str]:
+    return sorted(str(key) for key in keys)
+
+
+def assert_partition_survives_drift(
+    rel: str,
+    source: str,
+    partition: Callable[[Mapping[str, str]], tuple[set[_K], set[_K]]],
+    site_linenos: Iterable[int],
+    file_keys: Iterable[_K],
+) -> None:
+    """NFR-001 / NFR-002: the gate's ``(unexpected, suppressed)`` partition of
+    *rel* is identical after (i) a blank line at the top and (ii) a probe
+    statement above every census site; the per-file suppressed count is
+    unchanged and, unless one of *file_keys* is already stale, non-zero."""
+    base_unexpected, base_suppressed = partition({rel: source})
+    stale = set(file_keys) - base_suppressed
+    assert stale or base_suppressed, f"{rel}: vacuous drift case -- no allowlisted site is suppressed on the unmutated source"
+    mutations = {
+        "blank line at top": with_blank_line_at_top(source),
+        "probe above every census site": with_probes_above_sites(source, site_linenos),
+    }
+    for label, mutated in mutations.items():
+        unexpected, suppressed = partition({rel: mutated})
+        assert (unexpected, suppressed) == (base_unexpected, base_suppressed), (
+            f"{rel}: census partition changed under line drift ({label}). "
+            f"newly unexpected={_describe(unexpected - base_unexpected)} "
+            f"no longer suppressed={_describe(base_suppressed - suppressed)}"
+        )
+        assert len(suppressed) == len(base_suppressed), f"{rel}: suppressed count changed under {label}"
+
+
+def assert_second_identical_op_is_unexpected(
+    rel: str,
+    source: str,
+    partition: Callable[[Mapping[str, str]], tuple[set[_K], set[_K]]],
+    lineno: int,
+) -> None:
+    """Non-widening: duplicating an exempted op statement inside its function
+    yields at least one NEW unexpected key -- an allowlist entry blesses one
+    occurrence, never "every identical op in that function"."""
+    base_unexpected, _ = partition({rel: source})
+    unexpected, _ = partition({rel: with_duplicated_statement(source, lineno)})
+    assert unexpected - base_unexpected, f"{rel}: a second identical op (duplicate of line {lineno}) was silently blessed by the allowlist"
+
+
+def assert_changed_argument_is_unexpected(
+    rel: str,
+    source: str,
+    partition: Callable[[Mapping[str, str]], tuple[set[_K], set[_K]]],
+    mutated: str,
+) -> None:
+    """Non-widening: a token-changing argument edit on an exempted op makes the
+    edited site unexpected (FAIL) and its old entry stale (WARN)."""
+    base_unexpected, base_suppressed = partition({rel: source})
+    unexpected, suppressed = partition({rel: mutated})
+    new_unexpected = unexpected - base_unexpected
+    newly_stale = base_suppressed - suppressed
+    assert len(new_unexpected) == 1, (
+        f"{rel}: an exempted op whose arguments changed is still blessed by its allowlist entry "
+        f"(new unexpected={_describe(new_unexpected)}, still suppressed={_describe(suppressed)})"
+    )
+    assert len(newly_stale) == 1, f"{rel}: the edited op's old entry should turn stale, got {_describe(newly_stale)}"
