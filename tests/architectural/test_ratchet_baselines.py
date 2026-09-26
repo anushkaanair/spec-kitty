@@ -4,14 +4,16 @@ This test is the canonical executable contract for the burn-down policy
 pinned by C-004 / C-006 of the Slice F charter pack. It loads
 ``tests/architectural/_baselines.yaml`` and compares the recorded
 per-test, per-category allowlist size against the live size of each
-gated test module's allowlist symbol.
+gated test module's allowlist symbol. Every comparison is one row of the
+module-level ``_SIZE_RATCHETS`` table, and every YAML leaf must have a row
+(FR-011: ``test_every_baseline_leaf_is_enforced_by_a_size_ratchet``).
 
 Failure semantics
 -----------------
 * **Growth above baseline** -> ``pytest.fail`` with a remediation hint
   (either remove the new allowlist entry or edit ``_baselines.yaml`` in
   the same PR with a justification comment).
-* **Shrinkage below baseline** -> ``warnings.warn`` (informational; the
+* **Shrinkage below baseline** -> ``record_property`` (informational; the
   ratchet does not fail on shrinkage so legitimate cleanup is not
   blocked, but it nudges the PR author to lock in the new lower bound).
 
@@ -333,51 +335,6 @@ _REQUIRED_TOP_LEVEL_KEYS: frozenset[str] = frozenset(r.section for r in _SIZE_RA
 _REQUIRED_NO_DEAD_MODULES_CATEGORIES: frozenset[str] = frozenset(
     r.leaf for r in _SIZE_RATCHETS if r.section == "test_no_dead_modules"
 )
-
-# FR-003: JUnit property names for the skip-marker delta backstop. Growth is
-# REVIEWABLE (routed here, surfaced in the report, reviewed via the co-located
-# ``# round-trip: skip: <reason>`` diff line) rather than a hard CI failure.
-_SKIP_MARKER_GROWTH_PROP = "skip_marker_blocks_growth"
-_SKIP_MARKER_SHRINK_PROP = "skip_marker_blocks_shrinkage"
-
-
-def _emit_skip_marker_delta(
-    baseline: int, current: int, record_property: RecordPropertyFn
-) -> None:
-    """Route a skip-marker-block count delta to ``record_property`` (FR-003).
-
-    Growth is REVIEWABLE-not-blocking: a new ``# round-trip: skip: <reason>``
-    block is caught by human review of the co-located reason line (enforced by
-    the unmodified ``_SKIP_MARKER_RE``), not by a ``pytest.fail`` here. Shrinkage
-    locks in a lower high-water mark. This helper NEVER raises — that is the
-    whole point of draining the hard-fail toll.
-
-    #3560 finding 2 (advisory-by-design, not a gap): the ``record_property``
-    values emitted below land in pytest's JUnit ``user_properties``, which is
-    write-only in this repo (nothing reads it back to gate CI) — so this
-    numeric count is intentionally NOT machine-enforced. The count-bump was
-    pure bookkeeping toll; draining it here does not remove any teeth. The
-    actual machine-enforced gate for a new skip-marker block is per-block and
-    lives in ``tests/contract/test_example_round_trip.py``
-    (``_SKIP_MARKER_RE``): a block with neither a ``# pydantic_model:`` tag nor
-    a ``# round-trip: skip: <reason>`` marker carrying a non-empty reason fails
-    that gate directly, independent of this advisory count.
-    """
-    if current > baseline:
-        record_property(
-            _SKIP_MARKER_GROWTH_PROP,
-            f"Skip-marker blocks grew {baseline} -> {current}. FR-003: reviewable "
-            f"via the co-located `# round-trip: skip: <reason>` diff line, NOT a CI "
-            f"failure. Lock in the new high-water mark by bumping "
-            f"`_baselines.yaml::test_example_round_trip.skip_marker_blocks`.",
-        )
-    elif current < baseline:
-        record_property(
-            _SKIP_MARKER_SHRINK_PROP,
-            f"Skip-marker blocks shrank {baseline} -> {current}. Lock in the lower "
-            f"bound in `_baselines.yaml`.",
-        )
-
 
 def _load_baselines() -> dict[str, Any]:
     """Load and parse the baselines YAML. Raise FileNotFoundError if missing."""
@@ -718,64 +675,13 @@ def test_doctrine_pair_allowlist_growth_fails_and_shrink_is_reported(
     assert any(symbol in str(value) for _, value in recorded), recorded
 
 
-def test_skip_marker_growth_is_recorded_not_failed(
-    request: pytest.FixtureRequest,
-    record_property: RecordPropertyFn,
-) -> None:
-    """FR-003 / SC-003 / US2-AC1: skip-marker GROWTH is routed through
-    `record_property` (reviewable via the co-located `# round-trip: skip:
-    <reason>` diff line) and does NOT hard-fail.
-
-    `record_property` is write-only in this repo (`grep user_properties tests/`
-    is empty), so an unasserted call is an unverified backstop — this test
-    ASSERTS the growth property actually fired by inspecting
-    `request.node.user_properties`.
-    """
-    data = _load_baselines()
-    baseline = data["test_example_round_trip"]["skip_marker_blocks"]
-    # Drive growth with a synthetic current above baseline; must NOT raise
-    # (contrast the removed hard-fail `_SKIP_MARKED_BLOCKS` `single_baselines`
-    # tuple, which would have failed the whole ratchet on any new skip block).
-    _emit_skip_marker_delta(baseline, baseline + 5, record_property)
-    props = dict(request.node.user_properties)
-    assert _SKIP_MARKER_GROWTH_PROP in props, request.node.user_properties
-    assert "reviewable" in str(props[_SKIP_MARKER_GROWTH_PROP]).lower()
-
-
-def test_skip_marker_shrink_is_recorded(
-    request: pytest.FixtureRequest,
-    record_property: RecordPropertyFn,
-) -> None:
-    """FR-003 / US2-AC3: skip-marker shrinkage is tracked as a lowered
-    high-water mark (asserted to fire, same rationale as growth)."""
-    data = _load_baselines()
-    baseline = data["test_example_round_trip"]["skip_marker_blocks"]
-    _emit_skip_marker_delta(baseline, max(baseline - 1, 0), record_property)
-    props = dict(request.node.user_properties)
-    assert _SKIP_MARKER_SHRINK_PROP in props, request.node.user_properties
-
-
-def test_skip_marker_live_count_never_blocks(
-    record_property: RecordPropertyFn,
-) -> None:
-    """FR-003: against the LIVE `_SKIP_MARKED_BLOCKS` size (real import wiring),
-    the delta helper never raises — whatever the current count, skip-marker
-    accounting cannot block CI."""
-    data = _load_baselines()
-    baseline = data["test_example_round_trip"]["skip_marker_blocks"]
-    current = len(
-        _import_module_attr(_ROUND_TRIP_CONTRACT_MODULE, "_SKIP_MARKED_BLOCKS")
-    )
-    _emit_skip_marker_delta(baseline, current, record_property)  # must not raise
-
-
 def test_legacy_contract_allowlist_growth_still_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """FR-003 NFR-003 / Contract B: removing `_SKIP_MARKED_BLOCKS` did NOT loosen
-    the C-001 sibling. `legacy_contract_allowlist` stays pinned at 151 AND its
-    growth still reds the growth arm (the surgical extraction was scoped to the
-    skip-marker row only).
+    """FR-003 NFR-003 / Contract B: retiring the advisory `skip_marker_blocks`
+    leaf did NOT loosen the C-001 sibling. `legacy_contract_allowlist` stays
+    pinned at 151 AND its growth still reds the growth arm (the retirement was
+    scoped to the skip-marker leaf only).
     """
     data = _load_baselines()
     assert data["test_example_round_trip"]["legacy_contract_allowlist"] == 151
