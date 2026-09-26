@@ -187,11 +187,11 @@
     {
       "criterion_id": "FR-019",
       "description": "Verify FR-019 is satisfied",
-      "proof_type": "automated_test",
-      "evidence": null,
-      "pass_fail": "pending",
-      "verified_by": null,
-      "verified_at": null,
+      "proof_type": "manual_review",
+      "evidence": "GitHub issue_read spec-kitty/spec-kitty #5116 (oracle after #2633), #5117 (model suppression), #5118 (S8997 routing), #5145 (descriptor matchers, FR-019d): all exist, open; plus #5149",
+      "pass_fail": "pass",
+      "verified_by": "reviewer-renata",
+      "verified_at": "2026-09-26T22:56:49.204909+00:00",
       "notes": "TODO: replace with a real acceptance criterion"
     },
     {
