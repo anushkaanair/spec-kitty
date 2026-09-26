@@ -548,6 +548,52 @@ def test_leaf_drift_detects_planted_unenforced_leaf() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "row", _SIZE_RATCHETS, ids=[f"{r.section}.{r.leaf}" for r in _SIZE_RATCHETS]
+)
+def test_lowering_an_enforced_leaf_below_live_fails(
+    monkeypatch: pytest.MonkeyPatch, row: _SizeRatchet
+) -> None:
+    """US2-AS4: each ``_SIZE_RATCHETS`` row reads ITS OWN leaf.
+
+    Lowering the row's leaf to ``live - 1`` must make the real growth arm fail
+    on a line naming both ``section.leaf`` and the row's attr. A row wired to
+    the wrong leaf would not red here. For live-0 rows (e.g.
+    ``known_ungated_files``) the leaf becomes ``-1`` and ``0 > -1`` still fails,
+    so no special case is needed.
+    """
+    live = len(_import_module_attr(row.module, row.attr))
+    lowered = copy.deepcopy(_load_baselines())
+    lowered[row.section][row.leaf] = live - 1
+    monkeypatch.setattr(sys.modules[__name__], "_load_baselines", lambda: lowered)
+
+    with pytest.raises(AssertionError) as excinfo:
+        test_growing_an_allowlist_above_baseline_fails()
+
+    # The row's own failure line names `section.leaf (attr)` together, and NO
+    # other row fails: a second row reading the same leaf, or a row pair with
+    # swapped leaves, would surface as an extra failing row.
+    message = str(excinfo.value)
+    assert f"{row.section}.{row.leaf} ({row.attr})" in message, (
+        f"Lowering {row.section}.{row.leaf} below live did not produce a growth "
+        f"failure naming it and {row.attr}:\n{message}"
+    )
+    others = [
+        f"{r.section}.{r.leaf}"
+        for r in _SIZE_RATCHETS
+        if r != row and f"{r.section}.{r.leaf} ({r.attr})" in message
+    ]
+    assert not others, f"Lowering {row.section}.{row.leaf} also redded {others}"
+
+
+def test_size_ratchet_table_meets_floor() -> None:
+    """NFR-002 floor: the table cannot silently lose rows or duplicate a leaf."""
+    assert len(_SIZE_RATCHETS) >= 19, len(_SIZE_RATCHETS)
+    keys = [(r.section, r.leaf) for r in _SIZE_RATCHETS]
+    assert len(keys) == len(set(keys)), f"duplicate (section, leaf) rows: {keys}"
+    assert len(_REQUIRED_TOP_LEVEL_KEYS) == 12, sorted(_REQUIRED_TOP_LEVEL_KEYS)
+
+
 def test_yaml_leaves_refuses_a_scalar_section() -> None:
     """A top-level scalar has no leaf a comparison could read: refuse it."""
     with pytest.raises(ValueError, match="test_no_dead_symbols"):
