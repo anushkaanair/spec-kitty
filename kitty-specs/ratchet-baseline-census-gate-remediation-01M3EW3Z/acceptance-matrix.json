@@ -38,10 +38,10 @@
       "criterion_id": "FR-004",
       "description": "Verify FR-004 is satisfied",
       "proof_type": "automated_test",
-      "evidence": null,
-      "pass_fail": "pending",
-      "verified_by": null,
-      "verified_at": null,
+      "evidence": "pytest -n2 targeted arch set (arch_list.txt + clock_import/no_follow_symlinks/no_dead_symbols) from .worktrees/ratchet-baseline-census-gate-remediation-01M3EW3Z-lane-l: 887 passed, 1 skipped; test_built_in_location_authority.py test_join_allowlist_entries_each_suppress_a_live_join, test_join_allowlist_survives_line_drift, test_new_join_at_formerly_pinned_line_is_caught green; grep kernel/paths.py:88 / home.py 79 pins: 0 hits",
+      "pass_fail": "pass",
+      "verified_by": "reviewer-renata",
+      "verified_at": "2026-09-26T22:54:56.049458+00:00",
       "notes": "TODO: replace with a real acceptance criterion"
     },
     {
