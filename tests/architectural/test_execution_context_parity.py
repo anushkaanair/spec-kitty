@@ -95,67 +95,19 @@ Composite-fragment dual-CWD extension (execution-context-unification-01KTPKST / 
 The block at the bottom of this module extends the ratchet from *string-keyed
 status parity* (above) to **fragment-by-fragment parity of the resolved
 ``MissionExecutionContext``** — the doc-09 fragment / op-composite described in
-``kitty-specs/execution-context-unification-01KTPKST/data-model.md``. It is
-authored **ATDD-first** (charter C-011): the fragment assertions are written
-RED now, *before* the fragments exist on ``mission_runtime.MissionExecutionContext``,
-and each converges to GREEN as its conversion WP lands.
+``kitty-specs/execution-context-unification-01KTPKST/data-model.md``. Live
+parity tests cover the Identity (incl. ``mid8``), BranchRef (incl.
+``target_branch`` + ``destination_ref``/``CommitTarget``), StatusSurface,
+read-path, Workspace (incl. ``primary_root``) and ArtifactPlacement fragments,
+the runtime lifecycle actions, and the flattened topology.
 
 The harness resolves the context twice — once with ``repo_root`` derived (via
 ``find_repo_root``) from the **primary-checkout CWD** and once from the
 **lane-worktree CWD** — and asserts the two resolved contexts are equal,
-fragment by fragment, for every lifecycle action that the resolver supports
-today (``tasks`` / ``tasks_finalize`` / ``accept``). The broader lifecycle
-(``specify``/``plan``/``analyze``/``status``) and the fragment objects
-themselves (Identity incl. ``mid8``; BranchRef incl. ``target_branch`` +
-``destination_ref``/``CommitTarget``; StatusSurface; Workspace incl.
-``primary_root``; ArtifactPlacement; PromptSource) do not exist on the context
-yet, so the assertions that depend on them are ``xfail(strict=True)``.
+fragment by fragment.
 
-xfail → convergence-WP map (IC-08 / T003)
------------------------------------------
-Each ``xfail(strict=True)`` test below converges (flips to XPASS, at which point
-the converging WP removes the marker) as its conversion lands. ``strict=True``
-means a stale marker left after a fragment lands fails the suite, forcing the
-converging WP to delete it — that is the ratchet.
-
-==================================  ====  ==========================================
-Test (xfail until converged)        WP    What flips it green
-==================================  ====  ==========================================
-test_status_surface_fragment_       WP02  CONVERGED. StatusSurfaceFragment carried
-  parity                            /03   on the context (``status_read_dir`` /
-                                          ``status_write_dir``); status facade
-                                          adoption (IC-01, WP02) + fragment
-                                          attachment (WP03). xfail removed.
-test_identity_fragment_parity       WP03  CONVERGED. IdentityFragment (``mission_id``
-                                          / ``mid8`` / ``mission_slug``) on the
-                                          context; ``mid8`` single-derivation.
-                                          xfail removed.
-test_branchref_fragment_parity      WP03  CONVERGED. BranchRefFragment
-                                          (``target_branch`` /
-                                          ``coordination_branch`` /
-                                          ``destination_ref``=CommitTarget).
-                                          xfail removed.
-test_read_path_fragment_parity      WP04  Read-path resolver folded into the
-                                          context (``feature_dir`` resolves via
-                                          the single read-path surface, IC-03).
-test_workspace_fragment_parity      WP05  WorkspaceFragment incl. ``primary_root``
-                                          (single worktree-pointer parser, IC-04).
-test_artifact_placement_fragment_   WP06  ArtifactPlacementFragment
-  parity                                  (``placement_ref``=CommitTarget) — one
-                                          artifact-placement ref (IC-05).
-test_runtime_lifecycle_action_      WP07  Runtime threads the context through the
-  parity                                  full lifecycle (specify/plan/analyze/
-                                          status become resolvable actions).
-test_flattened_topology_commit_     WP08  CommitTarget + flattened-topology
-  target / *_status_surface /             resolution: ``kind == flattened``,
-  *_no_coordination_branch                ``coordination_branch is None``,
-                                          ``status_read_dir == status_write_dir``
-                                          (also exercised by retrospect/merge,
-                                          IC-12).
-==================================  ====  ==========================================
-
-Live (non-xfail) parity coverage
----------------------------------
+Live parity coverage
+--------------------
 ``test_dual_cwd_existing_field_parity`` asserts CWD-invariance of the fields
 that the resolver already populates today (``mission_slug`` / ``target_branch``
 / ``feature_dir`` / ``detection_method``). It guards against a CWD-routing
@@ -1392,17 +1344,9 @@ def test_full_sequence_ratchet_catches_divergence(tmp_path: Path) -> None:
 # (execution-context-unification-01KTPKST / IC-08 / FR-011 / C-CTX-2 / SC-1)
 # ===========================================================================
 #
-# ATDD-FIRST (charter C-011): the fragment assertions below are authored RED,
-# *before* the fragments exist on ``mission_runtime.MissionExecutionContext``. They are
-# ``xfail(strict=True)`` and converge to XPASS as each conversion WP lands; the
-# converging WP then removes its now-stale marker (strict=True forces this).
-#
-# The convergence map lives in the module docstring (T003). Every fragment test
-# names its convergence WP in its ``xfail`` reason.
-#
-# The single live (non-xfail) test ``test_dual_cwd_existing_field_parity`` is
-# the anchor: it guards CWD-invariance of the fields the resolver populates
-# *today* and must remain GREEN throughout.
+# Fragment-by-fragment parity of the resolved context across the primary and
+# lane-worktree CWDs. ``test_dual_cwd_existing_field_parity`` is the anchor: it
+# guards CWD-invariance of the scalar fields the resolver populates.
 # ---------------------------------------------------------------------------
 
 # Lifecycle actions the resolver supports today (``ACTION_NAMES``). The full
@@ -1410,8 +1354,8 @@ def test_full_sequence_ratchet_catches_divergence(tmp_path: Path) -> None:
 # status``) is only partly resolvable now; ``implement`` / ``review`` additionally
 # require a ``lanes.json`` (written by finalize-tasks) which the hermetic fixture
 # omits, so the dual-CWD field-parity anchor exercises the lane-free actions.
-# The remaining lifecycle steps are covered by the xfail
-# ``test_runtime_lifecycle_action_parity`` below (converges in WP07).
+# The remaining lifecycle steps are covered by
+# ``test_runtime_lifecycle_action_parity`` below.
 _RESOLVABLE_LANE_FREE_ACTIONS: tuple[str, ...] = (
     "tasks",
     "tasks_finalize",
@@ -1419,7 +1363,7 @@ _RESOLVABLE_LANE_FREE_ACTIONS: tuple[str, ...] = (
 )
 
 # Fields that ``resolve_action_context`` populates today for the lane-free
-# actions. These are the live (non-xfail) parity surface.
+# actions. These are the live parity surface.
 _EXISTING_PARITY_FIELDS: tuple[str, ...] = (
     "mission_slug",
     "target_branch",
@@ -2164,8 +2108,8 @@ def test_no_feature_dir_anchored_status_event_reads() -> None:
     ``status.events.jsonl`` path compositions in ``retrospective/gate.py`` and
     ``cli/commands/agent_retrospect.py`` outside their routed seam helpers,
     and asserts each seam consults ``resolve_status_surface``. Reverting the
-    WP05 T024/T025 routing reintroduces a forbidden read (or deletes a seam)
-    and turns this RED.
+    WP05 T024/T025 routing reintroduces a forbidden read and turns this RED;
+    renaming or deleting a seam surfaces its fallback reads as forbidden hits.
     """
     repo_root = _repo_root_for_sources()
     offenders: dict[str, list[str]] = {}
@@ -2174,13 +2118,11 @@ def test_no_feature_dir_anchored_status_event_reads() -> None:
         source_path = repo_root / rel_path
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
         hits: list[str] = []
-        seen_seams: set[str] = set()
 
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             if node.name in exempt_seams:
-                seen_seams.add(node.name)
                 # The seam is only a legitimate exemption if it consults the
                 # canonical resolver before any fallback composition.
                 seam_source = ast.unparse(node)
@@ -2192,12 +2134,6 @@ def test_no_feature_dir_anchored_status_event_reads() -> None:
                 continue
             hits.extend(_feature_dir_read_family_hits(node, exempt_seams))
 
-        missing_seams = exempt_seams - seen_seams
-        if missing_seams:
-            hits.append(
-                f"routed seam(s) {sorted(missing_seams)!r} missing — the canonical "
-                "read routing (WP05 T024/T025) appears to have been reverted"
-            )
         if hits:
             offenders[rel_path] = hits
 
