@@ -907,7 +907,125 @@ def _fr014_deferred_census_report() -> str:
 # stale), WP13 deletes every row and pins the set empty.
 # ---------------------------------------------------------------------------
 
-_POSITIONAL_ANCHOR_EXEMPTION_ROWS: tuple[tuple[str, str, str, str], ...] = ()
+_BY_WP02 = "#5085 interim: migrated by WP02 (join allowlist content identity)"
+_BY_WP03 = "#5085 interim: migrated by WP03 (kernel / os-detect content identity)"
+_BY_WP04 = "#5085 interim: migrated by WP04 (census CensusKey content identity)"
+
+_JOIN_GATE = "tests/architectural/test_built_in_location_authority.py"
+_KERNEL_GATE = "tests/architectural/test_kernel_no_doctrine_import.py"
+_DESTRUCTIVE_GATE = "tests/architectural/test_destructive_op_routing.py"
+_MUTATION_GATE = "tests/architectural/test_mutation_ownership_routing.py"
+_OVERWRITE_GATE = "tests/architectural/test_overwrite_ownership_routing.py"
+_EXEMPTIONS_DIR = "tests/architectural/_exemptions"
+_OS_DEFERRED_TXT = "os-detect-ban-deferred.txt"
+_OS_MYPY_TXT = "os-detect-ban-mypy-narrowing.txt"
+_OS_RAW_TXT = "os-detect-ban-sanctioned-raw.txt"
+_OS_DEFERRED_PATH = f"{_EXEMPTIONS_DIR}/{_OS_DEFERRED_TXT}"
+_OS_MYPY_PATH = f"{_EXEMPTIONS_DIR}/{_OS_MYPY_TXT}"
+_OS_RAW_PATH = f"{_EXEMPTIONS_DIR}/{_OS_RAW_TXT}"
+
+_JOIN_SYM = "_KNOWN_JOIN_ALLOWLIST"
+_KERNEL_SYM = "_PRE_EXISTING_EXEMPTIONS"
+_CENSUS_SYM = "_ALLOWLIST"
+
+# Generated from the RED findings (never hand-typed); stable sort by
+# (relpath, symbol, site).
+_POSITIONAL_ANCHOR_EXEMPTION_ROWS: tuple[tuple[str, str, str, str], ...] = (
+    (_OS_DEFERRED_PATH, _OS_DEFERRED_TXT, "src/specify_cli/__init__.py:353", _BY_WP03),
+    (_OS_DEFERRED_PATH, _OS_DEFERRED_TXT, "src/specify_cli/__init__.py:521", _BY_WP03),
+    (_OS_DEFERRED_PATH, _OS_DEFERRED_TXT, "src/specify_cli/paths/windows_paths.py:163", _BY_WP03),
+    (_OS_MYPY_PATH, _OS_MYPY_TXT, "src/kernel/locks.py:222", _BY_WP03),
+    (_OS_MYPY_PATH, _OS_MYPY_TXT, "src/kernel/locks.py:234", _BY_WP03),
+    (_OS_RAW_PATH, _OS_RAW_TXT, "src/kernel/locks.py:96", _BY_WP03),
+    (_JOIN_GATE, _JOIN_SYM, "(Path('src/charter/activation/kind_vocabulary.py'), 273)", _BY_WP02),
+    (_JOIN_GATE, _JOIN_SYM, "(Path('src/charter/activation/neutrality/lint.py'), 379)", _BY_WP02),
+    (_JOIN_GATE, _JOIN_SYM, "(Path('src/kernel/paths.py'), 88)", _BY_WP02),
+    (_JOIN_GATE, _JOIN_SYM, "(Path('src/specify_cli/runtime/home.py'), 79)", _BY_WP02),
+    (_JOIN_GATE, _JOIN_SYM, "(Path('src/specify_cli/template/manager.py'), 161)", _BY_WP02),
+    (_JOIN_GATE, _JOIN_SYM, "(Path('src/specify_cli/template/manager.py'), 304)", _BY_WP02),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/cli/commands/mission_type.py:1181:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/coordination/workspace.py:204:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/core/vcs/git.py:222:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/doctrine/sources/git_source.py:98:reset_hard'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/git/destructive_guard.py:229:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/git/ref_advance.py:514:reset_hard'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/auto_rebase.py:739:merge_abort'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/merge.py:1039:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/merge.py:1076:merge_abort'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/merge.py:1199:merge_abort'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/merge.py:969:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/worktree_allocator.py:1032:merge_abort'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/worktree_allocator.py:1040:reset_hard'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/worktree_allocator.py:1228:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/lanes/worktree_allocator.py:858:merge_abort'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/merge/executor.py:3342:reset_hard'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/merge/git_probes.py:232:reset_hard'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/merge/ordering.py:329:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/merge/ordering.py:667:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/merge/state.py:654:merge_abort'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/merge/workspace.py:113:worktree_remove_force'", _BY_WP04),
+    (_DESTRUCTIVE_GATE, _CENSUS_SYM, "'src/specify_cli/review/baseline.py:294:worktree_remove_force'", _BY_WP04),
+    (_KERNEL_GATE, _KERNEL_SYM, "('kernel/schema_utils.py', 88)", _BY_WP03),
+    (_KERNEL_GATE, _KERNEL_SYM, "('kernel/schema_utils.py', 97)", _BY_WP03),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/cli/commands/agent/config.py:168:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/cli/commands/init.py:136:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/cli/commands/init.py:1622:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/cli/commands/init.py:453:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/cli/commands/init.py:677:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py:221:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py:224:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_0_python_only.py:266:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_2_update_slash_commands.py:67:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:106:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:117:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:165:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:201:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:205:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:227:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_10_8_fix_memory_structure.py:230:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_2_0_specify_to_kittify.py:63:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_2_0_specify_to_kittify.py:74:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_6_5_commands_rename.py:103:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_6_5_commands_rename.py:141:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_7_2_worktree_commands_dedup.py:69:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_8_0_remove_active_mission.py:53:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_8_0_worktree_agents_symlink.py:106:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_0_frontmatter_only_lanes.py:251:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_0_frontmatter_only_lanes.py:272:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:301:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:324:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:422:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:425:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:431:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:450:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_0_9_1_complete_lane_migration.py:453:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_0_retire_git_hooks.py:127:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:416:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:418:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:421:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:433:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_6_consistency_sweep.py:435:shutil.rmtree'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py:135:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py:139:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_0_7_fix_stale_overrides.py:93:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_2_1_3_restore_prompt_commands.py:350:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:224:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:240:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:269:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:279:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:293:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:394:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py:419:shutil.move'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_2_globalize_commands.py:158:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_1_2_globalize_commands.py:171:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_2_0rc35_codex_to_skills.py:208:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_2_0rc35_codex_to_skills.py:234:Path.rmdir'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_2_8_provision_kitty_env.py:452:os.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_3_0_op_record_schema_v2.py:230:Path.unlink'", _BY_WP04),
+    (_MUTATION_GATE, _CENSUS_SYM, "'src/specify_cli/upgrade/migrations/m_3_3_0_op_record_schema_v2.py:266:Path.unlink'", _BY_WP04),
+    (_OVERWRITE_GATE, _CENSUS_SYM, "'src/specify_cli/cli/commands/research.py:94:shutil.copy2'", _BY_WP04),
+    (_OVERWRITE_GATE, _CENSUS_SYM, "'src/specify_cli/intake/brief_writer.py:172:os.replace'", _BY_WP04),
+)
 _POSITIONAL_ANCHOR_EXEMPTIONS: frozenset[tuple[str, str, str, str]] = frozenset(_POSITIONAL_ANCHOR_EXEMPTION_ROWS)
 
 
