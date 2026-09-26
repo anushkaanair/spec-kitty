@@ -168,10 +168,10 @@
       "criterion_id": "FR-017",
       "description": "Verify FR-017 is satisfied",
       "proof_type": "automated_test",
-      "evidence": null,
-      "pass_fail": "pending",
-      "verified_by": null,
-      "verified_at": null,
+      "evidence": "pytest -n2 charter/contract/next/review/runtime/status touched files from .worktrees/ratchet-baseline-census-gate-remediation-01M3EW3Z-lane-l: 472 passed, 10 skipped (pre-existing contract skips); tests/runtime/test_next_board_authority.py holds P0 tests with oracle-coupling self-scan (test_board_authority_tests_never_set_up_the_oracle_fixture) green, max call 11s; oracle remains in test_bridge_parity.py (580s setup), C-002 respected",
+      "pass_fail": "pass",
+      "verified_by": "reviewer-renata",
+      "verified_at": "2026-09-26T22:56:34.155025+00:00",
       "notes": "TODO: replace with a real acceptance criterion"
     },
     {
