@@ -50,9 +50,7 @@ def test_inert_slot_scanner_has_two_sided_fault_bite(tmp_path: Path) -> None:
     assert find_inert_slots(tmp_path) == []
 
     _plant(tmp_path, slot="missing_producer", produced=False)
-    assert [slot.name for slot in find_inert_slots(tmp_path)] == [
-        "missing_producer"
-    ]
+    assert [slot.name for slot in find_inert_slots(tmp_path)] == ["missing_producer"]
 
 
 def test_schema_definitions_are_not_mistaken_for_data_slots(tmp_path: Path) -> None:
@@ -66,10 +64,7 @@ def test_schema_definitions_are_not_mistaken_for_data_slots(tmp_path: Path) -> N
 
 
 _PRUNED_ROW = (
-    "  - name: probe_slot\n"
-    "    declared_at: src/charter/offering/schemas/probe.schema.yaml\n"
-    "    disposition: wire-the-producer\n"
-    "    note: planted probe row\n"
+    "  - name: probe_slot\n    declared_at: src/charter/offering/schemas/probe.schema.yaml\n    disposition: wire-the-producer\n    note: planted probe row\n"
 )
 
 
@@ -91,9 +86,7 @@ _RETIRED_LINES = {
         ("top", "code_only_suppressions"),
     ],
 )
-def test_load_baseline_rejects_retired_keys(
-    tmp_path: Path, where: str, key: str
-) -> None:
+def test_load_baseline_rejects_retired_keys(tmp_path: Path, where: str, key: str) -> None:
     """A retired inert-slot key is refused loudly, never silently carried."""
     retired_line = _RETIRED_LINES[key]
     entries = "entries:\n" + _PRUNED_ROW
@@ -112,11 +105,7 @@ def _walk_floor_shortfalls(slots: set[InertSlot]) -> list[str]:
         ("schema", MINIMUM_SCHEMA_SLOT_NAMES, len(schema_names)),
         ("model", MINIMUM_MODEL_SLOT_NAMES, len(model_names)),
     )
-    return [
-        f"{walk} walk saw {count} distinct slot names, below its floor of {floor}"
-        for walk, floor, count in walks
-        if count < floor
-    ]
+    return [f"{walk} walk saw {count} distinct slot names, below its floor of {floor}" for walk, floor, count in walks if count < floor]
 
 
 def test_live_scan_meets_per_walk_floors() -> None:
@@ -137,8 +126,7 @@ def test_live_tree_has_no_new_inert_slots() -> None:
     new, cleared = ratchet(found, load_baseline())
     if cleared:
         warnings.warn(
-            "inert-slot baseline shrank; delete cleared ledger rows: "
-            + ", ".join(entry.name for entry in cleared),
+            "inert-slot baseline shrank; delete cleared ledger rows: " + ", ".join(entry.name for entry in cleared),
             stacklevel=1,
         )
     assert new == [], (
@@ -146,6 +134,5 @@ def test_live_tree_has_no_new_inert_slots() -> None:
         'store-site (e.g. cfg["key"] = value) somewhere under src/ that actually '
         "WRITES the slot, not merely a class-body annotation or a schema "
         "declaration. Wire a real producer for the slot, or delete the unused "
-        "declaration. New: "
-        + ", ".join(f"{slot.name} ({slot.declared_at})" for slot in new)
+        "declaration. New: " + ", ".join(f"{slot.name} ({slot.declared_at})" for slot in new)
     )

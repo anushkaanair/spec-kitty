@@ -34,9 +34,7 @@ def _placeholder_offenders(root: Path) -> tuple[int, list[tuple[Path, int]]]:
     offenders: list[tuple[Path, int]] = []
     for path in files:
         lines = path.read_text(encoding="utf-8").splitlines()
-        offenders.extend(
-            (path, idx) for idx, line in enumerate(lines, start=1) if _PLACEHOLDER in line
-        )
+        offenders.extend((path, idx) for idx, line in enumerate(lines, start=1) if _PLACEHOLDER in line)
     return len(files), offenders
 
 
@@ -44,8 +42,7 @@ def test_runtime_placeholder_scan_inspects_live_source() -> None:
     """The placeholder scan targets the live runtime tree, not a vanished path."""
     files_inspected, _ = _placeholder_offenders(_RUNTIME_SOURCE_ROOT)
     assert files_inspected >= _RUNTIME_SOURCE_FILE_FLOOR, (
-        f"placeholder scan inspected {files_inspected} files under "
-        f"{_RUNTIME_SOURCE_ROOT}; expected >= {_RUNTIME_SOURCE_FILE_FLOOR}"
+        f"placeholder scan inspected {files_inspected} files under {_RUNTIME_SOURCE_ROOT}; expected >= {_RUNTIME_SOURCE_FILE_FLOOR}"
     )
 
 
@@ -73,20 +70,14 @@ class TestNoLegacyQueryPlaceholderInTemplates:
                 continue
             if _PLACEHOLDER in text:
                 offenders.append(path)
-        assert not offenders, (
-            f"Found legacy placeholder '{_PLACEHOLDER}' in shipped templates: {offenders}"
-        )
+        assert not offenders, f"Found legacy placeholder '{_PLACEHOLDER}' in shipped templates: {offenders}"
 
     def test_placeholder_is_absent_from_runtime_source(self) -> None:
         files_inspected, offenders = _placeholder_offenders(_RUNTIME_SOURCE_ROOT)
         assert files_inspected >= _RUNTIME_SOURCE_FILE_FLOOR, (
-            f"placeholder scan inspected {files_inspected} files under "
-            f"{_RUNTIME_SOURCE_ROOT}; expected >= {_RUNTIME_SOURCE_FILE_FLOOR}"
+            f"placeholder scan inspected {files_inspected} files under {_RUNTIME_SOURCE_ROOT}; expected >= {_RUNTIME_SOURCE_FILE_FLOOR}"
         )
-        assert not offenders, (
-            "Runtime source must not emit the legacy placeholder. Offenders: "
-            f"{offenders}"
-        )
+        assert not offenders, f"Runtime source must not emit the legacy placeholder. Offenders: {offenders}"
 
 
 class TestQueryModeDoesNotReturnUnknownForValidMission:
@@ -117,9 +108,7 @@ class TestQueryModeDoesNotReturnUnknownForValidMission:
         rendered = repr(payload)
         assert _PLACEHOLDER not in rendered
 
-    def test_query_decision_for_missing_feature_dir_is_structured(
-        self, tmp_path: Path
-    ) -> None:
+    def test_query_decision_for_missing_feature_dir_is_structured(self, tmp_path: Path) -> None:
         """A missing feature dir raises MissionNotFoundError (FR-004 / WP03).
 
         After WP03, ``query_current_state`` raises ``MissionNotFoundError``
@@ -157,13 +146,9 @@ class TestRuntimeBridgeBlockedReasonIsConcrete:
         We grep for the legacy placeholder in the function body — it is a
         regression guard for future edits.
         """
-        runtime_bridge_path = (
-            _REPO_ROOT / "src" / "runtime" / "next" / "runtime_bridge.py"
-        )
+        runtime_bridge_path = _REPO_ROOT / "src" / "runtime" / "next" / "runtime_bridge.py"
         text = runtime_bridge_path.read_text(encoding="utf-8")
         # Acceptable: "no result provided" appearing inside human-readable
         # query mode banner. We forbid only the bracket form that historically
         # leaked into prompt files.
-        assert _PLACEHOLDER not in text, (
-            f"runtime_bridge.py must not emit the legacy placeholder {_PLACEHOLDER}"
-        )
+        assert _PLACEHOLDER not in text, f"runtime_bridge.py must not emit the legacy placeholder {_PLACEHOLDER}"

@@ -84,6 +84,7 @@ _ROUND_TRIP_CONTRACT_MODULE = "tests.contract.test_example_round_trip"
 # The individual values MUST be non-negative integers or mappings of them.
 # ---------------------------------------------------------------------------
 
+
 class _PerCategorySection(BaseModel):
     """A section with per-category integer baselines."""
 
@@ -94,9 +95,7 @@ class _PerCategorySection(BaseModel):
         if isinstance(obj, dict):
             for k, v in obj.items():
                 if not isinstance(v, int) or v < 0:
-                    raise ValueError(
-                        f"Per-category baseline {k!r} must be a non-negative integer; got {v!r}"
-                    )
+                    raise ValueError(f"Per-category baseline {k!r} must be a non-negative integer; got {v!r}")
         return super().model_validate(obj, **kwargs)
 
 
@@ -302,10 +301,7 @@ def _yaml_leaves(data: dict[str, Any]) -> frozenset[tuple[str, str]]:
     leaves: set[tuple[str, str]] = set()
     for section, body in data.items():
         if not isinstance(body, dict):
-            raise ValueError(
-                f"`_baselines.yaml::{section}` must be a mapping of leaf -> "
-                f"integer baseline; got {type(body).__name__}."
-            )
+            raise ValueError(f"`_baselines.yaml::{section}` must be a mapping of leaf -> integer baseline; got {type(body).__name__}.")
         leaves.update((section, leaf) for leaf in body)
     return frozenset(leaves)
 
@@ -332,9 +328,8 @@ def _leaf_drift(data: dict[str, Any]) -> tuple[list[str], list[str]]:
 _REQUIRED_TOP_LEVEL_KEYS: frozenset[str] = frozenset(r.section for r in _SIZE_RATCHETS)
 
 # Per-category sub-keys for test_no_dead_modules (FR-112 refactor).
-_REQUIRED_NO_DEAD_MODULES_CATEGORIES: frozenset[str] = frozenset(
-    r.leaf for r in _SIZE_RATCHETS if r.section == "test_no_dead_modules"
-)
+_REQUIRED_NO_DEAD_MODULES_CATEGORIES: frozenset[str] = frozenset(r.leaf for r in _SIZE_RATCHETS if r.section == "test_no_dead_modules")
+
 
 def _load_baselines() -> dict[str, Any]:
     """Load and parse the baselines YAML. Raise FileNotFoundError if missing."""
@@ -348,10 +343,7 @@ def _load_baselines() -> dict[str, Any]:
     text = _BASELINES_PATH.read_text(encoding="utf-8")
     data = yaml.safe_load(text)
     if not isinstance(data, dict):
-        raise ValueError(
-            f"`tests/architectural/_baselines.yaml` is malformed: top level must "
-            f"be a mapping, got {type(data).__name__}."
-        )
+        raise ValueError(f"`tests/architectural/_baselines.yaml` is malformed: top level must be a mapping, got {type(data).__name__}.")
     return data
 
 
@@ -410,10 +402,7 @@ def test_baseline_file_exists_with_required_keys() -> None:
 
     # test_no_dead_modules must carry per-category sub-keys (FR-112).
     nd_section = data["test_no_dead_modules"]
-    assert isinstance(nd_section, dict), (
-        "`_baselines.yaml::test_no_dead_modules` must be a mapping of "
-        "per-category integers (FR-112 refactor)."
-    )
+    assert isinstance(nd_section, dict), "`_baselines.yaml::test_no_dead_modules` must be a mapping of per-category integers (FR-112 refactor)."
     missing_cats = _REQUIRED_NO_DEAD_MODULES_CATEGORIES - set(nd_section.keys())
     assert not missing_cats, (
         f"`_baselines.yaml::test_no_dead_modules` is missing per-category "
@@ -479,9 +468,7 @@ def test_growing_an_allowlist_above_baseline_fails() -> None:
 
     assert not growth_failures, (
         "Ratchet baseline GROWTH detected (FR-111 violation). The following "
-        "allowlists exceeded their pinned baselines:\n"
-        + "\n".join(growth_failures)
-        + "\n\nPer the burn-down policy (Slice F C-004), each growth requires "
+        "allowlists exceeded their pinned baselines:\n" + "\n".join(growth_failures) + "\n\nPer the burn-down policy (Slice F C-004), each growth requires "
         "a one-line YAML diff to _baselines.yaml in the same PR plus a "
         "`# justification:` comment naming why the growth is acceptable."
     )
@@ -502,8 +489,7 @@ def test_growth_fails_shrinkage_warns(
     """
     data = _load_baselines()
     shrinkage_messages = [
-        f"{row.section}.{row.leaf} ({row.attr}): baseline={baseline} "
-        f"current={current}. Edit _baselines.yaml to lock in the shrinkage."
+        f"{row.section}.{row.leaf} ({row.attr}): baseline={baseline} current={current}. Edit _baselines.yaml to lock in the shrinkage."
         for row, baseline, current in _size_comparisons(data)
         if current < baseline
     ]
@@ -548,12 +534,8 @@ def test_leaf_drift_detects_planted_unenforced_leaf() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "row", _SIZE_RATCHETS, ids=[f"{r.section}.{r.leaf}" for r in _SIZE_RATCHETS]
-)
-def test_lowering_an_enforced_leaf_below_live_fails(
-    monkeypatch: pytest.MonkeyPatch, row: _SizeRatchet
-) -> None:
+@pytest.mark.parametrize("row", _SIZE_RATCHETS, ids=[f"{r.section}.{r.leaf}" for r in _SIZE_RATCHETS])
+def test_lowering_an_enforced_leaf_below_live_fails(monkeypatch: pytest.MonkeyPatch, row: _SizeRatchet) -> None:
     """US2-AS4: each ``_SIZE_RATCHETS`` row reads ITS OWN leaf.
 
     Lowering the row's leaf to ``live - 1`` must make the real growth arm fail
@@ -575,14 +557,9 @@ def test_lowering_an_enforced_leaf_below_live_fails(
     # swapped leaves, would surface as an extra failing row.
     message = str(excinfo.value)
     assert f"{row.section}.{row.leaf} ({row.attr})" in message, (
-        f"Lowering {row.section}.{row.leaf} below live did not produce a growth "
-        f"failure naming it and {row.attr}:\n{message}"
+        f"Lowering {row.section}.{row.leaf} below live did not produce a growth failure naming it and {row.attr}:\n{message}"
     )
-    others = [
-        f"{r.section}.{r.leaf}"
-        for r in _SIZE_RATCHETS
-        if r != row and f"{r.section}.{r.leaf} ({r.attr})" in message
-    ]
+    others = [f"{r.section}.{r.leaf}" for r in _SIZE_RATCHETS if r != row and f"{r.section}.{r.leaf} ({r.attr})" in message]
     assert not others, f"Lowering {row.section}.{row.leaf} also redded {others}"
 
 
@@ -614,12 +591,8 @@ def test_non_derived_category_growth_still_reds(
     ``_SIZE_RATCHETS`` keeps its teeth.
     """
     nd_module = importlib.import_module(_NO_DEAD_MODULES_MODULE)
-    monkeypatch.setattr(
-        nd_module, "_CATEGORY_6_FROZEN_RUNTIME_REEXPORTS", _synthetic_frozenset(500)
-    )
-    with pytest.raises(
-        AssertionError, match="category_6_frozen_runtime_reexports"
-    ):
+    monkeypatch.setattr(nd_module, "_CATEGORY_6_FROZEN_RUNTIME_REEXPORTS", _synthetic_frozenset(500))
+    with pytest.raises(AssertionError, match="category_6_frozen_runtime_reexports"):
         test_growing_an_allowlist_above_baseline_fails()
 
 
@@ -630,17 +603,10 @@ def test_non_derived_category_shrink_still_records(
     below its YAML baseline IS recorded by the shrink arm.
     """
     nd_module = importlib.import_module(_NO_DEAD_MODULES_MODULE)
-    monkeypatch.setattr(
-        nd_module, "_CATEGORY_6_FROZEN_RUNTIME_REEXPORTS", frozenset()
-    )
+    monkeypatch.setattr(nd_module, "_CATEGORY_6_FROZEN_RUNTIME_REEXPORTS", frozenset())
     recorded: list[tuple[str, object]] = []
-    test_growth_fails_shrinkage_warns(
-        lambda name, value: recorded.append((name, value))
-    )
-    assert any(
-        "category_6_frozen_runtime_reexports" in str(value)
-        for _, value in recorded
-    ), recorded
+    test_growth_fails_shrinkage_warns(lambda name, value: recorded.append((name, value)))
+    assert any("category_6_frozen_runtime_reexports" in str(value) for _, value in recorded), recorded
 
 
 @pytest.mark.parametrize("package", ["runtime", "mission_runtime"])
@@ -707,10 +673,7 @@ def test_doctrine_pair_allowlist_growth_fails_and_shrink_is_reported(
     baseline = _load_baselines()[module_name][key]
     # Pair arity is the contract, not the number of allowed dependency pairs.
     assert all(isinstance(pair, tuple) and len(pair) == 2 for pair in allowed)
-    extra = {
-        (f"src/runtime/baseline_probe_{i}.py", "charter.offering.new_dependency")
-        for i in range(max(1, baseline - len(allowed) + 1))
-    }
+    extra = {(f"src/runtime/baseline_probe_{i}.py", "charter.offering.new_dependency") for i in range(max(1, baseline - len(allowed) + 1))}
     assert not allowed & extra
     monkeypatch.setattr(module, symbol, allowed | extra)
     with pytest.raises(AssertionError, match=symbol):

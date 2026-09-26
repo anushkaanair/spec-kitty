@@ -77,8 +77,7 @@ def test_scanned_file_floor_is_met() -> None:
     scanned = scan.iter_python_files()
 
     assert len(scanned) > scan.MIN_SCANNED_FILES, (
-        f"only {len(scanned)} files scanned under {[str(r) for r in scan.SCAN_ROOTS]} -- "
-        "the call-ban gate would otherwise pass vacuously."
+        f"only {len(scanned)} files scanned under {[str(r) for r in scan.SCAN_ROOTS]} -- the call-ban gate would otherwise pass vacuously."
     )
 
 
@@ -128,10 +127,7 @@ def test_no_banned_wall_clock_call_outside_the_door() -> None:
         "CALL:<path>::<qualname>::<token_substring> to your package's "
         "tests/architectural/_exemptions/<owner>.txt if this is a currently-"
         "tracked, not-yet-remediated site.\nViolations:\n"
-        + "\n".join(
-            f"  {relpath}:{violation.line}: {violation.call} -- use {violation.suggestion}"
-            for relpath, violation in violations
-        )
+        + "\n".join(f"  {relpath}:{violation.line}: {violation.call} -- use {violation.suggestion}" for relpath, violation in violations)
     )
 
 
@@ -184,16 +180,12 @@ def test_stale_exemption_removal_reds_the_gate(tmp_path: Path, monkeypatch: pyte
 
     isolated_dir = tmp_path / "_exemptions"
     isolated_dir.mkdir()
-    (isolated_dir / "isolated_owner.txt").write_text(
-        "CALL:offender.py::<module>::datetime . now (\n", encoding="utf-8"
-    )
+    (isolated_dir / "isolated_owner.txt").write_text("CALL:offender.py::<module>::datetime . now (\n", encoding="utf-8")
 
     def _fake_iter_exemption_entries() -> list[tuple[str, str]]:
         entries: list[tuple[str, str]] = []
         for path in sorted(isolated_dir.glob("*.txt")):
-            entries.extend(
-                (path.name, line.strip()) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
-            )
+            entries.extend((path.name, line.strip()) for line in path.read_text(encoding="utf-8").splitlines() if line.strip())
         return entries
 
     import tests.architectural._exemptions as exemptions_module
@@ -204,9 +196,7 @@ def test_stale_exemption_removal_reds_the_gate(tmp_path: Path, monkeypatch: pyte
     assert (sample_relpath, sample_violation) not in with_exemption
 
     isolated_dir.joinpath("isolated_owner.txt").write_text("", encoding="utf-8")
-    without_exemption, _unused, _errors = _partition_call_sites(
-        all_violations, exemptions_module.load_call_exemptions()
-    )
+    without_exemption, _unused, _errors = _partition_call_sites(all_violations, exemptions_module.load_call_exemptions())
 
     assert (sample_relpath, sample_violation) in without_exemption
 
@@ -321,10 +311,7 @@ def test_utcnow_date_today_and_epoch_time_fire(tmp_path: Path) -> None:
     """The remaining banned spellings: ``utcnow()``, ``date.today()``, ``time.time()``."""
     module = tmp_path / "offender.py"
     module.write_text(
-        "import datetime\nimport time\n\n"
-        "datetime.datetime.utcnow()\n"
-        "datetime.date.today()\n"
-        "time.time()\n",
+        "import datetime\nimport time\n\ndatetime.datetime.utcnow()\ndatetime.date.today()\ntime.time()\n",
         encoding="utf-8",
     )
 
@@ -349,9 +336,7 @@ def test_allowed_timedelta_and_annotation_do_not_fire(tmp_path: Path) -> None:
     """Negative: ``timedelta(...)`` and a ``datetime`` type annotation are never banned calls."""
     module = tmp_path / "offender.py"
     module.write_text(
-        "from kernel.clock import datetime, timedelta\n\n"
-        "def schedule(when: datetime) -> timedelta:\n"
-        "    return timedelta(seconds=1)\n",
+        "from kernel.clock import datetime, timedelta\n\ndef schedule(when: datetime) -> timedelta:\n    return timedelta(seconds=1)\n",
         encoding="utf-8",
     )
 
@@ -436,8 +421,7 @@ def test_message_mapping_falls_back_to_generic_now_suggestion(tmp_path: Path) ->
     violations = _violations_for_file(module)
 
     assert [v.suggestion for v in violations] == [
-        "kernel.clock.now_utc() (or now_utc_iso()/now_utc_stamp()/"
-        "now_utc_compact_stamp()/now_utc_seconds() for a specific serialization contract)"
+        "kernel.clock.now_utc() (or now_utc_iso()/now_utc_stamp()/now_utc_compact_stamp()/now_utc_seconds() for a specific serialization contract)"
     ]
 
 

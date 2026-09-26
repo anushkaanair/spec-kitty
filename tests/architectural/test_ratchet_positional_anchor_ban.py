@@ -126,9 +126,7 @@ _ARCH_ROOT = _REPO_ROOT / "tests" / "architectural"
 _GUARD_FILE = Path(__file__).resolve()
 
 # The two line-locator sink call names (DIR-041 / IC-DESCRIPTOR substrate).
-_LINE_SINK_CALL_NAMES: frozenset[str] = frozenset(
-    {"composite_key", "composite_key_from_file"}
-)
+_LINE_SINK_CALL_NAMES: frozenset[str] = frozenset({"composite_key", "composite_key_from_file"})
 _TOKENS_BY_LINE_CALL_NAME = "code_tokens_by_line"
 
 # #5085 (FR-001) — the pathlib constructors whose first argument makes a
@@ -215,11 +213,7 @@ class LineSinkViolation:
 
 def _is_int_constant(node: ast.AST) -> TypeGuard[ast.Constant]:
     """True when ``node`` is a bare (non-bool) int literal."""
-    return (
-        isinstance(node, ast.Constant)
-        and isinstance(node.value, int)
-        and not isinstance(node.value, bool)
-    )
+    return isinstance(node, ast.Constant) and isinstance(node.value, int) and not isinstance(node.value, bool)
 
 
 def _call_func_name(node: ast.AST) -> str | None:
@@ -263,9 +257,7 @@ def _is_tokens_by_line_target(node: ast.AST, tokens_vars: frozenset[str]) -> boo
     return isinstance(node, ast.Name) and node.id in tokens_vars
 
 
-def _is_tokens_by_line_index(
-    node: ast.AST, tokens_vars: frozenset[str]
-) -> ast.Constant | None:
+def _is_tokens_by_line_index(node: ast.AST, tokens_vars: frozenset[str]) -> ast.Constant | None:
     """Sink shape 2: a subscript or ``.get()`` indexing a ``code_tokens_by_line``
     result with a bare int-literal key.
 
@@ -281,9 +273,7 @@ def _is_tokens_by_line_index(
         return key if _is_int_constant(key) else None
     if isinstance(node, ast.Call) and _call_func_name(node) == "get":
         func = node.func
-        if not isinstance(func, ast.Attribute) or not _is_tokens_by_line_target(
-            func.value, tokens_vars
-        ):
+        if not isinstance(func, ast.Attribute) or not _is_tokens_by_line_target(func.value, tokens_vars):
             return None
         if not node.args:
             return None
@@ -387,9 +377,7 @@ def _enclosing_symbol_index(tree: ast.Module) -> dict[int, str]:
 # ---------------------------------------------------------------------------
 
 
-def _call_arg_line_sink_violations(
-    tree: ast.Module, source_lines: list[str], relpath: str
-) -> list[LineSinkViolation]:
+def _call_arg_line_sink_violations(tree: ast.Module, source_lines: list[str], relpath: str) -> list[LineSinkViolation]:
     """Walk every ``Call``/``Subscript`` node for the two call-arg sink shapes."""
     tokens_vars = _collect_tokens_by_line_vars(tree)
     symbols: dict[int, str] | None = None  # built lazily: most files have no finding
@@ -423,9 +411,7 @@ def _call_arg_line_sink_violations(
     return violations
 
 
-def _seed_string_constants(
-    tree: ast.Module, source_lines: list[str]
-) -> list[tuple[str, ast.Constant, str]]:
+def _seed_string_constants(tree: ast.Module, source_lines: list[str]) -> list[tuple[str, ast.Constant, str]]:
     """``(symbol, node, value)`` for every un-escaped str constant inside a
     seed container — the shared input of both string-shaped seed arms."""
     found: list[tuple[str, ast.Constant, str]] = []
@@ -439,9 +425,7 @@ def _seed_string_constants(
     return found
 
 
-def _seed_string_line_anchor_violations(
-    tree: ast.Module, source_lines: list[str], relpath: str
-) -> list[LineSinkViolation]:
+def _seed_string_line_anchor_violations(tree: ast.Module, source_lines: list[str], relpath: str) -> list[LineSinkViolation]:
     """Walk every module-level allow-list seed container for a ``path:NNN`` string
     (registry-predicate parity: :func:`is_file_line_anchor`)."""
     return [
@@ -463,9 +447,7 @@ def _is_embedded_line_key(value: str) -> bool:
     return bool(_EMBEDDED_LINE_KEY_RE.match(value.strip()))
 
 
-def _seed_embedded_line_key_violations(
-    tree: ast.Module, source_lines: list[str], relpath: str
-) -> list[LineSinkViolation]:
+def _seed_embedded_line_key_violations(tree: ast.Module, source_lines: list[str], relpath: str) -> list[LineSinkViolation]:
     """#5085 (FR-001): a seed-container string that whole-matches the embedded
     ``path:line[:suffix]`` key shape — the census ``"src/x.py:98:reset_hard"``
     form :func:`is_file_line_anchor` (anchored on a trailing ``:<int>``) misses.
@@ -492,9 +474,7 @@ def _is_line_keyword_record(node: ast.AST) -> bool:
     return any(kw.arg in _LINE_KEYWORD_NAMES and _is_int_constant(kw.value) for kw in node.keywords)
 
 
-def _seed_keyword_record_violations(
-    tree: ast.Module, source_lines: list[str], relpath: str
-) -> list[LineSinkViolation]:
+def _seed_keyword_record_violations(tree: ast.Module, source_lines: list[str], relpath: str) -> list[LineSinkViolation]:
     """#5085 (FR-001): a record constructor inside a seed container that pins a
     line number through a keyword (``lineno=3``)."""
     violations: list[LineSinkViolation] = []
@@ -619,9 +599,7 @@ def _laundering_violation_for_clause(
         return LineSinkViolation(
             relpath,
             call.lineno,
-            f"seed-tuple int element (from {iter_name!r}) laundered through "
-            f"loop/comprehension variable {laundered!r} into "
-            "composite_key(...)'s line-locator arg",
+            f"seed-tuple int element (from {iter_name!r}) laundered through loop/comprehension variable {laundered!r} into composite_key(...)'s line-locator arg",
             symbols.get(id(call), "<module>"),
             ast.unparse(call),
             call.col_offset,
@@ -629,9 +607,7 @@ def _laundering_violation_for_clause(
     return None
 
 
-def _seed_tuple_laundering_violations(
-    tree: ast.Module, source_lines: list[str], relpath: str
-) -> list[LineSinkViolation]:
+def _seed_tuple_laundering_violations(tree: ast.Module, source_lines: list[str], relpath: str) -> list[LineSinkViolation]:
     """#2564: a module-level ``(rel, int, ...)`` seed tuple whose int element is
     laundered through a ``for``/comprehension unpacking variable into a
     ``composite_key(...)``/``composite_key_from_file(...)`` line-locator sink.
@@ -645,12 +621,7 @@ def _seed_tuple_laundering_violations(
     seeds = _module_level_named_seed_containers(tree)
     if not seeds:
         return []
-    int_positions = {
-        name: pos
-        for name, container in seeds
-        for pos in [_seed_row_int_position(container)]
-        if pos is not None
-    }
+    int_positions = {name: pos for name, container in seeds for pos in [_seed_row_int_position(container)] if pos is not None}
     if not int_positions:
         return []
 
@@ -662,15 +633,11 @@ def _seed_tuple_laundering_violations(
             for gen in node.generators:
                 if not isinstance(gen.iter, ast.Name):
                     continue
-                violation = _laundering_violation_for_clause(
-                    gen.iter.id, gen.target, int_positions, value_exprs, source_lines, relpath, symbols
-                )
+                violation = _laundering_violation_for_clause(gen.iter.id, gen.target, int_positions, value_exprs, source_lines, relpath, symbols)
                 if violation is not None:
                     violations.append(violation)
         elif isinstance(node, ast.For) and isinstance(node.iter, ast.Name):
-            violation = _laundering_violation_for_clause(
-                node.iter.id, node.target, int_positions, node.body, source_lines, relpath, symbols
-            )
+            violation = _laundering_violation_for_clause(node.iter.id, node.target, int_positions, node.body, source_lines, relpath, symbols)
             if violation is not None:
                 violations.append(violation)
     return violations
@@ -722,9 +689,7 @@ def _is_file_line_tuple(node: ast.AST) -> bool:
     return _is_pathish_element(first) and any(_is_int_constant(elt) for elt in rest)
 
 
-def _raw_file_line_tuple_seed_violations(
-    tree: ast.Module, source_lines: list[str], relpath: str
-) -> list[LineSinkViolation]:
+def _raw_file_line_tuple_seed_violations(tree: ast.Module, source_lines: list[str], relpath: str) -> list[LineSinkViolation]:
     """CT7 (#2853, widened by #5085): a raw ``(path, ..., line)`` tuple used as a
     ratchet key / allow-list seed inside a module-level or class-level seed
     container. Import-agnostic: any file under ``tests/architectural/`` is in
@@ -794,11 +759,7 @@ def _iter_architectural_python_files() -> list[Path]:
     (whose own predicate helpers legitimately name the sink shapes) and any
     ``__pycache__`` artifact.
     """
-    return sorted(
-        p
-        for p in _ARCH_ROOT.rglob("*.py")
-        if "__pycache__" not in p.parts and p.resolve() != _GUARD_FILE
-    )
+    return sorted(p for p in _ARCH_ROOT.rglob("*.py") if "__pycache__" not in p.parts and p.resolve() != _GUARD_FILE)
 
 
 def _iter_architectural_text_files() -> list[Path]:
@@ -850,9 +811,7 @@ def _all_positional_anchor_findings() -> list[LineSinkViolation]:
     return findings
 
 
-def _unexempted(
-    findings: Sequence[LineSinkViolation], rows: frozenset[tuple[str, str, str, str]]
-) -> list[LineSinkViolation]:
+def _unexempted(findings: Sequence[LineSinkViolation], rows: frozenset[tuple[str, str, str, str]]) -> list[LineSinkViolation]:
     """Multiset filter (FR-003): one row suppresses exactly ONE finding with the
     same ``(relpath, symbol, site)``; ``lineno`` never participates. Two
     textually identical sites in one symbol therefore need two rows."""
@@ -866,13 +825,9 @@ def _unexempted(
     return unexpected
 
 
-def _stale_exemption_rows(
-    findings: Sequence[LineSinkViolation], rows: frozenset[tuple[str, str, str, str]]
-) -> list[tuple[str, str, str]]:
+def _stale_exemption_rows(findings: Sequence[LineSinkViolation], rows: frozenset[tuple[str, str, str, str]]) -> list[tuple[str, str, str]]:
     """Row keys with no live finding left to suppress (multiset difference)."""
-    stale = Counter((relpath, symbol, site) for relpath, symbol, site, _ in rows) - Counter(
-        f.exemption_key for f in findings
-    )
+    stale = Counter((relpath, symbol, site) for relpath, symbol, site, _ in rows) - Counter(f.exemption_key for f in findings)
     return sorted(stale.elements())
 
 
@@ -910,9 +865,7 @@ def _yaml_int_field_violations(doc: Any, path: str = "") -> list[str]:
 def _fr014_deferred_census_report() -> str:
     """The FR-014 enumeration folded into this guard's failure report."""
     lines = [
-        f"  - {name} ({relpath}) — path::qualname census, "
-        "known-relocation-anchored-but-out-of-scope (FR-014 default-defer; "
-        "follow-up tracked separately)"
+        f"  - {name} ({relpath}) — path::qualname census, known-relocation-anchored-but-out-of-scope (FR-014 default-defer; follow-up tracked separately)"
         for relpath, name in _FR014_DEFERRED_CENSUS_ALLOWLISTS
     ]
     return "\n".join(lines)
@@ -944,20 +897,13 @@ def test_architectural_python_universe_is_nonempty() -> None:
     """Anti-vacuity: the walker actually scans a non-trivial file set."""
     files = _iter_architectural_python_files()
     # Concrete floor (NFR-002): 263 on the planning base; WP07 retires one.
-    assert len(files) >= 262, (
-        f"only {len(files)} tests/architectural/**/*.py files discovered — "
-        "the walker may be mis-scoped (the guard would pass vacuously)"
-    )
+    assert len(files) >= 262, f"only {len(files)} tests/architectural/**/*.py files discovered — the walker may be mis-scoped (the guard would pass vacuously)"
 
 
 def _os_detect_entry_lines_inspected() -> int:
     """Entry lines the text arm inspects across ``_exemptions/os-detect-ban-*.txt``
     only (NOT all 20 text files, which would meet the floor trivially)."""
-    return sum(
-        len(_text_entry_lines(path.read_text(encoding="utf-8")))
-        for path in _iter_architectural_text_files()
-        if path.name.startswith(_OS_DETECT_TXT_PREFIX)
-    )
+    return sum(len(_text_entry_lines(path.read_text(encoding="utf-8"))) for path in _iter_architectural_text_files() if path.name.startswith(_OS_DETECT_TXT_PREFIX))
 
 
 def test_architectural_text_universe_meets_floor() -> None:
@@ -1014,9 +960,7 @@ def test_no_positional_anchor_in_architectural_text_files() -> None:
     )
 
 
-def _assert_exemptions_exact(
-    findings: Sequence[LineSinkViolation], rows: frozenset[tuple[str, str, str, str]]
-) -> None:
+def _assert_exemptions_exact(findings: Sequence[LineSinkViolation], rows: frozenset[tuple[str, str, str, str]]) -> None:
     """FR-003 exactness over ``rows``: a live finding with no row FAILS (growth
     is a visible diff) and a row with no live finding FAILS (a stale row must be
     deleted, never left masking a future regression at the same site)."""
@@ -1024,13 +968,9 @@ def _assert_exemptions_exact(
         assert len(row) == 4 and all(row[:3]), f"malformed exemption row {row!r}"
         assert row[3].strip(), f"exemption row without a reason: {row!r}"
     unexpected = _unexempted(findings, rows)
-    assert not unexpected, "live positional-anchor finding(s) with no exemption row:\n" + "\n".join(
-        f"  - {v}" for v in unexpected
-    )
+    assert not unexpected, "live positional-anchor finding(s) with no exemption row:\n" + "\n".join(f"  - {v}" for v in unexpected)
     stale = _stale_exemption_rows(findings, rows)
-    assert not stale, "#5085 exemption row(s) no longer match a live finding — delete them:\n" + "\n".join(
-        f"  - {row!r}" for row in stale
-    )
+    assert not stale, "#5085 exemption row(s) no longer match a live finding — delete them:\n" + "\n".join(f"  - {row!r}" for row in stale)
 
 
 def test_positional_anchor_exemptions_are_exact() -> None:
@@ -1086,10 +1026,8 @@ def test_no_int_field_ban_in_ratchet_allowlist_yaml() -> None:
     for name in _YAML_ALLOWLISTS:
         doc = yaml.safe_load((_ARCH_ROOT / name).read_text(encoding="utf-8"))
         violations.extend(f"{name}: {v}" for v in _yaml_int_field_violations(doc))
-    assert not violations, (
-        "an int reached a non-locator/non-count/non-baseline YAML field in a "
-        "ratchet allow-list (positional-anchor smuggling):\n"
-        + "\n".join(f"  - {v}" for v in violations)
+    assert not violations, "an int reached a non-locator/non-count/non-baseline YAML field in a ratchet allow-list (positional-anchor smuggling):\n" + "\n".join(
+        f"  - {v}" for v in violations
     )
 
 
@@ -1108,9 +1046,7 @@ def test_fr014_deferred_census_allowlists_enumerated() -> None:
     for relpath, name in _FR014_DEFERRED_CENSUS_ALLOWLISTS:
         target = _REPO_ROOT / relpath
         assert target.exists(), f"{relpath} moved/renamed — update the FR-014 enumeration"
-        assert name in target.read_text(encoding="utf-8"), (
-            f"{name} no longer appears in {relpath} — update the FR-014 enumeration"
-        )
+        assert name in target.read_text(encoding="utf-8"), f"{name} no longer appears in {relpath} — update the FR-014 enumeration"
     report = _fr014_deferred_census_report()
     for _, name in _FR014_DEFERRED_CENSUS_ALLOWLISTS:
         assert name in report
@@ -1399,10 +1335,7 @@ class TestSymbolAttribution:
         assert set(index.values()) == {"K"}
 
     def test_laundering_symbol_is_enclosing_binding(self) -> None:
-        planted = (
-            '_SITES = (("a", 42),)\n'
-            "_ALLOWLIST = {composite_key_from_file(rel, line) for rel, line in _SITES}\n"
-        )
+        planted = '_SITES = (("a", 42),)\n_ALLOWLIST = {composite_key_from_file(rel, line) for rel, line in _SITES}\n'
         violations = _scan_python_source(planted, "scratch/s.py")
         assert [v.symbol for v in violations if "laundered" in v.detail] == ["_ALLOWLIST"]
 
@@ -1466,10 +1399,7 @@ def test_non_vacuity_plants_int_line_sink_and_reds() -> None:
     is FLAGGED — proving the composite_key(...) arm actually bites and this
     guard is not a vacuous always-pass.
     """
-    planted = (
-        "from tests.architectural._ratchet_keys import composite_key\n\n"
-        "_SEED = composite_key(source, 347)\n"
-    )
+    planted = "from tests.architectural._ratchet_keys import composite_key\n\n_SEED = composite_key(source, 347)\n"
     violations = _scan_python_source(planted, "scratch/planted_seed.py")
     assert violations, "planted int-to-line-sink must be flagged (non-vacuity)"
     assert violations[0].lineno == 3
@@ -1493,10 +1423,7 @@ def test_non_vacuity_escape_hatch_opts_out() -> None:
     """The ``# diagnostic-locator`` marker suppresses a planted finding —
     proving the escape hatch is live, not decorative.
     """
-    planted = (
-        "from tests.architectural._ratchet_keys import composite_key\n\n"
-        "_SEED = composite_key(source, 347)  # diagnostic-locator\n"
-    )
+    planted = "from tests.architectural._ratchet_keys import composite_key\n\n_SEED = composite_key(source, 347)  # diagnostic-locator\n"
     assert _scan_python_source(planted, "scratch/escaped_seed.py") == []
 
 
@@ -1556,11 +1483,7 @@ def test_non_vacuity_compliant_snippet_stays_green() -> None:
     """A compliant, content-addressed seed (variable 2nd arg, no bare
     ``path:NNN`` string) stays GREEN — the guard does not over-fire.
     """
-    compliant = (
-        "from tests.architectural._ratchet_keys import composite_key\n\n"
-        "def resolve(source, lineno):\n"
-        "    return composite_key(source, lineno)\n"
-    )
+    compliant = "from tests.architectural._ratchet_keys import composite_key\n\ndef resolve(source, lineno):\n    return composite_key(source, lineno)\n"
     assert _scan_python_source(compliant, "scratch/compliant_seed.py") == []
 
 
@@ -1574,12 +1497,7 @@ def test_ct7_raw_file_line_tuple_seed_is_flagged() -> None:
     ratchet key in a substrate-importing file IS flagged — the file:line-drift
     regression CT7 bans.
     """
-    planted = (
-        "from tests.architectural._ratchet_keys import composite_key\n\n"
-        "_ALLOWLIST = {\n"
-        '    ("some_file.py", 472): "rationale",\n'
-        "}\n"
-    )
+    planted = 'from tests.architectural._ratchet_keys import composite_key\n\n_ALLOWLIST = {\n    ("some_file.py", 472): "rationale",\n}\n'
     violations = _scan_python_source(planted, "scratch/planted_raw_tuple.py")
     assert violations, "planted raw (path, line) 2-tuple ratchet key must be flagged (CT7)"
     assert "raw (path, line) 2-tuple" in violations[0].detail
@@ -1645,12 +1563,7 @@ def test_ct7_escape_hatch_opts_out_raw_tuple() -> None:
     a genuinely non-anchor ``(path, int)`` pair can opt out explicitly rather
     than forcing the predicate to grow a special case.
     """
-    planted = (
-        "from tests.architectural._ratchet_keys import composite_key\n\n"
-        "_ALLOWLIST = {\n"
-        '    ("some_file.py", 472): "rationale",  # diagnostic-locator\n'
-        "}\n"
-    )
+    planted = 'from tests.architectural._ratchet_keys import composite_key\n\n_ALLOWLIST = {\n    ("some_file.py", 472): "rationale",  # diagnostic-locator\n}\n'
     assert _scan_python_source(planted, "scratch/escaped_raw_tuple.py") == []
 
 
@@ -1778,9 +1691,7 @@ def test_non_vacuity_real_compliant_yamls_stay_green() -> None:
     assert len(_YAML_ALLOWLISTS) >= 1, "the YAML arm scans no allow-list (vacuous)"
     for name in _YAML_ALLOWLISTS:
         doc = yaml.safe_load((_ARCH_ROOT / name).read_text(encoding="utf-8"))
-        assert _yaml_int_field_violations(doc) == [], (
-            f"{name} unexpectedly failed the compliant-YAML non-vacuity check"
-        )
+        assert _yaml_int_field_violations(doc) == [], f"{name} unexpectedly failed the compliant-YAML non-vacuity check"
 
 
 # ---------------------------------------------------------------------------
@@ -1810,13 +1721,5 @@ def test_io_allowlist_sites_carry_no_bare_int_element() -> None:
     from tests.architectural.test_trio_seam_only import _IO_ALLOWLIST_SITES
 
     assert _IO_ALLOWLIST_SITES, "the real _IO_ALLOWLIST_SITES must be non-empty"
-    offenders = [
-        (entry, field)
-        for entry in _IO_ALLOWLIST_SITES
-        for field in entry
-        if isinstance(field, int) and not isinstance(field, bool)
-    ]
-    assert not offenders, (
-        "_IO_ALLOWLIST_SITES still carries a bare int line-number member — the "
-        f"#2564 seed-tuple laundering hole is not closed: {offenders!r}"
-    )
+    offenders = [(entry, field) for entry in _IO_ALLOWLIST_SITES for field in entry if isinstance(field, int) and not isinstance(field, bool)]
+    assert not offenders, f"_IO_ALLOWLIST_SITES still carries a bare int line-number member — the #2564 seed-tuple laundering hole is not closed: {offenders!r}"

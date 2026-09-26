@@ -13,6 +13,7 @@ The module also owns the rich/typer layer ban: presentation belongs in the CLI
 layer, never in ``_internal_runtime``. The ``spec_kitty_runtime`` import ban is
 owned by ``tests/architectural/test_shared_package_boundary.py``.
 """
+
 from __future__ import annotations
 
 import ast
@@ -28,9 +29,7 @@ pytestmark = [pytest.mark.unit, pytest.mark.fast]
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "runtime_parity"
 
 # Scan target of the rich/typer layer ban.
-_RUNTIME_PACKAGE = (
-    Path(__file__).resolve().parents[2] / "src" / "runtime" / "next" / "_internal_runtime"
-)
+_RUNTIME_PACKAGE = Path(__file__).resolve().parents[2] / "src" / "runtime" / "next" / "_internal_runtime"
 # Planning-base count of ``.py`` files under ``_RUNTIME_PACKAGE`` (NFR-002 floor).
 # A deliberate shrink of the package is a one-line edit here.
 _RUNTIME_PACKAGE_FILE_FLOOR = 16
@@ -83,6 +82,7 @@ def _load_capture_module() -> ModuleType:
     spec.loader.exec_module(module)
     return module
 
+
 SNAPSHOT_FILES = (
     "snapshot_start_mission_run.json",
     "snapshot_next_step_1.json",
@@ -122,31 +122,23 @@ def test_internalized_runtime_matches_upstream_snapshot(
     captured_text = json.dumps(captured, sort_keys=True, indent=2)
     expected_text = json.dumps(expected, sort_keys=True, indent=2)
 
-    assert captured_text == expected_text, (
-        f"Parity drift in {snapshot_name}:\n--- expected\n{expected_text}\n"
-        f"+++ captured\n{captured_text}"
-    )
+    assert captured_text == expected_text, f"Parity drift in {snapshot_name}:\n--- expected\n{expected_text}\n+++ captured\n{captured_text}"
 
 
 def test_no_rich_or_typer_imports_in_internal_package() -> None:
     """Layer-rule gate: presentation belongs in the CLI layer, not the runtime."""
     files_inspected, offenders = _rich_typer_import_offenders(_RUNTIME_PACKAGE)
     assert files_inspected >= _RUNTIME_PACKAGE_FILE_FLOOR, (
-        f"rich/typer ban inspected {files_inspected} files under {_RUNTIME_PACKAGE}; "
-        f"expected >= {_RUNTIME_PACKAGE_FILE_FLOOR}"
+        f"rich/typer ban inspected {files_inspected} files under {_RUNTIME_PACKAGE}; expected >= {_RUNTIME_PACKAGE_FILE_FLOOR}"
     )
-    assert offenders == [], (
-        "rich/typer imports must not appear inside _internal_runtime/:\n"
-        + "\n".join(f"  {o}" for o in offenders)
-    )
+    assert offenders == [], "rich/typer imports must not appear inside _internal_runtime/:\n" + "\n".join(f"  {o}" for o in offenders)
 
 
 def test_rich_typer_ban_inspects_live_runtime_package() -> None:
     """The ban's scan target is the live runtime package, not a vanished path."""
     files_inspected, _ = _rich_typer_import_offenders(_RUNTIME_PACKAGE)
     assert files_inspected >= _RUNTIME_PACKAGE_FILE_FLOOR, (
-        f"rich/typer ban inspected {files_inspected} files under {_RUNTIME_PACKAGE}; "
-        f"expected >= {_RUNTIME_PACKAGE_FILE_FLOOR}"
+        f"rich/typer ban inspected {files_inspected} files under {_RUNTIME_PACKAGE}; expected >= {_RUNTIME_PACKAGE_FILE_FLOOR}"
     )
 
 
@@ -163,9 +155,7 @@ def test_rich_typer_ban_fails_on_missing_or_empty_target(tmp_path: Path, kind: s
 def test_rich_typer_ban_flags_planted_import(tmp_path: Path) -> None:
     """Planted rich/typer imports are named by the same helper the ban calls."""
     (tmp_path / "mod.py").write_text("import os, typer\n", encoding="utf-8")
-    (tmp_path / "view.py").write_text(
-        "from rich.console import Console\n", encoding="utf-8"
-    )
+    (tmp_path / "view.py").write_text("from rich.console import Console\n", encoding="utf-8")
     (tmp_path / "clean.py").write_text("import os\n", encoding="utf-8")
     files_inspected, offenders = _rich_typer_import_offenders(tmp_path)
     assert files_inspected == 3
