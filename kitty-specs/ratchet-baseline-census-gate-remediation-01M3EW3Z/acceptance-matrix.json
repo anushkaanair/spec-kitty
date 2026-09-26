@@ -157,11 +157,11 @@
     {
       "criterion_id": "FR-016",
       "description": "Verify FR-016 is satisfied",
-      "proof_type": "automated_test",
-      "evidence": null,
-      "pass_fail": "pending",
-      "verified_by": null,
-      "verified_at": null,
+      "proof_type": "manual_review",
+      "evidence": "missing_seams/_apply_xfail/xfail_reason: 0 hits in kept suites; test_wp09_hook_landmine_* removed; status TestPhaseCap tombstone gone with test_parity.py. DEVIATION: docs_cli_reference test_retired_check_residual_option_is_absent KEPT per NFR-006 (survivor proof failed), follow-up #5149 open, recorded in parity-verdicts.md:107",
+      "pass_fail": "pass",
+      "verified_by": "reviewer-renata",
+      "verified_at": "2026-09-26T22:56:26.959027+00:00",
       "notes": "TODO: replace with a real acceptance criterion"
     },
     {
