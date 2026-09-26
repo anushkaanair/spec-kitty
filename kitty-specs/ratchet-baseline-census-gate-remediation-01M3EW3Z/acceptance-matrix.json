@@ -138,10 +138,10 @@
       "criterion_id": "FR-014",
       "description": "Verify FR-014 is satisfied",
       "proof_type": "automated_test",
-      "evidence": null,
-      "pass_fail": "pending",
-      "verified_by": null,
-      "verified_at": null,
+      "evidence": "pytest -n2 charter/contract/next/review/runtime/status touched files from .worktrees/ratchet-baseline-census-gate-remediation-01M3EW3Z-lane-l: 472 passed, 10 skipped (pre-existing contract skips); tests/status/test_parity.py deleted; determinism/transition-matrix checks relocated to tests/status/test_reducer.py and test_transitions.py (green)",
+      "pass_fail": "pass",
+      "verified_by": "reviewer-renata",
+      "verified_at": "2026-09-26T22:56:12.337285+00:00",
       "notes": "TODO: replace with a real acceptance criterion"
     },
     {
