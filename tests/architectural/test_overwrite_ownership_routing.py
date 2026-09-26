@@ -65,9 +65,13 @@ import pytest
 from tests.architectural._destructive_op_census import (
     REPO_ROOT,
     SPECIFY_CLI_ROOT,
+    CensusKey,
     assert_changed_argument_is_unexpected,
     assert_partition_survives_drift,
     assert_second_identical_op_is_unexpected,
+    census_keys,
+    census_keys_for_sources,
+    describe_unexpected,
     diff_against_allowlist,
     drop_one_entry,
     enclosing_qualname,
@@ -75,8 +79,8 @@ from tests.architectural._destructive_op_census import (
     import_alias_map,
     parse,
     read_sources,
+    render_census_key,
     scan_planted_source,
-    scan_sources,
     with_leading_argument,
 )
 
@@ -254,32 +258,40 @@ def _live_sources() -> dict[str, str]:
     return read_sources(_overwrite_module_set())
 
 
-def _scan_module_set() -> dict[str, list[tuple[int, str]]]:
-    return scan_sources(_live_sources(), _find_overwrite_ops)
-
-
-def _flatten(live: dict[str, list[tuple[int, str]]]) -> set[str]:
-    return {f"{rel}:{lineno}:{op}" for rel, hits in live.items() for lineno, op in hits}
+def _census_keys(sources: Mapping[str, str]) -> dict[CensusKey, int]:
+    """Content-keyed live census: ``{CensusKey: lineno}`` (the line is diagnostic only)."""
+    return census_keys_for_sources(sources, _find_overwrite_ops)
 
 
 # ---------------------------------------------------------------------------
 # The frozen allowlist. Every overwrite-family literal in the scan set MUST be
 # either (a) routed — the module calls the overwrite guard and the positive-
 # routing pin below proves it — or (b) an individually-rationalized, shrink-only
-# ``_ALLOWLIST`` entry keyed ``"{path}:{lineno}:{op}"``. Exemptions are PER-SITE,
-# never by module name. Shrink-only: a literal that disappears WARNS (stale); a
-# new un-rationalized literal FAILS.
+# ``_ALLOWLIST`` entry keyed by CONTENT: ``CensusKey`` = (repo-relative path,
+# enclosing qualname, normalized token line, op, op_ordinal among identical live
+# sites in that function) -- never by line, so an unrelated line shift does not
+# re-pin it (FR-006). Exemptions are PER-SITE, never by module name. Shrink-only:
+# a literal that disappears WARNS (stale); a new un-rationalized literal, a
+# second identical op or a changed argument FAILS.
 # ---------------------------------------------------------------------------
-_ALLOWLIST: dict[str, str] = {
+_ALLOWLIST: dict[CensusKey, str] = {
     # --- intake/brief_writer.py (1): atomic write-then-replace-own-tempfile ----
-    "src/specify_cli/intake/brief_writer.py:172:os.replace": (
+    CensusKey(
+        rel="src/specify_cli/intake/brief_writer.py", qualname="atomic_write_bytes", token_line="os . replace ( tmp , target )", op="os.replace", op_ordinal=0
+    ): (
         "atomic write-then-replace-own-tempfile idiom: os.replace(tmp, target) renames a "
         "same-directory temp THIS function just wrote (open+fsync+replace) onto target — the "
         "POSIX-atomic single-file commit, never a destination-clobber of unproven content; "
         "per-site exemption, never by module name."
     ),
     # --- cli/commands/research.py (1): guarded post-clear copy ----------------
-    "src/specify_cli/cli/commands/research.py:94:shutil.copy2": (
+    CensusKey(
+        rel="src/specify_cli/cli/commands/research.py",
+        qualname="_write_research_asset",
+        token_line="shutil . copy2 ( template_path , dest_path )",
+        op="shutil.copy2",
+        op_ordinal=0,
+    ): (
         "guarded post-clear copy: shutil.copy2(template_path, dest_path) executes ONLY after "
         "guard_destructive_overwrite (research.py:80) returned proceed=True — package-owned or "
         "authorized content is replaced while a refusal returns before the copy. The positive-"
@@ -341,20 +353,16 @@ def _live_routed_modules() -> set[str]:
 # ---------------------------------------------------------------------------
 
 
-def _census_partition(sources: Mapping[str, str]) -> tuple[set[str], set[str]]:
+def _census_partition(sources: Mapping[str, str]) -> tuple[set[CensusKey], set[CensusKey]]:
     """The gate's one detection + matching path: ``(unexpected, suppressed)``.
 
     Runs the REAL finder over *sources* (``rel -> source``, possibly mutated in
     memory) and partitions the keyed hits against ``_ALLOWLIST``. The gate, the
     line-drift tests and the non-widening tests all go through this seam.
     """
-    live_flat = _flatten(scan_sources(sources, _find_overwrite_ops))
-    unexpected, _stale = diff_against_allowlist(live_flat, _ALLOWLIST)
-    return unexpected, live_flat & _ALLOWLIST.keys()
-
-
-def _key_rel(key: str) -> str:
-    return key.rsplit(":", 2)[0]
+    live = _census_keys(sources)
+    unexpected, _stale = diff_against_allowlist(live, _ALLOWLIST)
+    return unexpected, live.keys() & _ALLOWLIST.keys()
 
 
 #: Files-scanned floor (NFR-002): the finder scanned 3 files on the planning
@@ -362,7 +370,7 @@ def _key_rel(key: str) -> str:
 _FILES_SCANNED_FLOOR = 3
 
 #: Every file carrying an allowlisted site; the line-drift test runs per file.
-_DRIFT_FILES: tuple[str, ...] = tuple(sorted({_key_rel(key) for key in _ALLOWLIST}))
+_DRIFT_FILES: tuple[str, ...] = tuple(sorted({key.rel for key in _ALLOWLIST}))
 
 _NON_WIDENING_REL = "src/specify_cli/intake/brief_writer.py"
 _NON_WIDENING_OP = "os.replace"
@@ -379,7 +387,7 @@ def test_every_overwrite_literal_is_allowlisted() -> None:
         "outside the frozen allowlist (#4901). Route the write through the overwrite "
         "guard (guard_destructive_overwrite), or — only for a genuinely-safe op (e.g. "
         "an atomic write-then-replace-own-tempfile) — add a one-line rationale entry to "
-        f"_ALLOWLIST: {sorted(unexpected)}"
+        f"_ALLOWLIST: {describe_unexpected(unexpected, sources, _find_overwrite_ops)}"
     )
     assert suppressed, "Non-vacuity: the census suppressed no allowlisted site at all"
     if stale:
@@ -393,7 +401,7 @@ def test_every_overwrite_literal_is_allowlisted() -> None:
 def test_allowlisted_files_exist() -> None:
     """A renamed/deleted allowlisted file must not silently drop out of the scan
     (an absent file reads as zero live hits — a false 'shrink' masking a rename)."""
-    rel_paths = {_key_rel(key) for key in _ALLOWLIST}
+    rel_paths = {key.rel for key in _ALLOWLIST}
     missing = sorted(rel for rel in rel_paths if not (REPO_ROOT / rel).is_file())
     assert not missing, f"Allowlisted file(s) no longer exist: {missing}"
 
@@ -469,10 +477,10 @@ def test_each_routed_module_routes_and_is_allowlist_clean() -> None:
     for rel in sorted(_ROUTED_MODULES):
         path = SPECIFY_CLI_ROOT / rel
         repo_rel = path.relative_to(REPO_ROOT).as_posix()
-        literals = {f"{repo_rel}:{lineno}:{op}" for lineno, op in _find_overwrite_ops(path)}
+        literals = census_keys(repo_rel, path.read_text(encoding="utf-8"), _find_overwrite_ops(path)).keys()
         unexpected = literals - _ALLOWLIST.keys()
         if unexpected:
-            unrouted_literals[rel] = sorted(unexpected)
+            unrouted_literals[rel] = [render_census_key(key) for key in sorted(unexpected)]
     assert not unrouted_literals, (
         "Pinned routed module(s) carry a raw overwrite literal outside the allowlist — "
         f"route it through the guard, do not absorb an unguarded user-content site: {unrouted_literals}"
@@ -581,15 +589,15 @@ def test_removing_an_allowlist_entry_reproduces_a_gate_failure() -> None:
     re-diffing against the ACTUAL live scan reproduces exactly the failure
     ``test_every_overwrite_literal_is_allowlisted`` would raise for a genuine
     un-routed regression — proving the primary gate is not vacuously green."""
-    live_flat = _flatten(_scan_module_set())
+    live = _census_keys(_live_sources())
     victim, shrunk_allowlist = drop_one_entry(_ALLOWLIST)
 
-    unexpected, _stale = diff_against_allowlist(live_flat, shrunk_allowlist)
+    unexpected, _stale = diff_against_allowlist(live, shrunk_allowlist)
 
     assert victim in unexpected, (
         f"Self-mutation check failed: removing {victim!r} from the allowlist did not "
         "reproduce a gate failure against the live tree. The census gate is vacuous — "
-        "investigate diff_against_allowlist / _scan_module_set before trusting a green run."
+        "investigate diff_against_allowlist / _census_keys before trusting a green run."
     )
 
 
@@ -675,7 +683,7 @@ def test_overwrite_census_survives_line_drift(rel: str) -> None:
     statement above every census site) leaves ``(unexpected, suppressed)``
     unchanged. RED on the line-keyed allowlist, GREEN on content keys."""
     source = (REPO_ROOT / rel).read_text(encoding="utf-8")
-    file_keys = [key for key in _ALLOWLIST if _key_rel(key) == rel]
+    file_keys = [key for key in _ALLOWLIST if key.rel == rel]
     assert_partition_survives_drift(rel, source, _census_partition, _site_linenos(rel), file_keys)
 
 

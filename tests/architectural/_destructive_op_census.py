@@ -294,6 +294,22 @@ def scan_sources(sources: Mapping[str, str], finder: Callable[[Path], list[Hit]]
     return live
 
 
+def census_keys_for_sources(sources: Mapping[str, str], finder: Callable[[Path], list[Hit]]) -> dict[CensusKey, int]:
+    """``{CensusKey: lineno}`` for every *finder* hit across *sources* (``rel -> source``)."""
+    keys: dict[CensusKey, int] = {}
+    for rel, hits in scan_sources(sources, finder).items():
+        keys.update(census_keys(rel, sources[rel], hits))
+    return keys
+
+
+def describe_unexpected(unexpected: Iterable[CensusKey], sources: Mapping[str, str], finder: Callable[[Path], list[Hit]]) -> list[str]:
+    """Render each unexpected key with its diagnostic line, for a gate's failure message."""
+    keys = sorted(unexpected)
+    rels = {key.rel for key in keys}
+    linenos = census_keys_for_sources({rel: sources[rel] for rel in rels if rel in sources}, finder)
+    return [render_census_key(key, linenos.get(key)) for key in keys]
+
+
 def read_sources(paths: Iterable[Path]) -> dict[str, str]:
     """``{repo-relative posix path: source text}`` for *paths* (unreadable files skipped)."""
     sources: dict[str, str] = {}
