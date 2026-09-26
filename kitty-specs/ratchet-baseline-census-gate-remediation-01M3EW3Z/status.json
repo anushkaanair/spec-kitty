@@ -1,7 +1,7 @@
 {
-  "event_count": 73,
-  "last_event_id": "01M3FKYBA6X1PA0FMMV7NC7DTP",
-  "materialized_at": "2026-09-26T19:44:14.662190+00:00",
+  "event_count": 75,
+  "last_event_id": "01M3FM50FJDYZDDB0KFE70VHGH",
+  "materialized_at": "2026-09-26T19:47:52.931691+00:00",
   "mission_number": "",
   "mission_slug": "ratchet-baseline-census-gate-remediation-01M3EW3Z",
   "mission_type": "",
@@ -13,9 +13,9 @@
     "claimed": 0,
     "done": 0,
     "for_review": 0,
-    "in_progress": 0,
+    "in_progress": 1,
     "in_review": 0,
-    "planned": 1
+    "planned": 0
   },
   "work_packages": {
     "WP01": {
@@ -326,7 +326,8 @@
       "last_transition_at": "2026-09-26T19:44:14.662190+00:00",
       "model": "__resolved_model_absent__",
       "notes": [
-        "FR-015 delivered: markers via copied packs mirror + SPEC_KITTY_PACKS_ROOT, renamed to test_context_bootstrap_markers.py. RED 1896b8cc lists exactly the 10 expected offenders; GREEN 0. Markers module 10 passed. charter+doctrine serial and -n2 loadfile: 9 failed/6139 passed/37 skipped in both orders, all 9 red on base src (linked-worktree/root env). test-fast 4 failed (known #4873 x3, #5126)/2305 passed. terminology 90 passed. ruff check/format exit 0, mypy 0 issues. context_contract.py AST-equal. Tracer design-decisions-961426612930."
+        "FR-015 delivered: markers via copied packs mirror + SPEC_KITTY_PACKS_ROOT, renamed to test_context_bootstrap_markers.py. RED 1896b8cc lists exactly the 10 expected offenders; GREEN 0. Markers module 10 passed. charter+doctrine serial and -n2 loadfile: 9 failed/6139 passed/37 skipped in both orders, all 9 red on base src (linked-worktree/root env). test-fast 4 failed (known #4873 x3, #5126)/2305 passed. terminology 90 passed. ruff check/format exit 0, mypy 0 issues. context_contract.py AST-equal. Tracer design-decisions-961426612930.",
+        "Reviewer renata: RED at 1896b8cc reproduced in scratch worktree = exact 10-entry list (6 patch + 2 private-import + 2 private-call); head scan 0 offenders; planted test uses same _src_coupling_offenders incl. mock-as-m alias + setenv/delenv negative; mirror copytree/copy2, no symlink_to; pack root under tmp_path + no SPEC_KITTY_PACKS_ROOT UserWarning; control test drops missing_artifact (typo_suspected); 4 marker assertion groups byte-identical to base; 47759725 pure rename (0 lines); context_contract.py AST-equal to base; 0 live old-path refs; ruff/format/mypy clean; module 10/10 green; test_no_legacy_terminology 90 passed; charter+doctrine -n 2: 9 failed/6139 passed, all 9 env (linked-worktree guard x7, root chmod x1, uv --no-sync pydantic x1), none touch WP10 files. LOW: is_symlink() after resolve() is vacuous; scan misses private attribute calls via module alias (outside spec wording)."
       ],
       "provider": "__resolved_provider_absent__",
       "review_result": {
@@ -409,11 +410,20 @@
       }
     },
     "WP13": {
-      "actor": "finalize-tasks",
+      "actor": "claude",
+      "agent": "claude",
+      "agent_profile": "python-pedro",
+      "agent_profile_version": "1.0",
       "force_count": 0,
-      "lane": "planned",
-      "last_event_id": "01M3F12V8686VT8CJ0K94QKJN3",
-      "last_transition_at": "2026-09-26T14:14:39.110281+00:00"
+      "implementer_of_record": "claude",
+      "lane": "in_progress",
+      "last_event_id": "01M3FM50FJDYZDDB0KFE70VHGH",
+      "last_transition_at": "2026-09-26T19:47:52.931691+00:00",
+      "model": "__resolved_model_absent__",
+      "provider": "__resolved_provider_absent__",
+      "role": "implementer",
+      "shell_pid": 23997,
+      "shell_pid_created_at": "1790452061.06"
     }
   }
 }
