@@ -13,6 +13,7 @@ not behaviorally identical to the upstream — fix the relevant sub-module.
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import json
 from pathlib import Path
@@ -23,6 +24,47 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "runtime_parity"
+
+# Scan target of the rich/typer layer ban.
+_RUNTIME_PACKAGE = (
+    Path(__file__).resolve().parents[1].parent
+    / "src"
+    / "specify_cli"
+    / "next"
+    / "_internal_runtime"
+)
+# Planning-base count of ``.py`` files under ``_RUNTIME_PACKAGE`` (NFR-002 floor).
+# A deliberate shrink of the package is a one-line edit here.
+_RUNTIME_PACKAGE_FILE_FLOOR = 16
+_FORBIDDEN_IMPORT_ROOTS = frozenset({"rich", "typer"})
+
+
+def _imported_roots(node: ast.AST) -> list[str]:
+    """Top-level module segments an ``import`` / ``from ... import`` statement loads."""
+    if isinstance(node, ast.Import):
+        return [alias.name.split(".")[0] for alias in node.names]
+    if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+        return [node.module.split(".")[0]]
+    return []
+
+
+def _rich_typer_import_offenders(root: Path) -> tuple[int, list[str]]:
+    """Return ``(files_inspected, offenders)`` for rich/typer imports under ``root``.
+
+    Walks the AST (not line prefixes), so ``import os, typer`` and lazy
+    function-local imports are caught. Fails loudly on a missing or empty
+    target: a ban that inspects nothing must never pass (SC-005).
+    """
+    assert root.is_dir(), f"rich/typer ban: missing target {root} (0 files inspected)"
+    files = sorted(root.rglob("*.py"))
+    assert files, f"rich/typer ban: empty target {root} (0 files inspected)"
+    offenders: list[str] = []
+    for py_file in files:
+        tree = ast.parse(py_file.read_text(encoding="utf-8"), filename=str(py_file))
+        for node in ast.walk(tree):
+            hits = [r for r in _imported_roots(node) if r in _FORBIDDEN_IMPORT_ROOTS]
+            offenders.extend(f"{py_file}:{node.lineno}: {r}" for r in hits)
+    return len(files), offenders
 
 
 def _load_capture_module() -> ModuleType:
@@ -167,3 +209,36 @@ def test_submodule_surface_matches_contract() -> None:
     assert hasattr(schema, "MissionRuntimeError")
     assert hasattr(engine, "_read_snapshot")
     assert hasattr(planner, "plan_next")
+
+
+def test_rich_typer_ban_inspects_live_runtime_package() -> None:
+    """The ban's scan target is the live runtime package, not a vanished path."""
+    files_inspected, _ = _rich_typer_import_offenders(_RUNTIME_PACKAGE)
+    assert files_inspected >= _RUNTIME_PACKAGE_FILE_FLOOR, (
+        f"rich/typer ban inspected {files_inspected} files under {_RUNTIME_PACKAGE}; "
+        f"expected >= {_RUNTIME_PACKAGE_FILE_FLOOR}"
+    )
+
+
+@pytest.mark.parametrize("kind", ["missing", "empty"])
+def test_rich_typer_ban_fails_on_missing_or_empty_target(tmp_path: Path, kind: str) -> None:
+    """A missing or empty scan target fails the ban instead of passing vacuously."""
+    target = tmp_path / "pkg"
+    if kind == "empty":
+        target.mkdir()
+    with pytest.raises(AssertionError, match="0 files inspected"):
+        _rich_typer_import_offenders(target)
+
+
+def test_rich_typer_ban_flags_planted_import(tmp_path: Path) -> None:
+    """Planted rich/typer imports are named by the same helper the ban calls."""
+    (tmp_path / "mod.py").write_text("import os, typer\n", encoding="utf-8")
+    (tmp_path / "view.py").write_text(
+        "from rich.console import Console\n", encoding="utf-8"
+    )
+    (tmp_path / "clean.py").write_text("import os\n", encoding="utf-8")
+    files_inspected, offenders = _rich_typer_import_offenders(tmp_path)
+    assert files_inspected == 3
+    assert len(offenders) == 2, offenders
+    assert any("mod.py:1: typer" in o for o in offenders), offenders
+    assert any("view.py:1: rich" in o for o in offenders), offenders
