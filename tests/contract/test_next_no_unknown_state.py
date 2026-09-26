@@ -16,7 +16,7 @@ pytestmark = pytest.mark.fast
 _PLACEHOLDER = "[QUERY - no result provided]"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _TEMPLATES_ROOT = _REPO_ROOT / "src" / "specify_cli" / "missions"
-_RUNTIME_SOURCE_ROOT = _REPO_ROOT / "src" / "specify_cli" / "next"
+_RUNTIME_SOURCE_ROOT = _REPO_ROOT / "src" / "runtime" / "next"
 # Planning-base count of ``.py`` files under ``_RUNTIME_SOURCE_ROOT`` (NFR-002
 # floor). A deliberate shrink of the runtime tree is a one-line edit here.
 _RUNTIME_SOURCE_FILE_FLOOR = 31
@@ -49,6 +49,16 @@ def test_runtime_placeholder_scan_inspects_live_source() -> None:
     )
 
 
+def test_runtime_placeholder_scan_flags_planted_placeholder(tmp_path: Path) -> None:
+    """A planted placeholder is named ``(path, line)`` by the helper the ban calls."""
+    planted = tmp_path / "emitter.py"
+    planted.write_text(f"x = 1\nmsg = {_PLACEHOLDER!r}\n", encoding="utf-8")
+    (tmp_path / "clean.py").write_text("msg = 'query result'\n", encoding="utf-8")
+    files_inspected, offenders = _placeholder_offenders(tmp_path)
+    assert files_inspected == 2
+    assert offenders == [(planted, 2)]
+
+
 class TestNoLegacyQueryPlaceholderInTemplates:
     """The literal placeholder must not appear in any shipped command template."""
 
@@ -68,16 +78,11 @@ class TestNoLegacyQueryPlaceholderInTemplates:
         )
 
     def test_placeholder_is_absent_from_runtime_source(self) -> None:
-        runtime_root = _REPO_ROOT / "src" / "specify_cli" / "next"
-        offenders: list[tuple[Path, int]] = []
-        for path in runtime_root.rglob("*.py"):
-            try:
-                lines = path.read_text(encoding="utf-8").splitlines()
-            except OSError:
-                continue
-            for idx, line in enumerate(lines, start=1):
-                if _PLACEHOLDER in line:
-                    offenders.append((path, idx))
+        files_inspected, offenders = _placeholder_offenders(_RUNTIME_SOURCE_ROOT)
+        assert files_inspected >= _RUNTIME_SOURCE_FILE_FLOOR, (
+            f"placeholder scan inspected {files_inspected} files under "
+            f"{_RUNTIME_SOURCE_ROOT}; expected >= {_RUNTIME_SOURCE_FILE_FLOOR}"
+        )
         assert not offenders, (
             "Runtime source must not emit the legacy placeholder. Offenders: "
             f"{offenders}"
