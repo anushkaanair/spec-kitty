@@ -1,8 +1,7 @@
-"""T017 (WP04, #2532) — non-trivial byte-parity baseline for ``charter.activation.context``.
+"""Behavioural bootstrap markers for ``charter.activation.context`` (FR-015).
 
-Captured **after** WP01/WP02/WP03 land (Decision 10 / Decision 8 in
-``research.md``): the corpus below traverses the three behaviour-bearing
-cases the contract requires plus the empty-charter provenance proof:
+The corpus traverses the behaviour-bearing cases of the context contract plus
+the empty-charter provenance proof:
 
 * token-budget substitution (an over-budget action-critical section body
   gets swapped for the canonical fetch + when-doing stanza — NFR-001);
@@ -10,41 +9,33 @@ cases the contract requires plus the empty-charter provenance proof:
   catalog degrades to the structured miss stanza, not a crash);
 * first-load state bookkeeping (a fresh repo's first render writes
   ``.kittify/charter/context-state.json``);
-* the empty-charter / generic-agent fallback (WP01/WP03, #3064) — proves
-  this golden was captured post-US1, not a stale pre-WP01 snapshot.
+* the empty-charter / generic-agent fallback (WP01/WP03, #3064).
 
-Each case asserts its own distinguishing behavioural marker: the token-budget
-swap actually happened, the ghost reference degraded to the miss stanza, the
-first-load state was persisted, and the empty-charter fallback did not leak the
-directive canon.
+Each case asserts its own distinguishing behavioural marker. Render
+*determinism* is covered separately by
+``tests/charter/test_context_noop_stability.py``.
 
-RETIRED byte-parity goldens (mission rehome-writing-comms-doctrine)
--------------------------------------------------------------------
-The four ``*.golden.txt`` byte-parity fixtures and the ``_assert_matches_golden``
-helper were removed. The JSON corpus golden embedded the LIVE built-in directive
-catalog, so it red on every legitimate doctrine addition with nothing wrong in
-the renderer — concretely, shipping ``DIRECTIVE_049`` moved the catalog-miss
-"did you mean" suggestion (``DIRECTIVE_998`` -> ``DIRECTIVE_049``) and broke the
-frozen corpus. Render *determinism* is now covered permanently by
-``tests/charter/test_context_noop_stability.py`` (render-twice idempotency), and
-the behavioural contracts by the marker tests below, so the frozen corpus was a
-redundant change-detector. The behaviour-bearing assertions are kept inline; only
-the full-corpus byte-freeze is gone.
-
-This module is import-safe before and after the WP04 extraction: every
-private symbol it touches is only exercised indirectly through the three
-public entry points (``build_charter_context``, ``build_charter_context_include``,
-``build_charter_context_json``), so it never needs to import a moved
-private symbol directly.
+On-disk fixture, public seams only
+----------------------------------
+The markers are reached exclusively through the public entry points
+(``build_charter_context``, ``build_charter_context_include``,
+``build_charter_context_json``) and the public ``SPEC_KITTY_PACKS_ROOT`` env
+knob — never by patching a first-party ``src/`` binding or calling a
+first-party private (enforced by ``test_context_markers_use_no_src_patch_targets``).
+The catalog-miss decoupling comes from filesystem state: :func:`_mirror_packs`
+**copies** (never symlinks, D-OP-10) the real ``packs/built-in`` tree under
+``tmp_path`` with an empty ``directives/`` directory and one extra on-disk
+fixture agent profile citing a directive absent from that empty catalog.
 """
 
 from __future__ import annotations
 
 import ast
 import json
+import shutil
 import textwrap
+import warnings
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -53,7 +44,7 @@ from charter.activation.context import (
     build_charter_context_include,
     build_charter_context_json,
 )
-from charter.offering.agent_profiles import AgentProfile
+from kernel.paths import get_built_in_pack_root
 
 pytestmark = [pytest.mark.fast]
 
@@ -140,36 +131,71 @@ def _bootstrap_corpus_charter_md() -> str:
     return header + _LONG_BODY + footer
 
 
-def _ghost_directive_profile() -> AgentProfile:
-    """A synthetic profile citing a directive id absent from the catalog."""
-    return AgentProfile.model_validate(
-        {
-            "profile-id": "parity-fixture-agent",
-            "name": "Parity Fixture Agent",
-            "roles": ["implementer"],
-            "purpose": "test fixture for the WP04 byte-parity baseline",
-            "specialization": {"primary-focus": "testing"},
-            "directive-references": [
-                {
-                    "code": _GHOST_DIRECTIVE_CODE,
-                    "name": "Ghost Directive",
-                    "rationale": "force a catalog-miss fall-through",
-                }
-            ],
-        }
-    )
+_FIXTURE_PROFILE_ID = "parity-fixture-agent"
 
-
-def _empty_doctrine_root(tmp_path: Path) -> Path:
-    """An intentionally-empty doctrine root: every catalog lookup misses.
-
-    Fully decouples the catalog-miss marker from the real, evolving
-    built-in doctrine catalog (no risk of a future directive edit
-    changing this golden for reasons unrelated to WP04).
+# Literal on-disk profile (public YAML format): cites a directive id that the
+# mirror's empty ``directives/`` catalog cannot resolve.
+_FIXTURE_PROFILE_YAML = textwrap.dedent(
+    f"""\
+    profile-id: {_FIXTURE_PROFILE_ID}
+    name: Parity Fixture Agent
+    roles:
+      - implementer
+    purpose: test fixture for the bootstrap-marker corpus
+    specialization:
+      primary-focus: testing
+    directive-references:
+      - code: "{_GHOST_DIRECTIVE_CODE}"
+        name: Ghost Directive
+        rationale: force a catalog-miss fall-through
     """
-    root = tmp_path / "empty_doctrine_root"
-    root.mkdir(parents=True, exist_ok=True)
+)
+
+
+def _mirror_packs(tmp_path: Path, *, empty_directives: bool = True) -> Path:
+    """Copy the real built-in pack under ``tmp_path/packs`` and return that packs root.
+
+    Resolve the real pack root through the public ``get_built_in_pack_root``
+    BEFORE ``SPEC_KITTY_PACKS_ROOT`` points at the mirror. Every child is copied
+    (never symlinked, D-OP-10). With *empty_directives* the ``directives/``
+    catalog is an empty real directory, so every directive lookup misses. The
+    fixture agent profile is written as literal YAML next to the real profiles.
+    """
+    real_built_in = get_built_in_pack_root()
+    packs_root = tmp_path / "packs"
+    mirror = packs_root / "built-in"
+    assert not real_built_in.resolve().is_relative_to(tmp_path.resolve()), "real pack root must be located before the env knob points at the mirror"
+    mirror.mkdir(parents=True)
+    for child in real_built_in.iterdir():
+        target = mirror / child.name
+        if child.name == "directives" and empty_directives:
+            target.mkdir()
+        elif child.is_dir():
+            shutil.copytree(child, target)
+        else:
+            shutil.copy2(child, target)
+    (mirror / "agent_profiles" / f"{_FIXTURE_PROFILE_ID}.agent.yaml").write_text(_FIXTURE_PROFILE_YAML, encoding="utf-8")
+    return packs_root
+
+
+@pytest.fixture
+def packs_mirror(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the public ``SPEC_KITTY_PACKS_ROOT`` knob at an empty-directives mirror."""
+    root = _mirror_packs(tmp_path)
+    monkeypatch.setenv("SPEC_KITTY_PACKS_ROOT", str(root))
     return root
+
+
+def _render_bootstrap_corpus(repo: Path) -> str:
+    _write_common_charter_files(repo, _bootstrap_corpus_charter_md())
+    result = build_charter_context(
+        repo,
+        profile=_FIXTURE_PROFILE_ID,
+        action="implement",
+        mark_loaded=True,
+    )
+    text: str = result.text
+    return text
 
 
 # ---------------------------------------------------------------------------
@@ -181,106 +207,37 @@ class TestBootstrapCorpusParity:
     """One render exercising all three non-trivial behaviour-bearing cases."""
 
     def _render(self, tmp_path: Path) -> tuple[str, Path]:
-        _write_common_charter_files(tmp_path, _bootstrap_corpus_charter_md())
-        doctrine_root = _empty_doctrine_root(tmp_path)
-        profile = _ghost_directive_profile()
+        repo = tmp_path / "repo"
+        return _render_bootstrap_corpus(repo), repo
 
-        from charter.activation.profile_resolution import _reset_agent_profile_cache
-
-        _reset_agent_profile_cache()
-        with (
-            patch(
-                "charter.activation.profile_resolution._activation_aware_profile_map",
-                return_value={profile.profile_id: profile},
-            ),
-            patch(
-                "charter.activation.catalog.resolve_doctrine_root",
-                return_value=doctrine_root,
-            ),
-            # Post-relocation (mission relocate-builtin-doctrine-packs) the built-in
-            # directive catalog is sourced through the ``built_in_dir(kind)`` seam,
-            # NOT ``resolve_doctrine_root`` (which now only serves template sets under
-            # src/doctrine). The profile-cited directive miss is diagnosed against the
-            # ``DoctrineService.directives`` repo, which self-resolves via its OWN
-            # built-in-dir seam. Patch both the charter-catalog seam and the directive
-            # repository's seam to the SAME empty root so the miss stanza stays
-            # decoupled from the live, evolving built-in canon — otherwise the fixture
-            # leaks into the ambient dev-checkout ``packs/built-in`` and the golden
-            # re-couples to real directive IDs (e.g. DIRECTIVE_039).
-            #
-            # Mission doctrine-built-in-seam-consolidation-01KYW3TX (WP01) routed the
-            # directive repository's default through the ``built_in_dir(kind)``
-            # authority in ``charter.offering.pack_paths`` (the join now lives there, not in
-            # ``repository.py``), so the old ``...repository.resolve_pack_root`` patch
-            # target no longer exists on this module. WP02 routed
-            # ``charter.activation.catalog``'s own per-kind joins through the same
-            # ``built_in_dir(kind)`` authority (removing its ``resolve_pack_root``
-            # import entirely), so the old ``charter.activation.catalog.resolve_pack_root``
-            # patch target no longer exists there either. Patching
-            # ``charter.activation.catalog.built_in_dir`` (all kinds -> under the empty root)
-            # and ``charter.offering.directives.repository.built_in_dir`` directly (rather
-            # than ``charter.offering.pack_paths.resolve_pack_root``) reproduces the exact
-            # same resolved paths scoped to only these two bindings, without
-            # over-capturing every OTHER repository's built-in resolution in the same
-            # render (paradigms/procedures/etc. still resolve their real built-in
-            # content for this test).
-            patch(
-                "charter.activation.catalog.built_in_dir",
-                side_effect=lambda kind: doctrine_root / kind.plural,
-            ),
-            patch(
-                "charter.offering.directives.repository.built_in_dir",
-                return_value=doctrine_root / "directives",
-            ),
-        ):
-            result = build_charter_context(
-                tmp_path,
-                profile="parity-fixture-agent",
-                action="implement",
-                mark_loaded=True,
-            )
-        return result.text, tmp_path
-
+    @pytest.mark.usefixtures("packs_mirror")
     def test_first_load_marker(self, tmp_path: Path) -> None:
         """The fresh repo's first render must report first_load and persist state."""
-        _write_common_charter_files(tmp_path, _bootstrap_corpus_charter_md())
-        doctrine_root = _empty_doctrine_root(tmp_path)
-        profile = _ghost_directive_profile()
-
-        from charter.activation.profile_resolution import _reset_agent_profile_cache
-
-        _reset_agent_profile_cache()
-        state_path = tmp_path / ".kittify" / "charter" / "context-state.json"
+        repo = tmp_path / "repo"
+        _write_common_charter_files(repo, _bootstrap_corpus_charter_md())
+        state_path = repo / ".kittify" / "charter" / "context-state.json"
         assert not state_path.exists(), "fixture must start with no prior state"
 
-        with (
-            patch(
-                "charter.activation.profile_resolution._activation_aware_profile_map",
-                return_value={profile.profile_id: profile},
-            ),
-            patch(
-                "charter.activation.catalog.resolve_doctrine_root",
-                return_value=doctrine_root,
-            ),
-        ):
-            result = build_charter_context(
-                tmp_path,
-                profile="parity-fixture-agent",
-                action="implement",
-                mark_loaded=True,
-            )
+        result = build_charter_context(
+            repo,
+            profile=_FIXTURE_PROFILE_ID,
+            action="implement",
+            mark_loaded=True,
+        )
 
         assert result.first_load is True
         assert state_path.exists(), "first-load render must write context-state.json"
         state = json.loads(state_path.read_text(encoding="utf-8"))
         assert "implement" in state.get("actions", {})
 
+    @pytest.mark.usefixtures("packs_mirror")
     def test_catalog_miss_marker(self, tmp_path: Path) -> None:
         """The ghost directive reference degrades to the structured miss stanza."""
         text, _ = self._render(tmp_path)
         assert f"directive:DIRECTIVE_{_GHOST_DIRECTIVE_CODE}" in text
         assert "Cause: missing_artifact" in text
 
+    @pytest.mark.usefixtures("packs_mirror")
     def test_token_budget_substitution_marker(self, tmp_path: Path) -> None:
         """The oversized critical-section body is swapped for a fetch stanza.
 
@@ -297,6 +254,36 @@ class TestBootstrapCorpusParity:
         assert _LONG_BODY_NEEDLE not in text, "the over-budget verbatim body must be swapped out, not inlined"
         assert "section:terminology-canon" in text
         assert "# Governance payload:" in text
+
+    @pytest.mark.usefixtures("packs_mirror")
+    def test_packs_mirror_is_the_resolved_built_in_root(self, tmp_path: Path) -> None:
+        """The copied mirror, not the ambient checkout, is the resolved built-in root (#3251 guard)."""
+        resolved = get_built_in_pack_root().resolve()
+        assert resolved.is_relative_to(tmp_path.resolve()), f"built-in pack root escaped the fixture: {resolved}"
+        assert not resolved.is_symlink(), "the packs mirror must be a copy, never a symlink (D-OP-10)"
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            text, _ = self._render(tmp_path)
+
+        fallback = [w for w in caught if issubclass(w.category, UserWarning) and "SPEC_KITTY_PACKS_ROOT" in str(w.message)]
+        assert fallback == [], "a SPEC_KITTY_PACKS_ROOT fallback means the mirror was silently bypassed"
+        assert "Cause: missing_artifact" in text
+
+    def test_real_directive_catalog_changes_the_miss_cause(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Control: a real, non-empty directives mirror changes the miss cause.
+
+        Proves the empty ``directives/`` directory is load-bearing. The suggested
+        directive id is deliberately NOT asserted (it tracks the live catalog).
+        """
+        packs_root = _mirror_packs(tmp_path, empty_directives=False)
+        assert any((packs_root / "built-in" / "directives").iterdir()), "control mirror must carry real directives"
+        monkeypatch.setenv("SPEC_KITTY_PACKS_ROOT", str(packs_root))
+
+        text, _ = self._render(tmp_path)
+
+        assert f"directive:DIRECTIVE_{_GHOST_DIRECTIVE_CODE}" in text
+        assert "Cause: missing_artifact" not in text
 
 
 # ---------------------------------------------------------------------------
