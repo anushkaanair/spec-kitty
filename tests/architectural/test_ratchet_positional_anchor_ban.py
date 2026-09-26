@@ -1152,6 +1152,24 @@ def test_positional_anchor_exemptions_are_exact() -> None:
         warnings.warn(f"#5085 exemption row no longer matches a live finding (migrated?): {stale!r}", stacklevel=1)
 
 
+def _exemption_rows_by_group(rows: frozenset[tuple[str, str, str, str]]) -> str:
+    """``relpath::symbol: N`` per exemption-row group (FR-003 pin report)."""
+    counts = Counter((relpath, symbol) for relpath, symbol, _, _ in rows)
+    return "\n".join(f"  {relpath}::{symbol}: {n}" for (relpath, symbol), n in sorted(counts.items()))
+
+
+def test_positional_anchor_exemptions_are_pinned_empty() -> None:
+    """FR-003 / SC-001 acceptance pin: the positional-anchor exemption set is
+    EXACTLY empty. Re-adding any row is a visible diff against ``frozenset()``
+    (exact-set equality, never ``len(...) == 0`` over a filtered view).
+    """
+    assert frozenset() == _POSITIONAL_ANCHOR_EXEMPTIONS, (
+        f"{len(_POSITIONAL_ANCHOR_EXEMPTIONS)} positional-anchor exemption row(s) remain; "
+        "the set must stay frozenset() (FR-003, SC-001). Remaining rows by "
+        "(relpath, symbol):\n" + _exemption_rows_by_group(_POSITIONAL_ANCHOR_EXEMPTIONS)
+    )
+
+
 def test_no_int_field_ban_in_ratchet_allowlist_yaml() -> None:
     """Standing gate (YAML arm): an int is permitted only in ``line`` / ``count``
     / ``*_baseline`` across the two ratchet allow-list YAMLs. Any other
