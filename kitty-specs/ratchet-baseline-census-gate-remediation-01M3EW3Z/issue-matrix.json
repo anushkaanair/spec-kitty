@@ -229,7 +229,7 @@
       "wp": "WP01"
     },
     "#5104": {
-      "evidence_ref": "Epic; closeout WP13 verifies all children",
+      "evidence_ref": "children: #5085 fixed, #3011 fixed, #3026 fixed (+#3962 folded, fixed), #2631 fixed; #2972 deferred by design (C-003), Follow-up: #5118; further follow-ups #5116 #5117 (+ FR-019(d) matcher follow-up drafted for filing). Closeout WP13 commits e8b5accb, db841aac, fb044499, 33851c2e. Operator may upgrade to fixed if the epic is judged closed with #2972 deferred.",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -237,7 +237,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "deferred-with-followup",
       "wp": "WP13"
     },
     "#5116": {
