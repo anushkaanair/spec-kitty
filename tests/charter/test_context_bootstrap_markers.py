@@ -258,9 +258,12 @@ class TestBootstrapCorpusParity:
     @pytest.mark.usefixtures("packs_mirror")
     def test_packs_mirror_is_the_resolved_built_in_root(self, tmp_path: Path) -> None:
         """The copied mirror, not the ambient checkout, is the resolved built-in root (#3251 guard)."""
-        resolved = get_built_in_pack_root().resolve()
+        root = get_built_in_pack_root()
+        resolved = root.resolve()
         assert resolved.is_relative_to(tmp_path.resolve()), f"built-in pack root escaped the fixture: {resolved}"
-        assert not resolved.is_symlink(), "the packs mirror must be a copy, never a symlink (D-OP-10)"
+        # Checked on the UNRESOLVED root: ``.resolve()`` follows symlinks, so a
+        # resolved path can never itself be one (that assert was vacuous).
+        assert not root.is_symlink(), "the packs mirror must be a copy, never a symlink (D-OP-10)"
 
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
