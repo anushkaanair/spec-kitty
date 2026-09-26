@@ -61,7 +61,7 @@
       "wp": null
     },
     "#2631": {
-      "evidence_ref": "Parity remediation WP08-WP12 (FR-013..FR-018)",
+      "evidence_ref": "45/45 verdicts in research/parity-verdicts.md (WP12); net-negatives remediated WP08 (d61d05ba, e034ecf9), WP09 (a5285a9a, e2712923, 6329c3db), WP10 (1896b8cc, b9d1e67a, 47759725), WP11 (dd6c44b7, 1fc09315, 466660ca); oracle retirement out of scope, Follow-up: #5116",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -69,7 +69,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "fixed",
       "wp": "WP08"
     },
     "#2633": {
