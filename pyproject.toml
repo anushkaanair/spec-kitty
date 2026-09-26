@@ -2550,7 +2550,6 @@ exclude = [
     "tests/status/test_event_mission_id.py",
     "tests/status/test_legacy_bridge.py",
     "tests/status/test_migrate_lifecycle_envelope.py",
-    "tests/status/test_parity.py",
     "tests/status/test_phase.py",
     "tests/status/test_reducer.py",
     "tests/status/test_reducer_recovery_integrity.py",
