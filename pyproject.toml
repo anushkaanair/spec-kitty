@@ -951,8 +951,6 @@ exclude = [
     "tests/architectural/_symbol_key.py",
     "tests/architectural/_workflow_fixtures/__init__.py",
     "tests/architectural/conftest.py",
-    "tests/architectural/surface_resolution_audit/audit.py",
-    "tests/architectural/surface_resolution_audit/rekey_inventory.py",
     "tests/architectural/test_2093_authority_invariant.py",
     "tests/architectural/test_auth_transport_singleton.py",
     "tests/architectural/test_bare_prose_corpus_ratchet.py",
