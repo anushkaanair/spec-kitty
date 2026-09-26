@@ -25,6 +25,7 @@
   "purpose_context": "Epic #5104 groups five test-suite friction issues (#2631, #2972, #3011, #3026, #5085). A grounding squad found that several gates the issues rely on were deleted by earlier sanitation missions, leaving dead scaffolding, vacuous bans, and line-pinned allowlists. This mission restores or retires each gate deliberately and closes the positional-anchor scope hole.",
   "purpose_tldr": "Make the frozen-baseline ratchets, allowlists and census gates under epic #5104 measure what they intend, stay round-trip-safe, and stop taxing unrelated changes.",
   "slug": "ratchet-baseline-census-gate-remediation-01M3EW3Z",
+  "status_phase": "1",
   "target_branch": "claude/spec-kitty-remediation-wfje22",
   "topology": "coord",
   "vcs": "git",
