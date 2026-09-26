@@ -127,15 +127,13 @@ C-003 status: PRESENT on the base. T038/T040 may build on it.
 from __future__ import annotations
 
 import functools
-import importlib.util
-import sys
 import tempfile
 from pathlib import Path
 from types import ModuleType
-from typing import Any
 
 import pytest
 
+from tests.architectural import _surface_resolution_scan as _scan
 from tests.architectural._ratchet_keys import (
     CompositeKey,
     ContentDescriptor,
@@ -156,30 +154,19 @@ _SRC_SPECIFY_CLI = _SRC_ROOT / "specify_cli"
 _SRC_MISSION_RUNTIME = _SRC_ROOT / "mission_runtime"
 
 # ---------------------------------------------------------------------------
-# Load the WP01 audit module (discover_rows is the live AST walker).
-# We load it as an explicit module so it can define its dataclasses correctly
-# and so we import the live version (not a stale copy).
+# The live AST walker (``discover_rows`` / ``discover_selection_callsites``)
+# lives in the ``_surface_resolution_scan`` package module; importing it
+# normally means this guard always exercises the live scanner.
 # ---------------------------------------------------------------------------
-_AUDIT_PATH = _REPO_ROOT / "tests" / "architectural" / "surface_resolution_audit" / "audit.py"
-assert _AUDIT_PATH.exists(), f"WP01 audit.py missing at {_AUDIT_PATH}"
-
-_AUDIT_MOD_NAME = "_surface_resolution_audit_wp01"
-_audit_spec = importlib.util.spec_from_file_location(_AUDIT_MOD_NAME, _AUDIT_PATH)
-assert _audit_spec is not None
-_audit_mod = importlib.util.module_from_spec(_audit_spec)
-sys.modules[_AUDIT_MOD_NAME] = _audit_mod
-assert _audit_spec.loader is not None
-_audit_spec.loader.exec_module(_audit_mod)
-
-discover_rows = _audit_mod.discover_rows
-discover_selection_callsites = _audit_mod.discover_selection_callsites
+discover_rows = _scan.discover_rows
+discover_selection_callsites = _scan.discover_selection_callsites
 
 # ---------------------------------------------------------------------------
-# Constants mirrored from audit.py (re-read from the live module so any
-# changes to the walker are automatically reflected here).
+# Constants mirrored from ``_surface_resolution_scan`` (re-read from the live
+# module so any changes to the walker are automatically reflected here).
 # ---------------------------------------------------------------------------
-_KITTY_SPECS_NAMES: frozenset[str] = _audit_mod.KITTY_SPECS_NAMES
-_ALLOWLISTED_SELECTION_CALLSITES: dict[str, str] = _audit_mod.ALLOWLISTED_SELECTION_CALLSITES
+_KITTY_SPECS_NAMES: frozenset[str] = _scan.KITTY_SPECS_NAMES
+_ALLOWLISTED_SELECTION_CALLSITES: dict[str, str] = _scan.ALLOWLISTED_SELECTION_CALLSITES
 
 # ---------------------------------------------------------------------------
 # Minimum discovered-row floor (T031 anti-vacuous assertion).
@@ -571,12 +558,12 @@ class _IsolatedSourceInsertion:
         path: Path,
         anchor_substring: str,
         inserted_line: str,
-        audit_mod: ModuleType,
+        scan_mod: ModuleType,
     ) -> None:
         self._path = path
         self._anchor_substring = anchor_substring
         self._inserted_line = inserted_line
-        self._audit_mod = audit_mod
+        self._scan_mod = scan_mod
         self._tmp_dir: tempfile.TemporaryDirectory[str] | None = None
         self._saved_roots: dict[str, Path] = {}
         self.tmp_src_root: Path = path
@@ -596,7 +583,7 @@ class _IsolatedSourceInsertion:
         lines.insert(anchor_index + 1, self._inserted_line + "\n")
         self.tmp_target.write_text("".join(lines), encoding="utf-8")
 
-        self._saved_roots = {name: getattr(self._audit_mod, name) for name in _IsolatedSourceMutation._PATCHED_ROOT_NAMES}
+        self._saved_roots = {name: getattr(self._scan_mod, name) for name in _IsolatedSourceMutation._PATCHED_ROOT_NAMES}
         patched_roots: dict[str, Path] = {
             "_REPO_ROOT": tmp_root,
             "_SRC_ROOT": self.tmp_src_root,
@@ -604,12 +591,12 @@ class _IsolatedSourceInsertion:
             "SRC_MISSION_RUNTIME": self.tmp_src_root / "mission_runtime",
         }
         for name in _IsolatedSourceMutation._PATCHED_ROOT_NAMES:
-            setattr(self._audit_mod, name, patched_roots[name])
+            setattr(self._scan_mod, name, patched_roots[name])
         return self
 
     def __exit__(self, *exc: object) -> None:
         for name, value in self._saved_roots.items():
-            setattr(self._audit_mod, name, value)
+            setattr(self._scan_mod, name, value)
         if self._tmp_dir is not None:
             self._tmp_dir.cleanup()
 
@@ -653,10 +640,10 @@ class _IsolatedSourceMutation:
     injected copy exactly as they would against the real tree.
     """
 
-    #: Audit-module root globals patched for the mutation window. Accessed via
-    #: ``getattr``/``setattr`` (not dotted attribute access) — *audit_mod* is a
-    #: dynamically ``importlib``-loaded module, and mypy cannot statically
-    #: confirm these names exist on a bare ``ModuleType``.
+    #: Scanner-module root globals patched for the mutation window. Accessed
+    #: via ``getattr``/``setattr`` (not dotted attribute access) because the
+    #: loop iterates attribute NAMES and *scan_mod* is typed as a plain
+    #: ``ModuleType``.
     _PATCHED_ROOT_NAMES: tuple[str, ...] = (
         "_REPO_ROOT",
         "_SRC_ROOT",
@@ -664,10 +651,10 @@ class _IsolatedSourceMutation:
         "SRC_MISSION_RUNTIME",
     )
 
-    def __init__(self, path: Path, snippet: str, audit_mod: ModuleType) -> None:
+    def __init__(self, path: Path, snippet: str, scan_mod: ModuleType) -> None:
         self._path = path
         self._snippet = snippet
-        self._audit_mod = audit_mod
+        self._scan_mod = scan_mod
         self._tmp_dir: tempfile.TemporaryDirectory[str] | None = None
         self._saved_roots: dict[str, Path] = {}
         self.tmp_src_root: Path = path
@@ -683,7 +670,7 @@ class _IsolatedSourceMutation:
         original = self._path.read_text(encoding="utf-8")
         self.tmp_target.write_text(original + self._snippet, encoding="utf-8")
 
-        self._saved_roots = {name: getattr(self._audit_mod, name) for name in self._PATCHED_ROOT_NAMES}
+        self._saved_roots = {name: getattr(self._scan_mod, name) for name in self._PATCHED_ROOT_NAMES}
         patched_roots: dict[str, Path] = {
             "_REPO_ROOT": tmp_root,
             "_SRC_ROOT": self.tmp_src_root,
@@ -691,12 +678,12 @@ class _IsolatedSourceMutation:
             "SRC_MISSION_RUNTIME": self.tmp_src_root / "mission_runtime",
         }
         for name in self._PATCHED_ROOT_NAMES:
-            setattr(self._audit_mod, name, patched_roots[name])
+            setattr(self._scan_mod, name, patched_roots[name])
         return self
 
     def __exit__(self, *exc: object) -> None:
         for name, value in self._saved_roots.items():
-            setattr(self._audit_mod, name, value)
+            setattr(self._scan_mod, name, value)
         if self._tmp_dir is not None:
             self._tmp_dir.cleanup()
 
@@ -720,11 +707,7 @@ def test_raw_join_bite_battery_new_unsanctioned_join_reds() -> None:
     """
     target = _SRC_SPECIFY_CLI / "core" / "mission_creation.py"
 
-    def _unexpected_mission_creation_rows(src_root: Path) -> list[Any]:
-        # ``ResolutionRow`` is a runtime value bound from the dynamically
-        # loaded audit module (not a mypy-visible type), so the element type
-        # is deliberately ``Any`` here — the assertions below only rely on
-        # ``.rel_path``/``.call_name``/``.line``, all present at runtime.
+    def _unexpected_mission_creation_rows(src_root: Path) -> list[_scan.ResolutionRow]:
         return [
             row
             for row in discover_rows()
@@ -745,7 +728,7 @@ def test_raw_join_bite_battery_new_unsanctioned_join_reds() -> None:
     )
 
     snippet = "\n\ndef _wp04_bite_witness(repo_root, mission_slug):  # noqa: injected T019\n    return repo_root / KITTY_SPECS_DIR / mission_slug\n"
-    with _IsolatedSourceMutation(target, snippet, _audit_mod) as mutation:
+    with _IsolatedSourceMutation(target, snippet, _scan) as mutation:
         witness = _unexpected_mission_creation_rows(mutation.tmp_src_root)
         assert witness, (
             "Bite battery FALSE-GREEN: the injected _wp04_bite_witness raw KITTY_SPECS_DIR/mission_slug join was NOT flagged as an unexpected functional bypass."
@@ -849,7 +832,7 @@ def test_selection_ratchet_bites_on_injected_direct_call() -> None:
         "    from specify_cli.lanes.branch_naming import mid8_from_slug\n"
         "    return resolve_mission_read_path(repo_root, slug, mid8_from_slug(slug))\n"
     )
-    with _IsolatedSourceMutation(_READ_CLI_FOR_MUTATION, snippet, _audit_mod):
+    with _IsolatedSourceMutation(_READ_CLI_FOR_MUTATION, snippet, _scan):
         during = _external_selection_bypasses()
         assert any(k.startswith("specify_cli/cli/commands/agent/context.py:") for k in during), (
             "Selection ratchet did NOT catch the injected direct "
@@ -948,7 +931,7 @@ def test_raw_handle_reinjection_is_caught() -> None:
         "    from specify_cli.core.paths import KITTY_SPECS_DIR\n"
         "    return repo_root / KITTY_SPECS_DIR / raw_handle\n"
     )
-    with _IsolatedSourceMutation(_READ_CLI_FOR_MUTATION, snippet, _audit_mod):
+    with _IsolatedSourceMutation(_READ_CLI_FOR_MUTATION, snippet, _scan):
         during = [
             r.key()
             for r in discover_rows()
