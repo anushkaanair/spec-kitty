@@ -648,12 +648,11 @@ def test_deleting_guard_call_in_mission_brief_reds_the_census() -> None:
 def test_enclosing_qualname_is_available_for_diagnostics() -> None:
     """The shared qualname helper resolves a censused op's enclosing function —
     used when a failure needs to name where an overwrite literal lives."""
-    tree = parse(_BRIEF_WRITER_PY)
-    assert tree is not None
+    source = _BRIEF_WRITER_PY.read_text(encoding="utf-8")
     hits = _find_overwrite_ops(_BRIEF_WRITER_PY)
     assert hits, "brief_writer.py should carry at least one allowlisted overwrite literal"
     lineno = hits[0][0]
-    assert enclosing_qualname(tree, lineno) != ""
+    assert enclosing_qualname(source, lineno) not in {"", "<module>"}
 
 
 # ---------------------------------------------------------------------------

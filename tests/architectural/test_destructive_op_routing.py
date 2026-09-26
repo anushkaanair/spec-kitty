@@ -79,7 +79,9 @@ from tests.architectural._destructive_op_census import (
     argv_tokens,
     assert_changed_argument_is_unexpected,
     assert_partition_survives_drift,
+    CensusKey,
     assert_second_identical_op_is_unexpected,
+    census_keys,
     diff_against_allowlist,
     drop_one_entry,
     enclosing_qualname,
@@ -87,7 +89,9 @@ from tests.architectural._destructive_op_census import (
     module_string_constants,
     ordered_subsequence,
     parse,
+    parse_with_source,
     read_sources,
+    render_census_key,
     scan_planted_source,
     scan_sources,
     with_leading_argument,
@@ -384,14 +388,15 @@ def _status_porcelain_hits(path: Path) -> list[tuple[int, str]]:
     literal in *path* -- deliberately NOT ``git worktree list --porcelain``
     (a different subcommand, listing worktrees rather than checking
     dirtiness), tagged with its enclosing function/method's qualname."""
-    tree = parse(path)
-    if tree is None:
+    parsed = parse_with_source(path)
+    if parsed is None:
         return []
+    source, tree = parsed
     consts = module_string_constants(tree)
     hits: list[tuple[int, str]] = []
     for node in _ast.walk(tree):
         if isinstance(node, (_ast.List, _ast.Tuple)) and ordered_subsequence(argv_tokens(node, consts), "status", "--porcelain"):
-            hits.append((node.lineno, enclosing_qualname(tree, node.lineno)))
+            hits.append((node.lineno, enclosing_qualname(source, node.lineno)))
     return hits
 
 
@@ -604,3 +609,48 @@ def test_changed_argument_on_exempted_op_fails() -> None:
     lineno = _site_linenos(_NON_WIDENING_REL, _MERGE_ABORT)[0]
     mutated = with_leading_argument(source, lineno, (_ast.List, _ast.Tuple))
     assert_changed_argument_is_unexpected(_NON_WIDENING_REL, source, _census_partition, mutated)
+
+
+# ---------------------------------------------------------------------------
+# CensusKey construction (T018): ordinals, file and op separation, rendering.
+# ---------------------------------------------------------------------------
+
+_TWIN_SOURCE = (
+    "import subprocess\n\n\n"
+    "def rollback(wt):\n"
+    '    subprocess.run(["git", "-C", wt, "merge", "--abort"])\n'
+    "    wt.touch()\n"
+    '    subprocess.run(["git", "-C", wt, "merge", "--abort"])\n'
+)
+
+
+def test_census_keys_assign_ordinals_to_a_same_key_pair() -> None:
+    """Two identical ops in one function share ``(qualname, token_line, op)``
+    and are told apart only by ``op_ordinal``, in line order."""
+    keys = census_keys("pkg/mod.py", _TWIN_SOURCE, [(7, _MERGE_ABORT), (5, _MERGE_ABORT)])
+    token_line = "subprocess . run ( [ , , wt , , ] )"
+    assert keys == {
+        CensusKey("pkg/mod.py", "rollback", token_line, _MERGE_ABORT, 0): 5,
+        CensusKey("pkg/mod.py", "rollback", token_line, _MERGE_ABORT, 1): 7,
+    }
+
+
+def test_census_keys_are_distinct_across_files() -> None:
+    """The same site in two files yields two keys: ``rel`` is part of the key."""
+    first = census_keys("pkg/a.py", _TWIN_SOURCE, [(5, _MERGE_ABORT)])
+    second = census_keys("pkg/b.py", _TWIN_SOURCE, [(5, _MERGE_ABORT)])
+    assert first.keys().isdisjoint(second.keys())
+
+
+def test_census_keys_are_distinct_across_ops() -> None:
+    """Two op labels on one line never share an ordinal sequence."""
+    keys = census_keys("pkg/mod.py", _TWIN_SOURCE, [(5, _MERGE_ABORT), (5, _RESET_HARD)])
+    assert {(key.op, key.op_ordinal) for key in keys} == {(_MERGE_ABORT, 0), (_RESET_HARD, 0)}
+
+
+def test_render_census_key_names_identity_line_and_tokens() -> None:
+    """Failure output carries ``rel::qualname::op#ordinal``, the diagnostic line
+    and the token line, so an author can write the ``CensusKey(...)`` literal."""
+    [(key, lineno)] = census_keys("pkg/mod.py", _TWIN_SOURCE, [(7, _MERGE_ABORT)]).items()
+    rendered = render_census_key(key, lineno)
+    assert rendered == f"pkg/mod.py::rollback::{_MERGE_ABORT}#0 (line 7) tokens=subprocess . run ( [ , , wt , , ] )"

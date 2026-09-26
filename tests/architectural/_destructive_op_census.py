@@ -1,6 +1,6 @@
 """Shared AST-census / allowlist-diff / self-mutation plumbing (DIRECTIVE_044).
 
-Single authority for the two destructive-op architectural gates, so the
+Single authority for the three census architectural gates, so the
 census machinery is written and audited once, not copy-pasted (charter
 single-canonical-authority; DIRECTIVE_044):
 
@@ -11,31 +11,52 @@ single-canonical-authority; DIRECTIVE_044):
   ``ast.Call`` literals** (``shutil.rmtree`` / ``Path.unlink`` / …) in the
   ``init`` + upgrade-migration mutating-flow module set (mission
   ``ownership-boundary-preservation-01M32KEN``, WP09).
+* ``test_overwrite_ownership_routing.py`` — scans the **overwrite /
+  destination-clobber** ``ast.Call`` family (``os.replace`` /
+  ``shutil.copy2`` / …) in a narrow module set (#4901).
 
-Both gates share the same shape: walk the AST of a fixed module set, classify
+All gates share the same shape: walk the AST of a fixed module set, classify
 each literal, diff the live census against a frozen, individually-rationalized,
 **shrink-only** allowlist (a NEW un-rationalized literal FAILS; a vanished one
 only WARNS), and prove non-vacuity by (a) planting an un-routed op the same
 scanner must detect and (b) dropping one real allowlist entry to reproduce the
 exact gate failure. Everything below is the generic, classifier-agnostic core;
 each gate keeps its own classifier, module set, and ``_ALLOWLIST``.
+
+Identity and matching are NOT implemented here (C-004 / D-OP-9). A census site
+is keyed by :class:`CensusKey`, built from
+``tests.architectural._ratchet_keys.composite_key`` (the single identity
+authority: enclosing qualname + normalized token line), plus the op label and
+an ``op_ordinal`` among identical live sites; no line number is part of a key.
+:func:`diff_against_allowlist` delegates to
+``tests.architectural._content_identity.partition_findings`` (the single
+matching authority). The census stale policy stays WARN (D-OP-8).
 """
 
 from __future__ import annotations
 
 import ast as _ast
 import tempfile
+from collections import Counter, defaultdict
 from collections.abc import Callable, Hashable, Iterable, Mapping
 from pathlib import Path
-from typing import TypeVar
+from typing import NamedTuple, TypeVar
 
-from tests.architectural._content_identity import with_blank_line_at_top, with_probe_above_statement
+from tests.architectural._content_identity import partition_findings, with_blank_line_at_top, with_probe_above_statement
+from tests.architectural._ratchet_keys import composite_key
+
+# Re-export (C-004): ``_ratchet_keys.enclosing_qualname(source, lineno)`` is the ONE
+# qualname algorithm; this module deliberately has none of its own.
+from tests.architectural._ratchet_keys import enclosing_qualname as enclosing_qualname
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = REPO_ROOT / "src"
 SPECIFY_CLI_ROOT = SRC_ROOT / "specify_cli"
 
 _T = TypeVar("_T")
+
+#: A census hit: ``(lineno, op)`` as every gate's finder reports it.
+Hit = tuple[int, str]
 _K = TypeVar("_K", bound=Hashable)
 
 
@@ -53,6 +74,15 @@ def parse(path: Path) -> _ast.Module | None:
     """Parse *path*; ``None`` on a read/decode/syntax failure (never raises)."""
     try:
         return _ast.parse(path.read_text(encoding="utf-8"))
+    except (SyntaxError, UnicodeDecodeError, OSError):
+        return None
+
+
+def parse_with_source(path: Path) -> tuple[str, _ast.Module] | None:
+    """``(source, tree)`` for *path*; ``None`` on a read/decode/syntax failure."""
+    try:
+        source = path.read_text(encoding="utf-8")
+        return source, _ast.parse(source)
     except (SyntaxError, UnicodeDecodeError, OSError):
         return None
 
@@ -149,58 +179,68 @@ def ordered_subsequence(tokens: list[str | None], *needles: str) -> bool:
     return False
 
 
-def enclosing_qualname(tree: _ast.Module, lineno: int) -> str:
-    """Dotted qualname (``Class.method`` or bare ``func``) of the innermost
-    function/method whose body contains *lineno*; ``"<module>"`` for
-    module-level code."""
-
-    class _Finder(_ast.NodeVisitor):
-        def __init__(self) -> None:
-            self.stack: list[str] = []
-            self.result: str | None = None
-
-        def _visit_def(self, node: _ast.FunctionDef | _ast.AsyncFunctionDef) -> None:
-            end = getattr(node, "end_lineno", node.lineno) or node.lineno
-            if node.lineno <= lineno <= end:
-                self.result = ".".join([*self.stack, node.name])
-                self.stack.append(node.name)
-                self.generic_visit(node)
-                self.stack.pop()
-            else:
-                self.generic_visit(node)
-
-        def visit_FunctionDef(self, node: _ast.FunctionDef) -> None:
-            self._visit_def(node)
-
-        def visit_AsyncFunctionDef(self, node: _ast.AsyncFunctionDef) -> None:
-            self._visit_def(node)
-
-        def visit_ClassDef(self, node: _ast.ClassDef) -> None:
-            self.stack.append(node.name)
-            self.generic_visit(node)
-            self.stack.pop()
-
-    finder = _Finder()
-    finder.visit(tree)
-    return finder.result or "<module>"
-
-
 # ---------------------------------------------------------------------------
 # Allowlist diff (shrink-only ratchet) + self-mutation harness
 # ---------------------------------------------------------------------------
 
 
-def diff_against_allowlist(live_flat: set[str], allowlist: Mapping[str, str]) -> tuple[set[str], set[str]]:
+class CensusKey(NamedTuple):
+    """Content identity of one census site (plan D-OP-1).
+
+    ``(qualname, token_line)`` is ``_ratchet_keys.composite_key(source, lineno)``;
+    ``op`` is the gate's op label; ``op_ordinal`` is the 0-based ordinal among
+    the live hits sharing ``(rel, qualname, token_line, op)``, ordered by line.
+    No line number is part of the key -- an unrelated line shift cannot re-pin it.
+    """
+
+    rel: str
+    qualname: str
+    token_line: str
+    op: str
+    op_ordinal: int
+
+
+def census_keys(rel: str, source: str, hits: Iterable[Hit]) -> dict[CensusKey, int]:
+    """Key every ``(lineno, op)`` hit in *source* by content: ``{CensusKey: lineno}``.
+
+    The line number in the values is diagnostic only (:func:`render_census_key`).
+    """
+    groups: dict[tuple[str, str, str], list[int]] = defaultdict(list)
+    for lineno, op in hits:
+        qualname, token_line = composite_key(source, lineno)
+        groups[(qualname, token_line, op)].append(lineno)
+    keys: dict[CensusKey, int] = {}
+    for (qualname, token_line, op), linenos in groups.items():
+        for ordinal, lineno in enumerate(sorted(linenos)):
+            keys[CensusKey(rel, qualname, token_line, op, ordinal)] = lineno
+    return keys
+
+
+def render_census_key(key: CensusKey, lineno: int | None = None) -> str:
+    """``rel::qualname::op#ordinal (line N) tokens=<token_line>`` for failure output.
+
+    The line is a diagnostic locator only; paste a ``CensusKey(...)`` literal,
+    never the line, into an allowlist.
+    """
+    where = f" (line {lineno})" if lineno is not None else ""
+    return f"{key.rel}::{key.qualname}::{key.op}#{key.op_ordinal}{where} tokens={key.token_line}"
+
+
+def diff_against_allowlist(live_flat: Iterable[_K], allowlist: Mapping[_K, str]) -> tuple[set[_K], set[_K]]:
     """Return ``(unexpected, stale)``.
 
     * ``unexpected`` — sites live in the tree but absent from *allowlist*:
       the gate FAILS on these (a new un-rationalized destructive literal).
     * ``stale`` — sites listed but no longer live: WARN only (shrink-only
-      ratchet — legitimate cleanup must never be blocked).
+      ratchet — legitimate cleanup must never be blocked). Content keys make
+      warn-on-stale safe: a dead content key cannot re-bind to a new site.
+
+    Delegates to :func:`tests.architectural._content_identity.partition_findings`
+    (D-OP-9: one matcher). ``CensusKey.op_ordinal`` makes live keys unique, so
+    its multiset match is exactly the set difference.
     """
-    unexpected = live_flat - allowlist.keys()
-    stale = set(allowlist) - live_flat
-    return unexpected, stale
+    unexpected, unused = partition_findings(((key, key) for key in live_flat), Counter(allowlist.keys()))
+    return set(unexpected), set(unused)
 
 
 def scan_planted_source(tmp_path: Path, name: str, source: str, finder: Callable[[Path], _T]) -> _T:
@@ -215,7 +255,7 @@ def scan_planted_source(tmp_path: Path, name: str, source: str, finder: Callable
     return finder(planted)
 
 
-def drop_one_entry(allowlist: Mapping[str, str]) -> tuple[str, dict[str, str]]:
+def drop_one_entry(allowlist: Mapping[_K, str]) -> tuple[_K, dict[_K, str]]:
     """Return ``(victim, shrunk)`` where *victim* is one entry removed from
     *allowlist* — the generic half of the drop-one-entry non-vacuity proof:
     re-diffing *shrunk* against the live tree must reproduce the gate failure
@@ -228,9 +268,6 @@ def drop_one_entry(allowlist: Mapping[str, str]) -> tuple[str, dict[str, str]]:
 # ---------------------------------------------------------------------------
 # Drift / non-widening harness: run a gate's REAL finder over in-memory sources
 # ---------------------------------------------------------------------------
-
-#: A census hit: ``(lineno, op)`` as every gate's finder reports it.
-Hit = tuple[int, str]
 
 _PROBE_ARGUMENT = "_census_probe_arg"
 

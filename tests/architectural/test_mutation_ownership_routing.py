@@ -807,12 +807,11 @@ def test_reverting_a_routed_call_to_a_raw_literal_is_caught(tmp_path: Path) -> N
 def test_enclosing_qualname_is_available_for_diagnostics() -> None:
     """The shared qualname helper resolves a censused op's enclosing function —
     used when a failure needs to name where an unrouted literal lives."""
-    tree = parse(_INIT_PY)
-    assert tree is not None
+    source = _INIT_PY.read_text(encoding="utf-8")
     hits = _find_destructive_ops(_INIT_PY)
     assert hits, "init.py should carry at least one allowlisted destructive literal"
     lineno = hits[0][0]
-    assert enclosing_qualname(tree, lineno) != ""
+    assert enclosing_qualname(source, lineno) not in {"", "<module>"}
 
 
 # ---------------------------------------------------------------------------
