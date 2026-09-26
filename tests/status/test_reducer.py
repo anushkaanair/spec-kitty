@@ -14,8 +14,10 @@ from specify_cli.post_merge.review_artifact_consistency import (
 from specify_cli.review.artifacts import ReviewCycleArtifact
 from specify_cli.status.models import (
     NON_DISPLAY_LANES,
+    DoneEvidence,
     InnerStateChanged,
     Lane,
+    ReviewApproval,
     ReviewOverride,
     ReviewResult,
     StatusEvent,
@@ -56,6 +58,7 @@ def _make_event(
     reason: str | None = None,
     review_ref: str | None = None,
     review_result: ReviewResult | None = None,
+    evidence: DoneEvidence | None = None,
 ) -> StatusEvent:
     """Helper to build StatusEvent with sensible defaults."""
     return StatusEvent(
@@ -71,6 +74,7 @@ def _make_event(
         reason=reason,
         review_ref=review_ref,
         review_result=review_result,
+        evidence=evidence,
     )
 
 
@@ -483,6 +487,172 @@ class TestByteIdenticalOutput:
         json_a = materialize_to_json(snapshot_a)
         json_b = materialize_to_json(snapshot_b)
         assert json_a == json_b
+
+    def test_sorted_keys_in_json_output(self) -> None:
+        """JSON output has sorted keys for deterministic diff-friendly output."""
+        snapshot = StatusSnapshot(
+            mission_slug="034-parity-test",
+            materialized_at="2026-02-08T15:00:00+00:00",
+            event_count=1,
+            last_event_id="01HXYZ0000000000000000000A",
+            work_packages={
+                "WP01": {
+                    "lane": "claimed",
+                    "actor": "agent",
+                    "last_transition_at": "2026-02-08T12:00:00+00:00",
+                    "last_event_id": "01HXYZ0000000000000000000A",
+                    "force_count": 0,
+                },
+            },
+            summary={
+                "planned": 0,
+                "claimed": 1,
+                "in_progress": 0,
+                "for_review": 0,
+                "done": 0,
+                "blocked": 0,
+                "canceled": 0,
+            },
+        )
+
+        json_str = materialize_to_json(snapshot)
+        parsed = json.loads(json_str)
+
+        # Top-level keys should be sorted
+        top_keys = list(parsed.keys())
+        assert top_keys == sorted(top_keys)
+
+
+class TestRealisticEventLog:
+    """Test determinism with a realistic multi-WP event sequence.
+
+    Relocated from the retired ``tests/status/test_parity.py``
+    (``TestFullEventLogParity``, WP09 / NFR-006): no other test pins these
+    realistic-log invariants.
+    """
+
+    def _build_realistic_event_log(self) -> list[StatusEvent]:
+        """Build a realistic event log covering multiple WPs and lanes."""
+        evidence = DoneEvidence(
+            review=ReviewApproval(
+                reviewer="reviewer-1",
+                verdict="approved",
+                reference="PR#100",
+            ),
+        )
+        return [
+            # WP01: planned -> claimed -> in_progress -> for_review -> done
+            _make_event(
+                event_id="01HXYZ0000000000000000WP1A",
+                wp_id="WP01",
+                from_lane=Lane.PLANNED,
+                to_lane=Lane.CLAIMED,
+                at="2026-02-08T10:00:00+00:00",
+                actor="agent-1",
+            ),
+            _make_event(
+                event_id="01HXYZ0000000000000000WP1B",
+                wp_id="WP01",
+                from_lane=Lane.CLAIMED,
+                to_lane=Lane.IN_PROGRESS,
+                at="2026-02-08T10:30:00+00:00",
+                actor="agent-1",
+            ),
+            _make_event(
+                event_id="01HXYZ0000000000000000WP1C",
+                wp_id="WP01",
+                from_lane=Lane.IN_PROGRESS,
+                to_lane=Lane.FOR_REVIEW,
+                at="2026-02-08T14:00:00+00:00",
+                actor="agent-1",
+            ),
+            _make_event(
+                event_id="01HXYZ0000000000000000WP1D",
+                wp_id="WP01",
+                from_lane=Lane.FOR_REVIEW,
+                to_lane=Lane.DONE,
+                at="2026-02-08T16:00:00+00:00",
+                actor="reviewer-1",
+                evidence=evidence,
+            ),
+            # WP02: planned -> claimed -> in_progress -> blocked
+            _make_event(
+                event_id="01HXYZ0000000000000000WP2A",
+                wp_id="WP02",
+                from_lane=Lane.PLANNED,
+                to_lane=Lane.CLAIMED,
+                at="2026-02-08T10:15:00+00:00",
+                actor="agent-2",
+            ),
+            _make_event(
+                event_id="01HXYZ0000000000000000WP2B",
+                wp_id="WP02",
+                from_lane=Lane.CLAIMED,
+                to_lane=Lane.IN_PROGRESS,
+                at="2026-02-08T10:45:00+00:00",
+                actor="agent-2",
+            ),
+            _make_event(
+                event_id="01HXYZ0000000000000000WP2C",
+                wp_id="WP02",
+                from_lane=Lane.IN_PROGRESS,
+                to_lane=Lane.BLOCKED,
+                at="2026-02-08T12:00:00+00:00",
+                actor="agent-2",
+            ),
+            # WP03: planned -> canceled
+            _make_event(
+                event_id="01HXYZ0000000000000000WP3A",
+                wp_id="WP03",
+                from_lane=Lane.PLANNED,
+                to_lane=Lane.CANCELED,
+                at="2026-02-08T11:00:00+00:00",
+                actor="lead",
+                force=True,
+                reason="Descoped from release",
+            ),
+            # WP04: stays planned (no events beyond initial state)
+        ]
+
+    def test_realistic_log_produces_expected_summary(self) -> None:
+        """A realistic event log produces the expected lane summary."""
+        events = self._build_realistic_event_log()
+
+        with patch(
+            "kernel.clock.now_utc_iso",
+            return_value="2026-02-08T18:00:00+00:00",
+        ):
+            snap = reduce(events)
+
+        assert snap.event_count == 8
+        assert snap.work_packages["WP01"]["lane"] == "done"
+        assert snap.work_packages["WP02"]["lane"] == "blocked"
+        assert snap.work_packages["WP03"]["lane"] == "canceled"
+        # WP04 has no events so it's not in the snapshot
+        assert "WP04" not in snap.work_packages
+
+        assert snap.summary["done"] == 1
+        assert snap.summary["blocked"] == 1
+        assert snap.summary["canceled"] == 1
+        assert snap.summary["planned"] == 0
+        assert snap.summary["claimed"] == 0
+        assert snap.summary["in_progress"] == 0
+        assert snap.summary["for_review"] == 0
+
+    def test_realistic_log_json_roundtrip_stable(self) -> None:
+        """Serialize -> parse -> re-serialize is stable for realistic log."""
+        events = self._build_realistic_event_log()
+
+        fixed_time = "2026-02-08T18:00:00+00:00"
+        with patch("kernel.clock.now_utc_iso", return_value=fixed_time):
+            snap = reduce(events)
+
+        json_1 = materialize_to_json(snap)
+        parsed = json.loads(json_1)
+        roundtrip = StatusSnapshot.from_dict(parsed)
+        json_2 = materialize_to_json(roundtrip)
+
+        assert json_1 == json_2
 
 
 class TestMaterializeFile:

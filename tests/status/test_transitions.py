@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from specify_cli.status.models import DoneEvidence, GuardContext, ReviewApproval, ReviewResult
+from specify_cli.status.models import DoneEvidence, GuardContext, Lane, ReviewApproval, ReviewResult
 from specify_cli.status.transitions import (
     ALLOWED_TRANSITIONS,
     CANONICAL_LANES,
@@ -36,6 +36,16 @@ ParityRow = tuple[str, str, str, bool, "str | None"]
 class TestConstants:
     def test_canonical_lanes_count(self) -> None:
         assert len(CANONICAL_LANES) == 9
+
+    def test_all_canonical_lanes_in_enum(self) -> None:
+        """All CANONICAL_LANES values are in the Lane enum.
+
+        Relocated from the retired ``tests/status/test_parity.py`` (WP09 /
+        NFR-006): mutation M5 (renaming a CANONICAL_LANES entry) reds no other
+        test.
+        """
+        for lane_str in CANONICAL_LANES:
+            assert Lane(lane_str), f"{lane_str} not in Lane enum"
 
     def test_allowed_transitions_count(self) -> None:
         # 27 base transitions + 2 genesis seeds: (genesis,planned) and
