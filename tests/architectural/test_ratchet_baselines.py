@@ -334,39 +334,11 @@ _REQUIRED_NO_DEAD_MODULES_CATEGORIES: frozenset[str] = frozenset(
     r.leaf for r in _SIZE_RATCHETS if r.section == "test_no_dead_modules"
 )
 
-# FR-004: ``category_1`` is DERIVED, not YAML-pinned. The count of
-# auto-discovered migration modules with no static importer is validated for
-# *membership correctness* by ``test_no_dead_modules`` (which owns the
-# hand-curated frozenset). Pinning its size here too was a double-charge: a
-# routine new migration would red this ratchet with nothing to fix. So this
-# meta-test derives the ``category_1`` baseline from the live frozenset length,
-# making the growth/shrink check for that one category a no-op while the
-# frozenset itself remains the single authority. The ``category_1_...`` integer
-# in ``_baselines.yaml`` is retained as a decorative audit value, pinned to the
-# frozenset length by ``test_decorative_category_1_yaml_matches_frozenset``.
-_CATEGORY_1_YAML_KEY = "category_1_auto_discovered_migrations"
-_CATEGORY_1_ATTR = "_CATEGORY_1_AUTO_DISCOVERED_MIGRATIONS"
-
 # FR-003: JUnit property names for the skip-marker delta backstop. Growth is
 # REVIEWABLE (routed here, surfaced in the report, reviewed via the co-located
 # ``# round-trip: skip: <reason>`` diff line) rather than a hard CI failure.
 _SKIP_MARKER_GROWTH_PROP = "skip_marker_blocks_growth"
 _SKIP_MARKER_SHRINK_PROP = "skip_marker_blocks_shrinkage"
-
-
-def _category_baseline(cat_key: str, yaml_value: int, nd_module: str) -> int:
-    """Return the baseline size for a ``test_no_dead_modules`` category.
-
-    FR-004: for ``category_1`` the baseline is DERIVED from the live
-    ``_CATEGORY_1_AUTO_DISCOVERED_MIGRATIONS`` frozenset length (single
-    authority — never re-globbed, which would fork a ``_has_caller``
-    split-brain). Every other category reads its recorded YAML integer. This
-    one helper is reused by BOTH the growth and shrinkage arms so the two can
-    never disagree about how ``category_1`` is derived.
-    """
-    if cat_key == _CATEGORY_1_YAML_KEY:
-        return len(_import_module_attr(nd_module, _CATEGORY_1_ATTR))
-    return yaml_value
 
 
 def _emit_skip_marker_delta(
@@ -625,71 +597,18 @@ def test_yaml_leaves_refuses_a_scalar_section() -> None:
         _yaml_leaves({"test_no_dead_symbols": 1})
 
 
-def test_decorative_category_1_yaml_matches_frozenset() -> None:
-    """FR-004 (pedro-nit): the now-decorative `category_1` YAML integer must
-    equal the live frozenset length so the non-load-bearing audit value cannot
-    silently drift away from the single authority.
-    """
-    data = _load_baselines()
-    recorded = data["test_no_dead_modules"][_CATEGORY_1_YAML_KEY]
-    live = len(_import_module_attr(_NO_DEAD_MODULES_MODULE, _CATEGORY_1_ATTR))
-    assert recorded == live, (
-        f"`_baselines.yaml::test_no_dead_modules.{_CATEGORY_1_YAML_KEY}` = "
-        f"{recorded} but the live `{_CATEGORY_1_ATTR}` frozenset has {live} "
-        f"members. The category_1 baseline is DERIVED (FR-004); the YAML integer "
-        f"is a decorative audit value that must track the frozenset in lockstep."
-    )
-
-
 def _synthetic_frozenset(size: int) -> frozenset[str]:
     """A frozenset of *size* distinct sentinels — a stand-in whose only salient
     property to the ratchet is its ``len()``."""
     return frozenset(f"synthetic::{index}" for index in range(size))
 
 
-def test_category_1_derived_baseline_absorbs_growth(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """FR-004 / US3-AC1: growing `_CATEGORY_1_AUTO_DISCOVERED_MIGRATIONS` ABOVE
-    the decorative YAML value (100) does NOT red the growth arm — proving the
-    baseline is derived from the frozenset, not read from YAML. A YAML-pinned
-    baseline would fail at 130-vs-100; the derived one self-cancels.
-
-    Drives the REAL production comparison (`test_growing_...`), not two inline
-    ``len()``s equated to each other.
-    """
-    nd_module = importlib.import_module(_NO_DEAD_MODULES_MODULE)
-    monkeypatch.setattr(nd_module, _CATEGORY_1_ATTR, _synthetic_frozenset(130))
-    # No raise: category_1 derives its own baseline, so 130 == 130 for it.
-    test_growing_an_allowlist_above_baseline_fails()
-
-
-def test_category_1_derived_baseline_absorbs_shrink(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """FR-004 / US3-AC2: a migration gaining a static importer shrinks the
-    frozenset below the YAML value; the derived baseline tracks it, so the
-    shrink arm records NO category_1 shrinkage and no `_baselines.yaml` edit is
-    demanded. Drives the real shrink-arm comparison with a captured
-    `record_property`.
-    """
-    nd_module = importlib.import_module(_NO_DEAD_MODULES_MODULE)
-    monkeypatch.setattr(nd_module, _CATEGORY_1_ATTR, _synthetic_frozenset(80))
-    recorded: list[tuple[str, object]] = []
-    test_growth_fails_shrinkage_warns(
-        lambda name, value: recorded.append((name, value))
-    )
-    assert not any(
-        _CATEGORY_1_YAML_KEY in str(value) for _, value in recorded
-    ), recorded
-
-
 def test_non_derived_category_growth_still_reds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Non-vacuity control (growth): a NON-derived category grown above its YAML
-    baseline STILL reds the growth arm — only category_1 was made
-    count-independent; the harness keeps its teeth for every other category.
+    """Non-vacuity control (growth): a ``test_no_dead_modules`` category grown
+    above its YAML baseline reds the growth arm -- every category row in
+    ``_SIZE_RATCHETS`` keeps its teeth.
     """
     nd_module = importlib.import_module(_NO_DEAD_MODULES_MODULE)
     monkeypatch.setattr(
@@ -704,9 +623,8 @@ def test_non_derived_category_growth_still_reds(
 def test_non_derived_category_shrink_still_records(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Non-vacuity control (shrink): a NON-derived category shrunk below its YAML
-    baseline IS recorded by the shrink arm — the derivation did not silence
-    shrink tracking for anything but category_1.
+    """Non-vacuity control (shrink): a ``test_no_dead_modules`` category shrunk
+    below its YAML baseline IS recorded by the shrink arm.
     """
     nd_module = importlib.import_module(_NO_DEAD_MODULES_MODULE)
     monkeypatch.setattr(
