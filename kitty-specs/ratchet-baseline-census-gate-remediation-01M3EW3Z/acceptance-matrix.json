@@ -148,10 +148,10 @@
       "criterion_id": "FR-015",
       "description": "Verify FR-015 is satisfied",
       "proof_type": "automated_test",
-      "evidence": null,
-      "pass_fail": "pending",
-      "verified_by": null,
-      "verified_at": null,
+      "evidence": "pytest -n2 charter/contract/next/review/runtime/status touched files from .worktrees/ratchet-baseline-census-gate-remediation-01M3EW3Z-lane-l: 472 passed, 10 skipped (pre-existing contract skips); tests/charter/test_context_parity.py replaced by test_context_bootstrap_markers.py (on-disk fixture, setenv knobs, no private-function patching; only patch() strings are planted-detector inputs) green",
+      "pass_fail": "pass",
+      "verified_by": "reviewer-renata",
+      "verified_at": "2026-09-26T22:56:19.521488+00:00",
       "notes": "TODO: replace with a real acceptance criterion"
     },
     {
