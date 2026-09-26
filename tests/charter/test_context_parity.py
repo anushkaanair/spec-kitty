@@ -40,6 +40,7 @@ private symbol directly.
 
 from __future__ import annotations
 
+import ast
 import json
 import textwrap
 from pathlib import Path
@@ -426,3 +427,160 @@ class TestEmptyCharterProvenance:
         # Provenance proof (Decision 10): the WP01/WP03 suppression must be
         # in effect — the full built-in directive canon must NOT leak.
         assert "Directive IDs:" in result.text or result.mode == "compact"
+
+
+# ---------------------------------------------------------------------------
+# src-coupling scan (FR-015): the marker tests must reach their behaviour
+# through public entry points and public env knobs only -- never by patching a
+# first-party ``src/`` binding or calling a first-party private.
+# ---------------------------------------------------------------------------
+
+_FIRST_PARTY_PACKAGES = ("charter", "kernel", "specify_cli", "runtime", "mission_runtime", "glossary", "doctrine")
+
+
+def _is_first_party(dotted: str) -> bool:
+    return any(dotted == pkg or dotted.startswith(f"{pkg}.") for pkg in _FIRST_PARTY_PACKAGES)
+
+
+def _first_party_module_aliases(tree: ast.AST) -> dict[str, str]:
+    """Map every local name bound to a first-party module/object -> its dotted path."""
+    aliases: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _is_first_party(alias.name):
+                    local = alias.asname or alias.name.split(".")[0]
+                    aliases[local] = alias.name if alias.asname else local
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module and _is_first_party(node.module):
+            for alias in node.names:
+                aliases[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+    return aliases
+
+
+def _patch_kind(func: ast.expr) -> str | None:
+    """Classify a callee as ``patch`` / ``object`` / ``setattr`` (alias-proof), else None."""
+    if isinstance(func, ast.Name) and func.id == "patch":
+        return "patch"
+    if not isinstance(func, ast.Attribute):
+        return None
+    if func.attr == "patch":
+        return "patch"
+    if func.attr == "object" and _patch_kind(func.value) == "patch":
+        return "object"
+    if func.attr == "setattr" and isinstance(func.value, ast.Name) and func.value.id == "monkeypatch":
+        return "setattr"
+    return None
+
+
+def _dotted_expr(expr: ast.expr, aliases: dict[str, str]) -> str | None:
+    """Resolve ``name`` / ``name.attr...`` to a first-party dotted path, else None."""
+    if isinstance(expr, ast.Name):
+        return aliases.get(expr.id)
+    if isinstance(expr, ast.Attribute):
+        base = _dotted_expr(expr.value, aliases)
+        return f"{base}.{expr.attr}" if base else None
+    return None
+
+
+def _patch_target(call: ast.Call, kind: str, aliases: dict[str, str]) -> str | None:
+    if not call.args:
+        return None
+    first = call.args[0]
+    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+        return first.value if _is_first_party(first.value) else None
+    if kind == "patch":
+        return None
+    base = _dotted_expr(first, aliases)
+    if base is None:
+        return None
+    second = call.args[1] if len(call.args) > 1 else None
+    if isinstance(second, ast.Constant) and isinstance(second.value, str):
+        return f"{base}.{second.value}"
+    return base
+
+
+def _patch_offenders(tree: ast.AST) -> list[str]:
+    aliases = _first_party_module_aliases(tree)
+    offenders: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        kind = _patch_kind(node.func)
+        if kind is None:
+            continue
+        target = _patch_target(node, kind, aliases)
+        if target is not None:
+            offenders.append(f"patch:{target}")
+    return offenders
+
+
+def _private_import_offenders(tree: ast.AST) -> list[str]:
+    offenders: list[str] = []
+    private_names: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module and _is_first_party(node.module):
+            for alias in node.names:
+                if alias.name.startswith("_"):
+                    offenders.append(f"private-import:{node.module}.{alias.name}")
+                    private_names.add(alias.asname or alias.name)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in private_names:
+            offenders.append(f"private-call:{node.func.id}")
+    return offenders
+
+
+def _src_coupling_offenders(source: str) -> list[str]:
+    """Every first-party patch target, private import and private call in *source*, sorted."""
+    tree = ast.parse(source)
+    return sorted(_patch_offenders(tree) + _private_import_offenders(tree))
+
+
+def test_context_markers_use_no_src_patch_targets() -> None:
+    """This module drives its markers through public seams only (FR-015)."""
+    source = Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    test_defs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")]
+    render_calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "build_charter_context"]
+    assert len(test_defs) >= 6, "non-vacuity: the marker module must keep its tests"
+    assert render_calls, "non-vacuity: the marker module must render through build_charter_context"
+
+    offenders = _src_coupling_offenders(source)
+    assert offenders == [], "src-coupled patch/private sites:\n" + "\n".join(offenders)
+
+
+_PLANTED_OFFENDERS_SOURCE = textwrap.dedent(
+    """\
+    from unittest import mock as m
+    from unittest.mock import patch
+
+    from charter import catalog as mod
+    from charter.activation.profile_resolution import _reset_agent_profile_cache
+
+
+    def planted(monkeypatch):
+        patch("charter.activation.catalog.built_in_dir")
+        monkeypatch.setattr(mod, "x", 1)
+        _reset_agent_profile_cache()
+        m.patch("charter.x")
+    """
+)
+
+_PLANTED_PUBLIC_KNOBS_SOURCE = textwrap.dedent(
+    """\
+    def allowed(monkeypatch, tmp_path):
+        monkeypatch.setenv("SPEC_KITTY_PACKS_ROOT", str(tmp_path))
+        monkeypatch.delenv("SPEC_KITTY_TEMPLATE_ROOT", raising=False)
+    """
+)
+
+
+def test_src_coupling_scan_flags_planted_offenders() -> None:
+    """Self-mutation: the same scan flags every planted offender and allows env knobs."""
+    assert _src_coupling_offenders(_PLANTED_OFFENDERS_SOURCE) == [
+        "patch:charter.activation.catalog.built_in_dir",
+        "patch:charter.catalog.x",
+        "patch:charter.x",
+        "private-call:_reset_agent_profile_cache",
+        "private-import:charter.activation.profile_resolution._reset_agent_profile_cache",
+    ]
+    assert _src_coupling_offenders(_PLANTED_PUBLIC_KNOBS_SOURCE) == []
