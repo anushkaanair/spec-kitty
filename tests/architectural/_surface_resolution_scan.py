@@ -1,62 +1,61 @@
-#!/usr/bin/env python3
-"""Mission-surface-resolution callsite audit (WP01 / FR-003).
+"""Mission-surface-resolution callsite scanner (live AST walker).
 
-Run directly::
+The one live consumer is ``test_single_mission_surface_resolver.py``, which
+calls :func:`discover_rows` and :func:`discover_selection_callsites` on the
+current source tree and classifies what they return. This module writes no
+file and has no command-line entry point; the former inventory, converter and
+standalone audit script were retired (#3011).
 
-    python tests/architectural/surface_resolution_audit/audit.py
+What the scanner discovers
+--------------------------
+It AST-walks every ``*.py`` under ``src/specify_cli`` and ``src/mission_runtime``
+and reports two classes of callsite (:func:`discover_rows`):
 
-Exit code ``0`` means the live source tree still matches the committed
-inventory; any non-zero exit is an audit failure a reviewer must read.
+(a) **Blessed resolver calls inside the seam files** (``_RESOLVER_SOURCE_STEMS``):
+    calls to a name in ``RESOLVER_CALLS`` or ``TOPOLOGY_BLIND_CALLS``, tracked
+    so the seam implementations themselves stay correct.
 
-What this does
---------------
-1. AST-walks every ``*.py`` under ``src/specify_cli`` and ``src/mission_runtime``.
-2. Discovers two classes of interesting callsite:
+(b) **Raw-bypass joins in every file**: a ``pathlib`` ``/`` join whose right
+    operand is a name (or attribute) in ``SLUG_NAMES`` and whose left subtree,
+    searched recursively down the ``/`` chain, references a name in
+    ``KITTY_SPECS_NAMES`` or the literal ``"kitty-specs"``. So
+    ``root / KITTY_SPECS_DIR / mission_slug`` is caught as well as
+    ``specs / mission_slug`` when ``specs`` is itself such a join.
 
-   (a) **Internal calls within known resolver files**: resolver function calls
-       and topology-blind primitives within the canonical seam modules
-       (``RESOLVER_SOURCE_FILES``). These are tracked to ensure the seam files'
-       own surface-resolution calls remain correct.
+A second discriminator, :func:`discover_selection_callsites`, reports every
+DIRECT call to a read-SELECTION name (``SELECTION_READ_CALLS``) whether or not a
+``KITTY_SPECS_DIR`` join is present; the raw-join walker is blind to those.
 
-   (b) **Raw-bypass joins**: inline ``KITTY_SPECS_DIR / slug`` path compositions
-       outside the canonical resolver itself — i.e. callsites that bypass the
-       resolver entirely. These are FR-001 targets.
+The seed set is data (``SLUG_NAMES``, ``KITTY_SPECS_NAMES``,
+``_RESOLVER_SOURCE_STEMS``), not a hard-coded file list, so extending a set
+widens the net everywhere.
 
-3. Cross-checks the machine-discovered candidate *files* against the
-   hand-curated dispositions in ``inventory.md`` and fails closed if either the
-   row count drifts or a known candidate disappears.
+Deliberately NOT tracked per callsite: downstream callers outside the seam
+files that call a blessed resolver (``resolve_feature_dir_for_mission`` etc.).
+They are routed through the resolver by construction. Also out of scope: the
+``WorktreeTopology`` / ``classify_worktree_topology`` / ``read_worktree_registry``
+machinery, which is the correct git-registry authority.
 
-Explicitly NOT tracked per-callsite: the hundreds of downstream callers that
-legitimately call ``resolve_feature_dir_for_mission`` /
-``candidate_feature_dir_for_mission`` / ``resolve_feature_dir_for_slug`` / etc.
-These are all "routed-through-resolver" by definition — the inventory's
-"Routed caller summary" section covers them in aggregate. The matcher's job
-here is to make undercounting of *bypasses* and *resolver-seam internals*
-impossible, not to enumerate every blessed call.
-
-Disposition vocabulary (see ``RULESET.md``):
-  ``routed-through-resolver``     — goes through the canonical resolver or a
-                                    blessed delegator (cite it).
-  ``topology-blind-by-design``    — deliberately primary-only; legitimate
-                                    (e.g. meta.json reads that must avoid the
-                                    coord surface). NAME the reason.
-  ``raw-bypass``                  — composes the path itself, bypassing the
-                                    resolver. These are FR-001 targets.
-
-Explicitly OUT of scope: ``WorktreeTopology`` / ``classify_worktree_topology``
-/ ``read_worktree_registry`` machinery (correct git-registry authority) — do
-NOT flag these.
-
-See ``RULESET.md`` for the full seed-set, sink predicate, and known
-false-negative classes.
+Known false-negative classes (what the matcher does NOT trace)
+--------------------------------------------------------------
+1. Cross-function flow: a slug passed into a function is not followed into the
+   callee.
+2. More than one alias hop (``a = slug; b = a; root / KITTY_SPECS_DIR / b``).
+3. Container flow: a slug stored in a list or dict and later joined.
+4. f-strings, ``os.path.join`` and ``str`` concatenation: only ``pathlib`` ``/``
+   joins are matched.
+5. ``Path(...)`` built from an untrusted full string rather than a join.
+6. Callers outside ``_RESOLVER_SOURCE_STEMS`` that call a blessed resolver
+   (routed by construction, see above).
 """
 
 from __future__ import annotations
 
 import ast
-import sys
 from dataclasses import dataclass
 from pathlib import Path
+
+from tests.architectural._ratchet_keys import CompositeKey, composite_key_from_file
 
 # --------------------------------------------------------------------------- #
 # Locate the source trees relative to this file (repo-root independent).
@@ -67,56 +66,33 @@ _REPO_ROOT = _THIS.parents[2]
 _SRC_ROOT = _REPO_ROOT / "src"
 SRC_SPECIFY_CLI = _SRC_ROOT / "specify_cli"
 SRC_MISSION_RUNTIME = _SRC_ROOT / "mission_runtime"
-INVENTORY_PATH = _THIS.parent / "inventory.md"
 
 # --------------------------------------------------------------------------- #
 # Drift-proof composite identity (FR-004 / IC-03). Row identity is the
 # ``(rel_path, enclosing_qualname, token)`` composite derived by
-# ``composite_key_from_file`` — NOT the raw ``rel:line`` locator, which drifts on
+# ``composite_key_from_file``, NOT the raw ``rel:line`` locator, which drifts on
 # every blank/comment-line insertion above a callsite (the #2306 failure class).
-# The audit is loaded two ways: (1) directly (``python audit.py``) and (2) as a
-# standalone module by ``test_single_mission_surface_resolver.py`` via
-# ``importlib`` (after that test has already imported ``_ratchet_keys``, so the
-# import below is a cache hit). For the standalone-run case we ensure the repo
-# root is importable so the canonical ``_ratchet_keys`` primitive resolves.
+# ``CompositeKey`` is declared once, in the shared ``_ratchet_keys`` substrate.
 # --------------------------------------------------------------------------- #
-if str(_REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(_REPO_ROOT))
-
-from tests.architectural._ratchet_keys import (  # noqa: E402 — after sys.path bootstrap
-    composite_key_from_file,
-)
-
-#: ``(rel_path, enclosing_qualname, token)`` — the frozen-comparand row identity.
-CompositeKey = tuple[str, str, str]
-
-
-def _normalize_token(token: str) -> str:
-    """Render a composite token safe for a markdown table cell.
-
-    ``composite_key_from_file`` already collapses whitespace to single spaces;
-    the only remaining table hazard is a literal ``|`` (a Python union/bitwise
-    operator can appear on a guarded line). Replacing it with ``¦`` keeps the
-    inventory table parseable. The SAME normalization runs on both the
-    live-discovered side and the recorded converter, so the composite comparison
-    stays symmetric.
-    """
-    return token.replace("|", "¦")
 
 
 def _composite_from_file(rel_path: str, line: int) -> CompositeKey:
-    """Live ``(rel_path, qualname, normalized_token)`` for a discovered row."""
+    """Live ``(rel_path, qualname, token)`` for a discovered row.
+
+    The token is returned exactly as ``composite_key_from_file`` renders it, so
+    this identity matches the keys the survivor guard builds with that helper.
+    """
     qualname, token = composite_key_from_file(_SRC_ROOT / rel_path, line)
-    return (rel_path, qualname, _normalize_token(token))
+    return (rel_path, qualname, token)
 
 
 # --------------------------------------------------------------------------- #
 # Canonical resolver / seam source files. Callsites WITHIN these files are
 # tracked to ensure the seam implementations themselves remain correct.
 # Callsites OUTSIDE these files that call the blessed resolver functions are
-# summarized in inventory.md's "Routed caller summary" section, not tracked
-# row-by-row. This keeps the inventory manageable while still preventing
-# bypass under-counting.
+# routed through the resolver by construction and are not tracked row-by-row;
+# the raw-bypass scanner still runs codebase-wide, so no hidden raw join can
+# escape.
 # --------------------------------------------------------------------------- #
 _RESOLVER_SOURCE_STEMS: frozenset[str] = frozenset(
     {
@@ -242,8 +218,7 @@ class ResolutionRow:
 
         Frozen: ``test_single_mission_surface_resolver.py`` consumes this string
         (``row.key().startswith(...)``). It is a diagnostics locator only, never
-        the identity used for inventory comparison — that is
-        :meth:`composite_key`.
+        an identity for comparison — that is :meth:`composite_key`.
         """
         return f"{self.rel_path}:{self.line}"
 
@@ -473,29 +448,15 @@ def discover_selection_callsites() -> list[SelectionRow]:
 
 
 # --------------------------------------------------------------------------- #
-# Known-candidate presence (anti-undercount tripwire). Each file listed here
-# MUST surface at least one discovered row, OR carry an explicit disposition
-# row in the inventory. Exit non-zero if any is missing from both.
-# --------------------------------------------------------------------------- #
-KNOWN_CANDIDATE_FILES: tuple[str, ...] = (
-    "specify_cli/missions/_read_path_resolver.py",
-    # ``feature_dir_resolver.py`` retired in WP07/FR-007 (shim collapsed into
-    # ``_read_path_resolver.py``) — no longer a tracked candidate file.
-    "specify_cli/coordination/surface_resolver.py",
-    "specify_cli/coordination/status_transition.py",
-    "specify_cli/status/aggregate.py",
-    "mission_runtime/resolution.py",
-)
-
-
-# --------------------------------------------------------------------------- #
 # FR-006a — blessed EXTERNAL read-SELECTION callsites (outside the seam files).
 #
 # Seam-internal ``resolve_mission_read_path`` calls (``in_seam_file``) are
 # auto-blessed (they ARE the seam definitions). Direct calls OUTSIDE the seam
-# files re-acquire the read-selection authority and MUST be justified here by
-# ``<rel_path>:<line>``. Every external selection callsite not listed here is a
-# bypass of the ``resolve_handle_to_read_path`` seam (FR-006a regression).
+# files re-acquire the read-selection authority and MUST be justified here.
+# Any future entry must be content-identified (never a ``path:line`` locator,
+# which the positional-anchor ban refuses). Every external selection callsite
+# not listed here is a bypass of the ``resolve_handle_to_read_path`` seam
+# (FR-006a regression).
 # --------------------------------------------------------------------------- #
 # WP01 (01KVN754) DRAINED both formerly-blessed external selection callsites by
 # rerouting them onto the ``resolve_handle_to_read_path`` seam:
@@ -510,274 +471,3 @@ KNOWN_CANDIDATE_FILES: tuple[str, ...] = (
 # With both rerouted, there are ZERO external direct selection callsites — the
 # allowlist is intentionally empty (every direct call is now seam-internal).
 ALLOWLISTED_SELECTION_CALLSITES: dict[str, str] = {}
-
-
-# --------------------------------------------------------------------------- #
-# Inventory parser.
-# --------------------------------------------------------------------------- #
-
-VALID_DISPOSITIONS: frozenset[str] = frozenset(
-    {
-        "routed-through-resolver",
-        "topology-blind-by-design",
-        "raw-bypass",
-    }
-)
-
-
-def _unwrap(cell: str) -> str:
-    """Strip the display backticks a converter wraps around identity cells."""
-    return cell.strip().strip("`")
-
-
-def _collect_table(text: str, header_needle: str) -> list[list[str]]:
-    """Return the cell lists of the markdown table whose header contains *needle*.
-
-    Both the sink table and the read-SELECTION table start with ``| file:line ``;
-    they are disambiguated by a distinctive header column (``handle source`` vs
-    ``in seam file``). The disposition/summary/routed-caller tables use different
-    leading columns and never trigger.
-    """
-    rows: list[list[str]] = []
-    in_table = False
-    for raw in text.splitlines():
-        line = raw.strip()
-        if line.startswith("| file:line ") and header_needle in line:
-            in_table = True
-            continue
-        if in_table and line.replace(" ", "").startswith("|---"):
-            continue
-        if in_table:
-            if not line.startswith("|"):
-                in_table = False
-                continue
-            rows.append([c.strip() for c in line.strip("|").split("|")])
-    return rows
-
-
-def _parse_inventory_rows(text: str) -> list[dict[str, str]]:
-    """Parse the sink table into row dicts (drift-proof identity columns).
-
-    Header (IC-03 re-key):
-    ``| file:line | qualname | token | handle source | sink | disposition | rationale |``
-
-    ``file:line`` is a NON-authoritative locator; the ``qualname`` + ``token``
-    columns carry the frozen ``composite_key_from_file`` comparand (the ``line``
-    is never compared — that is the #2306 fix).
-    """
-    rows: list[dict[str, str]] = []
-    for cells in _collect_table(text, "handle source"):
-        if len(cells) < 7:
-            continue
-        rows.append(
-            {
-                "locator": cells[0],
-                "qualname": _unwrap(cells[1]),
-                "token": _unwrap(cells[2]),
-                "handle_source": cells[3],
-                "sink": cells[4],
-                "disposition": cells[5],
-                "rationale": cells[6],
-            }
-        )
-    return rows
-
-
-def _parse_selection_rows(text: str) -> list[dict[str, str]]:
-    """Parse the read-SELECTION table into row dicts (same identity columns).
-
-    Header:
-    ``| file:line | qualname | token | in seam file | disposition | notes |``
-    """
-    rows: list[dict[str, str]] = []
-    for cells in _collect_table(text, "in seam file"):
-        if len(cells) < 6:
-            continue
-        rows.append(
-            {
-                "locator": cells[0],
-                "qualname": _unwrap(cells[1]),
-                "token": _unwrap(cells[2]),
-                "in_seam": cells[3],
-                "disposition": cells[4],
-                "rationale": cells[5],
-            }
-        )
-    return rows
-
-
-def _composite_from_locator(locator: str) -> CompositeKey:
-    """Derive a live composite key from a ``rel:line`` allowlist locator."""
-    rel, _, line_s = locator.rpartition(":")
-    return _composite_from_file(rel, int(line_s))
-
-
-def _inventory_composites(rows: list[dict[str, str]], table_name: str) -> tuple[dict[CompositeKey, str], set[CompositeKey], list[str]]:
-    """Build composite identities from stored inventory columns (fail-closed).
-
-    Returns ``(active, all_keys, parse_errors)`` where:
-
-    * ``active`` maps each NON-``[inventory-only]`` composite key to its stored
-      ``file:line`` locator (the overcount comparand set).
-    * ``all_keys`` includes ``[inventory-only]``-tagged rows too, so a documented
-      but intentionally-removed sink still satisfies the undercount membership.
-    * ``parse_errors`` names any row whose stored qualname/token identity is
-      missing — the audit aborts rather than silently under-identifying a row.
-    """
-    active: dict[CompositeKey, str] = {}
-    all_keys: set[CompositeKey] = set()
-    errors: list[str] = []
-    for row in rows:
-        loc = row["locator"]
-        qualname = row["qualname"]
-        token = row["token"]
-        if not qualname or not token:
-            errors.append(
-                f"{table_name} inventory row {loc!r} is missing its stored qualname/token identity — cannot build a composite key (fail-closed parse abort)"
-            )
-            continue
-        rel = loc.rsplit(":", 1)[0] if ":" in loc else loc
-        key: CompositeKey = (rel, qualname, token)
-        all_keys.add(key)
-        if "[inventory-only]" not in row["rationale"]:
-            active[key] = loc
-    return active, all_keys, errors
-
-
-def check_undercount(discovered: dict[CompositeKey, str], inventory_keys: set[CompositeKey]) -> list[str]:
-    """Discovered composite keys absent from the inventory (undercount tripwire).
-
-    Pure over its inputs (``main()`` calls it — no duplicated inline diff).
-    ``discovered`` maps each live composite key to its fresh ``rel:line`` locator,
-    kept in the message for the reviewer even though the key itself is drift-proof.
-    """
-    errors: list[str] = []
-    for key, locator in sorted(discovered.items()):
-        if key not in inventory_keys:
-            _rel, qualname, token = key
-            errors.append(f"discovered callsite {locator} ({qualname}) [token=`{token}`] is MISSING from inventory.md (undercount tripwire)")
-    return errors
-
-
-def check_overcount(inventory: dict[CompositeKey, str], discovered_keys: set[CompositeKey]) -> list[str]:
-    """Inventory composite keys with no live discovered sink (overcount/ghost).
-
-    Pure over its inputs. ``inventory`` maps each NON-``[inventory-only]``
-    composite key to its stored ``file:line`` locator. A ghost row means the sink
-    was deleted/moved but its inventory row lingers — RED with removal guidance.
-    """
-    errors: list[str] = []
-    for key, locator in sorted(inventory.items()):
-        if key not in discovered_keys:
-            _rel, qualname, token = key
-            errors.append(
-                f"inventory row {locator} ({qualname}) [token=`{token}`] has NO "
-                f"live discovered callsite (overcount/ghost tripwire) — remove the "
-                f"row or tag it [inventory-only] citing the change that removed it"
-            )
-    return errors
-
-
-def _fail(messages: list[str]) -> int:
-    print("AUDIT FAILED", file=sys.stderr)
-    for msg in messages:
-        print(f"  - {msg}", file=sys.stderr)
-    return 1
-
-
-def _resolution_checks(discovered: list[ResolutionRow], inventory_rows: list[dict[str, str]]) -> list[str]:
-    """Check-2: ResolutionRow undercount + overcount by COMPOSITE identity.
-
-    Drives the pure ``check_undercount`` / ``check_overcount`` seams over
-    composite keys — a ``+1`` line drift of a documented sink stays GREEN, while
-    a truly-new undocumented sink (undercount) or a deleted-but-documented ghost
-    row (overcount) goes RED. The stale ``rel:line`` locator is never compared.
-    """
-    errors: list[str] = []
-    discovered_keys = {row.composite_key(): row.key() for row in discovered}
-    active, all_keys, parse_errors = _inventory_composites(inventory_rows, "sink")
-    errors.extend(parse_errors)
-    errors.extend(check_undercount(discovered_keys, all_keys))
-    errors.extend(check_overcount(active, set(discovered_keys)))
-    return errors
-
-
-def _selection_checks(selection_rows: list[SelectionRow], selection_inventory_rows: list[dict[str, str]]) -> list[str]:
-    """Check 4: SelectionRow FR-006a bypass + undercount/overcount by COMPOSITE.
-
-    The read-SELECTION authority (``resolve_mission_read_path``) is reached ONLY
-    through the seam: every non-seam discovered callsite must be allowlisted (the
-    allowlist is empty on the collapsed tree, so any external call is RED). The
-    comparand is now the composite key, not the raw ``rel:line`` locator. The same
-    pure seams cross-check the read-SELECTION inventory table for drift/ghosts.
-    """
-    errors: list[str] = []
-    allow_composite = {_composite_from_locator(loc) for loc in ALLOWLISTED_SELECTION_CALLSITES}
-    for sel in selection_rows:
-        if sel.in_seam_file:
-            continue
-        if sel.composite_key() not in allow_composite:
-            errors.append(
-                f"direct read-SELECTION call {sel.key()} ({sel.call_name}) "
-                "outside the resolve_handle_to_read_path seam and not in "
-                "ALLOWLISTED_SELECTION_CALLSITES (FR-006a bypass)"
-            )
-    discovered_keys = {sel.composite_key(): sel.key() for sel in selection_rows}
-    active, all_keys, parse_errors = _inventory_composites(selection_inventory_rows, "read-SELECTION")
-    errors.extend(parse_errors)
-    errors.extend(check_undercount(discovered_keys, all_keys))
-    errors.extend(check_overcount(active, set(discovered_keys)))
-    return errors
-
-
-def main() -> int:
-    errors: list[str] = []
-
-    discovered = discover_rows()
-    discovered_files = {r.rel_path for r in discovered}
-
-    if not INVENTORY_PATH.exists():
-        return _fail([f"inventory.md missing at {INVENTORY_PATH}"])
-
-    text = INVENTORY_PATH.read_text(encoding="utf-8")
-    inventory_rows = _parse_inventory_rows(text)
-    selection_inventory_rows = _parse_selection_rows(text)
-
-    # ---- Check 1: every sink row carries exactly one valid disposition. ------
-    for row in inventory_rows:
-        disp = row["disposition"]
-        if disp not in VALID_DISPOSITIONS:
-            errors.append(f"row {row['locator']!r} has invalid/missing disposition {disp!r} (must be one of: {', '.join(sorted(VALID_DISPOSITIONS))})")
-
-    # ---- Check 2: ResolutionRow undercount + overcount (composite identity). -
-    errors.extend(_resolution_checks(discovered, inventory_rows))
-
-    # ---- Check 3: known-candidate presence (path-level, drift-immune). -------
-    for cand in KNOWN_CANDIDATE_FILES:
-        in_discovered = cand in discovered_files
-        in_inventory = any(r["locator"].startswith(cand) for r in inventory_rows)
-        if not (in_discovered or in_inventory):
-            errors.append(f"known candidate {cand!r} absent from BOTH discovered rows and inventory")
-
-    # ---- Check 4: SelectionRow FR-006a bypass + undercount/overcount. --------
-    errors.extend(_selection_checks(discover_selection_callsites(), selection_inventory_rows))
-
-    if errors:
-        return _fail(errors)
-
-    routed = sum(1 for r in inventory_rows if r["disposition"] == "routed-through-resolver")
-    blind = sum(1 for r in inventory_rows if r["disposition"] == "topology-blind-by-design")
-    bypass = sum(1 for r in inventory_rows if r["disposition"] == "raw-bypass")
-    print(
-        f"AUDIT OK: {len(inventory_rows)} inventory rows "
-        f"({len(discovered)} AST-discovered); "
-        f"{len(selection_inventory_rows)} read-SELECTION rows; "
-        f"routed-through-resolver={routed} "
-        f"topology-blind-by-design={blind} "
-        f"raw-bypass={bypass}"
-    )
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
