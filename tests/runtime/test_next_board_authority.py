@@ -20,11 +20,27 @@ from __future__ import annotations
 
 import ast
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
+
+from mission_runtime import MissionTopology as _MissionTopology
+from runtime.next.decision import DecisionKind
+from tests.integration.test_placement_partition_golden_path import (
+    _create_mission as _golden_create_mission,
+    _init_git_repo as _golden_init_git_repo,
+)
+from tests.runtime._next_mission_scaffold import (
+    _reject_wp_on_status_surface,
+    _seed_wp_lane,
+    _write_wp_task_files,
+    advance_to_step,
+    scaffold_coord_software_dev,
+    scaffold_software_dev,
+)
 
 pytestmark = [pytest.mark.integration, pytest.mark.git_repo]
 
@@ -205,3 +221,496 @@ def test_board_authority_tests_never_set_up_the_oracle_fixture() -> None:
         match.group(1) + (match.group(2) or "") for line in output.splitlines() if (match := _PLANNED_NODE_RE.search(line)) and match.group(1) not in _GUARD_TESTS
     }
     assert len(planned) >= _EXPECTED_BOARD_AUTHORITY_NODES, f"expected >= {_EXPECTED_BOARD_AUTHORITY_NODES} board-authority nodes planned, got {sorted(planned)}"
+
+
+# ---------------------------------------------------------------------------
+# Direct-call regression coverage for the two composed-guard fail-closed
+# defaults. NOT counted toward the entry-driven coverage floor above -- see
+# test_coverage_floor_is_met's docstring and the WP01 completion report for
+# why these are not reachable from their owning public entry with a valid
+# charter-resolved action_sequence. Mirrors the existing proven pattern in
+# tests/integration/test_research_runtime_walk.py::
+# test_unknown_research_action_fails_closed.
+# ---------------------------------------------------------------------------
+
+
+def test_research_fail_closed_default_direct_call(tmp_path: Path) -> None:
+    from runtime.next.runtime_bridge import _check_composed_action_guard
+
+    feature_dir = tmp_path / "kitty-specs" / "research-fail-closed"
+    feature_dir.mkdir(parents=True)
+    failures = _check_composed_action_guard("totally-unknown-action", feature_dir, mission="research")
+    assert failures == ["No guard registered for research action: totally-unknown-action"]
+
+
+def test_documentation_fail_closed_default_direct_call(tmp_path: Path) -> None:
+    from runtime.next.runtime_bridge import _check_composed_action_guard
+
+    feature_dir = tmp_path / "kitty-specs" / "documentation-fail-closed"
+    feature_dir.mkdir(parents=True)
+    failures = _check_composed_action_guard("totally-unknown-action", feature_dir, mission="documentation")
+    assert failures == ["No guard registered for documentation action: totally-unknown-action"]
+
+
+# ===========================================================================
+# advancing-next-board-unification-01M3BGQ0 -- T001-T003: board-authority
+# parity for review-reject re-dispatch (#4980) and coord implement dispatch
+# (#4975). Contract: kitty-specs/advancing-next-board-unification-01M3BGQ0/
+# contracts/advance-query-parity.md (CT-1..CT-7).
+# ===========================================================================
+
+
+def test_review_reject_redispatches_implement_single_branch(tmp_path: Path) -> None:
+    """#4980 (T001, CT-2): a WP rejected to ``planned`` while the run is
+    issued on ``review`` (single_branch) MUST re-dispatch ``implement WP01``,
+    exit 0, equal to query mode -- never the WP-less ``action=review,
+    wp_id=null`` composition placeholder (the placeholder-spin bug).
+
+    Pre-fix this was RED: ``_state_to_action("review", ...)`` finds no
+    ``for_review`` WP (it was just rejected to ``planned``) and falls
+    through to generic ``review.md`` template resolution, returning
+    ``action="review", wp_id=None`` -- a *non-None* action, so
+    ``_build_wp_iteration_decision``'s ``action is None`` blocked check never
+    fires and the WP-less composed placeholder is emitted instead (see
+    ``research.md`` Decision 2)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "042-anbu-reject-sb"
+    scaffold_software_dev(
+        repo,
+        mission_slug,
+        with_spec=True,
+        with_plan=True,
+        with_tasks_md=True,
+        wps={"WP01": "for_review"},
+    )
+    advance_to_step(repo, mission_slug, "software-dev", "review")
+    feature_dir = repo / "kitty-specs" / mission_slug
+    _reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime, query_current_state
+
+    query_decision = query_current_state("pedro", mission_slug, repo)
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.step
+    assert advance_decision.action == "implement"
+    assert advance_decision.wp_id == "WP01"
+    assert (advance_decision.action, advance_decision.wp_id) == (
+        query_decision.mission_state,
+        query_decision.wp_id,
+    ), "advance and query must agree on the actionable step/WP (CT-1)"
+    assert not (advance_decision.action == "review" and advance_decision.wp_id is None), "must never re-emit the WP-less review composition placeholder (FR-005)"
+
+
+def test_coord_implement_dispatch_reaches_wp01(tmp_path: Path) -> None:
+    """#4975 (T002, CT-3): on the default ``coord`` topology, a WP ready in
+    ``planned`` MUST dispatch ``implement WP01``, exit 0 -- never
+    ``kind=blocked reason="No action mapped for WP step 'implement'"``.
+
+    Pre-fix this was RED: ``_state_to_action("implement", mission_slug,
+    feature_dir, ...)`` calls ``preview_claimable_wp(feature_dir)`` with NO
+    ``status_dir`` and ``feature_dir`` (the coord-aware runtime feature dir)
+    carries no ``tasks/`` under coord topology (a PRIMARY-partition
+    artifact) -- ``preview_claimable_wp`` sees no WP files at all and
+    returns ``wp_id=None``, cascading to the generic 'No action mapped'
+    blocked decision."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "coord-anbu-implement"
+    feature_dir, coord_mission_dir = scaffold_coord_software_dev(repo, mission_slug, _MissionTopology.COORD, wps={"WP01": "planned"})
+    advance_to_step(repo, mission_slug, "software-dev", "implement")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime, query_current_state
+
+    query_decision = query_current_state("pedro", mission_slug, repo)
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert query_decision.wp_id == "WP01"  # absolute anchor on the query side
+    assert advance_decision.kind == DecisionKind.step
+    assert advance_decision.action == "implement"
+    assert advance_decision.wp_id == "WP01"
+    assert advance_decision.reason != "No action mapped for WP step 'implement'"
+
+
+@pytest.mark.parametrize("topology", [_MissionTopology.COORD, _MissionTopology.LANES_WITH_COORD])
+def test_review_reject_redispatches_implement_coord_family(tmp_path: Path, topology: _MissionTopology) -> None:
+    """US3 (combined cell): review-reject re-dispatch on ``coord`` AND
+    ``lanes_with_coord`` simultaneously -- the load-bearing proof the two
+    #4980/#4975 faces are unified at ONE authority, not separately patched
+    (a branch-by-branch fix could pass the single_branch review test AND the
+    coord implement test while still diverging on exactly this combined
+    cell -- the #4860 near-miss shape)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = f"coord-anbu-reject-{topology.value.replace('_', '-')}"
+    feature_dir, coord_mission_dir = scaffold_coord_software_dev(repo, mission_slug, topology, wps={"WP01": "for_review"})
+    advance_to_step(repo, mission_slug, "software-dev", "review")
+    _reject_wp_on_status_surface(coord_mission_dir, mission_slug, "WP01")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime, query_current_state
+
+    query_decision = query_current_state("pedro", mission_slug, repo)
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.step
+    assert advance_decision.action == "implement"
+    assert advance_decision.wp_id == "WP01"
+    assert (advance_decision.action, advance_decision.wp_id) == (
+        query_decision.mission_state,
+        query_decision.wp_id,
+    )
+
+
+def test_lanes_with_coord_implement_dispatch(tmp_path: Path) -> None:
+    """CT-3 absolute anchor on the second coord-family topology, whose lane
+    model differs from plain ``coord``."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "coord-anbu-lwc-implement"
+    scaffold_coord_software_dev(repo, mission_slug, _MissionTopology.LANES_WITH_COORD, wps={"WP01": "planned"})
+    advance_to_step(repo, mission_slug, "software-dev", "implement")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime
+
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.step
+    assert advance_decision.action == "implement"
+    assert advance_decision.wp_id == "WP01"
+
+
+def test_approve_control_unchanged(tmp_path: Path) -> None:
+    """US1 S4: the approve control is unchanged -- approving the reviewed WP
+    still advances past ``review`` (``kind=step action=accept``), never
+    re-dispatching an already-approved WP."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "042-anbu-approve"
+    scaffold_software_dev(
+        repo,
+        mission_slug,
+        with_spec=True,
+        with_plan=True,
+        with_tasks_md=True,
+        wps={"WP01": "for_review"},
+    )
+    advance_to_step(repo, mission_slug, "software-dev", "review")
+    feature_dir = repo / "kitty-specs" / mission_slug
+    from specify_cli.status.models import Lane, StatusEvent
+    from specify_cli.status.store import append_event
+
+    append_event(
+        feature_dir,
+        StatusEvent(
+            event_id="approve-WP01",
+            mission_slug=mission_slug,
+            wp_id="WP01",
+            from_lane=Lane.FOR_REVIEW,
+            to_lane=Lane.APPROVED,
+            at="2026-01-02T00:00:00+00:00",
+            actor="reviewer-fixture",
+            force=True,
+            execution_mode="worktree",
+        ),
+    )
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime
+
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.step
+    assert advance_decision.action == "accept"
+
+
+def test_early_reject_redispatches_implement(tmp_path: Path) -> None:
+    """Edge case: a reject issued while the run is still on ``implement``
+    (before hand-off ever reached ``review``) MUST continue to re-dispatch
+    ``implement WP01`` unchanged (FR-006)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "042-anbu-early-reject"
+    scaffold_software_dev(
+        repo,
+        mission_slug,
+        with_spec=True,
+        with_plan=True,
+        with_tasks_md=True,
+        wps={"WP01": "planned"},
+    )
+    advance_to_step(repo, mission_slug, "software-dev", "implement")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime
+
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.step
+    assert advance_decision.action == "implement"
+    assert advance_decision.wp_id == "WP01"
+
+
+def test_multi_wp_dependency_order_reject_redispatch(tmp_path: Path) -> None:
+    """US1 S5: WP01 (no deps) rejected mid-mission back to ``planned`` while
+    WP02 (depends on WP01) is dependency-gated -- advance MUST re-dispatch
+    exactly ``implement WP01``; WP02's dependency order stays undisturbed
+    (never surfaced as claimable ahead of its unmet dependency)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "042-anbu-multi-wp"
+    scaffold_software_dev(
+        repo,
+        mission_slug,
+        with_spec=True,
+        with_plan=True,
+        with_tasks_md=True,
+        wps={"WP01": "for_review"},
+    )
+    feature_dir = repo / "kitty-specs" / mission_slug
+    (feature_dir / "tasks" / "WP02.md").write_text(
+        "---\nwork_package_id: WP02\ndependencies: [WP01]\ntitle: WP02 depends on WP01\n"
+        "role: implementer\nrequirement_refs: [FR-001]\n---\n"
+        "## Work Package WP02: depends on WP01\n\n### Requirements\n- FR-001\n\nDo it.\n",
+        encoding="utf-8",
+    )
+    _seed_wp_lane(feature_dir, mission_slug, "WP02", "planned")
+    advance_to_step(repo, mission_slug, "software-dev", "review")
+    _reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
+
+    from runtime.next.discovery import preview_claimable_wp
+    from runtime.next.runtime_bridge import decide_next_via_runtime, query_current_state
+
+    query_decision = query_current_state("pedro", mission_slug, repo)
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.step
+    assert advance_decision.action == "implement"
+    assert advance_decision.wp_id == "WP01"
+    assert query_decision.wp_id == "WP01"
+    # WP02 stays dependency-gated -- the claimable-WP authority still refuses
+    # it, dependency order undisturbed.
+    wp02_preview = preview_claimable_wp(feature_dir)
+    assert wp02_preview.wp_id == "WP01", "WP02 must not become claimable ahead of its unmet dependency"
+
+
+def test_blocked_floor_all_in_review_has_named_recovery(tmp_path: Path) -> None:
+    """CT-4 / US4 S2: every WP ``in_review`` (claimed by another reviewer)
+    MUST be ``kind=blocked``, exit 1, with a runnable named recovery
+    command -- never a silent no-op."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "042-anbu-all-in-review"
+    scaffold_software_dev(
+        repo,
+        mission_slug,
+        with_spec=True,
+        with_plan=True,
+        with_tasks_md=True,
+        wps={"WP01": "in_review"},
+    )
+    advance_to_step(repo, mission_slug, "software-dev", "review")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime
+
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.blocked
+    assert advance_decision.wp_id is None
+    _assert_reason_has_runnable_recovery_command(advance_decision.reason, mission_slug)
+
+
+def test_blocked_floor_no_actionable_wp_has_named_recovery(tmp_path: Path) -> None:
+    """CT-4 / US4 S1: a board with no actionable WP for the issued step
+    (e.g. the only WP is ``blocked``) MUST be ``kind=blocked``, exit 1, with
+    a runnable named recovery command -- never the WP-less composed
+    placeholder."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "042-anbu-no-actionable"
+    scaffold_software_dev(
+        repo,
+        mission_slug,
+        with_spec=True,
+        with_plan=True,
+        with_tasks_md=True,
+        wps={"WP01": "blocked"},
+    )
+    advance_to_step(repo, mission_slug, "software-dev", "review")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime
+
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.blocked
+    assert advance_decision.wp_id is None
+    assert not (advance_decision.action == "review" and advance_decision.wp_id is None and advance_decision.kind == DecisionKind.step)
+    _assert_reason_has_runnable_recovery_command(advance_decision.reason, mission_slug)
+
+
+def test_blocked_floor_dependency_walled_has_named_recovery(tmp_path: Path) -> None:
+    """CT-4 / US4 S3: the only claimable-by-lane WP is dependency-gated by an
+    un-approved dependency -- MUST be ``kind=blocked``, exit 1, with a
+    runnable recovery command, never exit-0 ``kind=step``."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "042-anbu-dep-walled"
+    scaffold_software_dev(
+        repo,
+        mission_slug,
+        with_spec=True,
+        with_plan=True,
+        with_tasks_md=True,
+        wps={"WP01": "in_review"},
+    )
+    feature_dir = repo / "kitty-specs" / mission_slug
+    (feature_dir / "tasks" / "WP02.md").write_text(
+        "---\nwork_package_id: WP02\ndependencies: [WP01]\ntitle: WP02 depends on WP01\n"
+        "role: implementer\nrequirement_refs: [FR-001]\n---\n"
+        "## Work Package WP02: depends on WP01\n\n### Requirements\n- FR-001\n\nDo it.\n",
+        encoding="utf-8",
+    )
+    _seed_wp_lane(feature_dir, mission_slug, "WP02", "planned")
+    advance_to_step(repo, mission_slug, "software-dev", "implement")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime
+
+    advance_decision = decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    assert advance_decision.kind == DecisionKind.blocked
+    _assert_reason_has_runnable_recovery_command(advance_decision.reason, mission_slug)
+
+
+def test_unmaterialized_coord_surfaces_typed_blocked_reason(tmp_path: Path) -> None:
+    """CT-5 / NFR-003: an unmaterialized coordination worktree MUST surface a
+    blocked reason naming the unmaterialized surface -- NOT the generic
+    ``no_actionable_wp`` floor, and never a fabricated empty-primary read
+    (ADR 2026-09-24-2). Reuses the same ``_create_mission``-without-
+    materializing shape as
+    ``tests/mission_runtime/test_coord_read_seam.py::
+    test_unmaterialized_coord_read_raises_instead_of_empty_primary``.
+
+    Drives the selector (``_resolve_wp_board_action``) DIRECTLY rather than
+    through ``decide_next_via_runtime``: bootstrap's own
+    ``_wrap_with_decision_git_log`` (``DecisionGitLog`` construction) calls
+    ``CoordinationWorkspace.resolve``, which materializes the coordination
+    worktree as a side effect ("creating it on first call") BEFORE the
+    dependency-gate phase ever reaches this selector -- so the unmaterialized
+    state is not observable through the full advancing pipeline once
+    bootstrap has run (a pre-existing property of ``_wrap_with_decision_git_
+    log``, unrelated to and unchanged by this fix). The selector's own
+    fail-closed behavior is independently correct and testable at its own
+    seam, exactly as ``tests/next/test_finalized_task_routing.py``'s mapping-
+    pin tests already exercise it directly."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "coord-anbu-unmat"
+    _golden_init_git_repo(repo)
+    result = _golden_create_mission(repo, mission_slug, _MissionTopology.COORD)
+    # deliberately never materialize the coord worktree (CoordState.UNMATERIALIZED)
+    _write_wp_task_files(result.feature_dir, {"WP01": "planned"})
+    (result.feature_dir / "tasks.md").write_text("# Tasks\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], capture_output=True, check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "seed unmaterialized-coord fixture"],
+        capture_output=True,
+        check=True,
+    )
+
+    from runtime.next.runtime_bridge import _resolve_wp_board_action
+
+    board = _resolve_wp_board_action(mission_slug=result.mission_slug, repo_root=repo)
+
+    assert board.action is None
+    assert board.blocked_reason is not None
+    assert "unmaterializ" in board.blocked_reason.lower(), f"blocked reason must name the unmaterialized coordination surface, got: {board.blocked_reason!r}"
+    assert "no actionable" not in board.blocked_reason.lower(), "must NOT collapse into the generic no-actionable-wp floor (CT-5)"
+    assert "spec-kitty doctor workspaces --fix" in board.blocked_reason
+
+
+def test_snapshot_byte_identical_across_redispatch(tmp_path: Path) -> None:
+    """CT-6 / NFR-001: evaluating the re-dispatch decision performs no
+    persisted run/engine-state write -- ``state.json`` and
+    ``run.events.jsonl`` under the run dir are byte-identical before and
+    after the call."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    mission_slug = "042-anbu-snapshot"
+    scaffold_software_dev(
+        repo,
+        mission_slug,
+        with_spec=True,
+        with_plan=True,
+        with_tasks_md=True,
+        wps={"WP01": "for_review"},
+    )
+    advance_to_step(repo, mission_slug, "software-dev", "review")
+    feature_dir = repo / "kitty-specs" / mission_slug
+    _reject_wp_on_status_surface(feature_dir, mission_slug, "WP01")
+
+    from runtime.next.runtime_bridge import decide_next_via_runtime, get_or_start_run
+
+    run_ref = get_or_start_run(mission_slug, repo, "software-dev")
+    run_dir = Path(run_ref.run_dir)
+    state_path = run_dir / "state.json"
+    events_path = run_dir / "run.events.jsonl"
+    pre_state = state_path.read_bytes()
+    pre_events = events_path.read_bytes() if events_path.exists() else b""
+
+    decide_next_via_runtime("pedro", mission_slug, "success", repo)
+
+    post_state = state_path.read_bytes()
+    post_events = events_path.read_bytes() if events_path.exists() else b""
+    assert post_state == pre_state, "re-dispatch must not write the run's state.json (NFR-001)"
+    assert post_events == pre_events, "re-dispatch must not append run.events.jsonl (NFR-001)"
+
+
+def test_no_advancing_path_emits_unauthorized_step(tmp_path: Path) -> None:
+    """NFR-002 / CT-7 negative single-authority guard: every advancing
+    WP-iteration ``(action, wp_id)`` this matrix produces is exactly what the
+    board authority (``_resolve_wp_board_action``) independently derives for
+    the same repo state -- no advancing path may emit a step/WP the board
+    authority did not produce."""
+    from runtime.next.runtime_bridge import _resolve_wp_board_action, decide_next_via_runtime
+
+    cases: list[tuple[Path, str]] = []
+
+    repo1 = tmp_path / "neg-implement"
+    repo1.mkdir()
+    mission1 = "042-anbu-neg-implement"
+    scaffold_software_dev(repo1, mission1, with_spec=True, with_plan=True, with_tasks_md=True, wps={"WP01": "planned"})
+    advance_to_step(repo1, mission1, "software-dev", "implement")
+    cases.append((repo1, mission1))
+
+    repo2 = tmp_path / "neg-reject"
+    repo2.mkdir()
+    mission2 = "042-anbu-neg-reject"
+    scaffold_software_dev(repo2, mission2, with_spec=True, with_plan=True, with_tasks_md=True, wps={"WP01": "for_review"})
+    advance_to_step(repo2, mission2, "software-dev", "review")
+    _reject_wp_on_status_surface(repo2 / "kitty-specs" / mission2, mission2, "WP01")
+    cases.append((repo2, mission2))
+
+    repo3 = tmp_path / "neg-coord"
+    repo3.mkdir()
+    mission3 = "coord-anbu-neg"
+    scaffold_coord_software_dev(repo3, mission3, _MissionTopology.COORD, wps={"WP01": "planned"})
+    advance_to_step(repo3, mission3, "software-dev", "implement")
+    cases.append((repo3, mission3))
+
+    for repo_root, mission_slug in cases:
+        decision = decide_next_via_runtime("pedro", mission_slug, "success", repo_root)
+        board = _resolve_wp_board_action(mission_slug=mission_slug, repo_root=repo_root)
+        assert (decision.action, decision.wp_id) == (
+            board.action,
+            board.wp_id,
+        ), f"{mission_slug}: advancing emitted {(decision.action, decision.wp_id)!r} but the board authority independently yields {(board.action, board.wp_id)!r}"
+
+
+def _assert_reason_has_runnable_recovery_command(reason: str | None, mission_slug: str) -> None:
+    """CT-4: the blocked reason must embed a runnable ``spec-kitty``
+    invocation (parses as a command), not merely be non-empty."""
+    assert reason, "blocked decision must carry a non-empty reason"
+    match = re.search(r"`(spec-kitty [^`]+)`", reason)
+    assert match is not None, f"reason has no backtick-delimited spec-kitty command: {reason!r}"
+    command = match.group(1)
+    tokens = shlex.split(command)
+    assert tokens[0] == "spec-kitty", f"recovery command does not start with 'spec-kitty': {command!r}"
+    assert len(tokens) >= 2, f"recovery command has no subcommand: {command!r}"
