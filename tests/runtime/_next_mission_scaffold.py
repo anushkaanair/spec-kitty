@@ -130,9 +130,8 @@ def _provision_mission_type_activations(repo_root: Path, mission_type: str) -> N
     """
     kittify_dir = repo_root / ".kittify"
     kittify_dir.mkdir(exist_ok=True)
-    (kittify_dir / "config.yaml").write_text(
-        f"mission_type_activations:\n  - {mission_type}\n", encoding="utf-8"
-    )
+    (kittify_dir / "config.yaml").write_text(f"mission_type_activations:\n  - {mission_type}\n", encoding="utf-8")
+
 
 def scaffold_software_dev(
     repo_root: Path,
@@ -181,10 +180,7 @@ def advance_to_step(repo_root: Path, mission_slug: str, mission_type: str, targe
         if snapshot.issued_step_id == target_step_id:
             return
         runtime_next_step(run_ref, agent_id="fixture-setup", result="success", emitter=NullEmitter())
-    raise AssertionError(
-        f"advance_to_step: never reached {target_step_id!r} within {max_steps} steps "
-        f"(mission={mission_slug!r} type={mission_type!r})"
-    )
+    raise AssertionError(f"advance_to_step: never reached {target_step_id!r} within {max_steps} steps (mission={mission_slug!r} type={mission_type!r})")
 
 
 # ---------------------------------------------------------------------------
