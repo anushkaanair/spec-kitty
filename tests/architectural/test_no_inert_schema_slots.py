@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from tests.architectural._inert_slots import (
+    BaselineError,
     find_inert_slots,
     load_baseline,
     ratchet,
@@ -57,6 +58,45 @@ def test_schema_definitions_are_not_mistaken_for_data_slots(tmp_path: Path) -> N
         encoding="utf-8",
     )
     assert find_inert_slots(tmp_path) == []
+
+
+_PRUNED_ROW = (
+    "  - name: probe_slot\n"
+    "    declared_at: src/charter/offering/schemas/probe.schema.yaml\n"
+    "    disposition: wire-the-producer\n"
+    "    note: planted probe row\n"
+)
+
+
+#: One legal-looking value per retired key, keyed by where it would sit.
+_RETIRED_LINES = {
+    "owner": "    owner: WP01\n",
+    "provisional": "    provisional: false\n",
+    "mission": "mission: some-mission-01ABCDEF\n",
+    "code_only_suppressions": "code_only_suppressions: []\n",
+}
+
+
+@pytest.mark.parametrize(
+    ("where", "key"),
+    [
+        ("entry", "owner"),
+        ("entry", "provisional"),
+        ("top", "mission"),
+        ("top", "code_only_suppressions"),
+    ],
+)
+def test_load_baseline_rejects_retired_keys(
+    tmp_path: Path, where: str, key: str
+) -> None:
+    """A retired inert-slot key is refused loudly, never silently carried."""
+    retired_line = _RETIRED_LINES[key]
+    entries = "entries:\n" + _PRUNED_ROW
+    text = entries + retired_line if where == "entry" else retired_line + entries
+    path = tmp_path / "baseline.yaml"
+    path.write_text(text, encoding="utf-8")
+    with pytest.raises(BaselineError, match=rf"unknown key '{key}'"):
+        load_baseline(path)
 
 
 def test_live_tree_has_no_new_inert_slots() -> None:
