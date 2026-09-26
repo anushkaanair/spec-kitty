@@ -57,11 +57,11 @@
     {
       "criterion_id": "FR-006",
       "description": "Verify FR-006 is satisfied",
-      "proof_type": "automated_test",
-      "evidence": null,
-      "pass_fail": "pending",
-      "verified_by": null,
-      "verified_at": null,
+      "proof_type": "script",
+      "evidence": "python kitty-specs/<mission>/research/census_rekey_equivalence.py --base 2fd2dcc5 --head-root .worktrees/ratchet-baseline-census-gate-remediation-01M3EW3Z-lane-l: EQUIVALENCE OK 80/80 sites (22+56+2), bijection, rationale hashes equal; --self-test: all 3 corruptions detected; census-rekey-map.csv 80 rows",
+      "pass_fail": "pass",
+      "verified_by": "reviewer-renata",
+      "verified_at": "2026-09-26T22:55:11.350360+00:00",
       "notes": "TODO: replace with a real acceptance criterion"
     },
     {
