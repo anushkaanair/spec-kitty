@@ -61,7 +61,7 @@
       "wp": null
     },
     "#2631": {
-      "evidence_ref": "Parity remediation WP08-WP12 (FR-013..FR-018)",
+      "evidence_ref": "45/45 verdicts in research/parity-verdicts.md (WP12); net-negatives remediated WP08 (d61d05ba, e034ecf9), WP09 (a5285a9a, e2712923, 6329c3db), WP10 (1896b8cc, b9d1e67a, 47759725), WP11 (dd6c44b7, 1fc09315, 466660ca); oracle retirement out of scope, Follow-up: #5116",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -69,7 +69,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "fixed",
       "wp": "WP08"
     },
     "#2633": {
@@ -85,7 +85,7 @@
       "wp": null
     },
     "#2972": {
-      "evidence_ref": "Campsite-only per C-003; matrix row + S8997 routed to #5118 (FR-020)",
+      "evidence_ref": "Follow-up: #5118 (S8997 routing); census is 'do not mission' (C-003); campsite-only on touched files",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -93,11 +93,11 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "deferred-with-followup",
       "wp": "WP13"
     },
     "#3011": {
-      "evidence_ref": "Converter retirement (FR-008/FR-009, DM-01M3EW4J8E)",
+      "evidence_ref": "converter/inventory/audit entry point retired; scanner kept in tests/architectural/_surface_resolution_scan.py; commit 1122cfd1 (series 343bea78..1122cfd1)",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -105,11 +105,11 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "fixed",
       "wp": "WP07"
     },
     "#3026": {
-      "evidence_ref": "Inert-slot retirement (FR-010, DM-01M3EW4PB6)",
+      "evidence_ref": "dead inert-slot caps/predicates/code-only record retired (DM-01M3EW4PB6), baseline 38->36; commit 4668c259",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -117,7 +117,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "fixed",
       "wp": "WP05"
     },
     "#3206": {
@@ -157,7 +157,7 @@
       "wp": null
     },
     "#3962": {
-      "evidence_ref": "Folded into FR-010 (restore-or-delete -> delete)",
+      "evidence_ref": "same deletion as #3026; commit 4668c259",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -165,7 +165,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "fixed",
       "wp": "WP05"
     },
     "#4506": {
@@ -217,7 +217,7 @@
       "wp": null
     },
     "#5085": {
-      "evidence_ref": "Ban widening + migrations WP01-WP04 (FR-001..FR-007)",
+      "evidence_ref": "widened positional-anchor ban WP01 (233749de, 2f583e41, 1b5a0521); content-identity migrations WP02 (b469e4de, 63771648), WP03 (e9c5519c, 3897c5b3, 274d71fb), WP04 (d76ac920, a644f51e, b0dc84fa); exemptions pinned frozenset() + stale-row fail WP13 (e8b5accb red, db841aac)",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -225,11 +225,11 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "fixed",
       "wp": "WP01"
     },
     "#5104": {
-      "evidence_ref": "Epic; closeout WP13 verifies all children",
+      "evidence_ref": "children: #5085 fixed, #3011 fixed, #3026 fixed (+#3962 folded, fixed), #2631 fixed; #2972 deferred by design (C-003), Follow-up: #5118; further follow-ups #5116 #5117 (+ FR-019(d) matcher follow-up drafted for filing). Closeout WP13 commits e8b5accb, db841aac, fb044499, 33851c2e. Operator may upgrade to fixed if the epic is judged closed with #2972 deferred.",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -237,7 +237,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "deferred-with-followup",
       "wp": "WP13"
     },
     "#5116": {
