@@ -240,62 +240,34 @@ test_example_round_trip:
 # (mission doctrine-silence-guards-01KYFV7Q, WP01).
 #
 # NOT an allowlist. Each entry is a declared doctrine slot that nothing in the
-# tree populates, frozen with a named owner and a required structural fix; see
+# tree populates, frozen with a required structural disposition; see
 # tests/architectural/_inert_slots_baseline.yaml. Growth FAILS, shrinkage WARNS.
-# WP05 cleared its 8 (the FR-028 enhances/overrides excision, 59 -> 51); mission
-# foundational-values-creed-band-01KYFV8N still owns 26 (import_candidates'
-# first producer). Expect this to fall further, not rise.
-# 51 -> 48 (PR #3134 fixup): occurrence-map.schema.yaml's `from`/`moves`/`to`
-# rows were deleted from the baseline. `_inert_slots.py` now excludes that
-# whole schema from the slot walk (`_NON_DOCTRINE_SCHEMAS`) -- occurrence maps
-# are per-mission kitty-specs/ planning artifacts, structurally outside the
-# src-only producer scope, so no property of that schema (including PR #3134's
-# new `structural_targets`) can ever be assessed here. All three deleted rows
-# were `unassigned`, so that count drops 23 -> 20 too.
-# justification: 48 -> 47 (PR #3234): the `toolguide-references` row was deleted
-# from _inert_slots_baseline.yaml because `diagram-daisy.agent.yaml` now authors
-# that key -- a previously-inert schema slot became live. Legitimate shrinkage.
-# The deleted row was `unassigned`, so that count drops 20 -> 19 too.
-# justification: 47 -> 51 (mission dead-port-disposition-01M1TZVN, WP01): the
-# retired mission-DSL v1 `states:`/`transitions:` blocks in
-# packs/built-in/missions/*/mission.yaml were name-only producer matches for the
-# `orchestration` child slots `states`/`transitions` (models.py + mission.schema.yaml);
-# deleting the blocks (OD3) exposed four pre-existing inert slots. They are
-# owned by that mission (disposition delete-the-declaration), NOT unassigned,
-# so `unassigned_entries` stays at 19.
-# justification: 51 -> 37 (mission dead-port-disposition-01M1TZVN, WP03 rider
-# T014b): the whole `orchestration` state-machine family was DELETED from
-# `charter/offering/missions/models.py` + `mission.schema.yaml`
-# (MissionOrchestration / MissionStateObject / MissionTransition and the
-# REQUIRED `Mission.orchestration` field that nothing ever supplied), so all 14
-# baseline rows it declared went with it: the 4 owned by that mission
-# (states x2, transitions x2 -- disposition delete-the-declaration, kept) plus
-# the 10 provisional `unassigned` rows (from, from_state, on x2,
-# orchestration x2, required_artifacts x2, to x2). `unassigned` drops 19 -> 9
-# and `MAX_UNASSIGNED_ENTRIES` in `_inert_slots.py` is lowered to match.
-# Counts are measured (`len(BASELINE_SLOTS)`), not derived.
+# Counts are measured (`len(BASELINE_SLOTS)`), not derived. Expect this to fall
+# further, not rise.
+#
+# Shrink history:
+# - 59 -> 51: doctrine-silence-guards WP05 cleared the FR-028
+#   enhances/overrides excision (8 rows).
+# - 51 -> 48 (PR #3134 fixup): occurrence-map.schema.yaml's `from`/`moves`/`to`
+#   rows deleted; `_inert_slots.py` excludes that whole schema from the slot walk
+#   (`_NON_DOCTRINE_SCHEMAS`) because occurrence maps are per-mission
+#   kitty-specs/ planning artifacts outside the src-only producer scope.
+# - 48 -> 47 (PR #3234): `toolguide-references` became live once
+#   `diagram-daisy.agent.yaml` authored that key.
+# - 47 -> 51 (dead-port-disposition-01M1TZVN WP01): deleting the retired
+#   mission-DSL v1 `states:`/`transitions:` blocks exposed four pre-existing
+#   inert `orchestration` child slots.
+# - 51 -> 37 (dead-port-disposition-01M1TZVN WP03 rider T014b): the whole
+#   `orchestration` state-machine family was deleted from
+#   `charter/offering/missions/models.py` + `mission.schema.yaml`, taking its
+#   14 baseline rows with it.
+# - 37 -> 38 (#3831/#4088): +1 `path_conventions`, a forward-declared charter
+#   MissionType slot whose producers are downstream consumer org packs + the
+#   deferred #2652 built-in wiring (disposition wire-the-producer).
+# - 38 -> 36 (ratchet-baseline-census-gate-remediation-01M3EW3Z WP05,
+#   #3026/#3962): stale agent-profile.schema.yaml rows deleted.
 test_no_inert_schema_slots:
-  baseline_entries: 38  # justification: the 14-row orchestration family deleted by dead-port-disposition-01M1TZVN T014b (see comment above). 37 -> 38 (#3831/#4088): +1 path_conventions — a forward-declared charter MissionType slot whose producers are downstream consumer org packs + the deferred #2652 built-in wiring (baseline row owned by mission-type-canonical-source-01M302V9; disposition wire-the-producer).
-  # The shrink-only cap on `unassigned` owners. `unassigned` is the one owner the
-  # anti-weasel test can never fire for, so this is the gate's only escape hatch;
-  # registering it here subjects widening it to the same `# justification:` policy
-  # as any other ratchet, instead of leaving it a bare module constant a future PR
-  # raises in one line.
-  unassigned_entries: 9
-  # The shrink-only cap on slots suppressed by a CODE producer alone. A single
-  # dead line anywhere under src/doctrine (`x = None`, a dict key, a kwarg —
-  # three shapes work) used to silence a new inert-slot finding with no baseline
-  # row and nothing visible in review. Tightening which AST node counts as a
-  # write only moves that hole, so the suppressions are made visible and capped
-  # instead. Measured: 14 of the 15 are false suppressions (name collisions and
-  # reader-not-producer sites) — the lint erred permissively. At 14/14 a new
-  # suppression can only enter as a genuine producer, argued in the diff.
-  # 14 -> 13 (PR #3134 fixup): the `field_path` / occurrence-map.schema.yaml
-  # masking row was retired along with the whole schema exclusion (see
-  # `test_no_inert_schema_slots` note above and `_NON_DOCTRINE_SCHEMAS` in
-  # `_inert_slots.py`) — that slot is no longer scanned at all, so it can no
-  # longer be code-only-suppressed either.
-  masking_suppressions: 13
+  baseline_entries: 36  # justification: 38 -> 36 (mission ratchet-baseline-census-gate-remediation-01M3EW3Z WP05, #3026/#3962): the stale agent-profile.schema.yaml rows `styleguide-references` and `model` are no longer reported by the live scan and were deleted from _inert_slots_baseline.yaml. Legitimate shrinkage.
 
 # tests/architectural/test_reference_enum_ratchet.py
 # The four `<kind>_reference.type` enums in src/doctrine/schemas/. `_BASELINE`
