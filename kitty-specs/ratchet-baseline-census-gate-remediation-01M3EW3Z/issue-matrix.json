@@ -85,7 +85,7 @@
       "wp": null
     },
     "#2972": {
-      "evidence_ref": "Campsite-only per C-003; matrix row + S8997 routed to #5118 (FR-020)",
+      "evidence_ref": "Follow-up: #5118 (S8997 routing); census is 'do not mission' (C-003); campsite-only on touched files",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -93,7 +93,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "deferred-with-followup",
       "wp": "WP13"
     },
     "#3011": {
