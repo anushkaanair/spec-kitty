@@ -52,9 +52,15 @@ out of scope here by construction, same as the charter gate this mirrors.
 from __future__ import annotations
 
 import ast
+from collections import Counter
+from collections.abc import Mapping
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
+
+from tests.architectural._content_identity import with_blank_line_at_top, with_probe_above_statement
+from tests.architectural._ratchet_keys import composite_key
 
 pytestmark = pytest.mark.architectural
 
@@ -174,12 +180,11 @@ def _module_root(name: str) -> str:
     return name.split(".", 1)[0]
 
 
-def _scan_file(path: Path, relative_to: Path) -> list[tuple[str, int, str]]:
-    """Return ``(relative_path, lineno, detail)`` violations found in a single file."""
+def _scan_source(source: str, rel: str) -> list[tuple[str, int, str]]:
+    """Return ``(rel, lineno, detail)`` violations found in one module's *source*."""
     found: list[tuple[str, int, str]] = []
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+    tree = ast.parse(source)
     docstring_ids = _docstring_nodes(tree)
-    rel = str(path.relative_to(relative_to))
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -194,6 +199,11 @@ def _scan_file(path: Path, relative_to: Path) -> list[tuple[str, int, str]]:
             if isinstance(node.value, str) and _matches_forbidden_vocabulary(node.value):
                 found.append((rel, node.lineno, f"string literal {node.value!r}"))
     return found
+
+
+def _scan_file(path: Path, relative_to: Path) -> list[tuple[str, int, str]]:
+    """Return ``(relative_path, lineno, detail)`` violations found in a single file."""
+    return _scan_source(path.read_text(encoding="utf-8"), str(path.relative_to(relative_to)))
 
 
 def collect_forbidden_vocabulary(root: Path, *, relative_to: Path | None = None) -> list[tuple[str, int, str]]:
@@ -305,3 +315,103 @@ def test_walker_ignores_docstrings_and_prose(tmp_path: Path) -> None:
     )
 
     assert collect_forbidden_vocabulary(tmp_path, relative_to=tmp_path) == []
+
+
+# ---------------------------------------------------------------------------
+# Line-drift tolerance (NFR-001): the exemptions must survive line drift
+# ---------------------------------------------------------------------------
+
+
+class _KernelFinding(NamedTuple):
+    """One kernel vocabulary finding: its content identity plus its current line."""
+
+    key: tuple[str, str, str]
+    lineno: int
+    detail: str
+
+
+def _kernel_sources() -> dict[str, str]:
+    """``{src-relative path: source}`` for every module under ``src/kernel/``."""
+    return {str(path.relative_to(_SRC)): path.read_text(encoding="utf-8") for path in sorted(_KERNEL_ROOT.rglob("*.py")) if "__pycache__" not in path.parts}
+
+
+def _kernel_findings(sources: Mapping[str, str]) -> list[_KernelFinding]:
+    """Every vocabulary finding in *sources*, keyed by ``(rel, qualname, token_line)``."""
+    findings: list[_KernelFinding] = []
+    for rel, source in sorted(sources.items()):
+        for _rel, lineno, detail in _scan_source(source, rel):
+            findings.append(_KernelFinding((rel, *composite_key(source, lineno)), lineno, detail))
+    return findings
+
+
+def _split_kernel_findings(sources: Mapping[str, str]) -> tuple[list[_KernelFinding], list[_KernelFinding]]:
+    """Split the findings in *sources* into ``(unexpected, suppressed)``."""
+    unexpected: list[_KernelFinding] = []
+    suppressed: list[_KernelFinding] = []
+    for finding in _kernel_findings(sources):
+        target = suppressed if (finding.key[0], finding.lineno) in _PRE_EXISTING_EXEMPTIONS else unexpected
+        target.append(finding)
+    return unexpected, suppressed
+
+
+def _kernel_partition(sources: Mapping[str, str]) -> tuple[Counter[tuple[tuple[str, str, str], str]], Counter[tuple[tuple[str, str, str], str]]]:
+    """The gate's detection path as content identities (line numbers dropped)."""
+    unexpected, suppressed = _split_kernel_findings(sources)
+    return Counter((f.key, f.detail) for f in unexpected), Counter((f.key, f.detail) for f in suppressed)
+
+
+#: The distinct files the kernel exemptions name -- the drift test's parameters.
+_DRIFT_FILES: tuple[str, ...] = tuple(sorted({rel for rel, _lineno in _PRE_EXISTING_EXEMPTIONS}))
+
+#: Floor on ``_DRIFT_FILES`` so the drift proof cannot pass over a shrunken set.
+_DRIFT_FILES_FLOOR = 1
+
+
+def _exemption_count_for(rel: str) -> int:
+    return sum(1 for exempt_rel, _lineno in _PRE_EXISTING_EXEMPTIONS if exempt_rel == rel)
+
+
+def _count_for(identities: Counter[tuple[tuple[str, str, str], str]], rel: str) -> int:
+    return sum(count for (key, _detail), count in identities.items() if key[0] == rel)
+
+
+def _probe_every_site(source: str, linenos: list[int]) -> str:
+    """Insert a drift probe above each site's statement, bottom-up so lines stay valid."""
+    for lineno in sorted(set(linenos), reverse=True):
+        source = with_probe_above_statement(source, lineno)
+    return source
+
+
+def test_kernel_drift_files_meet_floor() -> None:
+    """NFR-002: the drift parameter set is non-trivial and every file in it is live."""
+    assert len(_DRIFT_FILES) >= _DRIFT_FILES_FLOOR
+    _, suppressed = _kernel_partition(_kernel_sources())
+    empty = [rel for rel in _DRIFT_FILES if _count_for(suppressed, rel) < 1]
+    assert not empty, f"Drift files with no suppressed finding on the unmutated tree: {empty}"
+
+
+@pytest.mark.parametrize("rel", _DRIFT_FILES)
+def test_kernel_exemptions_survive_line_drift(rel: str) -> None:
+    """NFR-001: line drift above or around the exempted sites changes nothing the gate sees.
+
+    Two mutations of *rel*, each rescanned: (i) a blank line at the top of the
+    file, (ii) a ``# drift-probe`` / ``pass`` pair above every exempted site's
+    statement. The ``(unexpected, suppressed)`` identities must be unchanged
+    and the per-file suppressed count must equal the per-file exemption count.
+    """
+    sources = _kernel_sources()
+    baseline = _kernel_partition(sources)
+    expected = _exemption_count_for(rel)
+    assert _count_for(baseline[1], rel) == expected, f"{rel}: {_count_for(baseline[1], rel)} suppressed finding(s) unmutated, expected {expected}"
+
+    site_lines = [f.lineno for f in _split_kernel_findings(sources)[1] if f.key[0] == rel]
+    mutations = {
+        "blank line at top": with_blank_line_at_top(sources[rel]),
+        "probe above each site": _probe_every_site(sources[rel], site_lines),
+    }
+    for label, mutated_source in mutations.items():
+        mutated = dict(sources)
+        mutated[rel] = mutated_source
+        drifted = _kernel_partition(mutated)
+        assert drifted == baseline, f"{rel} ({label}): drift changed the gate's partition.\nbefore: {baseline}\nafter:  {drifted}"
+        assert _count_for(drifted[1], rel) == expected

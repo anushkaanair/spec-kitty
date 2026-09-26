@@ -26,6 +26,7 @@ read under lock" that would misfire on the door's own diagnostics.
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -294,3 +295,13 @@ def test_unrelated_filelock_named_callable_is_a_disclosed_over_fire(tmp_path: Pa
     module.write_text("def FileLock(*a):\n    return None\n\n\nFileLock('x')\n", encoding="utf-8")
 
     assert _violations_for_file(module) == [5]
+
+
+def test_lock_ban_loader_rejects_line_pinned_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-OP-6: a ``path:line`` exemption line is refused with a ``ValueError`` naming it."""
+    import tests.architectural._lock_ban_exemptions as exemptions_module
+
+    monkeypatch.setattr(exemptions_module, "_iter_exemption_lines", lambda: ["src/x.py:12"])
+
+    with pytest.raises(ValueError, match=re.escape("src/x.py:12")):
+        exemptions_module.load_lock_ban_exemptions()

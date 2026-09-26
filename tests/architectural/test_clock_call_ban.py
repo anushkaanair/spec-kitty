@@ -34,6 +34,7 @@ import-ban to catch either).
 from __future__ import annotations
 
 import ast
+import re
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -412,3 +413,13 @@ def test_message_mapping_falls_back_to_generic_now_suggestion(tmp_path: Path) ->
         "kernel.clock.now_utc() (or now_utc_iso()/now_utc_stamp()/"
         "now_utc_compact_stamp()/now_utc_seconds() for a specific serialization contract)"
     ]
+
+
+def test_clock_call_loader_rejects_line_pinned_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-OP-6: a ``CALL:path:line`` exemption line is refused with a ``ValueError`` naming it."""
+    import tests.architectural._exemptions as exemptions_module
+
+    monkeypatch.setattr(exemptions_module, "_iter_exemption_lines", lambda: ["CALL:src/x.py:12"])
+
+    with pytest.raises(ValueError, match=re.escape("src/x.py:12")):
+        exemptions_module.load_call_exemptions()

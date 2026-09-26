@@ -28,13 +28,19 @@ through it or named in a per-owner exemption file under
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterable
+import functools
+import re
+from collections import Counter
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
 from tests.architectural import _os_detection_scan as scan
+from tests.architectural._content_identity import with_blank_line_at_top, with_probe_above_statement
 from tests.architectural._os_detection_exemptions import load_os_detection_exemptions
+from tests.architectural._ratchet_keys import composite_key
 
 pytestmark = [pytest.mark.architectural]
 
@@ -265,3 +271,123 @@ def test_platform_system_call_with_args_does_not_fire(tmp_path: Path) -> None:
     module.write_text('import platform\n\nplatform.system(True) == "Windows"\n', encoding="utf-8")
 
     assert _violations_for_file(module) == []
+
+
+# ---------------------------------------------------------------------------
+# Line-drift tolerance (NFR-001) and the loader's sanctioned shape
+# ---------------------------------------------------------------------------
+
+
+class _OsFinding(NamedTuple):
+    """One banned-idiom finding: its content identity plus its current line."""
+
+    key: tuple[str, str, str]
+    lineno: int
+
+
+@functools.cache
+def _violation_lines(source: str) -> tuple[int, ...]:
+    """Banned-idiom lines in *source*, parsed once per distinct text."""
+    return tuple(scan.find_os_detection_violations(ast.parse(source)))
+
+
+def _scanned_sources() -> dict[str, str]:
+    """``{repo-relative path: source}`` for every scanned file."""
+    return {scan.relpath(path): path.read_text(encoding="utf-8") for path in scan.iter_python_files()}
+
+
+def _os_findings(sources: Mapping[str, str]) -> list[_OsFinding]:
+    """Every banned-idiom finding outside the door, keyed by ``(relpath, qualname, token_line)``."""
+    door = scan.relpath(scan.DOOR_FILE)
+    findings: list[_OsFinding] = []
+    for relpath, source in sorted(sources.items()):
+        if relpath == door:
+            continue
+        for lineno in _violation_lines(source):
+            findings.append(_OsFinding((relpath, *composite_key(source, lineno)), lineno))
+    return findings
+
+
+def _split_os_findings(sources: Mapping[str, str]) -> tuple[list[_OsFinding], list[_OsFinding]]:
+    """Split the findings in *sources* into ``(unexpected, suppressed)``."""
+    exemptions = load_os_detection_exemptions()
+    unexpected: list[_OsFinding] = []
+    suppressed: list[_OsFinding] = []
+    for finding in _os_findings(sources):
+        target = suppressed if (finding.key[0], finding.lineno) in exemptions else unexpected
+        target.append(finding)
+    return unexpected, suppressed
+
+
+def _os_detection_partition(sources: Mapping[str, str]) -> tuple[Counter[tuple[str, str, str]], Counter[tuple[str, str, str]]]:
+    """The gate's detection path as content identities (line numbers dropped)."""
+    unexpected, suppressed = _split_os_findings(sources)
+    return Counter(f.key for f in unexpected), Counter(f.key for f in suppressed)
+
+
+#: The distinct files the os-detect exemptions name -- the drift test's parameters.
+_DRIFT_FILES: tuple[str, ...] = tuple(sorted({relpath for relpath, _lineno in load_os_detection_exemptions()}))
+
+#: Floor on ``_DRIFT_FILES`` so the drift proof cannot pass over a shrunken set.
+_DRIFT_FILES_FLOOR = 3
+
+
+def _exemption_count_for(relpath: str) -> int:
+    return sum(1 for exempt_relpath, _lineno in load_os_detection_exemptions() if exempt_relpath == relpath)
+
+
+def _count_for(keys: Counter[tuple[str, str, str]], relpath: str) -> int:
+    return sum(count for key, count in keys.items() if key[0] == relpath)
+
+
+def _probe_every_site(source: str, linenos: list[int]) -> str:
+    """Insert a drift probe above each site's statement, bottom-up so lines stay valid."""
+    for lineno in sorted(set(linenos), reverse=True):
+        source = with_probe_above_statement(source, lineno)
+    return source
+
+
+def test_os_detection_drift_files_meet_floor() -> None:
+    """NFR-002: the drift parameter set is non-trivial and every file in it is live."""
+    assert len(_DRIFT_FILES) >= _DRIFT_FILES_FLOOR
+    _, suppressed = _os_detection_partition(_scanned_sources())
+    empty = [relpath for relpath in _DRIFT_FILES if _count_for(suppressed, relpath) < 1]
+    assert not empty, f"Drift files with no suppressed finding on the unmutated tree: {empty}"
+
+
+@pytest.mark.parametrize("relpath", _DRIFT_FILES)
+def test_os_detection_exemptions_survive_line_drift(relpath: str) -> None:
+    """NFR-001: line drift above or around the exempted sites changes nothing the gate sees.
+
+    Two mutations of *relpath*, each rescanned: (i) a blank line at the top of
+    the file, (ii) a ``# drift-probe`` / ``pass`` pair above every exempted
+    site's statement. The ``(unexpected, suppressed)`` identities must be
+    unchanged and the per-file suppressed count must equal the per-file
+    exemption count.
+    """
+    sources = _scanned_sources()
+    baseline = _os_detection_partition(sources)
+    expected = _exemption_count_for(relpath)
+    assert _count_for(baseline[1], relpath) == expected, f"{relpath}: {_count_for(baseline[1], relpath)} suppressed finding(s) unmutated, expected {expected}"
+
+    site_lines = [f.lineno for f in _split_os_findings(sources)[1] if f.key[0] == relpath]
+    mutations = {
+        "blank line at top": with_blank_line_at_top(sources[relpath]),
+        "probe above each site": _probe_every_site(sources[relpath], site_lines),
+    }
+    for label, mutated_source in mutations.items():
+        mutated = dict(sources)
+        mutated[relpath] = mutated_source
+        drifted = _os_detection_partition(mutated)
+        assert drifted == baseline, f"{relpath} ({label}): drift changed the gate's partition.\nbefore: {baseline}\nafter:  {drifted}"
+        assert _count_for(drifted[1], relpath) == expected
+
+
+def test_os_detection_loader_rejects_line_pinned_entry(monkeypatch: pytest.MonkeyPatch) -> None:
+    """D-OP-6: a ``path:line`` exemption line is refused with a ``ValueError`` naming it."""
+    import tests.architectural._os_detection_exemptions as exemptions_module
+
+    monkeypatch.setattr(exemptions_module, "_iter_exemption_lines", lambda: ["src/x.py:12"])
+
+    with pytest.raises(ValueError, match=re.escape("src/x.py:12")):
+        exemptions_module.load_os_detection_exemptions()
