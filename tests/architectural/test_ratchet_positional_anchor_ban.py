@@ -31,23 +31,45 @@ Two predicates, mechanically decidable (no fragile heuristic):
   file(...)``'s 2nd positional arg — the laundering vector that evades both
   (a) (the 2nd arg there is a ``Name``, not an ``ast.Constant``) and the
   ``file.py:NNN`` grep (the seed spans multiple source lines).
-* **Python (raw 2-tuple key — CT7, #2853)** — now that ``composite_key`` /
-  :class:`ContentDescriptor` adoption is broad, this arm bans the *regrowth* of
-  the file:line-drift engine in its most direct form: a ratchet-key /
-  allow-list-seed constructed as a raw ``("some_file.py", 472)`` **2-tuple**
-  (a path-ish string literal + a bare int literal) instead of via
-  ``composite_key`` / :class:`ContentDescriptor`. To avoid flagging an
-  identically-shaped ``(str, int)`` tuple that is NOT a content-address ratchet
-  key — most notably the ``("kernel/schema_utils.py", 88)`` doctrine-**import-
-  lineno** exemption in ``test_kernel_no_doctrine_import.py`` (a different gate,
-  tracked #3206) — this arm is scoped by *context*, not by tuple shape alone: it
-  fires ONLY for a raw 2-tuple that (i) lives inside a module-level allow-list
-  seed container AND (ii) sits in a file that actually imports the
-  content-addressed ratchet substrate (``composite_key`` /
-  ``composite_key_from_file`` / ``code_tokens_by_line`` / ``ContentDescriptor``
-  / the descriptor resolver, from ``tests.architectural._ratchet_keys`` or
-  ``specify_cli.contracts.anchoring``). The #3206 exemption file imports none of
-  that substrate, so its ``(path, int)`` exemption tuples are never in scope.
+* **Python (raw file:line tuple key — CT7 #2853, widened by #5085)** — bans
+  the *regrowth* of the file:line-drift engine in its most direct form: a
+  ratchet-key / allow-list seed built as a raw tuple instead of via
+  ``composite_key`` / :class:`ContentDescriptor`. The arm is
+  **import-agnostic** (#5085 removed the former "file imports the ratchet
+  substrate" context gate, which let 94 line pins escape) and fires on any
+  module-level **or class-body** seed container (tuple / list / set / dict /
+  ``frozenset(...)``) holding:
+
+  - a tuple of >= 2 elements whose first element is path-ish — a str literal,
+    a ``Path`` / ``PurePath`` / ``PurePosixPath`` / ``PureWindowsPath`` call
+    over one, or a ``/`` join with any path-ish leaf — and any later element a
+    bare int literal: ``("a.py", 3)``, ``(Path("src/a.py"), 12)``,
+    ``("a.py", "mod.f", 3)``;
+  - a str constant that whole-matches an embedded ``[PREFIX:]path:line[:suffix]``
+    key (the census ``"src/x.py:98:reset_hard"`` form);
+  - a record constructor with a ``line`` / ``lineno`` / ``line_no`` /
+    ``file_line`` / ``fileline`` keyword bound to a bare int literal
+    (``occurrence=`` / ``op_ordinal=`` are scan ordinals and stay allowed).
+* **Text (#5085)** — every non-blank, non-``#`` line of
+  ``tests/architectural/**/*.txt`` (the ``_exemptions/`` lists) that
+  whole-matches the same ``[PREFIX:]path:line[:suffix]`` key
+  (``CALL:src/x.py:12``, ``src/kernel/locks.py:96``). ``IMPORT:<path>`` has no
+  line and content-shaped ``path::qualname::token`` entries stay green.
+
+**Exemption lifecycle (FR-003)**: findings are identified by content
+``(relpath, symbol, site)``, never by line. WP01 lands one interim row per
+flagged site in :data:`_POSITIONAL_ANCHOR_EXEMPTIONS` (94 rows: join 6, kernel
+2, destructive 22, mutation 56, overwrite 2, os-detect text 6); WP02-WP04
+migrate the underlying allow-lists to content identity (their rows then only
+warn as stale); WP13 deletes every row and pins the set empty.
+
+**Out of scope (#5085), each with a negative fixture below**: ``{path: int}``
+dicts (the ints in ``test_timing_coverage_invariant.py::BASELINE_FUNCTIONAL_
+ASSERTIONS`` are counts, not lines); function-local containers; the SHA-pinned
+/ non-authoritative YAMLs ``census/spec_kitty_home_pin_anchor.yaml`` and
+``charter_path_literal_allowlist.yaml``; the dormant
+``tests/runtime/_bridge_oracle.py`` pin (outside the ``tests/architectural/``
+scan universe); prose evidence such as ``"decision.py:401; empty stdout"``.
 * **YAML** — a field-name rule over the two YAML allow-lists
   (``resolution_gate_allowlist.yaml``, ``inline_meta_read_allowlist.yaml``):
   an int is permitted ONLY as a ``line`` locator (documented
@@ -81,6 +103,7 @@ from __future__ import annotations
 
 import ast
 import re
+import sys
 import warnings
 from collections import Counter
 from collections.abc import Sequence
@@ -373,7 +396,7 @@ def _call_arg_line_sink_violations(
 ) -> list[LineSinkViolation]:
     """Walk every ``Call``/``Subscript`` node for the two call-arg sink shapes."""
     tokens_vars = _collect_tokens_by_line_vars(tree)
-    symbols = _enclosing_symbol_index(tree)
+    symbols: dict[int, str] | None = None  # built lazily: most files have no finding
     violations: list[LineSinkViolation] = []
     for node in ast.walk(tree):
         offender: ast.Constant | None = None
@@ -389,6 +412,8 @@ def _call_arg_line_sink_violations(
             shape = "code_tokens_by_line(...)[...]"
         if offender is None or has_diagnostic_locator_marker(source_lines, offender.lineno):
             continue
+        if symbols is None:
+            symbols = _enclosing_symbol_index(tree)
         violations.append(
             LineSinkViolation(
                 relpath,
@@ -1037,10 +1062,31 @@ _POSITIONAL_ANCHOR_EXEMPTIONS: frozenset[tuple[str, str, str, str]] = frozenset(
 def test_architectural_python_universe_is_nonempty() -> None:
     """Anti-vacuity: the walker actually scans a non-trivial file set."""
     files = _iter_architectural_python_files()
-    assert len(files) > 50, (
+    # Concrete floor (NFR-002): 263 on the planning base; WP07 retires one.
+    assert len(files) >= 262, (
         f"only {len(files)} tests/architectural/**/*.py files discovered — "
         "the walker may be mis-scoped (the guard would pass vacuously)"
     )
+
+
+def _os_detect_entry_lines_inspected() -> int:
+    """Entry lines the text arm inspects across ``_exemptions/os-detect-ban-*.txt``
+    only (NOT all 20 text files, which would meet the floor trivially)."""
+    return sum(
+        len(_text_entry_lines(path.read_text(encoding="utf-8")))
+        for path in _iter_architectural_text_files()
+        if path.name.startswith(_OS_DETECT_TXT_PREFIX)
+    )
+
+
+def test_architectural_text_universe_meets_floor() -> None:
+    """Anti-vacuity (#5085 NFR-002): the text walker sees the exemption files,
+    and the os-detect exemption files still carry the six entry lines the text
+    arm inspects (they survive WP03 as content lines)."""
+    files = _iter_architectural_text_files()
+    assert len(files) >= 20, f"only {len(files)} tests/architectural/**/*.txt files discovered"
+    inspected = _os_detect_entry_lines_inspected()
+    assert inspected >= 6, f"only {inspected} os-detect exemption entry line(s) inspected"
 
 
 def test_no_int_line_sink_in_architectural_python_seeds() -> None:
@@ -1410,6 +1456,32 @@ class TestScanTextSource:
         assert _text_entry_lines("# c\n\n  a.py:1  \n") == [(3, "a.py:1")]
 
 
+class TestSymbolAttribution:
+    def test_call_arg_sink_symbol_is_enclosing_binding(self) -> None:
+        violations = _scan_python_source("_SEED = composite_key(source, 347)\n", "scratch/s.py")
+        assert [(v.symbol, v.site) for v in violations] == [("_SEED", "composite_key(source, 347)")]
+
+    def test_function_symbol(self) -> None:
+        violations = _scan_python_source("def f(source):\n    return composite_key(source, 3)\n", "scratch/s.py")
+        assert [v.symbol for v in violations] == ["f"]
+
+    def test_bare_module_statement_symbol(self) -> None:
+        violations = _scan_python_source("composite_key(source, 3)\n", "scratch/s.py")
+        assert [v.symbol for v in violations] == ["<module>"]
+
+    def test_class_level_non_assign_symbol(self) -> None:
+        index = _enclosing_symbol_index(ast.parse("class K:\n    composite_key(source, 3)\n"))
+        assert set(index.values()) == {"K"}
+
+    def test_laundering_symbol_is_enclosing_binding(self) -> None:
+        planted = (
+            '_SITES = (("a", 42),)\n'
+            "_ALLOWLIST = {composite_key_from_file(rel, line) for rel, line in _SITES}\n"
+        )
+        violations = _scan_python_source(planted, "scratch/s.py")
+        assert [v.symbol for v in violations if "laundered" in v.detail] == ["_ALLOWLIST"]
+
+
 class TestExemptionMultiset:
     def _finding(self) -> LineSinkViolation:
         return LineSinkViolation("t/a.py", 1, "d", "_SEED", "('a.py', 3)")
@@ -1713,11 +1785,72 @@ def test_overlapping_arms_report_one_finding_per_site() -> None:
     assert len(violations) == 1
 
 
+# ---------------------------------------------------------------------------
+# #5085 NFR-002 — per-arm self-mutation: disable one arm's predicate and the
+# arm-EXCLUSIVE planted fixture must drop to exactly 0 findings, proving the
+# production scan path (_scan_python_source / _scan_text_source) uses that arm.
+# ---------------------------------------------------------------------------
+
+_THIS_MODULE = sys.modules[__name__]
+
+
+def _never(*_args: object) -> bool:
+    return False
+
+
+def test_arm_disable_file_line_tuple(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exclusive fixture: ``(Path("src/a.py"), 12)`` — no string / keyword arm
+    sees it. (Overlap note: a plain ``("a.py:1", ...)`` string would ALSO hit
+    the two string arms, so it is not used here.)"""
+    planted = 'from pathlib import Path\n_SEED = ((Path("src/a.py"), 12),)\n'
+    assert len(_scan_python_source(planted, "scratch/t.py")) == 1
+    monkeypatch.setattr(_THIS_MODULE, "_is_file_line_tuple", _never)
+    assert _scan_python_source(planted, "scratch/t.py") == []
+
+
+def test_arm_disable_embedded_line_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exclusive fixture: ``"src/x.py:98:reset_hard"`` — the registry-parity
+    :func:`is_file_line_anchor` arm needs a trailing ``:<int>`` and misses it.
+    (Overlap note: ``"src/x.py:12"`` is caught by BOTH string arms.)"""
+    planted = '_ALLOWLIST = {"src/x.py:98:reset_hard": "r"}\n'
+    assert len(_scan_python_source(planted, "scratch/t.py")) == 1
+    monkeypatch.setattr(_THIS_MODULE, "_is_embedded_line_key", _never)
+    assert _scan_python_source(planted, "scratch/t.py") == []
+
+
+def test_arm_disable_keyword_record(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exclusive fixture: ``Entry(path="a.py", lineno=3)`` — not a tuple, and no
+    string constant in it is a line key."""
+    planted = '_SEED = (Entry(path="a.py", lineno=3),)\n'
+    assert len(_scan_python_source(planted, "scratch/t.py")) == 1
+    monkeypatch.setattr(_THIS_MODULE, "_is_line_keyword_record", _never)
+    assert _scan_python_source(planted, "scratch/t.py") == []
+
+
+def test_arm_disable_class_body_walk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exclusive fixture: a class-attribute allow-list — reachable ONLY through
+    the class-body walk (the tuple arm is what flags it once walked)."""
+    planted = 'class K:\n    ALLOW = (("a.py", 3),)\n'
+    assert len(_scan_python_source(planted, "scratch/t.py")) == 1
+    monkeypatch.setattr(_THIS_MODULE, "_class_body_scopes", lambda _tree: [])
+    assert _scan_python_source(planted, "scratch/t.py") == []
+
+
+def test_arm_disable_text_line_anchor(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exclusive fixture: a ``CALL:<path>:<line>`` exemption text line — only
+    the text arm reads ``.txt`` files."""
+    planted = "CALL:src/x.py:12\n"
+    assert len(_scan_text_source(planted, "t.txt")) == 1
+    monkeypatch.setattr(_THIS_MODULE, "_is_text_line_anchor", _never)
+    assert _scan_text_source(planted, "t.txt") == []
+
+
 def test_non_vacuity_real_compliant_yamls_stay_green() -> None:
     """The 2 real, WS1-compliant YAMLs (``line:`` locators + count-floor
     baselines only) stay GREEN through the actual YAML predicate — the
     authoritative-vs-diagnostic distinction the contract requires.
     """
+    assert len(_YAML_ALLOWLISTS) >= 1, "the YAML arm scans no allow-list (vacuous)"
     for name in _YAML_ALLOWLISTS:
         doc = yaml.safe_load((_ARCH_ROOT / name).read_text(encoding="utf-8"))
         assert _yaml_int_field_violations(doc) == [], (
