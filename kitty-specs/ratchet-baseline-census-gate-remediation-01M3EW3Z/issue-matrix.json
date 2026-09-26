@@ -217,7 +217,7 @@
       "wp": null
     },
     "#5085": {
-      "evidence_ref": "Ban widening + migrations WP01-WP04 (FR-001..FR-007)",
+      "evidence_ref": "widened positional-anchor ban WP01 (233749de, 2f583e41, 1b5a0521); content-identity migrations WP02 (b469e4de, 63771648), WP03 (e9c5519c, 3897c5b3, 274d71fb), WP04 (d76ac920, a644f51e, b0dc84fa); exemptions pinned frozenset() + stale-row fail WP13 (e8b5accb red, db841aac)",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -225,7 +225,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "in-mission",
+      "verdict": "fixed",
       "wp": "WP01"
     },
     "#5104": {
