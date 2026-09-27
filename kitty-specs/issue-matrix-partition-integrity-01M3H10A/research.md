@@ -16,19 +16,31 @@ architecture decisions. No open `NEEDS CLARIFICATION` markers.
 - **Alternatives considered**: a bespoke per-gate resolver (rejected — second authority); a
   narrow #5171-only wiring fix (rejected by operator — leaves #4943 live and divergent).
 
-## D2 — Coordination-branch-ref read is a NEW primitive (the deep fix)
+## D2 — Post-consolidation read is a NEW primitive resolved via the write's phase authority (the deep fix)
 
-- **Decision**: Add a read authority in `src/mission_runtime/resolution.py` that resolves
-  ISSUE_MATRIX content from the coordination **branch ref** (`git show <ref>:<path>`) when the
-  worktree is unmaterialized-but-retained.
-- **Rationale**: `coord_read_dir_for` fail-softs to `None` when the coord worktree is gone
-  (post-consolidation) — `resolve_artifact_surface` stamps PRIMARY for EMPTY/UNMATERIALIZED and
-  absorbs DELETED — so even the "already partition-aware" review CLI reproduces #5171's residue read
-  post-merge. No existing primitive reads blob content off a ref (grep of `mission_runtime` found
-  only branch-*name*/topology resolution). This is `[build]`, not adoption.
-- **Alternatives considered**: require `--retain-worktrees` so the worktree survives (rejected —
-  changes user workflow, doesn't close the class); materialize a throwaway worktree at read time
-  (rejected — slow, side-effecting, violates the <2s bar).
+- **Decision**: Add a read authority in `src/mission_runtime/resolution.py` that reads ISSUE_MATRIX
+  **content** from a git ref (`git show <ref>:<path>`) when there is no on-disk worktree, resolving the
+  ref via the SAME lifecycle-phase authority the write path uses (`resolve_lifecycle_phase` →
+  `resolve_placement_only`): PUBLISHED ⇒ consolidated-primary ref; CONSOLIDATED / PRE_CONSOLIDATION on
+  coord topology ⇒ coordination branch ref. Never hardcode a surface.
+- **Rationale**: The MAJOR-3 investigation confirmed the write surface is a function of **lifecycle
+  phase**, not coord-worktree materialization. E2 consolidated-primary routing
+  (`_E2_CONSOLIDATED_ELIGIBLE_KINDS` / `_resolve_consolidated_e2_target`) fires only in PUBLISHED phase
+  (Target Ref `meta.target_branch` DELETED + baseline + completion). #5171's verdict landed on
+  `kitty/mission-<slug>` ⇒ phase was CONSOLIDATED ⇒ the coordination branch ref is the correct read
+  source. `coord_read_dir_for` fail-softs to `None` when the worktree is gone, so the current review CLI
+  reproduces #5171's residue read. No existing primitive reads blob content off a ref (grep of
+  `mission_runtime` found only branch-name/topology resolution). This is `[build]`, not adoption.
+- **Read/write co-authority (critical)**: driving the read off `resolve_lifecycle_phase` guarantees the
+  read targets exactly where the write landed — hardcoding the coord branch (or primary) would create
+  an inverse divergence bug in the opposite phase.
+- **Caveat**: because the phase reader probes `meta.target_branch` (often a durable trunk like `main`,
+  never deleted), PUBLISHED/E2 may never fire for such missions ⇒ phase stays CONSOLIDATED ⇒ post-merge
+  verdicts always route to the coordination branch. IC-01a must not assume E2 fires on "merged".
+- **Alternatives considered**: require `--retain-worktrees` (rejected — changes workflow, doesn't close
+  the class); materialize a throwaway worktree at read time (rejected — slow, side-effecting, violates
+  the <2s bar); hardcode the coordination branch ref (rejected — diverges from the write in PUBLISHED
+  phase).
 
 ## D3 — Merge mirrors move-task's terminal-verdict rule
 
@@ -42,17 +54,20 @@ architecture decisions. No open `NEEDS CLARIFICATION` markers.
   behavioral coupling, out of scope); block on `warn` too (rejected — contradicts existing
   `merge_gates.mode` conventions).
 
-## D4 — Deterministic deleted-vs-unmaterialized boundary; fail closed
+## D4 — Fail-closed on the resolved ref; #4959 carve-out
 
-- **Decision**: Distinguish states by `git rev-parse --verify refs/heads/<coordination_branch>`:
-  ref present + no worktree ⇒ read from ref (D2); ref absent ⇒ deleted, fail closed; ref present but
-  content probe errors ⇒ fail closed on a distinct path; empty authored set with live references ⇒
-  fail closed (never "nothing to enforce").
-- **Rationale**: Avoids conflating "deleted" with a transient probe error (both refuse, but for
-  different, separately-tested reasons). Fail-open is the worse failure mode (vacuous PASS), so every
-  ambiguity resolves to refusal (NFR-002).
-- **Alternatives considered**: catch-all exception → "deleted" (rejected — hides probe errors and
-  produces a misleading diagnostic).
+- **Decision**: After the phase authority (D2) selects the surface, check existence via
+  `git rev-parse --verify` / `coord_branch_has_committed_artifact`: resolved ref present ⇒ read content;
+  ref absent ⇒ fail closed (deleted leg); content probe errors ⇒ fail closed on a distinct path; empty
+  authored set with live references ⇒ fail closed (never "nothing to enforce"). The UNMATERIALIZED
+  ref-read is carved for ISSUE_MATRIX **only** — the deliberate #4959 `CoordinationWorktreeUnmaterialized`
+  raise in `_classify_artifact_surface` MUST still fire for the other coord kinds (TRACER_FILE,
+  REVIEW_CYCLE, ACCEPTANCE_MATRIX, STATUS_STATE), with a non-regression guard.
+- **Rationale**: Avoids conflating "deleted" with a transient probe error (both refuse, separately
+  tested). Fail-open is the worse mode (vacuous PASS), so every ambiguity refuses (NFR-002). The #4959
+  carve-out prevents the deep read from regressing the tracer-clobber fix for other kinds.
+- **Alternatives considered**: catch-all exception → "deleted" (rejected — hides probe errors);
+  removing the UNMATERIALIZED raise for all kinds (rejected — regresses #4959).
 
 ## D5 — Non-vacuous regression guard
 

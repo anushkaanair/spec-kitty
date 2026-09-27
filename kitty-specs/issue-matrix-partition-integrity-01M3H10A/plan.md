@@ -111,25 +111,38 @@ tests/
 > IC-01b → IC-02/IC-03 edge is load-bearing (the gate consumers cannot read post-consolidation
 > content until the readers accept a ref-content source), not incidental.
 >
-> **⚠ MAJOR-3 precondition (open):** a focused investigation is reconciling where a
-> post-consolidation issue-matrix verdict is actually WRITTEN — the coordination branch ref
-> (per #5171's observed `surface=kitty/mission-<slug>`) vs the CONSOLIDATED PRIMARY surface (per
-> `_E2_CONSOLIDATED_ELIGIBLE_KINDS` / `_resolve_consolidated_e2_target`, resolution.py:154-162).
-> IC-01a's read MUST target the same surface the write path uses, or it introduces an inverse
-> read/write-divergence bug. The read-target below is provisional pending that finding; if the
-> write routes to consolidated-primary once the coord branch is deleted, IC-01a resolves
-> branch-ref-when-retained AND consolidated-primary-when-deleted rather than only the ref.
+> **MAJOR-3 resolved (read surface = lifecycle-phase authority, matching the write).** The write
+> surface is chosen by `resolve_lifecycle_phase` (`src/mission_runtime/lifecycle_phase.py:220-273`),
+> NOT by coord-worktree materialization. The E2 consolidated-primary routing
+> (`_E2_CONSOLIDATED_ELIGIBLE_KINDS` / `_resolve_consolidated_e2_target`, resolution.py:154-208)
+> fires ONLY in `PUBLISHED` phase, which requires the **Target Ref (`meta.target_branch`, the
+> planning branch — distinct from `meta.coordination_branch`) to be DELETED** + baseline +
+> completion evidence. In `CONSOLIDATED`/`PRE_CONSOLIDATION` phase on a coord topology, writes route
+> to the coordination branch ref (`destination_ref`, resolution.py:1442-1443,1674) — this is #5171's
+> case (write reported `surface=kitty/mission-<slug>`). **Therefore IC-01a MUST resolve the read
+> surface through the SAME authority as the write** (`resolve_lifecycle_phase` /
+> `resolve_placement_only` via `PlacementSeam`/`resolve_artifact_surface`), never hardcoding coord or
+> primary: PUBLISHED ⇒ read consolidated-primary ref; CONSOLIDATED/PRE_CONSOLIDATION coord ⇒ read the
+> coordination branch ref. Reading the wrong one is the inverse read/write-divergence bug.
+>
+> **Caveat (durable-trunk missions):** because the phase reader probes `meta.target_branch` (often a
+> durable trunk like `main`, never deleted), PUBLISHED/E2 may never fire for such missions ⇒ phase
+> stays `CONSOLIDATED` ⇒ post-merge verdicts always route to the retained coordination branch. IC-01a
+> must not assume E2 fires simply because a mission is "merged"; the trigger is Target Ref deletion.
 
 ### IC-01a — Coordination-branch-ref content read primitive (the deep primitive)
 
-- **Purpose**: Add a NEW function in the seam that returns ISSUE_MATRIX **content** (bytes/text) from
-  the coordination branch ref (`git show <ref>:<path>`) when the coord worktree is
-  unmaterialized-but-retained; fail closed on a deleted ref, a probe error, or an empty authored set
-  while gating references exist.
+- **Purpose**: Add a NEW function in the seam that returns ISSUE_MATRIX **content** (bytes/text) read
+  from a git ref (`git show <ref>:<path>`) when the artifact has no on-disk worktree, resolving the
+  **ref via the same lifecycle-phase authority the write path uses** (`resolve_lifecycle_phase` →
+  PUBLISHED: consolidated-primary ref; CONSOLIDATED/PRE_CONSOLIDATION coord: coordination branch ref).
+  Never hardcode coord or primary. Fail closed on a deleted ref, a probe error, or an empty authored
+  set while gating references exist.
 - **Relevant requirements**: FR-005, FR-007, NFR-002, NFR-003.
-- **Affected surfaces**: `src/mission_runtime/resolution.py` — a NEW ref-content function; **do not**
-  mutate `coord_read_dir_for`/`resolve_artifact_surface`'s existing `Path`/dir semantics (7+
-  consumers depend on them — MINOR-7). Reuse `coord_branch_has_committed_artifact`
+- **Affected surfaces**: `src/mission_runtime/resolution.py` — a NEW ref-content read that drives off
+  `resolve_lifecycle_phase`/`resolve_placement_only` (the write authority), so read and write can
+  never diverge; **do not** mutate `coord_read_dir_for`/`resolve_artifact_surface`'s existing
+  `Path`/dir semantics (7+ consumers depend on them — MINOR-7). Reuse `coord_branch_has_committed_artifact`
   (`coordination/surface_resolver.py:717`) for existence-on-ref rather than a new `git ls-tree`.
 - **#4959 carve-out (MAJOR-2)**: `_classify_artifact_surface` currently RAISES
   `CoordinationWorktreeUnmaterialized` on `CoordState.UNMATERIALIZED` for **all** coord kinds

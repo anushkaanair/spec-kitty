@@ -38,32 +38,51 @@ git state are modelled to make the resolution/enforcement rules precise.
 - **Rule**: reference discovery always reads PRIMARY; matrix verdicts read the matrix's owning
   partition (COORD on coord topology).
 
-### CoordinationBranchRef (state machine)
+### LifecyclePhase (the surface-selection authority)
 
-The state a consumer must classify before reading a COORD-owned artifact post-consolidation:
+The read surface is chosen by `resolve_lifecycle_phase` — the SAME authority the write path uses — so
+read and write can never diverge. It is driven by durable git signals, NOT by coord-worktree
+materialization:
 
 ```
-                 git rev-parse --verify refs/heads/<coord-branch>
-                              │
-              ┌───────────────┴───────────────┐
-          ref present                      ref absent
-              │                                │
-      ┌───────┴────────┐                  DELETED
-  worktree present   worktree absent      → fail closed (FR-007 deleted leg)
-      │                  │
-  MATERIALIZED       UNMATERIALIZED_RETAINED
-  → read worktree    → read from branch ref: git show <ref>:<path>  (FR-005)
-                          │
-                  ┌───────┴────────┐
-              probe ok          probe errors
-                  │                  │
-          content resolved      PROBE_ERROR → fail closed (FR-007 probe leg)
-                  │
-          empty authored set + live references → fail closed (FR-007 empty leg)
+                 baseline_merge_commit present?
+                        │
+             ┌──────────┴───────────┐
+            no                      yes
+             │                       │
+      PRE_CONSOLIDATION   Target Ref (meta.target_branch) exists?
+      (coord topology →         │
+       read coord branch   ┌────┴─────┐
+       ref)               yes         no
+                           │           │
+                     CONSOLIDATED   completion evidence (mission_number OR all WPs done)?
+                     (coord →         │
+                      read coord   ┌──┴───┐
+                      branch ref)  yes    no
+                      #5171 case    │      │
+                              PUBLISHED  PRE_CONSOLIDATION
+                              (E2 → read
+                               consolidated
+                               PRIMARY ref)
 ```
 
-- **Invariant (fail-closed)**: any ambiguity (DELETED, PROBE_ERROR, empty-with-references) resolves
-  to a refusal, never a fallback to the PRIMARY residue and never a vacuous PASS (NFR-002).
+- **#5171 is the CONSOLIDATED case**: coord branch retained, Target Ref (planning branch) still
+  present ⇒ verdict written to (and read from) the coordination branch ref.
+- **Caveat**: `meta.target_branch` is the planning branch (distinct from `meta.coordination_branch`);
+  for a mission targeting a durable trunk (`main`) it is never deleted ⇒ phase stays CONSOLIDATED ⇒
+  post-merge verdicts always route to the coordination branch. PUBLISHED/E2 only engages for missions
+  whose Target Ref is a deletable per-mission branch.
+
+### Read source resolution & fail-closed
+
+Given the phase, the consumer reads the artifact **content** from the resolved ref (`git show
+<ref>:<path>`; existence via `git rev-parse --verify` / `coord_branch_has_committed_artifact`):
+
+- **PUBLISHED** ⇒ consolidated PRIMARY ref (`_resolve_consolidated_e2_target`).
+- **CONSOLIDATED / PRE_CONSOLIDATION** (coord topology) ⇒ coordination branch ref.
+- **Materialized worktree present** ⇒ the on-disk directory (unchanged fast path).
+- **Fail-closed (NFR-002)**: resolved ref absent (deleted), content probe error, or empty authored set
+  while gating references exist ⇒ REFUSE — never fall back to PRIMARY residue, never a vacuous PASS.
 
 ### ResolvedSurface (existing)
 
