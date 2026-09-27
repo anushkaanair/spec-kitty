@@ -137,7 +137,7 @@ from this table rather than missing coverage.
 | C-004 (no silent `GITHUB_TOKEN` fallback) | WP02 | T012, T014 (fixture 5) | the truthy check never falls back to `GH_TOKEN`/`GITHUB_TOKEN`; fixture 5 proves the loud-failure path |
 | C-005 (no absolute local paths / credentials in committed artifacts) | WP01, WP02, WP03 | (all) | reviewer/self-check: `grep -rn "/home/" <touched files>` before each WP is marked done |
 | C-006 (concurrency-guarded) | WP03 | T016 | `concurrency: {group: ci-charter-shard-recapture, cancel-in-progress: false}` — static group, per plan.md item (b)'s rationale (a topic-branch rehearsal dispatch and a `main` cron run both push to the same fixed branch) |
-| Ruling: fixed head branch `ci/recapture-charter-shard-timings`, skip-if-open (not force-update) | WP02 | T011, T013 | the `gh pr list --base main` query restricts candidates to PRs against `main`; `find_open_recapture_pr` then matches on `headRefName == ci/recapture-charter-shard-timings` among those results; when found, the job writes one job-summary line and performs no push/force-push/comment/open |
+| Ruling: fixed head branch `ci/recapture-charter-shard-timings`, skip-if-open (not force-update) | WP02 | T011, T013 | the `gh pr list --head ci/recapture-charter-shard-timings --base main` query already restricts candidates by BOTH head and base at the CLI level; `find_open_recapture_pr`'s own `headRefName == ci/recapture-charter-shard-timings` check is then a defense-in-depth re-check of the (already-filtered) results, not the primary filter — this is also what makes the pure function unit-testable via injected fixtures 1/2 (T014), which construct JSON payloads independent of what any real `gh` call would return; when found, the job writes one job-summary line and performs no push/force-push/comment/open |
 | Ruling: FR-010 carries no identity-matching coupling to FR-007 | WP02 | T013 | commit/PR template text is independent of the branch-based open-PR check; no cross-requirement coupling in the code |
 | Plan ruling: fixture proving an ordinary failing test does not abort commit/PR (PLAN-FRESH2-001) | WP02 | T015 (fixture 10) | `test_ordinary_failure_continues_to_drift_check` (or equivalently named) |
 | Plan ruling: static concurrency group, real rationale (PLAN-FRESH2-002) | WP03 | T016 | concurrency group is static, not `${{ github.ref }}`-suffixed — WP03's task text states the rehearsal-vs-`main` rationale verbatim |
@@ -179,13 +179,24 @@ from this table rather than missing coverage.
 **Priority**: P1 (User Stories 1, 3) | **Dependencies**: none | **Parallel with**: WP02
 **Requirements**: FR-001, FR-002, FR-003, FR-004; C-001, C-002; NFR-001 (code-shape half)
 
-Subtasks: T001, T002, T003, T004, T005, T006, T007, T008 (8 subtasks, ~350-450 estimated lines —
-at the upper end, because T004 and T005 are kept as two separate subtasks rather than merged into
-one, even though each is individually small. Each pins one of `_charter_disposition`'s two
-distinct dispositions as an independently-checkable red-first fixture — T004 the disagreement
-case, T005 the agreement case — not padding: a reviewer can confirm each disposition landed and
-stays correct on its own, which a single merged subtask covering "the two `_charter_disposition`
-unit tests" would blur into one combined pass/fail signal instead of two.).
+Subtasks: T001, T002, T003, T004, T005, T006, T007, T008 (8 subtasks, ~350-450 estimated lines).
+
+This is reconciled against
+`packs/built-in/missions/mission-steps/software-dev/tasks/guidelines.md`'s subtask-granularity
+guidance: "Aim for 3–7 subtasks per WP and 200–500 lines per WP prompt. Prefer splitting an
+oversized WP over padding a small one." WP01's subtask count (8) is one over the 3-7 guideline as
+literally written; its line estimate (~350-450) sits within the 200-500 range. WP01 is kept at 8
+subtasks — not merged down to 7, not split into two WPs — because T004 and T005 each pin one of
+`_charter_disposition`'s two distinct dispositions as an independently-checkable red-first
+fixture: T004 the disagreement case, T005 the agreement case. Merging them into one subtask
+covering "the two `_charter_disposition` unit tests" would satisfy the count guideline but blur
+the pass/fail signal — a reviewer could confirm only that the merged subtask as a whole passed,
+not that each disposition independently landed and stays correct. Splitting into two WPs is
+rejected too: every one of the 8 subtasks operates on the single file
+`tests/architectural/test_module_length_agreement.py` through one shared pure helper
+(`_charter_disposition`), so a second WP would either duplicate ownership of that file or carve an
+artificial boundary with no real design seam behind it. One subtask over the guideline's aim-for
+ceiling, spent on keeping two dispositions independently falsifiable, is judged the smaller cost.
 
 Owns `tests/architectural/test_module_length_agreement.py` only. This is the **first and only** WP
 to touch this file, so it carries the mandatory RED-FIRST baseline (T001) before its own edit.
@@ -218,7 +229,8 @@ This combined figure is reconciled against
 guidance: "Aim for 3–7 subtasks per WP and 200–500 lines per WP prompt. Prefer splitting an
 oversized WP over padding a small one." (Note on denominator: that guideline's "lines per WP
 prompt" wording literally means the `tasks/WPnn-*.md` prompt document's own length — WP02's
-actual committed prompt file is 433 lines, within the 200-500 range as literally written — but
+actual committed prompt file is 441 lines (`wc -l`, re-verified at fix time), within the 200-500
+range as literally written — but
 tasks.md's "estimated lines" figures for all three WPs have consistently tracked the underlying
 *implementation* diff size instead, so that is the reading reconciled here, since implementation
 size is what actually bears on a split-or-keep decision.) WP02's subtask count (7) is within the

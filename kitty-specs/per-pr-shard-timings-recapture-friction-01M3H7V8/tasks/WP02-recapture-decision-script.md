@@ -204,10 +204,14 @@ this WP).
   Separately, implement (or fold into `main()`, T013) the actual `subprocess` call that produces
   `open_prs`:
   ```
-  gh pr list --repo <owner/repo> --head ci/recapture-charter-shard-timings --base main --state open --json number
+  gh pr list --repo <owner/repo> --head ci/recapture-charter-shard-timings --base main --state open --json number,headRefName
   ```
   authenticated with `GH_TOKEN` set to `CHARTER_SHARD_RECAPTURE_TOKEN` (never `GITHUB_TOKEN`). An
-  empty JSON array means no open PR.
+  empty JSON array means no open PR. Both JSON fields are required, not just `number`:
+  `find_open_recapture_pr` reads `headRefName` to do its own match, and the caller needs `number`
+  to report/return the matched PR's number — requesting `--json number` alone would leave every
+  `pr.get("headRefName")` call returning `None`, silently disabling the head-branch match (and
+  therefore FR-007's skip-if-open behavior) in every real invocation.
 - **Files**: `scripts/ci/recapture_charter_shard_timings.py`.
 - **Parallel?**: Independent of T009/T010/T012.
 - **Notes**: Keep `find_open_recapture_pr` pure (list-of-dicts in, `int | None` out) so fixtures 1
