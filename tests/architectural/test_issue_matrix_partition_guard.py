@@ -21,6 +21,13 @@ Rules (count of violations must be 0 — NFR-001):
 * **Python, discovery dir fed to the matrix read** — the issue-matrix readers
   are never handed ``feature_dir`` (the primary discovery dir).
 * **Python, split bypass** — every guarded gate function calls the helper.
+* **Python, helper unpack** — every helper call is unpacked positionally as
+  ``<discovery_dir>, <matrix_source> = ...``; a swapped or indexed result trips.
+* **Python, taint** — values derived from the discovery dir (a discovery
+  name, ``<obj>.feature_dir``, or a hand-built ``"kitty-specs"`` path) never
+  reach a matrix sink or a matrix-location local, except the two sites pinned
+  in ``ALLOWED_TAINTS``. Known, accepted limitation: loop targets
+  (``for matrix_dir in ...``) are not tracked.
 * **Doctrine** — no executable raw read (``cat``/``jq``/``head``/... of an
   ``issue-matrix`` file) in a fenced block, and an inline raw-read span only
   inside an explicit prohibition ("Do NOT ...").
@@ -114,8 +121,11 @@ ALLOWED_TAINTS: tuple[AllowedTaint, ...] = (
 _MATRIX_FILE_RE = re.compile(r"issue-matrix\.(?:json|md)")
 _HAND_BUILT_PATH_RE = re.compile(r"kitty-specs/[^\s\"'`]*issue-matrix")
 _RAW_READ_RE = re.compile(r"\b(?:cat|less|more|head|tail|jq|bat|yq|sed|awk|grep|open)\b[^`\n]*issue-matrix\.(?:json|md)")
-_PROHIBITION_RE = re.compile(r"\b(?:do not|don't|never)\b", re.IGNORECASE)
-_PROHIBITION_MAX_WORDS = 4
+# The prohibition must govern the command directly: "Do NOT `cat ...`",
+# "never run `cat ...`" -- not "Don't forget to `cat ...`".
+_PROHIBITION_CLAUSE_RE = re.compile(r"^\s*(?:do not|don't|never)\s+(?:run\s+|use\s+|call\s+)?$", re.IGNORECASE)
+# A path segment that hand-rebuilds a mission dir instead of asking the helper.
+_MISSION_ROOT_SEGMENT = "kitty-specs"
 _FENCE_RE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 
@@ -163,9 +173,26 @@ _MATRIX_LOCATION_TARGETS = RESOLVED_MATRIX_NAMES | {"feature_dir_for_blocker", "
 
 @dataclass(frozen=True)
 class _Assignment:
-    node: ast.Assign | ast.AnnAssign
+    node: ast.stmt
     target: str
+    value: ast.expr | None
     guards: tuple[str, ...]
+
+
+def _pair_targets(stmt: ast.stmt, target: ast.expr, value: ast.expr, guards: tuple[str, ...]) -> list[_Assignment]:
+    """Name targets paired with their value; ``a, b = x, y`` pairs elementwise.
+
+    Any other tuple unpack (``a, b = f()``) gives every name the whole value,
+    so taint spreads conservatively. The helper's own unpack is policed
+    positionally by :func:`_helper_unpack_violations`.
+    """
+    if isinstance(target, ast.Name):
+        return [_Assignment(stmt, target.id, value, guards)]
+    if not isinstance(target, (ast.Tuple, ast.List)):
+        return []
+    if isinstance(value, (ast.Tuple, ast.List)) and len(value.elts) == len(target.elts):
+        return [a for t, v in zip(target.elts, value.elts, strict=True) for a in _pair_targets(stmt, t, v, guards)]
+    return [a for t in target.elts for a in _pair_targets(stmt, t, value, guards)]
 
 
 def _collect_assignments(stmts: list[ast.stmt], guards: tuple[str, ...] = ()) -> list[_Assignment]:
@@ -179,10 +206,10 @@ def _collect_assignments(stmts: list[ast.stmt], guards: tuple[str, ...] = ()) ->
             found += _collect_assignments(stmt.body, (*guards, test))
             found += _collect_assignments(stmt.orelse, (*guards, f"not ({test})"))
             continue
-        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1 and isinstance(stmt.targets[0], ast.Name):
-            found.append(_Assignment(stmt, stmt.targets[0].id, guards))
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+            found += _pair_targets(stmt, stmt.targets[0], stmt.value, guards)
         elif isinstance(stmt, ast.AnnAssign) and stmt.value is not None and isinstance(stmt.target, ast.Name):
-            found.append(_Assignment(stmt, stmt.target.id, guards))
+            found.append(_Assignment(stmt, stmt.target.id, stmt.value, guards))
         for field in ("body", "orelse", "finalbody"):
             found += _collect_assignments(getattr(stmt, field, None) or [], guards)
         for handler in getattr(stmt, "handlers", None) or []:
@@ -190,12 +217,23 @@ def _collect_assignments(stmts: list[ast.stmt], guards: tuple[str, ...] = ()) ->
     return found
 
 
+def _is_tainting(node: ast.AST, names: set[str]) -> bool:
+    """A single node that carries the primary partition into an expression."""
+    if isinstance(node, ast.Name):
+        return node.id in names
+    if isinstance(node, ast.Attribute):  # ``resolved.feature_dir``
+        return node.attr in DISCOVERY_DIR_NAMES
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):  # ``repo_root / "kitty-specs" / slug``
+        return node.value == _MISSION_ROOT_SEGMENT or node.value.startswith(f"{_MISSION_ROOT_SEGMENT}/")
+    return False
+
+
 def _mentions(node: ast.AST | None, names: set[str]) -> bool:
-    return node is not None and any(isinstance(n, ast.Name) and n.id in names for n in ast.walk(node))
+    return node is not None and any(_is_tainting(n, names) for n in ast.walk(node))
 
 
 def _value_src(assignment: _Assignment) -> str:
-    return ast.unparse(assignment.node.value) if assignment.node.value is not None else ""
+    return ast.unparse(assignment.value) if assignment.value is not None else ""
 
 
 def _allowed_taint(rel: str, function: str, assignment: _Assignment) -> AllowedTaint | None:
@@ -234,7 +272,7 @@ def _taint(rel: str, function: str, assignments: list[_Assignment], used: set[Al
     while changed:
         changed = False
         for assignment in assignments:
-            if assignment.target in tainted or not _mentions(assignment.node.value, tainted):
+            if assignment.target in tainted or not _mentions(assignment.value, tainted):
                 continue
             entry = _allowed_taint(rel, function, assignment)
             if entry is not None:
@@ -266,16 +304,52 @@ def _scope_violations(rel: str, function: str, stmts: list[ast.stmt], used: set[
     found = [
         Violation(rel, a.node.lineno, "partition-swap", f"{function}(): {a.target} = {_value_src(a)} puts the primary discovery dir in a matrix-location name")
         for a in assignments
-        if a.target in _MATRIX_LOCATION_TARGETS and a.target in tainted
+        if a.target in _MATRIX_LOCATION_TARGETS and a.target in tainted and _mentions(a.value, tainted)
     ]
+    docstrings = _docstring_ids(stmts)
     for node in _scope_nodes(stmts):
         base = _path_join_base(node)
         if isinstance(node, (ast.BinOp, ast.Call)) and base is not None and (_base_name(base) not in RESOLVED_MATRIX_NAMES or _mentions(base, tainted)):
             found.append(Violation(rel, node.lineno, "raw-path", f"{ast.unparse(node)} joins the matrix file onto a non-resolved dir"))
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str) and _HAND_BUILT_PATH_RE.search(node.value):
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in docstrings and _HAND_BUILT_PATH_RE.search(node.value):
             found.append(Violation(rel, node.lineno, "raw-path", f"string literal hand-builds an issue-matrix path: {node.value[:80]!r}"))
         elif isinstance(node, ast.Call) and _call_name(node) in MATRIX_SINKS and _mentions(_sink_arg(node), tainted):
             found.append(Violation(rel, node.lineno, "discovery-dir-read", f"{ast.unparse(node)} reads the matrix from the primary discovery dir"))
+    return found
+
+
+def _docstring_ids(stmts: list[ast.stmt]) -> set[int]:
+    """Docstring constants of a scope and its classes (prose, not path reads)."""
+    ids: set[int] = set()
+    for stmt in stmts:
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+            ids.add(id(stmt.value))
+        if isinstance(stmt, ast.ClassDef):
+            ids |= _docstring_ids(stmt.body)
+    return ids
+
+
+def _helper_unpack_violations(rel: str, tree: ast.AST) -> list[Violation]:
+    """Every helper call is unpacked positionally as ``<discovery>, <matrix> = ...``.
+
+    This pins the split's ORDER, so swapping the destructure (the likeliest
+    re-entry of #4943/#5171) or indexing into the result is a violation.
+    """
+    unpacked: set[int] = set()
+    found: list[Violation] = []
+    for node in ast.walk(tree):
+        if not (isinstance(node, ast.Assign) and isinstance(node.value, ast.Call) and _call_name(node.value) == HELPER_NAME):
+            continue
+        unpacked.add(id(node.value))
+        target = node.targets[0]
+        names = [e.id for e in target.elts if isinstance(e, ast.Name)] if isinstance(target, ast.Tuple) else []
+        if len(node.targets) != 1 or len(names) != 2 or names[0] not in DISCOVERY_DIR_NAMES or names[1] in DISCOVERY_DIR_NAMES:
+            found.append(
+                Violation(rel, node.lineno, "partition-swap", f"{ast.unparse(target)} = {HELPER_NAME}(...) must unpack as <discovery_dir>, <matrix_source>")
+            )
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and _call_name(node) == HELPER_NAME and id(node) not in unpacked:
+            found.append(Violation(rel, node.lineno, "partition-swap", f"{ast.unparse(node)} result used without the positional unpack"))
     return found
 
 
@@ -298,6 +372,7 @@ def scan_python(rel: str, source: str) -> list[Violation]:
     found: list[Violation] = []
     for function, stmts in _scopes(tree):
         found += _scope_violations(rel, function, stmts, used)
+    found += _helper_unpack_violations(rel, tree)
     found += _bypass_violations(rel, tree, HELPER_CALLERS.get(rel, ()))
     found += [
         Violation(rel, 0, "stale-allowlist", f"ALLOWED_TAINTS pin {entry} matches no site — remove it or restore the guarded site")
@@ -314,11 +389,12 @@ def _line_of(text: str, offset: int) -> int:
 def _is_prohibited_span(line: str, span_start: int) -> bool:
     """True only when a prohibition directly governs the span ("Do NOT `cat ...`").
 
-    The prohibition must sit in the same clause as the span, within a few
-    words of it, so "Never skip this: run `cat ...`" is still a violation.
+    The clause text before the span must be exactly the prohibition (plus an
+    optional run/use/call), so "Never skip `cat ...`" and "Don't forget to
+    `cat ...`" are still violations.
     """
     clause = re.split(r"[.:;!?]", line[:span_start])[-1]
-    return bool(_PROHIBITION_RE.search(clause)) and len(clause.split()) <= _PROHIBITION_MAX_WORDS
+    return bool(_PROHIBITION_CLAUSE_RE.match(clause))
 
 
 def scan_doctrine(rel: str, text: str) -> list[Violation]:
@@ -408,6 +484,11 @@ class TestSelfMutation:
             (REVIEW_GATE, "matrix_dir=matrix_dir,", "matrix_dir=feature_dir,"),
             (REVIEW_GATE, "issue_matrix_artifact_present(resolved_matrix_dir", "issue_matrix_artifact_present(feature_dir"),
             (REVIEW_GATE, 'issue_matrix_path = resolved_matrix_dir / "issue-matrix.md"', 'issue_matrix_path = feature_dir / "issue-matrix.md"'),
+            # Review cycle 2: attribute-held discovery dir and a hand-rebuilt mission dir.
+            (REVIEW_GATE, "matrix_dir=matrix_dir,", "matrix_dir=resolved.feature_dir,"),
+            (MERGE_GATES, "_load_issue_matrix_rows(coord_matrix_source)", '_load_issue_matrix_rows(repo_root / "kitty-specs" / mission_slug)'),
+            (REVIEW_GATE, "matrix_dir = matrix_source", 'matrix_dir = repo_root / "kitty-specs" / mission_slug'),
+            (REVIEW_GATE, "matrix_dir = matrix_source", "matrix_dir, _unused = _primary_discovery_dir, None"),
         ],
     )
     def test_partition_swap_in_fixed_code_trips(self, rel: str, old: str, new: str) -> None:
@@ -416,6 +497,55 @@ class TestSelfMutation:
         assert scan_python(rel, source) == []
         mutated = scan_python(rel, source.replace(old, new))
         assert [v for v in mutated if v.rule in {"partition-swap", "discovery-dir-read", "raw-path"}], f"partition swap {new!r} passed the guard in {rel}"
+
+    @pytest.mark.parametrize(
+        ("rel", "old", "new", "count"),
+        [
+            (
+                MERGE_GATES,
+                "primary_discovery_dir, coord_matrix_source = resolve_issue_matrix_partition(",
+                "coord_matrix_source, primary_discovery_dir = resolve_issue_matrix_partition(",
+                2,
+            ),
+            (
+                REVIEW_GATE,
+                "_primary_discovery_dir, matrix_source = resolve_issue_matrix_partition(",
+                "matrix_source, _primary_discovery_dir = resolve_issue_matrix_partition(",
+                1,
+            ),
+            (
+                REVIEW_GATE,
+                "_primary_discovery_dir, matrix_source = resolve_issue_matrix_partition(repo_root, mission_slug)",
+                "_primary_discovery_dir, matrix_source = resolve_issue_matrix_partition(repo_root, mission_slug)[::-1]",
+                1,
+            ),
+        ],
+    )
+    def test_swapped_helper_unpack_trips(self, rel: str, old: str, new: str, count: int) -> None:
+        # Review cycle 2: reversing the helper's (discovery, matrix) destructure
+        # is the likeliest way the partition swap comes back.
+        source = _read_guarded(rel)
+        assert source.count(old) == count, f"mutation anchor {old!r} drifted in {rel}; re-pin it"
+        swaps = [v for v in scan_python(rel, source.replace(old, new)) if v.rule == "partition-swap"]
+        assert len(swaps) >= count, f"swapped unpack passed the guard in {rel}"
+
+    def test_indexed_helper_result_trips(self) -> None:
+        source = (
+            _read_guarded(MERGE_GATES)
+            + "\n\ndef _injected(repo_root, mission_slug):\n    return _load_issue_matrix_rows(resolve_issue_matrix_partition(repo_root, mission_slug)[0])\n"
+        )
+        assert any(v.rule == "partition-swap" for v in scan_python(MERGE_GATES, source))
+
+    def test_docstring_mentioning_the_raw_path_is_not_a_violation(self) -> None:
+        # False-red guard: prose that warns against the raw read is not a read.
+        source = '"""Never read kitty-specs/<slug>/issue-matrix.json directly."""\n\n\ndef f():\n    """Nor kitty-specs/<slug>/issue-matrix.md."""\n'
+        assert scan_python("x.py", source) == []
+        assert scan_python("x.py", source + '\n_P = "kitty-specs/<slug>/issue-matrix.json"\n')
+
+    def test_clean_reassignment_of_a_tainted_name_is_not_reported(self) -> None:
+        source = "def f(feature_dir, matrix_source):\n    matrix_dir = feature_dir\n    matrix_dir = None\n    matrix_dir = matrix_source\n"
+        swaps = [v for v in scan_python("x.py", source) if v.rule == "partition-swap"]
+        assert [v.line for v in swaps] == [2]
 
     def test_allowlisted_taint_outside_its_guard_trips(self) -> None:
         # The pinned ``feature_dir_for_blocker = primary_discovery_dir`` is only
@@ -465,6 +595,9 @@ class TestSelfMutation:
         assert scan_doctrine("x.md", "Then `cat kitty-specs/s/issue-matrix.json` directly.\n")
         assert scan_doctrine("x.md", "Never skip this step: run `cat kitty-specs/s/issue-matrix.json` first.\n")
         assert scan_doctrine("x.md", "Do not forget to always run `cat kitty-specs/s/issue-matrix.json` first.\n")
+        assert scan_doctrine("x.md", "Don't forget to `cat kitty-specs/s/issue-matrix.json`.\n")
+        assert scan_doctrine("x.md", "Never skip `cat kitty-specs/s/issue-matrix.json`.\n")
+        assert scan_doctrine("x.md", "Never run `cat kitty-specs/s/issue-matrix.json` by hand.\n") == []
 
     def test_missing_gate4_section_fails_closed(self) -> None:
         with pytest.raises(pytest.fail.Exception):
