@@ -212,6 +212,13 @@ this WP).
   to report/return the matched PR's number — requesting `--json number` alone would leave every
   `pr.get("headRefName")` call returning `None`, silently disabling the head-branch match (and
   therefore FR-007's skip-if-open behavior) in every real invocation.
+  - **Supersession note (TASKS-FRESH2-001):** `plan.md`'s "Open-PR check (verbatim)" bullet
+    (item (b)) and its TOCTOU re-verification paragraph's restatement of this same `gh pr list`
+    command still show the pre-fix `--json number` field list (no `headRefName`). Both passages
+    predate this correction and are **superseded** by the `--json number,headRefName` command
+    above — this T011 section, not plan.md's now-stale sample, is authoritative for
+    implementation. `plan.md` itself is a PASSED artifact from a prior phase and is intentionally
+    left unedited; this note is the reconciliation instead.
 - **Files**: `scripts/ci/recapture_charter_shard_timings.py`.
 - **Parallel?**: Independent of T009/T010/T012.
 - **Notes**: Keep `find_open_recapture_pr` pure (list-of-dicts in, `int | None` out) so fixtures 1

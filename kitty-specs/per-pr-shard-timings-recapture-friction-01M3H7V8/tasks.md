@@ -137,7 +137,7 @@ from this table rather than missing coverage.
 | C-004 (no silent `GITHUB_TOKEN` fallback) | WP02 | T012, T014 (fixture 5) | the truthy check never falls back to `GH_TOKEN`/`GITHUB_TOKEN`; fixture 5 proves the loud-failure path |
 | C-005 (no absolute local paths / credentials in committed artifacts) | WP01, WP02, WP03 | (all) | reviewer/self-check: `grep -rn "/home/" <touched files>` before each WP is marked done |
 | C-006 (concurrency-guarded) | WP03 | T016 | `concurrency: {group: ci-charter-shard-recapture, cancel-in-progress: false}` — static group, per plan.md item (b)'s rationale (a topic-branch rehearsal dispatch and a `main` cron run both push to the same fixed branch) |
-| Ruling: fixed head branch `ci/recapture-charter-shard-timings`, skip-if-open (not force-update) | WP02 | T011, T013 | the `gh pr list --head ci/recapture-charter-shard-timings --base main` query already restricts candidates by BOTH head and base at the CLI level; `find_open_recapture_pr`'s own `headRefName == ci/recapture-charter-shard-timings` check is then a defense-in-depth re-check of the (already-filtered) results, not the primary filter — this is also what makes the pure function unit-testable via injected fixtures 1/2 (T014), which construct JSON payloads independent of what any real `gh` call would return; when found, the job writes one job-summary line and performs no push/force-push/comment/open |
+| Ruling: fixed head branch `ci/recapture-charter-shard-timings`, skip-if-open (not force-update) | WP02 | T011, T013 | the `gh pr list --head ci/recapture-charter-shard-timings --base main` query already restricts candidates by BOTH head and base at the CLI level; `find_open_recapture_pr`'s own `headRefName == ci/recapture-charter-shard-timings` check is then a defense-in-depth re-check of the (already-filtered) results, not the primary filter — this is also what makes the pure function unit-testable via injected fixtures 1/2 (T014), which construct JSON payloads independent of what any real `gh` call would return; when found, the job writes one job-summary line and performs no push/force-push/comment/open. **Pointer (TASKS-FRESH2-001):** `plan.md`'s "Open-PR check (verbatim)" bullet and its TOCTOU-paragraph restatement of the same `gh pr list` command still show the pre-fix `--json number` field list; both are superseded by WP02.md's T011 section, which specifies `--json number,headRefName` and is authoritative for implementation. |
 | Ruling: FR-010 carries no identity-matching coupling to FR-007 | WP02 | T013 | commit/PR template text is independent of the branch-based open-PR check; no cross-requirement coupling in the code |
 | Plan ruling: fixture proving an ordinary failing test does not abort commit/PR (PLAN-FRESH2-001) | WP02 | T015 (fixture 10) | `test_ordinary_failure_continues_to_drift_check` (or equivalently named) |
 | Plan ruling: static concurrency group, real rationale (PLAN-FRESH2-002) | WP03 | T016 | concurrency group is static, not `${{ github.ref }}`-suffixed — WP03's task text states the rehearsal-vs-`main` rationale verbatim |
@@ -184,8 +184,14 @@ Subtasks: T001, T002, T003, T004, T005, T006, T007, T008 (8 subtasks, ~350-450 e
 This is reconciled against
 `packs/built-in/missions/mission-steps/software-dev/tasks/guidelines.md`'s subtask-granularity
 guidance: "Aim for 3–7 subtasks per WP and 200–500 lines per WP prompt. Prefer splitting an
-oversized WP over padding a small one." WP01's subtask count (8) is one over the 3-7 guideline as
-literally written; its line estimate (~350-450) sits within the 200-500 range. WP01 is kept at 8
+oversized WP over padding a small one." (Note on denominator, mirroring WP02's own clarification
+below: that guideline's "lines per WP prompt" wording literally means the `tasks/WPnn-*.md` prompt
+document's own length — WP01's actual committed prompt file is 369 lines (`wc -l`, freshly
+re-measured), within the 200-500 range as literally written — but tasks.md's "estimated lines"
+figures for all three WPs have consistently tracked the underlying *implementation* diff size
+instead, so that is the reading reconciled here, matching WP02's denominator clarification.)
+WP01's subtask count (8) is one over the 3-7 guideline as literally written; its line estimate
+(~350-450, the implementation-size reading) sits within the 200-500 range. WP01 is kept at 8
 subtasks — not merged down to 7, not split into two WPs — because T004 and T005 each pin one of
 `_charter_disposition`'s two distinct dispositions as an independently-checkable red-first
 fixture: T004 the disagreement case, T005 the agreement case. Merging them into one subtask
@@ -229,7 +235,8 @@ This combined figure is reconciled against
 guidance: "Aim for 3–7 subtasks per WP and 200–500 lines per WP prompt. Prefer splitting an
 oversized WP over padding a small one." (Note on denominator: that guideline's "lines per WP
 prompt" wording literally means the `tasks/WPnn-*.md` prompt document's own length — WP02's
-actual committed prompt file is 441 lines (`wc -l`, re-verified at fix time), within the 200-500
+actual committed prompt file is 448 lines (`wc -l`, freshly re-measured after this round's T011
+supersession-note addition), within the 200-500
 range as literally written — but
 tasks.md's "estimated lines" figures for all three WPs have consistently tracked the underlying
 *implementation* diff size instead, so that is the reading reconciled here, since implementation
