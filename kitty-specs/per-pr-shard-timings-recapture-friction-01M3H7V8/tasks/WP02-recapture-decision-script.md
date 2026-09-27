@@ -12,6 +12,7 @@ requirement_refs:
 - C-001
 - C-003
 - C-004
+- C-005
 - C-006
 planning_base_branch: issue-5189-per-pr-shard-timings-recapture-friction
 merge_target_branch: issue-5189-per-pr-shard-timings-recapture-friction
@@ -423,6 +424,9 @@ this WP).
   (FR-010) — this is falsifiable by inspection, so check character-for-character.
 - Confirm `CHARTER_SHARD_RECAPTURE_TOKEN`'s value never appears in any print/log/commit-message/PR-body
   string — only its name does (NFR-003).
+- **C-005 self-check**: run `grep -rn "/home/" scripts/ci/recapture_charter_shard_timings.py
+  tests/ci/test_recapture_charter_shard_timings.py` and confirm no match, before marking this WP
+  done — no absolute local paths or credentials may land in these committed artifacts.
 
 ## Activity Log
 

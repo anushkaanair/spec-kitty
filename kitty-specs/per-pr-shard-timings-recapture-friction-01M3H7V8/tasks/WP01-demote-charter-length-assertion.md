@@ -9,6 +9,7 @@ requirement_refs:
 - FR-004
 - C-001
 - C-002
+- C-005
 - NFR-001
 planning_base_branch: issue-5189-per-pr-shard-timings-recapture-friction
 merge_target_branch: issue-5189-per-pr-shard-timings-recapture-friction
@@ -355,6 +356,9 @@ module other than `charter`.
   pre-demotion (hard-`assert`) version of the file — reviewer should mentally (or actually) revert
   T003 and confirm T007 goes red, proving it is not vacuous.
 - No compiler/typecheck step applies here (Python, no static typed-build gate beyond `ruff`).
+- **C-005 self-check**: run `grep -rn "/home/" tests/architectural/test_module_length_agreement.py`
+  and confirm no match, before marking this WP done — no absolute local paths or credentials may
+  land in this committed artifact.
 
 ## Activity Log
 

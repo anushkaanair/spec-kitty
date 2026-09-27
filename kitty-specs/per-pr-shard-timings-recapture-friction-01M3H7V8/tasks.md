@@ -18,10 +18,11 @@ given its own WP — see "IC-04 disposition" below.
 **ONE PR for the whole mission.** Per plan.md's own file list (one edited test file, one new
 script + its unit-test file, one new workflow file, plus a one-line docs addendum), the total diff
 is small (~15-line behavioural edit + 4 new tests in one existing file; one new ~150-250-line
-script; one matching unit-test file; one new ~60-80-line workflow YAML; a 1-2 line docs edit) and
-is reviewable in one sitting on `main`. This matches spec-kitty's own default (one PR per mission);
-nothing here argues for a split. This is an explicit judgment call, stated per the dispatch's
-instruction, not a silent default.
+script; one matching ~280-320-line unit-test file — 11 fixtures, estimated from WP02's own
+fixture list, see WP02's section below for the derivation; one new ~60-80-line workflow YAML; a
+1-2 line docs edit) and is reviewable in one sitting on `main`. This matches spec-kitty's own
+default (one PR per mission); nothing here argues for a split. This is an explicit judgment call,
+stated per the dispatch's instruction, not a silent default.
 
 ---
 
@@ -106,24 +107,28 @@ than leaving it to the PR body alone.
 
 ## FR / NFR / Constraint / Ruling traceability
 
-Every FR in spec.md, every NFR, every Constraint, and every operator ruling point is mapped below
-to a concrete WP task with a concrete test (or, for FR-009/FR-010/NFR-001, a concrete inspection
-point plan.md itself designates as "no-op passable: yes" / verified by code-shape inspection, not a
-dedicated fixture).
+Every FR in spec.md, every NFR, every Constraint, and every operator ruling point that carries a
+code-facing consequence is mapped below to a concrete WP task with a concrete test (or, for
+FR-009/FR-010/NFR-001, a concrete inspection point plan.md itself designates as "no-op passable:
+yes" / verified by code-shape inspection, not a dedicated fixture). Four operator rulings —
+PLAN-FRESH2-003 through PLAN-FRESH2-006 — are resolved entirely in plan.md's own prose (the TOCTOU
+sequencing paragraph, the fixture-tested/code-shape-inspection split, and the accepted-residual-cost
+paragraph) with no separate code-landing WP task required, and are therefore intentionally absent
+from this table rather than missing coverage.
 
 | Requirement / ruling point | WP | Task(s) | How it is verified |
 |---|---|---|---|
-| FR-001 (demote to non-blocking) | WP01 | T003, T007 | `test_charter_disposition_flags_length_disagreement`, `test_charter_is_not_allowlisted_and_agrees_xfails_on_disagreement` |
+| FR-001 (demote to non-blocking) | WP01 | T004, T007 | `test_charter_disposition_flags_length_disagreement`, `test_charter_is_not_allowlisted_and_agrees_xfails_on_disagreement` |
 | FR-002 (charter stays out of `_MISMATCH_ALLOWLIST`) | WP01 | T003, T008 | unchanged hard `assert "charter" not in _MISMATCH_ALLOWLIST` kept in the test body; diff review in T008 |
 | FR-003 (4 untouched tests + 19-entry allowlist byte-identical) | WP01 | T008 | diff review confirms no edit to `test_allowlist_does_not_exceed_baseline` / `test_allowlisted_modules_still_genuinely_mismatch` / `test_allowlist_entries_are_real_registry_modules` / `test_non_allowlisted_modules_agree_with_live_collection` bodies (SC-006) |
 | FR-004 (visible drift + infra-break still fails) | WP01 | T004, T005, T006 | `test_charter_disposition_flags_length_disagreement` (disagree), `test_charter_disposition_is_none_on_agreement` (agree), `test_load_timings_fails_loudly_when_artefact_missing` (infra-break) |
 | FR-005 (named secret, truthy check, fail-loud before anything else) | WP02 | T012, T014 (fixture 5) | `main()`'s first action is the truthy secret check; fixture 5's two sub-cases (empty-string, fully-unset) both assert the capture-wrapper AND the open-PR-check callables are never invoked |
 | FR-006 (no PR when no drift) | WP02 | T010, T014 (fixtures 3, 6) | `has_drift(N, N)` is `False`; `has_drift(N, M)` is `True` and triggers the push callable |
-| FR-007 (skip if a recapture PR is already open) | WP02 | T011, T013, T014 (fixtures 1, 2, 7) | open-PR matcher returns the PR number only for the fixed head branch; fixture 2 proves an unrelated PR on a different head is never matched; fixture 7 (TOCTOU re-check) proves a PR appearing between the initial check and the push still aborts the push |
-| FR-008 (mechanism failure aborts; ordinary test failure does not) | WP02 | T009, T015 (fixtures 4, 8, 9, 10) | `run_capture_or_die` catches `(Exception, SystemExit)`, re-raises `KeyboardInterrupt`; fixtures 4/8/9 prove mechanism-crash aborts before commit/push/PR-open; fixture 10 proves an ordinary non-zero `pytest_exit_code` (no exception) proceeds to the drift check |
+| FR-007 (skip if a recapture PR is already open) | WP02 | T011, T013, T014 (fixtures 1, 2), T015 (fixture 7) | open-PR matcher returns the PR number only for the fixed head branch; fixture 2 proves an unrelated PR on a different head is never matched; fixture 7 (TOCTOU re-check) proves a PR appearing between the initial check and the push still aborts the push |
+| FR-008 (mechanism failure aborts; ordinary test failure does not) | WP02 | T009, T014 (fixture 4), T015 (fixtures 8, 9, 10) | `run_capture_or_die` catches `(Exception, SystemExit)`, re-raises `KeyboardInterrupt`; fixtures 4/8/9 prove mechanism-crash aborts before commit/push/PR-open; fixture 10 proves an ordinary non-zero `pytest_exit_code` (no exception) proceeds to the drift check |
 | FR-009 (charter-only scope, no `--module` flag) | WP02 | T009, T013 | `MODULE = "charter"` module-level constant; script exposes no `--module` CLI flag at all |
 | FR-010 (bot identity + fixed PR body/commit text) | WP02 | T013 | fixed commit author `spec-kitty-ci-bot <ci-bot@users.noreply.github.com>`, fixed commit message `chore(ci): automated charter shard-timings recapture`, fixed PR title/body template (verbatim in plan.md item (d)) |
-| NFR-001 (gate protects shard balance, not correctness) | WP01, WP03 | T003 (code shape), T017 (PR-body statement) | `module-tests.yml`'s uniform-weight fallback verified by inspection (plan.md item (d)); WP03's PR-body note states this explicitly |
+| NFR-001 (gate protects shard balance, not correctness) | WP01, WP03 | T003 (code shape), T019 (PR-body statement) | `module-tests.yml`'s uniform-weight fallback verified by inspection (plan.md item (d)); WP03's PR-body note states this explicitly |
 | NFR-002 (30-minute timeout budget; measured runtime recorded post-dispatch) | WP03 | T016, T019 | workflow `timeout-minutes: 30`; T019 flags the budget for revisit in the PR body after the first real dispatch |
 | NFR-003 (no credential leakage) | WP02 | T012, T013 | secret value never interpolated into commit/PR/log text; only the secret's **name** appears in error paths |
 | C-001 (charter-only scope) | WP01, WP02 | T003, T009 | WP01's demotion touches only the `charter` assertion; WP02 hardcodes `MODULE = "charter"` |
@@ -132,13 +137,13 @@ dedicated fixture).
 | C-004 (no silent `GITHUB_TOKEN` fallback) | WP02 | T012, T014 (fixture 5) | the truthy check never falls back to `GH_TOKEN`/`GITHUB_TOKEN`; fixture 5 proves the loud-failure path |
 | C-005 (no absolute local paths / credentials in committed artifacts) | WP01, WP02, WP03 | (all) | reviewer/self-check: `grep -rn "/home/" <touched files>` before each WP is marked done |
 | C-006 (concurrency-guarded) | WP03 | T016 | `concurrency: {group: ci-charter-shard-recapture, cancel-in-progress: false}` — static group, per plan.md item (b)'s rationale (a topic-branch rehearsal dispatch and a `main` cron run both push to the same fixed branch) |
-| Ruling: fixed head branch `ci/recapture-charter-shard-timings`, skip-if-open (not force-update) | WP02 | T011, T013 | open-PR matcher checks head==`ci/recapture-charter-shard-timings` AND base==`main`; when found, the job writes one job-summary line and performs no push/force-push/comment/open |
+| Ruling: fixed head branch `ci/recapture-charter-shard-timings`, skip-if-open (not force-update) | WP02 | T011, T013 | the `gh pr list --base main` query restricts candidates to PRs against `main`; `find_open_recapture_pr` then matches on `headRefName == ci/recapture-charter-shard-timings` among those results; when found, the job writes one job-summary line and performs no push/force-push/comment/open |
 | Ruling: FR-010 carries no identity-matching coupling to FR-007 | WP02 | T013 | commit/PR template text is independent of the branch-based open-PR check; no cross-requirement coupling in the code |
 | Plan ruling: fixture proving an ordinary failing test does not abort commit/PR (PLAN-FRESH2-001) | WP02 | T015 (fixture 10) | `test_ordinary_failure_continues_to_drift_check` (or equivalently named) |
 | Plan ruling: static concurrency group, real rationale (PLAN-FRESH2-002) | WP03 | T016 | concurrency group is static, not `${{ github.ref }}`-suffixed — WP03's task text states the rehearsal-vs-`main` rationale verbatim |
 | Plan ruling: TOCTOU re-check fixture (fixture 7) | WP02 | T015 | `test_toctou_recheck_aborts_push` |
 | Plan ruling: truthy secret check, both empty-string and fully-unset sub-cases (PLAN-FRESH4-001) | WP02 | T014 (fixture 5) | both sub-cases fail loudly before any recapture/open-PR call |
-| Plan ruling: NFR-002 satisfied by post-dispatch PR-body update (PLAN-FRESH4-002) | WP03 | T019 | stated explicitly as a follow-up note in WP03's Definition of Done |
+| Plan ruling: NFR-002 satisfied by post-dispatch PR-body update (PLAN-FRESH4-002) | WP03 | T019 | stated explicitly as a PR-body note (T019 step 2) — WP03 has no separate "Definition of Done" section; the note lives in T019's own Subtasks & Detailed Guidance text |
 
 ---
 
@@ -174,7 +179,13 @@ dedicated fixture).
 **Priority**: P1 (User Stories 1, 3) | **Dependencies**: none | **Parallel with**: WP02
 **Requirements**: FR-001, FR-002, FR-003, FR-004; C-001, C-002; NFR-001 (code-shape half)
 
-Subtasks: T001, T002, T003, T004, T005, T006, T007, T008 (8 subtasks, ~350-450 estimated lines).
+Subtasks: T001, T002, T003, T004, T005, T006, T007, T008 (8 subtasks, ~350-450 estimated lines —
+at the upper end, because T004 and T005 are kept as two separate subtasks rather than merged into
+one, even though each is individually small. Each pins one of `_charter_disposition`'s two
+distinct dispositions as an independently-checkable red-first fixture — T004 the disagreement
+case, T005 the agreement case — not padding: a reviewer can confirm each disposition landed and
+stays correct on its own, which a single merged subtask covering "the two `_charter_disposition`
+unit tests" would blur into one combined pass/fail signal instead of two.).
 
 Owns `tests/architectural/test_module_length_agreement.py` only. This is the **first and only** WP
 to touch this file, so it carries the mandatory RED-FIRST baseline (T001) before its own edit.
@@ -188,10 +199,38 @@ to touch this file, so it carries the mandatory RED-FIRST baseline (T001) before
 **Requirements**: FR-005, FR-006, FR-007, FR-008, FR-009, FR-010; C-001, C-003, C-004, C-006;
 NFR-003
 
-Subtasks: T009, T010, T011, T012, T013, T014, T015 (7 subtasks, ~500-600 estimated lines — at the
-upper end because of the 11-fixture test file; kept as one WP rather than split, since every
-fixture exercises the same small set of pure functions and splitting would fragment a cohesive
-review).
+Subtasks: T009, T010, T011, T012, T013, T014, T015 (7 subtasks). Revised line estimate, derived
+from the actual artifacts rather than an assumed round number: the script itself is ~150-250 lines
+(per the "PR shape recommendation" section above); the accompanying 11-fixture test file
+(`tests/ci/test_recapture_charter_shard_timings.py`) is separately estimated at ~280-320 lines —
+derived from the fixture list itself (T014's 6 fixtures, one with two required sub-cases, plus
+T015's 5 fixtures = ~12 actual test functions), each needing setup for one or more injected fake
+callables (`capture_main`, `find_open_recapture_pr`, a "would-push" spy) plus multi-line
+assertions, shared imports/constants, fixture 5's two sub-cases, and fixture 11's multi-step
+mutate-then-reread sequence — pushing several fixtures well past this repo's own
+`tests/ci/test_stale_running_sweep.py` precedent (206 lines / 14 test functions, ~15 lines/test on
+average, mostly single-assertion tests with no fake-injection setup). Combined, WP02's realistic
+total is **~430-570 estimated lines** (script + test file), replacing the previously-stated flat
+"~500-600," which was an unsubstantiated round number not derived from either file.
+
+This combined figure is reconciled against
+`packs/built-in/missions/mission-steps/software-dev/tasks/guidelines.md`'s subtask-granularity
+guidance: "Aim for 3–7 subtasks per WP and 200–500 lines per WP prompt. Prefer splitting an
+oversized WP over padding a small one." (Note on denominator: that guideline's "lines per WP
+prompt" wording literally means the `tasks/WPnn-*.md` prompt document's own length — WP02's
+actual committed prompt file is 433 lines, within the 200-500 range as literally written — but
+tasks.md's "estimated lines" figures for all three WPs have consistently tracked the underlying
+*implementation* diff size instead, so that is the reading reconciled here, since implementation
+size is what actually bears on a split-or-keep decision.) WP02's subtask count (7) is within the
+3-7 guideline. Its implementation-line estimate (~430-570) sits within the 200-500 guideline at
+the low end and above it at the high end. WP02 is kept as **ONE WP** despite that: every one of
+the 11 fixtures exercises the same small set of pure functions (`has_drift`,
+`find_open_recapture_pr`, `run_capture_or_die`, and `main()`'s orchestration sequence) —
+splitting along fixture lines would force a reviewer to hold the same handful of functions' full
+behavioral contract open across two separate diffs, fragmenting a review surface that is
+inherently one cohesive unit. That is a real cost the guideline's "prefer splitting" default does
+not price in for this specific shape (many fixtures over few functions, not many concerns over
+many functions).
 
 Owns `scripts/ci/recapture_charter_shard_timings.py` (new) and
 `tests/ci/test_recapture_charter_shard_timings.py` (new). Both files are new — `create_intent`
@@ -229,7 +268,21 @@ red is explicitly an ORCHESTRATOR action per plan.md item (f), never a WP task.
 
 ## Next steps
 
-1. `spec-kitty agent mission finalize-tasks --validate-only --mission per-pr-shard-timings-recapture-friction-01M3H7V8 --json`
-2. `spec-kitty agent tasks map-requirements --batch '{"WP01":["FR-001","FR-002","FR-003","FR-004"],"WP02":["FR-005","FR-006","FR-007","FR-008","FR-009","FR-010"],"WP03":["NFR-002"]}' --mission per-pr-shard-timings-recapture-friction-01M3H7V8 --json`
-3. `spec-kitty agent mission finalize-tasks --mission per-pr-shard-timings-recapture-friction-01M3H7V8 --json`
-4. `/spec-kitty.analyze` (mandatory gate before any WP implementation claim).
+**Status as of this commit**: `finalize-tasks` has already run successfully — the committed
+`lanes.json` (`computed_at: '2026-09-27T22:06:42+00:00'`, `computed_from:
+'dependency_graph+ownership'`) landed in the same commit as this tasks.md and all three
+`tasks/WP*.md` files. All three WP files' `requirement_refs` frontmatter fields are already
+populated, and are richer than the `map-requirements --batch` payload below would have produced —
+e.g. WP01 already carries `C-001`/`C-002`/`NFR-001`, WP02 already carries
+`C-001`/`C-003`/`C-004`/`C-006`, WP03 already carries `C-003`/`C-005`/`C-006`, none of which the
+batch payload below lists.
+
+The only genuinely pending next step is:
+
+1. `/spec-kitty.analyze` (mandatory gate before any WP implementation claim).
+
+**Historical note — already executed; do not re-run unless a WP file changes:**
+
+- `spec-kitty agent mission finalize-tasks --validate-only --mission per-pr-shard-timings-recapture-friction-01M3H7V8 --json` — superseded by the real `finalize-tasks` run below.
+- `spec-kitty agent tasks map-requirements --batch '{"WP01":["FR-001","FR-002","FR-003","FR-004"],"WP02":["FR-005","FR-006","FR-007","FR-008","FR-009","FR-010"],"WP03":["NFR-002"]}' --mission per-pr-shard-timings-recapture-friction-01M3H7V8 --json` — superseded; the frontmatter already on disk is richer than this payload (see above).
+- `spec-kitty agent mission finalize-tasks --mission per-pr-shard-timings-recapture-friction-01M3H7V8 --json` — already run; see the committed `lanes.json`.

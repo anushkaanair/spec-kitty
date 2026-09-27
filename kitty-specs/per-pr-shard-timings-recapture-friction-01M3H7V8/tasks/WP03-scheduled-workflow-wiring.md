@@ -201,14 +201,29 @@ than the ones plan.md pins (below) — these are fixed decisions, not open choic
 - **Purpose**: PR #5190 (merged, docs-only) recorded this friction as a known-friction-points
   bullet and explicitly stated it does not close #5189. This mission is the actual fix — note the
   supersession so a future reader of that doc does not think the friction is still open.
-- **Steps**: Read `docs/development/reference/known-friction-points.md`, find the bullet PR #5190
-  added about this friction (per spec.md's Reflexivity section), and add a short note (1-2 lines)
-  immediately after it (or inline, whichever reads more naturally given the existing doc's format)
-  stating that this mission (spec-kitty#5189, `per-pr-shard-timings-recapture-friction`) resolves
-  the friction: the per-PR assertion is now non-blocking (`xfail`) and a scheduled workflow
-  (`.github/workflows/ci-charter-shard-recapture.yml`) keeps `charter`'s shard timings converging
-  automatically. Do not rewrite or remove the existing bullet — add the supersession note, since
-  the existing bullet is still historically accurate about the friction that existed.
+- **Steps**:
+  1. **First, check whether the bullet is actually present in your checkout — do not assume it
+     is.** Run `git log --oneline -- docs/development/reference/known-friction-points.md` and/or
+     read the current content of `docs/development/reference/known-friction-points.md` for a
+     mention of "shard", "recapture", "5189", or "5190". This mission's branch
+     (`issue-5189-per-pr-shard-timings-recapture-friction`) may have diverged from `main` before
+     PR #5190 merged, in which case the bullet PR #5190 added will not yet be in your working
+     tree.
+  2. **If the bullet IS present**: find it (per spec.md's Reflexivity section) and add a short note
+     (1-2 lines) immediately after it (or inline, whichever reads more naturally given the
+     existing doc's format) stating that this mission (spec-kitty#5189,
+     `per-pr-shard-timings-recapture-friction`) resolves the friction: the per-PR assertion is now
+     non-blocking (`xfail`) and a scheduled workflow
+     (`.github/workflows/ci-charter-shard-recapture.yml`) keeps `charter`'s shard timings
+     converging automatically. Do not rewrite or remove the existing bullet — add the supersession
+     note, since the existing bullet is still historically accurate about the friction that
+     existed.
+  3. **If the bullet is ABSENT** (this branch predates PR #5190's merge to `main`): either (a)
+     rebase/fast-forward this mission's branch onto current `main` first so the bullet becomes
+     present, then follow step 2 above; or (b), if a mid-mission rebase is out of scope at this
+     point, add BOTH the original friction bullet's content AND this mission's supersession note
+     together in one edit — never add only a supersession note pointing at a bullet that does not
+     exist in the file as the reader will see it.
 - **Files**: `docs/development/reference/known-friction-points.md` (existing file, edited — not
   created).
 - **Parallel?**: Independent of T016/T017 (different file) — can be done in any order relative to
@@ -242,6 +257,14 @@ than the ones plan.md pins (below) — these are fixed decisions, not open choic
   4. Note in the PR body (per spec.md's Reflexivity section) that the
      `docs/development/reference/known-friction-points.md` bullet PR #5190 added is now superseded
      by this mission's actual fix (T018's edit is the doc-side half of this note).
+  5. Add a PR-body sentence stating, near-verbatim: "The `schedule` (cron) trigger firing on its
+     own, and the recapture PR actually opening against the real `main` and running normal per-PR
+     CI, are only confirmable post-merge (GitHub only evaluates `schedule` triggers on the
+     workflow's copy on the default branch) — this PR's pre-merge testing covers the decision-logic
+     unit tests (WP02) and structural workflow-shape inspection (T017) only." This is the concrete
+     step that discharges WP03's own "Risks & Mitigations" bullet about cron/post-merge
+     provability (below) — do not consider that risk mitigated until this sentence is actually in
+     the PR body.
 - **Files**: no additional file changes beyond T016/T018 — this subtask's output is the PR body
   text itself, drafted now and carried into the PR at review time.
 - **Parallel?**: Depends on T016/T017 (needs the finished workflow file) and, for the `ci-parity`
@@ -261,8 +284,8 @@ than the ones plan.md pins (below) — these are fixed decisions, not open choic
 ## Risks & Mitigations
 
 - **Risk**: cron-firing and the real-`main` PR-open path cannot be proven pre-merge.
-  **Mitigation**: the PR body says so explicitly (T019) rather than implying full pre-merge proof —
-  this is plan.md's own stated limitation, not a gap to paper over.
+  **Mitigation**: the PR body says so explicitly (T019 step 5) rather than implying full pre-merge
+  proof — this is plan.md's own stated limitation, not a gap to paper over.
 - **Risk**: an implementer "fixes" a permissions error during local testing by granting
   `contents: write` at the workflow level instead of confirming the checkout token wiring is
   correct. **Mitigation**: T017's checklist explicitly checks for this; review should reject any
@@ -284,6 +307,12 @@ than the ones plan.md pins (below) — these are fixed decisions, not open choic
 - Confirm the PR body carries the `make ci-parity` real output, the NFR-002 budget-revisit flag,
   and the NFR-001 shard-balance-only claim, all as explicit text (T019) — not left to reviewer
   inference.
+- Confirm the PR body also carries the cron/post-merge-provability sentence (T019 step 5) —
+  distinct from the NFR-002 budget note, this is the explicit statement that the `schedule`
+  trigger firing and the real-`main` PR-open path are only confirmable post-merge.
+- **C-005 self-check**: run `grep -rn "/home/" .github/workflows/ci-charter-shard-recapture.yml
+  docs/development/reference/known-friction-points.md` and confirm no match, before marking this
+  WP done — no absolute local paths or credentials may land in these committed artifacts.
 
 ## Activity Log
 
