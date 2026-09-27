@@ -243,9 +243,8 @@ stable done state.
 - A custom type uses Unicode display text while all storage identifiers remain ASCII.
 - `mission run` receives a slug, `mid8`, numeric prefix, or full ULID resolving to an
   existing Mission of the same or a different type.
-- Creation succeeds but run freezing fails; the command must report the created Mission
-  honestly and must not claim a live run, or must roll back the entire combined operation
-  according to the selected transaction boundary.
+- Canonical creation succeeds but later run freezing fails; the pre-existing Mission remains
+  intact, run-start effects roll back, and the command must not claim a live run.
 - A manifest is missing, malformed, shadowed, or changes after Mission creation.
 - A lifecycle policy declares impossible combinations, such as required WP review with WPs
   forbidden and no non-WP review surface.
@@ -272,7 +271,7 @@ stable done state.
 | FR-007 | Policy combination validation | As a pack author, I want invalid lifecycle-policy combinations rejected with field-specific diagnostics so impossible workflows cannot be activated. | High | Open | [build] | no |
 | FR-008 | Manifest-owned artifacts | As a pack author, I want artifact role, path, step, required/optional, and blocking semantics to come from the resolved expected-artifact manifest so no second artifact list drifts. | High | Open | [ratchet] | yes — positive and missing-artifact arms share the manifest |
 | FR-009 | Frozen lifecycle provenance | As an auditor, I want the selected type, lifecycle policy, artifact manifest, and step definition frozen or fingerprinted at run start so later commands can prove what governed the Mission. | High | Open | [build] | no |
-| FR-010 | Durable cross-process step resolution | As an orchestrator, I want fresh CLI processes to continue resolving every active custom step, profile binding, and contract from durable frozen state so process-local registry state is never required. | High | Open | [ratchet] | yes — today’s separate-process positive plus missing-contract terminal negative |
+| FR-010 | Durable cross-process step resolution | As an orchestrator, I want fresh CLI processes to resolve every active custom step, profile binding, and contract from durable frozen state so process-local registry state is never required. | High | Open | [build] | no — ordinary steps resolve today, but terminal contract completion remains red |
 | FR-011 | Governed definition drift | As an operator, I want changes to the live custom definition after run start handled according to one explicit frozen/drift policy so in-flight behavior never changes silently. | High | Open | [build] | no |
 | FR-012 | WP-required materialization | As a custom executable-mission author, I want required WPs finalized into canonical task, dependency, status-event, and lane projections so existing implement/review machinery can consume them. | High | Open | [build] | no |
 | FR-013 | Explicit no-WP lifecycle | As a no-WP mission author, I want an explicit canonical no-WP state so accept/merge/close can proceed without fabricated tasks, WPs, checkboxes, or lane transitions. | High | Open | [build] | no |
@@ -365,9 +364,9 @@ stable done state.
   the new resolved lifecycle/dossier provenance, and run-start attaches to that exact
   identity, while unactivated/incomplete controls fail before run creation. — [build] ·
   no-op passable: no
-- **SC-002**: Every step in the positive custom fixture continues to resolve from a fresh
-  CLI process, and changing the live authored definition does not silently alter the
-  in-flight run. — [ratchet] · no-op passable: yes
+- **SC-002**: Every step and contract in the positive custom fixture resolves and completes
+  from a fresh CLI process, and changing the live authored definition does not silently
+  alter the in-flight run. — [build] · no-op passable: no
 - **SC-003**: A WP-required custom fixture completes implement → rejection → rework →
   independent approval with append-only status/review evidence. — [build] · no-op
   passable: no
