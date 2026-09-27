@@ -375,6 +375,36 @@ _CATEGORY_B_GRANDFATHERED_LEGACY: frozenset[SymbolKey] = frozenset(
         SymbolKey(
             "AcceptanceMode", "c5cd8f94fa6b672c333faeaf3cdc781f33fee2bb29a8bb465fd7562ec85582c2", source_module="specify_cli.acceptance"
         ),  # specify_cli.acceptance::AcceptanceMode
+        # specify_cli.acceptance::EncodingBackupCollisionError -- a legitimate
+        # public exception on the accept encoding-backup surface: defined and
+        # raised internally by ``_write_recovered_artifact`` when
+        # ``--normalize-encoding`` finds a pre-existing backup sibling it must
+        # never silently overwrite, and part of the documented accept
+        # encoding-backup contract exercised by
+        # ``tests/regressions/test_issue_4968_accept_encoding.py`` (#4962/#4968).
+        # ``__all__``-declared but only ever caught within the same module's own
+        # ``except AcceptanceError`` handler, so it has no cross-module ``src/``
+        # caller for this gate to see.
+        SymbolKey(
+            "EncodingBackupCollisionError",
+            "b4c5ed8e7eb99df0e588c2a7df454b0fd9208f938d100784f6bf3440d713f7a1",
+            source_module="specify_cli.acceptance",
+        ),  # specify_cli.acceptance::EncodingBackupCollisionError
+        # charter.encoding_recovery::EncodingRecoveryResult -- the return type
+        # of :func:`charter.encoding_recovery.recover` (the canonical
+        # encoding-recovery detector, #4962/#4968 WP01). Its sole cross-module
+        # caller (``specify_cli.acceptance._recover_normalized_text``) consumes
+        # the returned instance purely via attribute access
+        # (``.ambiguous``/``.text``/``.normalization_applied``/
+        # ``.source_encoding``/``.confidence``) -- legitimate duck-typed usage
+        # that never imports the dataclass by name, so it has no ``ImportFrom``
+        # site for this gate to see. Exercised directly by
+        # ``tests/charter/test_encoding_recovery.py``.
+        SymbolKey(
+            "EncodingRecoveryResult",
+            "85e807160de6a2d22f31c30ada6743a30b2917e24aede1180cedcf4c55559859",
+            source_module="charter.encoding_recovery",
+        ),  # charter.encoding_recovery::EncodingRecoveryResult
         # specify_cli.acceptance::WorkPackageState -- PRUNED (coord-authority-
         # trio-degod #2464/#2465/#2508): the class body relocated to
         # specify_cli.acceptance.summary_core, re-exported via
@@ -1336,8 +1366,14 @@ _CATEGORY_C_MERGE_DECOMP_SHIM_REEXPORT_2057: frozenset[SymbolKey] = frozenset(
         SymbolKey(
             "check_push_safety", "893124ff3029dec30c538fd54577881f4afa05002067b4f1033ce550f52e0460", source_module="specify_cli.merge.push_preflight"
         ),  # specify_cli.merge.push_preflight::check_push_safety
+        # (FR-008: the redundant trailing bare-slug regex was replaced by
+        # strip_numeric_prefix + parse_lane_worktree_dir routed through the
+        # naming authority -- body changed, content-tier hash re-pinned.
+        # Out-of-map edit; re-pin only this one entry if another mission
+        # also touches this allow-list file.)
+        # specify_cli.merge.resolve::_extract_mission_slug
         SymbolKey(
-            "_extract_mission_slug", "834a3e235860c64046504604c6f21d21f5a8c2e8443ef33b8c4ad6ad07c2e934", source_module="specify_cli.merge.resolve"
+            "_extract_mission_slug", "069b2a0bb16644081c3d0cf618a231ba3251fea4a2905c157d121d8e07d44f65", source_module="specify_cli.merge.resolve"
         ),  # specify_cli.merge.resolve::_extract_mission_slug
         # specify_cli.merge.resolve::_iter_merge_states_for_slug
         # Hash re-pinned (#2899 landing): the cross-mission slug-scan fix folded in
@@ -2241,10 +2277,16 @@ _CATEGORY_C_TERMINUS_RECONCILIATION_5001: frozenset[SymbolKey] = frozenset(
         # specify_cli.merge.bookkeeping_projection::project_post_checkpoint_commits_to_target
         # -- same S-B/FR-004 projection helper; called only from within its
         # own module today (the ``__all__`` claim of cross-module export
-        # keeps it caught by this gate's rules regardless).
+        # keeps it caught by this gate's rules regardless). RE-KEYED
+        # (merge-seam-test-isolation-campsite-01M3F61E WP02 / #5119): the
+        # body changed (its two internal ``git show`` blob reads now call
+        # the collapsed single reader `git_probes._read_git_blob_bytes`
+        # instead of the deleted duplicate `_git_show_blob_bytes`), so the
+        # content-tier body_hash below was recomputed via
+        # ``resolve_symbol_key``/``key_tier``, not hand-guessed.
         SymbolKey(
             "project_post_checkpoint_commits_to_target",
-            "fd9b9d68d3086089da9b3efbe15209dddfb6a7c1810ecddefaccdc4e2ec57fcc",
+            "279b256560969d15906ad220dcfde65c55f272afcbdfbac9842c0ad54a37a514",
             source_module="specify_cli.merge.bookkeeping_projection",
         ),
         # specify_cli.merge.git_probes::lane_integrated_by_tree_or_ancestry --

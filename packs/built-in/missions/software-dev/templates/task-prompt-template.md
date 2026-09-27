@@ -78,7 +78,7 @@ Use language identifiers in code blocks: ````python`,````bash`
 - **Planning base branch**: {{planning_base_branch}}
 - **Merge target branch**: {{merge_target_branch}}
 
-> These fields are populated automatically by `spec-kitty agent mission tasks`.
+> These fields are populated automatically by `spec-kitty agent mission finalize-tasks`.
 > Do NOT change them manually unless you are certain the branch topology has changed.
 
 ## Subtasks & Detailed Guidance
@@ -165,4 +165,4 @@ Status is managed via `status.events.jsonl`. Use `spec-kitty agent tasks move-ta
 
 ### Optional Phase Subdirectories
 
-For large features, organize prompts under `tasks/` to keep bundles grouped while maintaining lexical ordering.
+For large missions, organize prompts under `tasks/` to keep bundles grouped while maintaining lexical ordering.

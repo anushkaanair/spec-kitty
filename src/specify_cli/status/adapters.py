@@ -22,8 +22,10 @@ import math
 import os
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
+from specify_cli.core import hosted_posture
 from specify_cli.core.env import moment_handlers_disabled_reason
 
 # The E3 Zeitgeist moment handler (#8): the default occupant of the three
@@ -260,7 +262,7 @@ def _fanout_force(kwargs: dict[str, Any]) -> Any:
     return getattr(kwargs.get("metadata"), "force", None)
 
 
-def fire_saas_fanout(**kwargs: Any) -> None:
+def fire_saas_fanout(*, repo_root: Path | None = None, **kwargs: Any) -> None:
     """Call all registered SaaS fan-out handlers with **kwargs.
 
     Guarantees:
@@ -274,7 +276,25 @@ def fire_saas_fanout(**kwargs: Any) -> None:
     correlatable with the originating canonical event in operator logs.
     The breadcrumb identifies the WP, lane delta, and force flag; the
     full kwargs are NOT logged (PII / payload-size reasons).
+
+    ``repo_root`` (#5181): the repository that OWNS this transition -- the
+    checkout ``status/emit.py`` and ``coordination/outbound.py`` were given,
+    never the process's own CWD. It gates drain against that repo's own
+    ``.kittify/config.yaml`` (see below) and is re-joined into the kwargs
+    handed to handlers, since ``zeitgeist_bridge._broadcast_status_transition``
+    already reads ``kwargs["repo_root"]`` to resolve relay credentials. A
+    caller that omits it (an older call site, or a direct test call) falls
+    back to ``drain_posture()``'s own documented CWD resolution -- unchanged
+    legacy behaviour, not a new fallback this fix introduces.
     """
+    # Drain gate (WP03/T013, repo-scoped per #5181): evaluated per call,
+    # independently of the import-time moment_handlers_disabled_reason()
+    # registration gate below -- the two compose (either one silences
+    # fan-out); neither replaces the other. A future reader must not
+    # "simplify" this into one check.
+    if not hosted_posture.drain_posture(project_root=repo_root).enabled:
+        return
+    kwargs["repo_root"] = repo_root
     # Diagnostic breadcrumb (issue #1141). Cheap dict.get() calls avoid
     # raising if the caller drops a key; the breadcrumb is best-effort and
     # never blocks fan-out. Log even with zero handlers; a missing handler
@@ -316,7 +336,7 @@ def fire_saas_fanout(**kwargs: Any) -> None:
             )
 
 
-def fire_resolved_binding_fanout(**kwargs: Any) -> None:
+def fire_resolved_binding_fanout(*, repo_root: Path | None = None, **kwargs: Any) -> None:
     """Call all registered ``WPResolvedBindingChanged`` fan-out handlers with **kwargs.
 
     Same non-raising / bounded contract as :func:`fire_saas_fanout`: exceptions
@@ -324,7 +344,14 @@ def fire_resolved_binding_fanout(**kwargs: Any) -> None:
     fan-out can never block canonical local persistence. An empty registry is a
     no-op. The status layer only reaches here once its version gate confirms the
     installed ``spec_kitty_events`` supports the event (FR-015 / IC-09).
+
+    ``repo_root`` (#5181): see :func:`fire_saas_fanout` -- gates drain against
+    the emitting repo, never the process CWD.
     """
+    # Drain gate (WP03/T013, repo-scoped per #5181): composes with, does not
+    # replace, the import-time moment_handlers_disabled_reason() gate below.
+    if not hosted_posture.drain_posture(project_root=repo_root).enabled:
+        return
     logger.info(
         "fire_resolved_binding_fanout: wp_id=%s mission_slug=%s handlers=%d",
         kwargs.get("wp_id"),
@@ -352,8 +379,19 @@ def fire_resolved_binding_fanout(**kwargs: Any) -> None:
             )
 
 
-def fire_lifecycle_saas_fanout(**kwargs: Any) -> None:
-    """Call all registered lifecycle SaaS fan-out handlers with **kwargs."""
+def fire_lifecycle_saas_fanout(*, repo_root: Path | None = None, **kwargs: Any) -> None:
+    """Call all registered lifecycle SaaS fan-out handlers with **kwargs.
+
+    ``repo_root`` (#5181): see :func:`fire_saas_fanout` -- gates drain against
+    the emitting repo, never the process CWD. Callers resolve it themselves
+    (e.g. ``lifecycle_events.repo_root_for_lifecycle_log(log_path)``) since
+    this module must not reach back into ``lifecycle_events``/``decisions``
+    at import time.
+    """
+    # Drain gate (WP03/T013, repo-scoped per #5181): composes with, does not
+    # replace, the import-time moment_handlers_disabled_reason() gate below.
+    if not hosted_posture.drain_posture(project_root=repo_root).enabled:
+        return
     for handler in _lifecycle_saas_handlers:
         try:
             _run_fanout_handler_bounded(handler, kwargs, label="Lifecycle SaaS fan-out")

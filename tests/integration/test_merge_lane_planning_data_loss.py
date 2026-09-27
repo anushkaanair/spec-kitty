@@ -1435,8 +1435,6 @@ def _invoke_merge_cli(repo: Path, extra_args: list[str]) -> object:
     cleanup flags' default lives) — NOT ``_run_lane_based_merge`` directly,
     whose ``delete_branch``/``remove_worktree`` params have no default of
     their own."""
-    import os
-
     from typer.testing import CliRunner
 
     from specify_cli.cli.commands.merge import merge
@@ -1445,12 +1443,8 @@ def _invoke_merge_cli(repo: Path, extra_args: list[str]) -> object:
     app.command()(merge)
 
     runner = CliRunner()
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(repo)
+    with contextlib.chdir(repo):
         return runner.invoke(app, extra_args, catch_exceptions=False)
-    finally:
-        os.chdir(original_cwd)
 
 
 class TestRetentionConstraintSurvivesCleanup:
@@ -1513,11 +1507,14 @@ class TestRetentionConstraintSurvivesCleanup:
         # phase resolves for a modern (mission_id-bearing) mission — NOT the
         # legacy `<slug>-<lane>` path, and explicitly NOT the merge scratch
         # worktree.
-        from specify_cli.lanes.branch_naming import worktree_path as _worktree_path_helper
+        # The CREATED worktree — never a Mission-identity-keyed path.
+        # ``predict_lane_worktree`` is the
+        # same placement authority ``_created_lane_worktree`` (the executor's
+        # cleanup seam) routes through, so this always matches where cleanup
+        # actually looks.
+        from specify_cli.lanes.worktree_allocator import predict_lane_worktree
 
-        lane_worktree = _worktree_path_helper(
-            tmp_path, slug, mission_id=_RETENTION_MISSION_ID, lane_id="lane-a"
-        )
+        lane_worktree, _lane_branch = predict_lane_worktree(tmp_path, slug, "lane-a")
         _git(
             tmp_path,
             "worktree",
@@ -1626,11 +1623,14 @@ class TestRetentionConstraintSurvivesCleanup:
         )
         _git(tmp_path, "checkout", "main")
 
-        from specify_cli.lanes.branch_naming import worktree_path as _worktree_path_helper
+        # The CREATED worktree — never a Mission-identity-keyed path.
+        # ``predict_lane_worktree`` is the
+        # same placement authority ``_created_lane_worktree`` (the executor's
+        # cleanup seam) routes through, so this always matches where cleanup
+        # actually looks.
+        from specify_cli.lanes.worktree_allocator import predict_lane_worktree
 
-        lane_worktree = _worktree_path_helper(
-            tmp_path, slug, mission_id=_RETENTION_MISSION_ID, lane_id="lane-a"
-        )
+        lane_worktree, _lane_branch = predict_lane_worktree(tmp_path, slug, "lane-a")
         _git(tmp_path, "worktree", "add", str(lane_worktree), lane_a_branch)
 
         with (
@@ -1724,11 +1724,14 @@ class TestRetentionConstraintSurvivesCleanup:
         )
         _git(tmp_path, "checkout", "main")
 
-        from specify_cli.lanes.branch_naming import worktree_path as _worktree_path_helper
+        # The CREATED worktree — never a Mission-identity-keyed path.
+        # ``predict_lane_worktree`` is the
+        # same placement authority ``_created_lane_worktree`` (the executor's
+        # cleanup seam) routes through, so this always matches where cleanup
+        # actually looks.
+        from specify_cli.lanes.worktree_allocator import predict_lane_worktree
 
-        lane_worktree = _worktree_path_helper(
-            tmp_path, slug, mission_id=_RETENTION_MISSION_ID, lane_id="lane-a"
-        )
+        lane_worktree, _lane_branch = predict_lane_worktree(tmp_path, slug, "lane-a")
         _git(tmp_path, "worktree", "add", str(lane_worktree), lane_a_branch)
 
         with (

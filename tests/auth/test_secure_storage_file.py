@@ -350,3 +350,98 @@ def test_rewrite_reuses_existing_key(storage: FastFileFallback, tmp_path: Path):
     storage.write(_make_session(access_token="different"))
     key_after = (tmp_path / "session.key").read_bytes()
     assert key_before == key_after
+
+
+# ---------------------------------------------------------------------------
+# #5183: peek() is the side-effect-free read that the rc5 endpoint-backfill
+# migration uses. Every unreadable state returns None and leaves the store
+# byte-identical (no discard, no rewrite, no new lock file).
+# ---------------------------------------------------------------------------
+
+
+def _store_snapshot(base: Path) -> dict[str, bytes]:
+    return {p.name: p.read_bytes() for p in sorted(base.iterdir()) if p.is_file()}
+
+
+def test_peek_returns_the_stored_session_without_touching_the_store(storage: FastFileFallback, tmp_path: Path):
+    session = _make_session()
+    storage.write(session)
+    before = _store_snapshot(tmp_path)
+
+    assert storage.peek() == session
+    assert _store_snapshot(tmp_path) == before
+
+
+def test_peek_returns_none_for_a_missing_store(tmp_path: Path):
+    empty = tmp_path / "never-created"
+    assert FastFileFallback(base_dir=empty).peek() is None
+    assert not empty.exists()
+
+
+def test_peek_on_corrupt_session_json_returns_none_and_keeps_the_file(storage: FastFileFallback, tmp_path: Path):
+    storage.write(_make_session())
+    (tmp_path / "session.json").write_text("{not json", encoding="utf-8")
+    before = _store_snapshot(tmp_path)
+
+    assert storage.peek() is None
+    assert _store_snapshot(tmp_path) == before
+
+
+def test_peek_on_wrong_length_key_returns_none_and_keeps_the_files(storage: FastFileFallback, tmp_path: Path):
+    storage.write(_make_session())
+    key_file = tmp_path / "session.key"
+    key_file.write_bytes(b"short")
+    os.chmod(key_file, 0o600)
+    before = _store_snapshot(tmp_path)
+
+    assert storage.peek() is None
+    assert _store_snapshot(tmp_path) == before
+
+
+@pytest.mark.skipif(not hasattr(os, "getuid"), reason="POSIX-only permission check")
+def test_peek_on_unsafe_key_permissions_returns_none_and_keeps_the_files(storage: FastFileFallback, tmp_path: Path):
+    storage.write(_make_session())
+    key_file = tmp_path / "session.key"
+    os.chmod(key_file, 0o644)
+    before = _store_snapshot(tmp_path)
+
+    assert storage.peek() is None
+    assert _store_snapshot(tmp_path) == before
+    assert stat.S_IMODE(key_file.stat().st_mode) == 0o644
+
+
+def test_peek_on_wrongly_typed_fields_returns_none_and_keeps_the_file(storage: FastFileFallback, tmp_path: Path):
+    """A v3 envelope whose nonce is not a hex string makes ``bytes.fromhex``
+    raise ``TypeError``; peek() must swallow it, not crash the migration."""
+    storage.write(_make_session())
+    cred_file = tmp_path / "session.json"
+    blob = json.loads(cred_file.read_text(encoding="utf-8"))
+    blob["nonce"] = 123
+    cred_file.write_text(json.dumps(blob), encoding="utf-8")
+    before = _store_snapshot(tmp_path)
+
+    assert storage.peek() is None
+    assert _store_snapshot(tmp_path) == before
+
+
+def test_peek_on_non_utf8_session_file_returns_none_and_keeps_the_file(storage: FastFileFallback, tmp_path: Path):
+    storage.write(_make_session())
+    (tmp_path / "session.json").write_bytes(b"\xff\xfe\x00not-utf8")
+    before = _store_snapshot(tmp_path)
+
+    assert storage.peek() is None
+    assert _store_snapshot(tmp_path) == before
+
+
+def test_peek_skips_a_legacy_v2_blob_before_any_decrypt(storage: FastFileFallback, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    storage.write(_make_session())
+    cred_file = tmp_path / "session.json"
+    blob = json.loads(cred_file.read_text(encoding="utf-8"))
+    blob["version"] = 2
+    cred_file.write_text(json.dumps(blob), encoding="utf-8")
+
+    def _no_decrypt(_blob: object) -> bytes:
+        raise AssertionError("peek() must not decrypt a blob it will not surface")
+
+    monkeypatch.setattr(storage, "_decrypt", _no_decrypt)
+    assert storage.peek() is None

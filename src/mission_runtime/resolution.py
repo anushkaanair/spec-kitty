@@ -19,6 +19,7 @@ work package, workspace path, and any action-specific commands to run.
 
 from __future__ import annotations
 
+import subprocess
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,7 +50,10 @@ from mission_runtime.context import (
 )
 from mission_runtime.identity import mid8_from_slug, resolve_mid8
 from mission_runtime.lifecycle_phase import (
+    _GIT_PROBE_TIMEOUT,
     LifecyclePhase,
+    LifecyclePhaseProbeError,
+    _rev_is_valid,
     content_present_at_primary_tip,
     resolve_lifecycle_phase,
 )
@@ -82,6 +86,12 @@ __all__ = [
     "ACTION_NAMES",
     "ActionContextError",
     "ActionName",
+    # #5222 (F2): the ONE typed error every content-source consumer of
+    # ``read_issue_matrix_ref_content`` catches — previously reachable only
+    # via ``mission_runtime.resolution`` (an import-forbidden submodule per
+    # MR-1/MR-2), so a caller outside this package could not catch it by type
+    # at all and fell back to a bare ``Exception`` catch.
+    "IssueMatrixRefReadError",
     "PlacementSeam",
     # ResolvedSurface / SurfaceLocations / translate_surface: demoted -- the
     # stamped output, the input bundle, and the member->path translation of
@@ -93,6 +103,7 @@ __all__ = [
     "declared_read_surface",
     "mission_context_for",
     "placement_seam",
+    "read_issue_matrix_ref_content",
     "resolve_action_context",
     "resolve_artifact_surface",
     "resolve_create_time_write_target",
@@ -1672,6 +1683,264 @@ def resolve_placement_only(
     if kind in _PRIMARY_ARTIFACT_KINDS:
         return CommitTarget(ref=target_branch)
     return branch_ref.destination_ref
+
+
+# ---------------------------------------------------------------------------
+# IC-01a (#5171/#4943, FR-005/FR-007): standalone ISSUE_MATRIX coordination-
+# ref content read.
+# ---------------------------------------------------------------------------
+#
+# A NEW, STANDALONE read authority — a sibling of ``resolve_placement_only``,
+# not an edit to ``_classify_artifact_surface`` / ``coord_read_dir_for`` /
+# ``resolve_artifact_surface``. Those three keep their existing ``Path | None``
+# contract untouched (7+ consumers depend on it — MINOR-7) and
+# ``_classify_artifact_surface`` keeps raising ``CoordinationWorktreeUnmaterialized``
+# for EVERY coord kind unchanged (#4959) — this function is the ISSUE_MATRIX
+# post-consolidation path a future caller dispatches to explicitly, never a
+# change to what the existing dir-based seam returns.
+#
+# The ref is resolved via the SAME lifecycle-phase authority the write path
+# uses — ``resolve_placement_only`` (which derives ``resolve_lifecycle_phase``
+# internally): PUBLISHED -> the consolidated-primary ref; CONSOLIDATED /
+# PRE_CONSOLIDATION on coord topology -> the coordination branch ref. A read
+# built this way can never diverge from where the verdict was written.
+
+_ISSUE_MATRIX_FILENAME = "issue-matrix.json"
+# Legacy markdown failover (FR-013, #5222/F3), mirroring the dir-based
+# reader's JSON-first-then-``.md`` probe order
+# (:func:`~specify_cli.tasks.issue_matrix_migration.load_issue_matrix`). The
+# canonical name lives on ``specify_cli.tasks.issue_matrix.
+# ISSUE_MATRIX_MD_FILENAME``; it is re-declared here (not imported) because
+# ``mission_runtime``'s ``specify_cli`` outbound ledger
+# (tests/architectural/test_layer_rules.py) does not carry a "tasks" entry.
+_ISSUE_MATRIX_MD_FILENAME = "issue-matrix.md"
+
+_ISSUE_MATRIX_REF_ABSENT_CODE = "ISSUE_MATRIX_REF_ABSENT"
+_ISSUE_MATRIX_PROBE_ERROR_CODE = "ISSUE_MATRIX_PROBE_ERROR"
+_ISSUE_MATRIX_EMPTY_CONTENT_CODE = "ISSUE_MATRIX_EMPTY_CONTENT"
+
+
+class IssueMatrixRefReadError(RuntimeError):
+    """Typed fail-closed refusal for :func:`read_issue_matrix_ref_content` (FR-007).
+
+    Never absorbed into a silent PRIMARY-residue fallback or a vacuous pass —
+    every raise here names a distinct ``code`` (deleted ref / probe error /
+    empty authored content) so a caller can tell the three fail-closed legs
+    apart (NFR-002).
+    """
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+def _issue_matrix_ref(
+    repo_root: Path,
+    mission_slug: str,
+    *,
+    resolver: MissionResolver | None,
+) -> str:
+    """Helper (i): ref resolution off the phase authority the write path uses.
+
+    A thin projection of :func:`resolve_placement_only` for
+    ``MissionArtifactKind.ISSUE_MATRIX`` — no independent phase derivation, so
+    this read can never diverge from where the write landed (T002).
+    """
+    return resolve_placement_only(
+        repo_root,
+        mission_slug,
+        kind=MissionArtifactKind.ISSUE_MATRIX,
+        resolver=resolver,
+    ).ref
+
+
+def _issue_matrix_object_path(
+    primary_root: Path,
+    mission_slug: str,
+    *,
+    resolver: MissionResolver | None,
+    filename: str = _ISSUE_MATRIX_FILENAME,
+) -> str:
+    """The ``<KITTY_SPECS_DIR>/<canonical-mission-dir>/<filename>`` git object path.
+
+    The relative path is IDENTICAL across the primary tree, the coordination
+    worktree, and the consolidated-primary tree (all three lay the mission
+    dir out at ``KITTY_SPECS_DIR/<slug-mid8>/...`` — ``coord_feature_dir``'s
+    own layout), so one canonicalization serves every resolved ref.
+    ``filename`` selects between the structured (``.json``) object and the
+    legacy markdown failover (``.md``, FR-013, #5222/F3) at the SAME ref.
+    """
+    from specify_cli.core.constants import KITTY_SPECS_DIR
+    from specify_cli.missions._read_path_resolver import candidate_feature_dir_for_mission
+
+    candidate_dir = candidate_feature_dir_for_mission(primary_root, mission_slug, resolver=resolver)
+    return f"{KITTY_SPECS_DIR}/{candidate_dir.name}/{filename}"
+
+
+def _ensure_issue_matrix_ref_exists(repo_root: Path, ref: str) -> None:
+    """Helper (ii): existence probe (``_rev_is_valid``) — the deleted-ref leg (FR-007).
+
+    #5222 (F2): ``_rev_is_valid`` raises ``LifecyclePhaseProbeError`` on its
+    own underlying git-probe failure (timeout) — that escaped this function
+    untyped before, so a caller catching only ``IssueMatrixRefReadError``
+    (the ONE documented type, per the module docstring) never saw it. Wrapped
+    into the same probe-error leg here so every git-probe failure surfaces
+    through the one typed error this function's docstring promises.
+    """
+    try:
+        ref_exists = _rev_is_valid(repo_root, ref)
+    except LifecyclePhaseProbeError as exc:
+        raise IssueMatrixRefReadError(
+            _ISSUE_MATRIX_PROBE_ERROR_CODE,
+            f"could not verify issue-matrix read ref {ref!r} in {repo_root}: {exc}",
+        ) from exc
+    if not ref_exists:
+        raise IssueMatrixRefReadError(
+            _ISSUE_MATRIX_REF_ABSENT_CODE,
+            f"issue-matrix read ref {ref!r} does not resolve in {repo_root} — it has been deleted; refusing rather than falling back to the primary residue.",
+        )
+
+
+def _read_issue_matrix_ref_content(repo_root: Path, ref: str, object_path: str) -> str:
+    """Helper (iii): content probe (``git show <ref>:<path>``) — the probe-error leg (FR-007).
+
+    Callers MUST have already confirmed ``ref`` resolves
+    (:func:`_ensure_issue_matrix_ref_exists`) — mirrors
+    :func:`~mission_runtime.lifecycle_phase._git_object_present`'s two-step
+    discipline. With ``ref`` confirmed valid, ANY non-zero exit here is
+    unambiguously a content-probe failure (path never committed at this ref,
+    an unreadable object, or another git-plumbing error) — a DISTINCT
+    fail-closed path from the deleted-ref leg above, never conflated with it.
+
+    #5222 (F2): an ``OSError`` (e.g. the ``git`` executable itself is
+    missing) previously escaped untyped, same class of gap as the
+    ``TimeoutExpired`` leg already handled here — both are now wrapped into
+    the same probe-error code so the ONE documented type
+    (``IssueMatrixRefReadError``) is what every caller actually sees.
+    """
+    object_spec = f"{ref}:{object_path}"
+    try:
+        result = subprocess.run(
+            ["git", "show", object_spec],
+            cwd=repo_root,
+            capture_output=True,
+            timeout=_GIT_PROBE_TIMEOUT,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise IssueMatrixRefReadError(
+            _ISSUE_MATRIX_PROBE_ERROR_CODE,
+            f"git show {object_spec!r} timed out in {repo_root}",
+        ) from exc
+    except OSError as exc:
+        raise IssueMatrixRefReadError(
+            _ISSUE_MATRIX_PROBE_ERROR_CODE,
+            f"git show {object_spec!r} could not be run in {repo_root}: {exc}",
+        ) from exc
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", errors="replace").strip()
+        raise IssueMatrixRefReadError(
+            _ISSUE_MATRIX_PROBE_ERROR_CODE,
+            f"git show {object_spec!r} failed in {repo_root}: {stderr}",
+        )
+    return result.stdout.decode("utf-8")
+
+
+def _ensure_issue_matrix_content_authored(content: str, *, ref: str, object_path: str) -> None:
+    """Helper (iv): empty-authored-set check — never "nothing to enforce" (FR-007)."""
+    if not content.strip():
+        raise IssueMatrixRefReadError(
+            _ISSUE_MATRIX_EMPTY_CONTENT_CODE,
+            f"issue-matrix content at {ref}:{object_path} is empty — refusing rather than treating an empty authored set as nothing to enforce.",
+        )
+
+
+def read_issue_matrix_ref_content(
+    repo_root: Path,
+    mission_slug: str,
+    *,
+    resolver: MissionResolver | None = None,
+) -> str:
+    """Read ISSUE_MATRIX **content** from the ref the write path resolved to (IC-01a).
+
+    Returns matrix content (text) read straight from git — ``git show
+    <ref>:<path>`` — for the case where the artifact has no on-disk worktree:
+    a coordination worktree that has been consolidated away (branch retained)
+    or a published mission whose Target Ref has been deleted. The ref is
+    picked by the SAME lifecycle-phase authority the write path uses
+    (:func:`resolve_lifecycle_phase` via :func:`resolve_placement_only`), so
+    this read can never diverge from where the verdict was authored:
+
+    * PUBLISHED -> the consolidated-primary ref (the resolved Primary Branch).
+    * CONSOLIDATED / PRE_CONSOLIDATION on coord topology -> the coordination
+      branch ref (#5171's exact case).
+
+    This is a NEW, STANDALONE read — it does not alter
+    ``_classify_artifact_surface`` / ``coord_read_dir_for`` /
+    ``resolve_artifact_surface``'s existing ``Path | None`` contract, and
+    ``_classify_artifact_surface`` keeps raising
+    ``CoordinationWorktreeUnmaterialized`` for every coord kind unchanged
+    (#4959) — a future caller dispatches to THIS function for the ISSUE_MATRIX
+    post-consolidation case instead of routing content through that raising
+    path (which would re-introduce the #5171/#4959 residue class).
+
+    Fails closed (NFR-002), never falling back to primary residue or passing
+    vacuously, raising :class:`IssueMatrixRefReadError` when:
+
+    * the resolved ref is absent (deleted) — ``ISSUE_MATRIX_REF_ABSENT``;
+    * the content probe errors (unreadable object, path never committed at a
+      valid ref, IO error) — ``ISSUE_MATRIX_PROBE_ERROR`` (a path distinct
+      from ref-absent);
+    * the authored content is empty — ``ISSUE_MATRIX_EMPTY_CONTENT`` (an
+      empty matrix is never read as "nothing to enforce").
+
+    Legacy markdown failover (FR-013, #5222/F3): probes ``issue-matrix.json``
+    at the ref first; when that specific object is absent (a probe-error,
+    never a deleted-ref) it probes the legacy ``issue-matrix.md`` at the SAME
+    ref before giving up — mirroring the dir-based reader's JSON-first-then-
+    ``.md`` failover (:func:`~specify_cli.tasks.issue_matrix_migration.
+    load_issue_matrix`). The returned content carries no separate format tag;
+    callers sniff it (:func:`~specify_cli.tasks.issue_matrix.
+    looks_like_json_issue_matrix_content`) since the two formats are
+    unambiguous by their leading character.
+
+    Args:
+        repo_root: Repository root (may be a worktree; canonicalized
+            internally by the shared resolvers, so the result is
+            CWD-invariant).
+        mission_slug: The mission directory name / slug (any canonicalizable
+            handle).
+        resolver: Optional :class:`MissionResolver` threaded through handle
+            canonicalization. ``None`` preserves historical behaviour.
+
+    Raises:
+        ActionContextError: When the mission slug cannot be resolved at all
+            (propagated from :func:`resolve_placement_only` — no silent
+            fallback), or when a PUBLISHED mission's consolidated content is
+            not present on the current checkout.
+        IssueMatrixRefReadError: On any of the three fail-closed legs above.
+        LifecyclePhaseProbeError: When an underlying git probe this function
+            depends on (via :func:`resolve_lifecycle_phase`) fails for a
+            reason other than "genuinely absent".
+    """
+    from specify_cli.core.paths import get_main_repo_root
+
+    main_root = get_main_repo_root(repo_root)
+    ref = _issue_matrix_ref(repo_root, mission_slug, resolver=resolver)
+    _ensure_issue_matrix_ref_exists(main_root, ref)
+
+    json_object_path = _issue_matrix_object_path(main_root, mission_slug, resolver=resolver)
+    try:
+        content = _read_issue_matrix_ref_content(main_root, ref, json_object_path)
+        object_path = json_object_path
+    except IssueMatrixRefReadError as exc:
+        if exc.code != _ISSUE_MATRIX_PROBE_ERROR_CODE:
+            raise
+        object_path = _issue_matrix_object_path(main_root, mission_slug, resolver=resolver, filename=_ISSUE_MATRIX_MD_FILENAME)
+        content = _read_issue_matrix_ref_content(main_root, ref, object_path)
+
+    _ensure_issue_matrix_content_authored(content, ref=ref, object_path=object_path)
+    return content
 
 
 @dataclass(frozen=True)

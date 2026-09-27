@@ -2,7 +2,7 @@
 title: 'Context: Orchestration'
 description: 'Glossary context for orchestration: lifecycle and runtime orchestration semantics, including the repository, project, and mission-run terms.'
 doc_status: active
-updated: '2026-09-08'
+updated: '2026-09-27'
 related:
 - docs/context/charter.md
 - docs/context/identity.md
@@ -89,11 +89,11 @@ Terms describing lifecycle and runtime orchestration semantics.
 
 | | |
 |---|---|
-| **Definition** | Compatibility alias for a [Mission](#mission) whose mission type is `software-dev`. |
+| **Definition** | Retired alias for a [Mission](#mission) whose mission type is `software-dev`. |
 | **Context** | Orchestration |
-| **Status** | canonical (compatibility) |
-| **Applicable to** | `1.x`, `2.x` |
-| **Note** | Allowed on legacy software-delivery surfaces, but not a co-equal canonical architecture noun. |
+| **Status** | deprecated |
+| **Applicable to** | `1.x`, `2.x` (historical) |
+| **Note** | Prohibited for the Mission domain object in active surfaces (Terminology Canon). Use [Mission](#mission). Generic "feature" in the product-capability sense, and the Gherkin keyword, are unaffected. Legacy machine keys such as `feature_dir` are still emitted alongside the canonical `mission_dir` as legacy output aliases (#5206), not read-only survivors. |
 
 ---
 

@@ -55,14 +55,22 @@ _CANONICAL_READER_SYMBOLS: frozenset[str] = frozenset(
 
 # The live consumer set (m2/E2 scope boundary, WP06 prompt "Context"): doctor,
 # post-merge review (Gate 4), finalize-lint, and the shared approval-blocker
-# helper move-task consumes. ``tasks_move_task.py`` imports
-# ``_issue_matrix_approval_blocker`` FROM ``tasks_parsing_validation.py``, so
-# covering that module covers the move-task/approval call site transitively
-# -- it is not enumerated a second time here.
+# rule. #5222 (F4) moved the approval-blocker's IMPLEMENTATION out of
+# ``tasks_parsing_validation.py`` onto its own domain home,
+# ``specify_cli.tasks.issue_matrix_approval`` (``policy.merge_gates`` reuses
+# the same rule, so it needed a policy -> domain edge, not policy -> CLI);
+# ``tasks_parsing_validation.py`` now only RE-EXPORTS the name (a plain
+# ``from ... import X as X``, no canonical-reader import of its own left in
+# its AST), so the module pinned here moved with the implementation.
+# ``tasks_move_task.py`` imports ``_issue_matrix_approval_blocker`` FROM
+# ``tasks_parsing_validation.py`` (the re-export), which resolves to the SAME
+# function object this module's own call site does, so covering
+# ``issue_matrix_approval.py`` covers the move-task/approval call site
+# transitively -- it is not enumerated a second time here.
 _LIVE_CONSUMER_MODULES: tuple[Path, ...] = (
     _SRC_ROOT / "status" / "doctor.py",
     _SRC_ROOT / "cli" / "commands" / "review" / "__init__.py",
-    _SRC_ROOT / "cli" / "commands" / "agent" / "tasks_parsing_validation.py",
+    _SRC_ROOT / "tasks" / "issue_matrix_approval.py",
     _SRC_ROOT / "cli" / "commands" / "agent" / "mission_finalize.py",
 )
 
@@ -108,7 +116,8 @@ class TestLiveConsumersRouteThroughCanonicalReader:
 # hermetic tmp_path, with only the git-write-seam plumbing stubbed out, and
 # assert neither ever materializes issue-matrix.md. A legacy mission's
 # EXISTING .md is still read via failover (issue_matrix_migration.py) and
-# the #2804 legacy merge driver (merge_driver.py::merge_driver_issue_matrix)
+# the #2804 legacy merge driver (merge/drivers.py::run_issue_matrix_driver,
+# relocated there from merge_driver.py::merge_driver_issue_matrix by #5119)
 # still resolves conflicts on an ALREADY-EXISTING .md file for a
 # not-yet-migrated mission -- neither of those is "emission" of a fresh
 # file, so neither is asserted against here.

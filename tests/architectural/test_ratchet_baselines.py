@@ -284,6 +284,43 @@ _SIZE_RATCHETS: tuple[_SizeRatchet, ...] = (
         "tests.architectural.test_mutation_ownership_routing",
         "_ALLOWLIST",
     ),
+    # hosted-opt-in-drain-ledger WP04 (NFR-002): hosted relay/gateway edges
+    # exempt from the drain gate. Empty; growth means an ungated hosted edge.
+    _SizeRatchet(
+        "test_hosted_drain_gate",
+        "ungated_edge_allowlist",
+        "tests.architectural.test_hosted_drain_gate",
+        "_UNGATED_EDGE_ALLOWLIST",
+    ),
+    # #5108 four-leg worktree-name gate: each leg's allow-list is the surface
+    # an author would edit to silence that leg, so growing it must cost the
+    # same visible diff. Registered here (not the retired `single_baselines`
+    # list #5104 replaced with this table) so every _baselines.yaml leaf is
+    # enforced by a size ratchet (FR-011).
+    _SizeRatchet(
+        "test_no_worktree_name_guess",
+        "signature_allowlist",
+        "tests.architectural.test_no_worktree_name_guess",
+        "_SIGNATURE_ALLOWLIST",
+    ),
+    _SizeRatchet(
+        "test_no_worktree_name_guess",
+        "compose_allowlist",
+        "tests.architectural.test_no_worktree_name_guess",
+        "_COMPOSE_ALLOWLIST",
+    ),
+    _SizeRatchet(
+        "test_no_worktree_name_guess",
+        "match_allowlist",
+        "tests.architectural.test_no_worktree_name_guess",
+        "_MATCH_ALLOWLIST",
+    ),
+    _SizeRatchet(
+        "test_no_worktree_name_guess",
+        "def_use_allowlist",
+        "tests.architectural.test_no_worktree_name_guess",
+        "_DEF_USE_ALLOWLIST",
+    ),
 )
 
 
@@ -568,7 +605,10 @@ def test_size_ratchet_table_meets_floor() -> None:
     assert len(_SIZE_RATCHETS) >= 19, len(_SIZE_RATCHETS)
     keys = [(r.section, r.leaf) for r in _SIZE_RATCHETS]
     assert len(keys) == len(set(keys)), f"duplicate (section, leaf) rows: {keys}"
-    assert len(_REQUIRED_TOP_LEVEL_KEYS) == 12, sorted(_REQUIRED_TOP_LEVEL_KEYS)
+    # 14 gated test-modules: the 12 pre-#5166 sections + `test_no_worktree_name_guess`
+    # (#5108 registered its four worktree-name-gate legs here) + `test_hosted_drain_gate`
+    # (#4971 registered its ungated-edge allowlist here).
+    assert len(_REQUIRED_TOP_LEVEL_KEYS) == 14, sorted(_REQUIRED_TOP_LEVEL_KEYS)
 
 
 def test_yaml_leaves_refuses_a_scalar_section() -> None:

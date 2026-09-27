@@ -2960,10 +2960,6 @@ class _WpBoardAction:
 
 _WP_BOARD_DECLINE = _WpBoardAction(board_step=None, action=None, wp_id=None, workspace_path=None, blocked_reason=None)
 
-#: CT-4's runnable recovery command for the coord-read fail-closed floor
-#: (CT-5) — materializing the coordination worktree, never flattening it.
-_COORD_UNMATERIALIZED_RECOVERY = "spec-kitty doctor workspaces --fix"
-
 
 def _inspect_board_recovery_command(mission_slug: str) -> str:
     """CT-4's runnable recovery command for the generic 'inspect the board'
@@ -3069,10 +3065,25 @@ def _resolve_wp_board_action(*, mission_slug: str, repo_root: Path) -> _WpBoardA
     try:
         placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.STATUS_STATE)
         mission_context = mission_context_for(repo_root, mission_slug)
-    except (CoordinationWorktreeUnmaterialized, CoordinationBranchDeleted) as exc:
+    except CoordinationWorktreeUnmaterialized as exc:
+        # #5113 / FR-014: the branch is present, only the worktree is not yet
+        # materialized — the truthful recovery is to materialize it, never to
+        # flatten (that arm is `CoordinationBranchDeleted`, handled below).
+        # Surface the exception's OWN next_step (the single remedy authority,
+        # surface_resolver._compose_next_step) rather than re-composing the
+        # materialize command here — matching the sibling arm below, so the
+        # `doctor coordination --fix` string has exactly one composer.
         return _wp_blocked_action(
             None,
-            f"Coordination surface for mission {mission_slug!r} is not readable ({exc}). Materialize it: `{_COORD_UNMATERIALIZED_RECOVERY}`.",
+            f"Coordination surface for mission {mission_slug!r} is not readable ({exc}). {exc.next_step}",
+        )
+    except CoordinationBranchDeleted as exc:
+        # The declared coordination branch itself is gone (never created or
+        # deleted) — surface the exception's OWN next_step (flatten guidance),
+        # never the "Materialize it" text that only fits the sibling arm above.
+        return _wp_blocked_action(
+            None,
+            f"Coordination surface for mission {mission_slug!r} is not readable ({exc}). {exc.next_step}",
         )
     except ActionContextError:
         # Mission context genuinely cannot be resolved -- decline and let the

@@ -15,6 +15,7 @@ from enum import StrEnum
 from pathlib import Path
 
 from specify_cli.cli.commands.review._diagnostics import MissionReviewDiagnostic
+from specify_cli.tasks.issue_matrix import looks_like_json_issue_matrix_content
 
 # ---------------------------------------------------------------------------
 # Closed-set vocabulary (NFR-007 single source of truth)
@@ -42,9 +43,7 @@ COLUMN_ALIASES: dict[str, str] = {
     "theme": "scope",
 }
 
-_ALL_VALID_COLUMNS: frozenset[str] = frozenset(MANDATORY_COLUMNS) | frozenset(
-    NAMED_OPTIONAL_COLUMNS
-)
+_ALL_VALID_COLUMNS: frozenset[str] = frozenset(MANDATORY_COLUMNS) | frozenset(NAMED_OPTIONAL_COLUMNS)
 
 
 class IssueMatrixVerdict(StrEnum):
@@ -207,7 +206,7 @@ def _normalize_header(raw: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def validate_issue_matrix(path: Path) -> IssueMatrixValidationResult:  # noqa: C901
+def validate_issue_matrix(path: Path, *, content: str | None = None) -> IssueMatrixValidationResult:  # noqa: C901
     """Validate an issue-matrix against the closed-set schema.
 
     JSON-first (M7 / write-side-seam-matrix-tracer-01KYP3MH WP05 / T023):
@@ -217,13 +216,32 @@ def validate_issue_matrix(path: Path) -> IssueMatrixValidationResult:  # noqa: C
     load_issue_matrix`) and NO markdown parsing happens. Otherwise falls back
     to the legacy markdown parser below (FR-013 back-compat).
 
+    Content source (IC-01b, T008; legacy failover #5222/F3): when ``content``
+    is supplied (WP01's coordination-ref content read, for the case where the
+    artifact has no on-disk worktree), it mirrors the SAME JSON-first-then-
+    ``.md`` dispatch as the dir-based probes below -- the ref-content reader
+    (:func:`~mission_runtime.resolution.read_issue_matrix_ref_content`) probes
+    ``.json`` then the legacy ``.md`` at the SAME ref and hands back whichever
+    text existed with no separate format tag, so this sniffs the content
+    itself (:func:`~specify_cli.tasks.issue_matrix.
+    looks_like_json_issue_matrix_content`) instead of always assuming JSON.
+    Structured content skips the dir-based probes entirely and goes straight
+    to the JSON validator; markdown content falls through into the SAME
+    markdown-parsing tail the dir-based ``.md`` path uses below. ``path`` is
+    used only as the result's ``path`` label in both content arms (never
+    touched on disk).
+
     Parameters
     ----------
     path:
         Absolute path to the ``issue-matrix.md`` (or ``.json``) file to
         validate -- historically always ``<feature_dir>/issue-matrix.md``;
         ``path.parent`` is treated as the mission's issue-matrix directory
-        for the JSON-first check.
+        for the JSON-first check. When ``content`` is supplied this is a
+        label only.
+    content:
+        Optional coordination-ref content source (T008); when supplied,
+        bypasses the dir-based JSON/markdown probes entirely.
 
     Returns
     -------
@@ -232,18 +250,24 @@ def validate_issue_matrix(path: Path) -> IssueMatrixValidationResult:  # noqa: C
     """
     result = IssueMatrixValidationResult(path=path, passed=True)
 
-    json_path = path if path.name == "issue-matrix.json" else path.parent / "issue-matrix.json"
-    if json_path.exists():
-        return _validate_structured_issue_matrix(json_path, result)
+    if content is not None:
+        if looks_like_json_issue_matrix_content(content):
+            return _validate_structured_issue_matrix(path, result, content=content)
+        text = content
+    else:
+        json_path = path if path.name == "issue-matrix.json" else path.parent / "issue-matrix.json"
+        if json_path.exists():
+            return _validate_structured_issue_matrix(json_path, result)
 
-    if not path.exists():
-        result.add_diagnostic(
-            MissionReviewDiagnostic.ISSUE_MATRIX_MISSING,
-            f"issue-matrix.md not found at {path}",
-        )
-        return result
+        if not path.exists():
+            result.add_diagnostic(
+                MissionReviewDiagnostic.ISSUE_MATRIX_MISSING,
+                f"issue-matrix.md not found at {path}",
+            )
+            return result
 
-    text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8")
+
     lines = text.splitlines()
 
     # -----------------------------------------------------------------------
@@ -254,7 +278,7 @@ def validate_issue_matrix(path: Path) -> IssueMatrixValidationResult:  # noqa: C
         result.add_diagnostic(
             MissionReviewDiagnostic.ISSUE_MATRIX_MULTI_TABLE,
             f"issue-matrix.md contains {len(tables)} Markdown tables; exactly one is allowed.",
-            detail=f"Table spans found at lines: {[(s+1, e) for s, e in tables]}",
+            detail=f"Table spans found at lines: {[(s + 1, e) for s, e in tables]}",
         )
         return result
 
@@ -304,12 +328,8 @@ def validate_issue_matrix(path: Path) -> IssueMatrixValidationResult:  # noqa: C
     if unknown_columns:
         result.add_diagnostic(
             MissionReviewDiagnostic.ISSUE_MATRIX_SCHEMA_DRIFT,
-            f"Unknown column(s) not in mandatory or named-optional vocabulary: "
-            f"{', '.join(unknown_columns)}",
-            detail=(
-                f"Valid columns: {list(MANDATORY_COLUMNS)} (mandatory) + "
-                f"{list(NAMED_OPTIONAL_COLUMNS)} (optional)"
-            ),
+            f"Unknown column(s) not in mandatory or named-optional vocabulary: {', '.join(unknown_columns)}",
+            detail=(f"Valid columns: {list(MANDATORY_COLUMNS)} (mandatory) + {list(NAMED_OPTIONAL_COLUMNS)} (optional)"),
         )
 
     # If structural problems prevent further parsing, return early
@@ -356,16 +376,13 @@ def validate_issue_matrix(path: Path) -> IssueMatrixValidationResult:  # noqa: C
         except ValueError:
             result.add_diagnostic(
                 MissionReviewDiagnostic.ISSUE_MATRIX_VERDICT_UNKNOWN,
-                f"Row for issue '{issue}': verdict '{raw_verdict}' is not in the "
-                f"allowed set: {[v.value for v in IssueMatrixVerdict]}",
+                f"Row for issue '{issue}': verdict '{raw_verdict}' is not in the allowed set: {[v.value for v in IssueMatrixVerdict]}",
             )
             verdict = None
 
         # Rule: deferred-with-followup must contain follow-up handle
         if verdict is IssueMatrixVerdict.DEFERRED_WITH_FOLLOWUP:
-            has_handle = bool(re.search(r"#\d+", evidence_ref)) or (
-                "Follow-up:" in evidence_ref
-            )
+            has_handle = bool(re.search(r"#\d+", evidence_ref)) or ("Follow-up:" in evidence_ref)
             if not has_handle:
                 result.add_diagnostic(
                     MissionReviewDiagnostic.ISSUE_MATRIX_DEFERRED_WITHOUT_HANDLE,
@@ -375,9 +392,7 @@ def validate_issue_matrix(path: Path) -> IssueMatrixValidationResult:  # noqa: C
                     f"got: '{evidence_ref}'",
                 )
 
-        if verdict is not None and result.passed or (
-            verdict is not None and not missing_mandatory and not unknown_columns
-        ):
+        if verdict is not None and result.passed or (verdict is not None and not missing_mandatory and not unknown_columns):
             row = IssueMatrixRow(
                 issue=issue,
                 verdict=verdict,
@@ -396,9 +411,12 @@ def validate_issue_matrix(path: Path) -> IssueMatrixValidationResult:  # noqa: C
 
 
 def _validate_structured_issue_matrix(
-    json_path: Path, result: IssueMatrixValidationResult
+    json_path: Path,
+    result: IssueMatrixValidationResult,
+    *,
+    content: str | None = None,
 ) -> IssueMatrixValidationResult:
-    """Validate ``issue-matrix.json`` business rules (M7 / T023).
+    """Validate ``issue-matrix.json`` business rules (M7 / T023; content source T008).
 
     Re-points onto the ONE canonical dir-based reader
     (:func:`specify_cli.tasks.issue_matrix_migration.load_issue_matrix`) for
@@ -412,15 +430,27 @@ def _validate_structured_issue_matrix(
     scaffolded placeholder verdict like ``"unknown"`` is still flagged even
     though it is excluded from the canonical ``.rows`` list -- mirroring the
     markdown validator's existing row-filtering contract).
+
+    ``content`` (T008): when supplied, both the diagnostics and the row read
+    go through the content-source arms
+    (:func:`~specify_cli.tasks.issue_matrix_migration.diagnose_structured_issue_matrix_text`
+    / ``load_issue_matrix(..., content=...)``) instead of reading
+    ``json_path`` from disk -- ``json_path`` is used only as the result's
+    ``path`` label in this arm.
     """
     from specify_cli.tasks.issue_matrix_migration import (
         diagnose_structured_issue_matrix,
+        diagnose_structured_issue_matrix_text,
         load_issue_matrix,
     )
 
     result.path = json_path
-    result.diagnostics = diagnose_structured_issue_matrix(json_path)
-    result.rows = load_issue_matrix(json_path.parent)
+    if content is not None:
+        result.diagnostics = diagnose_structured_issue_matrix_text(content)
+        result.rows = load_issue_matrix(json_path, content=content)
+    else:
+        result.diagnostics = diagnose_structured_issue_matrix(json_path)
+        result.rows = load_issue_matrix(json_path.parent)
     result.passed = not result.diagnostics
     return result
 

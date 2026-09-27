@@ -313,7 +313,8 @@ def _emit_spec_missing(spec_file: Path, feature_dir: Path, mission_slug: str, *,
         "error_code": "SPEC_FILE_MISSING",
         "error": f"Required spec not found for mission '{mission_slug}': {spec_file.resolve()}",
         "mission_slug": mission_slug,
-        "feature_dir": str(feature_dir.resolve()),
+        "mission_dir": str(feature_dir.resolve()),
+        "feature_dir": str(feature_dir.resolve()),  # legacy alias of mission_dir (#5206)
         "spec_file": str(spec_file.resolve()),
         "remediation": [
             f"Restore the missing spec file at {spec_file.resolve()}",
@@ -416,17 +417,15 @@ def _evaluate_spec_gate(
             "error_code": "SPEC_FILE_MISSING",
             "error": f"Required spec not found for mission '{mission_slug}': {spec_file.resolve()}",
             "mission_slug": mission_slug,
-            "feature_dir": str(feature_dir.resolve()),
+            "mission_dir": str(feature_dir.resolve()),
+            "feature_dir": str(feature_dir.resolve()),  # legacy alias of mission_dir (#5206)
             "spec_file": str(spec_file.resolve()),
             "remediation": [
                 f"Restore the missing spec file at {spec_file.resolve()}",
                 f"Or select another mission explicitly: {SETUP_PLAN_COMMAND_NAME} --mission <mission-slug> --json",
             ],
         }
-        message = "\n".join(
-            [f"[red]Error:[/red] {payload['error']}"]
-            + [f"  - {step}" for step in cast(list[str], payload["remediation"])]
-        )
+        message = "\n".join([f"[red]Error:[/red] {payload['error']}"] + [f"  - {step}" for step in cast(list[str], payload["remediation"])])
         return SetupPlanLocalOutcome(payload, 1, "error"), message
 
     # FR-011: single read-surface commit check. ``spec_file`` is the
@@ -457,7 +456,8 @@ def _evaluate_spec_gate(
         "blocked_reason": blocked_reason,
         "error_code": "SPEC_NOT_SUBSTANTIVE_OR_UNCOMMITTED",
         "mission_slug": mission_slug,
-        "feature_dir": str(feature_dir.resolve()),
+        "mission_dir": str(feature_dir.resolve()),
+        "feature_dir": str(feature_dir.resolve()),  # legacy alias of mission_dir (#5206)
         "spec_file": str(spec_file.resolve()),
         "spec_committed": spec_is_committed,
         "spec_substantive": spec_is_substantive,
@@ -712,9 +712,7 @@ def _commit_plan_if_substantive(
 
     _field_info = describe_plan_field_requirements(mission_type, project_dir=repo_root)
     # FR-013 (#1896): name the offending Technical Context format.
-    _plan_gap = describe_technical_context_gap(
-        plan_file.read_text(encoding="utf-8"), mission_type, project_dir=repo_root
-    )
+    _plan_gap = describe_technical_context_gap(plan_file.read_text(encoding="utf-8"), mission_type, project_dir=repo_root)
 
     if _field_info is None:
         # #3830 severity-4 compounding-diagnostic fix: no field declaration
@@ -757,15 +755,19 @@ def _run_documentation_gap_analysis(
     target_branch: str,
     json_output: bool,
 ) -> str | None:
-    """Run gap analysis for gap_filling/feature_specific doc missions; return its path or None."""
-    from specify_cli.doc_analysis.doc_state import read_documentation_state, set_audit_metadata
+    """Run gap analysis for gap_filling/mission_specific doc missions; return its path or None."""
+    from specify_cli.doc_analysis.doc_state import (
+        canonical_iteration_mode,
+        read_documentation_state,
+        set_audit_metadata,
+    )
     from specify_cli.doc_analysis.gap_analysis import generate_gap_analysis_report
 
     if not meta_file.exists():
         return None
     doc_state = read_documentation_state(meta_file)
-    iteration_mode = doc_state.get("iteration_mode", "initial") if doc_state else "initial"
-    if iteration_mode not in ("gap_filling", "feature_specific"):
+    iteration_mode = canonical_iteration_mode(doc_state.get("iteration_mode", "initial")) if doc_state else "initial"
+    if iteration_mode not in ("gap_filling", "mission_specific"):
         return None
 
     docs_dir = repo_root / "docs"
@@ -882,9 +884,7 @@ def _run_documentation_wiring(
     ``gap-analysis.md`` itself carries no ``MissionArtifactKind`` (WP02 T013's
     honest bound) -- it simply anchors on this resolved directory.
     """
-    primary_dir = placement_seam(repo_root, mission_slug).read_dir(
-        MissionArtifactKind.PRIMARY_METADATA
-    )
+    primary_dir = placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.PRIMARY_METADATA)
     if get_mission_type(primary_dir) != MISSION_TYPE_DOCUMENTATION:
         return None, []
     meta_file = primary_dir / "meta.json"
@@ -923,7 +923,8 @@ def _build_setup_plan_result(
         "phase_complete": plan_is_substantive,
         "mission_slug": mission_slug,
         "plan_file": str(plan_file),
-        "feature_dir": str(feature_dir),
+        "mission_dir": str(feature_dir),
+        "feature_dir": str(feature_dir),  # legacy alias of mission_dir (#5206)
         "spec_file": str(spec_file),
         "plan_substantive": plan_is_substantive,
     }
@@ -949,13 +950,7 @@ def _build_setup_plan_result(
         current_branch=current_branch,
         match_target_branch=match_target_branch,
     )
-    render_kind: Literal["success", "scaffold", "blocked", "error"] = (
-        "scaffold"
-        if plan_scaffold_only
-        else "success"
-        if plan_is_substantive
-        else "blocked"
-    )
+    render_kind: Literal["success", "scaffold", "blocked", "error"] = "scaffold" if plan_scaffold_only else "success" if plan_is_substantive else "blocked"
     return SetupPlanLocalOutcome(result, 0, render_kind)
 
 
@@ -1033,7 +1028,6 @@ def setup_plan(
             else:
                 console.print(f"[red]Error:[/red] {error_msg}")
             raise typer.Exit(1)
-
 
         _mission._enforce_git_preflight(
             repo_root,
@@ -1134,9 +1128,7 @@ def setup_plan(
             plan_template=plan_template,
         )
 
-        gap_analysis_path, generators_detected = _run_documentation_wiring(
-            mission_slug, repo_root, target_branch=target_branch, json_output=json_output
-        )
+        gap_analysis_path, generators_detected = _run_documentation_wiring(mission_slug, repo_root, target_branch=target_branch, json_output=json_output)
 
         _emit_setup_plan_result(
             plan_file=plan_file,

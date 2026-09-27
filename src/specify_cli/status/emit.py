@@ -52,10 +52,12 @@ import ulid as _ulid_mod
 from pydantic import ValidationError
 
 from kernel.clock import now_utc, now_utc_iso, timedelta
+from specify_cli.core import hosted_posture
 from specify_cli.core.constants import KITTY_SPECS_DIR
 from specify_cli.mission_metadata import load_meta
 from specify_cli.frontmatter import FrontmatterError, read_frontmatter, write_frontmatter
 from specify_cli.workspace import canonicalize_feature_dir
+from .views import refresh_execution_projection
 from .wp_metadata import coerce_legacy_dependencies, read_wp_frontmatter
 
 from .models import (
@@ -647,6 +649,25 @@ def _legacy_alias_collapses_to_current_lane(
     return normalized != resolved_lane and resolved_lane == from_lane
 
 
+def _refresh_projection_if_ledger_on(feature_dir: Path, repo_root: Path | None) -> None:
+    """F-3 flat-path hook: refresh the derived execution-state projection.
+
+    Independent of the ``fan_out`` flag (FR-009 refreshes on every durably
+    persisted transition regardless of whether SaaS fan-out ran) and gated
+    on :func:`hosted_posture.ledger_posture`. Reached through the MODULE
+    ATTRIBUTE (``hosted_posture.ledger_posture(...)``, never a local
+    binding) so the root ``tests/conftest.py`` fixture's monkeypatch of the
+    module attribute stays effective (see hosted_posture's own docstring).
+    Skipped entirely -- no posture check, no I/O -- when ``repo_root`` is
+    ``None``: there is no repository root to derive ``.kittify/derived/``
+    against.
+    """
+    if repo_root is None:
+        return
+    if hosted_posture.ledger_posture(repo_root).enabled:
+        refresh_execution_projection(feature_dir, repo_root)
+
+
 def _feature_status_lock_root(feature_dir: Path, repo_root: Path | None) -> Path:
     """Resolve the repo root used for per-feature status locking.
 
@@ -804,6 +825,7 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
     ensure_sync_daemon: bool = True,
     sync_dossier: bool = True,  # noqa: ARG001 -- 3.2.6 compatibility; fan-out retired by #677
     fan_out: bool = True,
+    refresh_projection: bool = True,
 ) -> StatusEvent:
     """Flat/primary composition shell over :func:`prepare_transition`.
 
@@ -843,6 +865,20 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
             skipped and the persisted event is returned as-is. The coord
             fallback arm uses this to fan out only after its commit succeeds
             (FR-008 / SC-002); the default preserves immediate fan-out.
+        refresh_projection: When False, the F-3 execution-state projection
+            refresh (independent of ``fan_out``) is skipped entirely. The
+            coord fallback arm's flat shell (``_fallback_emit_single``/
+            ``_fallback_emit_batch``'s ``_coord`` arm) passes ``False`` here
+            because that call runs BEFORE the coord commit, under the
+            fallback's bounded L1 (``_emit_on_coord_then_commit``) -- an
+            unconditional refresh there would run twice on success (once
+            pre-commit, once from the post-commit ``_fan_out_committed_coord_
+            tail`` hook) and leave a phantom projection (a rolled-back event
+            visible in the derived ``status.json``) on a commit failure,
+            the same hazard class SC-002 forbids for SaaS fan-out. This is
+            deliberately NOT keyed on ``fan_out``: FR-009 requires the
+            refresh to run regardless of the SaaS fan-out setting, so the
+            two flags are independent.
 
     Returns:
         The persisted StatusEvent.
@@ -927,6 +963,12 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
         # Step 5: persist -> materialize -> mirror, still under the lock.
         _persist_prepared(canonical_feature_dir, prepared, prepared.event)
 
+    # F-3: refresh the derived execution-state projection on every durably
+    # persisted transition, independent of `fan_out`. Skipped when
+    # refresh_projection=False (the coord fallback's pre-commit flat shell).
+    if refresh_projection:
+        _refresh_projection_if_ledger_on(canonical_feature_dir, request.repo_root)
+
     # Step 7: fan-out after release (never blocks canonical persistence).
     if fan_out:
         _saas_fan_out(
@@ -937,7 +979,7 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
             ensure_sync_daemon=ensure_sync_daemon,
         )
         if prepared.annotation is not None:
-            _resolved_binding_fan_out(prepared.annotation, request_mission_slug)
+            _resolved_binding_fan_out(prepared.annotation, request_mission_slug, request.repo_root)
 
     return prepared.event
 
@@ -1030,6 +1072,7 @@ def emit_status_transition_batch(
     ensure_sync_daemon: bool = True,
     sync_dossier: bool = True,  # noqa: ARG001 -- 3.2.6 compatibility; fan-out retired by #677
     fan_out: bool = True,
+    refresh_projection: bool = True,
 ) -> list[StatusEvent]:
     """Validate and persist a same-WP transition sequence atomically.
 
@@ -1043,7 +1086,9 @@ def emit_status_transition_batch(
     member persists nothing. ``sync_dossier`` remains an accepted no-op
     keyword for 3.2.6 callers after retirement of the permanently-empty
     dossier fan-out registry in issue #677; ``fan_out=False`` skips step 7 for
-    the coord fallback arm (FR-008).
+    the coord fallback arm (FR-008). ``refresh_projection=False`` skips the
+    F-3 projection refresh (see :func:`emit_status_transition`'s docstring
+    for why the coord fallback's flat shell needs this independent flag).
     """
     if not requests:
         return []
@@ -1086,6 +1131,13 @@ def emit_status_transition_batch(
         for event in events:
             _mirror_phase1_frontmatter_lane(feature_dir, event.wp_id, str(event.to_lane))
 
+    # F-3: refresh once per persisted batch (not once per event -- the whole
+    # batch belongs to one feature_dir/repo_root), independent of `fan_out`.
+    # Skipped when refresh_projection=False (the coord fallback's pre-commit
+    # flat shell -- see emit_status_transition's docstring for why).
+    if refresh_projection:
+        _refresh_projection_if_ledger_on(feature_dir, requests[0].repo_root)
+
     if fan_out:
         for event, _prepared, request in built:
             _saas_fan_out(
@@ -1095,8 +1147,12 @@ def emit_status_transition_batch(
                 policy_metadata=request.policy_metadata,
                 ensure_sync_daemon=ensure_sync_daemon,
             )
-        for annotation in annotations:
-            _resolved_binding_fan_out(annotation, mission_slug)
+        # #5181: paired with its own request (never the flattened `annotations`
+        # list above) so each annotation's fan-out reads ITS OWN request's
+        # repo_root, not some other request's in the same batch.
+        for _event, prepared, request in built:
+            if prepared.annotation is not None:
+                _resolved_binding_fan_out(prepared.annotation, mission_slug, request.repo_root)
 
     return events
 
@@ -1168,7 +1224,7 @@ def emit_inner_state_changed(
     # so it can never alter local persistence or the reduced snapshot. A non-
     # binding annotation is a no-op; a binding annotation fans out when the events
     # package supports it, else logs an intentional skip (version-gated).
-    _resolved_binding_fan_out(event, mission_slug)
+    _resolved_binding_fan_out(event, mission_slug, repo_root)
 
     return event
 
@@ -1186,7 +1242,7 @@ _RESOLVED_BINDING_DELTA_FIELDS: tuple[str, ...] = (
 )
 
 
-def _resolved_binding_fan_out(event: InnerStateChanged, mission_slug: str) -> None:
+def _resolved_binding_fan_out(event: InnerStateChanged, mission_slug: str, repo_root: Path | None = None) -> None:
     """Version-gated ``WPResolvedBindingChanged`` fan-out for a binding change.
 
     ``emit_inner_state_changed`` has no fan-out of its own; this adds the
@@ -1201,6 +1257,9 @@ def _resolved_binding_fan_out(event: InnerStateChanged, mission_slug: str) -> No
     The concrete payload model is built by the registered sync handler once 6.2.0
     ships; the status layer only feature-detects via the gate and hands off kwargs
     (the same handoff shape as :func:`_saas_fan_out` — no local type definition).
+
+    ``repo_root`` (#5181): threaded through to :func:`fire_resolved_binding_fanout`
+    so its drain gate reads the emitting repo's own posture, never the process CWD.
     """
     delta = event.delta
     binding = {name: getattr(delta, name) for name in _RESOLVED_BINDING_DELTA_FIELDS}
@@ -1225,6 +1284,7 @@ def _resolved_binding_fan_out(event: InnerStateChanged, mission_slug: str) -> No
         actor=event.actor,
         causation_id=event.event_id,
         occurred_at=event.at,
+        repo_root=repo_root,
         **binding,
     )
 

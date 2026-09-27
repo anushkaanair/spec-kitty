@@ -58,6 +58,7 @@ from mission_runtime.checkout_identity import (
 from mission_runtime.identity import mid8_from_slug, resolve_mid8
 from mission_runtime.resolution import (
     ActionContextError,
+    IssueMatrixRefReadError,
     PlacementSeam,
     coord_read_dir_for,
     declared_read_surface,
@@ -69,6 +70,7 @@ from mission_runtime.resolution import (
     resolve_placement_only,
     resolve_topology,
 )
+from mission_runtime.issue_matrix_partition import resolve_issue_matrix_partition
 from mission_runtime.mission_resolver_port import MissionResolver
 from mission_runtime.read_dir_degrade import (
     ReadDegradeStrategy,
@@ -84,6 +86,12 @@ __all__ = [
     "ActionContextError",
     "CheckoutIdentityError",
     "CommitTarget",
+    # #5222 (F2): promoted onto the package root so review/doctor consumers of
+    # ``read_issue_matrix_ref_content`` (via ``resolve_issue_matrix_partition``)
+    # can catch it by type instead of a bare ``Exception`` -- it was reachable
+    # only via the import-forbidden ``mission_runtime.resolution`` submodule
+    # before (MR-1/MR-2).
+    "IssueMatrixRefReadError",
     "MissionArtifactKind",
     "MissionContext",
     "MissionExecutionContext",
@@ -115,6 +123,9 @@ __all__ = [
     "resolve_action_context",
     "resolve_artifact_surface",
     "resolve_create_time_write_target",
+    # issue-matrix-partition-integrity (#5171/#4943): the single two-partition
+    # split every issue-matrix gate consumes.
+    "resolve_issue_matrix_partition",
     "resolve_mid8",
     "resolve_placement_only",
     "resolve_read_dir_or_degrade",

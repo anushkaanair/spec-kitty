@@ -74,6 +74,7 @@ import httpx
 
 from kernel.clock import UTC, now_utc, parse_iso, timedelta
 
+from specify_cli.core import hosted_posture
 from specify_cli.saas_client.auth import AuthContext, load_auth_context
 from specify_cli.saas_client.errors import SaasAuthError
 
@@ -167,6 +168,7 @@ class SaasCapabilityGateway:
         team_slug: str | None = None,
         timeout_s: float = DEFAULT_TIMEOUT_S,
         _http: httpx.Client | None = None,
+        project_root: Path | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._team_slug = team_slug
@@ -175,6 +177,12 @@ class SaasCapabilityGateway:
             headers={"Authorization": f"Bearer {token}"},
             timeout=timeout_s,
         )
+        # M2: the repo this gateway is acting on behalf of, so its own
+        # `require_drain("capability")` gates scope to that repo rather than
+        # the process's CWD (which can be an unrelated repo). `None` keeps
+        # the CWD-derived posture for a caller (e.g. a CLI relay command)
+        # with no mission-scoped root to offer.
+        self._project_root = project_root
 
     def _headers(self, team_slug_override: str | None = None) -> dict[str, str]:
         slug = team_slug_override or self._team_slug
@@ -184,6 +192,7 @@ class SaasCapabilityGateway:
 
     def check_repo_admission(self, *, repo_slug: str, host: str | None = None) -> AdmissionAnswer:
         """``GET /api/v1/sync/repo-admission/?repo_slug=<>&host=<>``."""
+        hosted_posture.require_drain("capability", project_root=self._project_root)
         params: dict[str, str] = {"repo_slug": repo_slug}
         if host is not None:
             params["host"] = host
@@ -231,6 +240,7 @@ class SaasCapabilityGateway:
         teams A+B whose auth context selects A would deterministically 403 a
         mint for a repo only B admits — asking the team the pre-flight proved
         admits the repo is what makes the two calls agree."""
+        hosted_posture.require_drain("capability", project_root=self._project_root)
         selector = logical_session_id()
         try:
             resp = self._http.post(
@@ -438,16 +448,22 @@ def _expired(expires_at: str | None) -> bool:
     return now_utc() >= parsed
 
 
-def _default_gateway(auth_repo_root: Path) -> SaasCapabilityGateway:
+def _default_gateway(auth_repo_root: Path, *, project_root: Path | None = None) -> SaasCapabilityGateway:
     """Build the real gateway from the same auth sources every other
     CLI→SaaS transport uses (env vars, then ``<root>/.kittify/saas-auth.json``,
     then the stored ``auth login`` session — #198). Raises
-    :class:`SaasAuthError` when nothing is configured — logged by the caller."""
+    :class:`SaasAuthError` when nothing is configured — logged by the caller.
+
+    ``project_root`` (M2) is the acting repo the gateway's own
+    ``require_drain("capability")`` gate must scope to -- distinct from
+    ``auth_repo_root``, which is only where the auth fallback file is read
+    from and may not be the same directory."""
     ctx: AuthContext = load_auth_context(repo_root=auth_repo_root)
     return SaasCapabilityGateway(
         ctx.saas_url,
         ctx.token,
         team_slug=ctx.team_slug,
+        project_root=project_root,
     )
 
 
@@ -600,6 +616,14 @@ def resolve_credentials(
             here (Priivacy-ai/spec-kitty#203).
     """
     cwd_str = str(cwd)
+    # A3: scope the posture check to the ACTING repo (`cwd`), not the
+    # process's own working directory -- `drain_posture()` with no argument
+    # falls back to `locate_project_root()` off `os.getcwd()`, which is wrong
+    # whenever the caller resolves credentials for a repo other than the
+    # process's cwd.
+    if not hosted_posture.drain_posture(project_root=Path(cwd)).enabled:
+        logger.debug("zeitgeist credentials: drain-off (%s)", cwd_str)
+        return None
     try:
         # One Git read: the verbatim origin URL is where both the store
         # key's (host, owner/repo) scope and Team Kitty's admission question
@@ -629,7 +653,10 @@ def resolve_credentials(
     resolved_gateway = gateway
     if resolved_gateway is None:
         try:
-            resolved_gateway = _default_gateway(Path(auth_repo_root) if auth_repo_root is not None else Path(cwd))
+            resolved_gateway = _default_gateway(
+                Path(auth_repo_root) if auth_repo_root is not None else Path(cwd),
+                project_root=Path(cwd),
+            )
         except SaasAuthError as exc:
             logger.debug("zeitgeist credentials: nothing configured to authenticate with (%s)", exc)
             return None
@@ -687,6 +714,10 @@ def resolve_focus_capability(
             broadcast (Priivacy-ai/spec-kitty#203).
     """
     cwd_str = str(cwd)
+    # A3: same acting-repo scoping as `resolve_credentials` above.
+    if not hosted_posture.drain_posture(project_root=Path(cwd)).enabled:
+        logger.debug("zeitgeist focus capability: drain-off (%s)", cwd_str)
+        return None
     try:
         origin = repo_identity.origin_url(cwd_str, deadline or repo_identity.Deadline())
     except repo_identity.RepoIdentityError as exc:
@@ -715,7 +746,10 @@ def resolve_focus_capability(
     resolved_gateway = gateway
     if resolved_gateway is None:
         try:
-            resolved_gateway = _default_gateway(Path(auth_repo_root) if auth_repo_root is not None else Path(cwd))
+            resolved_gateway = _default_gateway(
+                Path(auth_repo_root) if auth_repo_root is not None else Path(cwd),
+                project_root=Path(cwd),
+            )
         except SaasAuthError as exc:
             logger.debug("zeitgeist focus capability: nothing configured to authenticate with (%s)", exc)
             return None
@@ -756,7 +790,12 @@ class FocusLease:
 
 
 def resolve_focus_lease(cwd: str | Path, *, deadline: repo_identity.Deadline | None = None) -> FocusLease | None:
-    """Resolve focus authority and identity together, refusing a racing replacement."""
+    """Resolve focus authority and identity together, refusing a racing replacement.
+
+    No separate drain gate here: :func:`resolve_focus_capability` already
+    returns ``None`` under drain-off (WP03/T012), and this function returns
+    immediately when that happens — the gate is inherited, not duplicated.
+    """
     capability = resolve_focus_capability(cwd, deadline=deadline)
     if capability is None:
         return None

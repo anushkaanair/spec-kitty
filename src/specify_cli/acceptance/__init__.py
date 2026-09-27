@@ -10,7 +10,9 @@ from dataclasses import dataclass, field
 from kernel.clock import now_utc_stamp
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
+from charter.encoding_recovery import recover as _recover_encoding
 from kernel.paths import to_posix
 from specify_cli.core.agent_config import get_auto_commit_default
 from specify_cli.core.owned_mission import effective_root_kwargs
@@ -220,6 +222,76 @@ def _is_accept_pipeline_own_write(path: str, *, mission_slug: str) -> bool:
     return False
 
 
+def _encoding_backup_scope_prefix(
+    repo_root: Path, feature: str, *, effective_root: Path | None = None,
+) -> str | None:
+    """The posix-relative ``<primary-feature-dir>/`` prefix a backup must fall under.
+
+    Resolves the CURRENT mission's PRIMARY feature directory through the same
+    kind-aware seam :func:`_planning_read_dir` uses
+    (``mission_runtime.placement_seam``) rather than composing it from the raw
+    ``KITTY_SPECS_DIR`` constant (trio-seam-only invariant,
+    ``test_trio_imports_route_only_through_seam_wrappers`` --
+    coord-authority-trio-degod-01KX7094 WP05): the accept trio's ``__init__.py``
+    must never import that primitive directly. Behavior-preserving for the
+    common case -- for a coord-less (``SINGLE_BRANCH``/``LANES``) mission this
+    resolves the identical ``kitty-specs/<mission_slug>`` directory the retired
+    raw composition pointed to -- and it is a correctness upgrade for a
+    canonically-``<slug>-<mid8>``-renamed mission, where the raw literal
+    ``mission_slug`` string no longer matched the on-disk directory name but
+    this seam-resolved one does.
+
+    Returns ``None`` (fail-closed, matching every other predicate in this
+    module) when the resolved directory does not sit inside ``repo_root`` --
+    an unexpected shape for the PRIMARY anchor this seam returns, but never
+    silently treated as a match.
+    """
+    feature_dir = _planning_read_dir(repo_root, feature, effective_root=effective_root)
+    try:
+        relative = feature_dir.relative_to(repo_root)
+    except ValueError:
+        return None
+    return f"{to_posix(relative)}/"
+
+
+def _is_own_encoding_backup_write(path: str, *, feature_dir_prefix: str | None) -> bool:
+    """True when *path* is the accept pipeline's OWN encoding-recovery backup.
+
+    ``accept --normalize-encoding`` (FR-005 / #4968) writes an untracked
+    ``<artifact><_ENCODING_BACKUP_SUFFIX>`` sibling next to every artifact it
+    repairs (:func:`_write_recovered_artifact`) BEFORE the in-place UTF-8
+    rewrite. After a SUCCESSFUL repair,
+    ``_collect_summary_with_optional_repair`` (``cli/commands/accept.py``)
+    re-collects the summary exactly once -- and without this exclusion that
+    re-collect's ``git status`` snapshot sees the freshly-written ``.bak`` as
+    untracked dirt, flips ``AcceptanceSummary.ok`` False, and makes a REAL
+    (non-``--diagnose``) accept exit 1 on its own successful repair (#4962
+    review fold A). Every test exercising the repair path before this fix used
+    ``--diagnose``, which exits 0 unconditionally before the ``ok`` gate, so
+    the self-block was untested.
+
+    Scoped NARROWLY to the CURRENT mission's feature dir via
+    *feature_dir_prefix* (:func:`_encoding_backup_scope_prefix`) and the exact
+    ``_ENCODING_BACKUP_SUFFIX`` (``.bak``) suffix -- deliberately NOT a
+    repo-wide ``*.bak`` rule: a tracked ``.bak`` fixture elsewhere in the repo,
+    a user's own stray ``.bak`` file outside the mission tree, or another
+    mission's backup must still block (matches the narrow, mission-scoped
+    posture of :func:`_is_accept_pipeline_own_write` above -- this is
+    deliberately NOT folded into the shared
+    :func:`specify_cli.coordination.coherence.is_self_bookkeeping_churn`
+    authority, which has no mission-scoping parameter and would have to widen
+    to a repo-wide ``*.bak`` match to serve this call site). ``feature_dir_prefix
+    is None`` (the fail-closed resolution outcome) never matches -- a genuinely
+    unresolvable scope must not be silently treated as "this is our own write".
+    """
+    if feature_dir_prefix is None:
+        return False
+    normalized = to_posix(path)
+    if not normalized.startswith(feature_dir_prefix):
+        return False
+    return normalized.endswith(_ENCODING_BACKUP_SUFFIX)
+
+
 def _mission_routes_through_coordination(repo_root: Path, feature: str, *, effective_root: Path | None = None) -> bool:
     """True when ``feature`` routes through coordination under its STORED topology.
 
@@ -271,7 +343,7 @@ def _accept_dirty_gate(
 ) -> list[str]:
     """Compute the accept dirty set: accept-owned exclusion + FR-008 coord residue.
 
-    Three filters compose:
+    Four filters compose:
 
     1. **Accept-owned convergence (#1883):** the accept gate's own writes
        (``acceptance-matrix.json`` + ``status.json``) are excluded via
@@ -280,14 +352,26 @@ def _accept_dirty_gate(
        exactly those two kinds (IC-07g retired the former accept-owned-paths
        filename frozenset onto it) — unconditionally, every topology, so
        ``accept ∘ accept`` converges in every mode.
-    2. **Self-bookkeeping exclusion (#2251):** spec-kitty's own bookkeeping
+    2. **Encoding-backup exclusion (#4962 review fold A):** the accept
+       pipeline's OWN ``--normalize-encoding`` recovery backup
+       (``<artifact><_ENCODING_BACKUP_SUFFIX>``, written by
+       :func:`_write_recovered_artifact`) is excluded via
+       :func:`_is_own_encoding_backup_write`, narrowly scoped to the CURRENT
+       mission's feature dir (resolved once here via
+       :func:`_encoding_backup_scope_prefix`, the seam-only replacement for the
+       retired raw ``KITTY_SPECS_DIR`` composition) + the exact backup suffix --
+       so a successful in-place repair does not self-block the very accept run
+       that produced it. Not folded into filter 1's classifier (the backup is
+       not a recognised :class:`~mission_runtime.MissionArtifactKind`) or into
+       filter 3 below (mission-scoping, not a repo-wide ``*.bak`` rule).
+    3. **Self-bookkeeping exclusion (#2251):** spec-kitty's own bookkeeping
        files (``meta.json``, encoding-provenance JSONL, and ``kitty-ops/<ULID>.jsonl``
        Op-record orphans) are excluded via the SINGLE shared
        :func:`specify_cli.coordination.coherence.is_self_bookkeeping_churn`
        authority — no independent literal carried here (G-5 invariant / #1914
        framing; WP11 retired the former ``mission_runtime`` self-bookkeeping predicate
        onto this owner-module leg).
-    3. **FR-008 topology-aware residue:** under coordination topology the
+    4. **FR-008 topology-aware residue:** under coordination topology the
        recognized coordination residue (stale primary copies of artifacts owned
        by the coordination branch) is excluded via the SAME per-ref pattern the
        record-analysis preflight uses (:func:`routes_through_coordination` + the
@@ -297,15 +381,19 @@ def _accept_dirty_gate(
        artifacts STILL block. The accept-owned exclusion (1) is NOT widened to
        this leg's ``ISSUE_MATRIX`` kind (see :func:`_is_accept_pipeline_own_write`).
 
-    Non-accept-owned, non-self-bookkeeping, non-residue dirt is preserved verbatim
-    (fail-closed, NFR-003).
+    Non-accept-owned, non-backup, non-self-bookkeeping, non-residue dirt is
+    preserved verbatim (fail-closed, NFR-003).
     """
     from specify_cli.coordination.coherence import is_self_bookkeeping_churn
+
+    encoding_backup_prefix = _encoding_backup_scope_prefix(repo_root, feature, effective_root=effective_root)
 
     git_dirty = [
         line
         for line in git_dirty_raw
-        if not _is_accept_pipeline_own_write(_porcelain_dirty_path(line), mission_slug=feature) and not is_self_bookkeeping_churn(_porcelain_dirty_path(line))
+        if not _is_accept_pipeline_own_write(_porcelain_dirty_path(line), mission_slug=feature)
+        and not _is_own_encoding_backup_write(_porcelain_dirty_path(line), feature_dir_prefix=encoding_backup_prefix)
+        and not is_self_bookkeeping_churn(_porcelain_dirty_path(line))
     ]
     return _filter_coordination_residue(
         git_dirty, repo_root=repo_root, feature=feature,
@@ -357,6 +445,33 @@ class ArtifactEncodingError(AcceptanceError):
         super().__init__(message)
         self.path = path
         self.error = error
+
+
+class EncodingBackupCollisionError(AcceptanceError):
+    """Raised when a ``--normalize-encoding`` repair finds a pre-existing
+    ``<name><_ENCODING_BACKUP_SUFFIX>`` sibling for the artifact it is about
+    to rewrite (#4962 review fold B).
+
+    Mirrors ``migrate charter-encoding``'s collision rule
+    (``cli/commands/migrate/charter_encoding.py::_BackupCollisionError``,
+    data-model.md "Backup artifact"): the existing backup is NEVER silently
+    overwritten -- doing so would destroy the only surviving copy of some
+    PRIOR repair's original bytes, breaking the "never a one-way trip"
+    guarantee :func:`_write_recovered_artifact` exists to uphold. ``accept``
+    refuses instead, surfacing through the command's ``except AcceptanceError``
+    handler (exit 1), so the operator can inspect/remove the stale backup and
+    re-run ``--normalize-encoding``.
+    """
+
+    def __init__(self, path: Path, backup_path: Path):
+        message = (
+            f"Refusing to normalize {path}: a backup already exists at "
+            f"{backup_path} and would be silently overwritten. Remove or "
+            "rename the existing backup, then re-run `accept --normalize-encoding`."
+        )
+        super().__init__(message)
+        self.path = path
+        self.backup_path = backup_path
 
 
 def _format_lane_blocker(lane: str, wp_id: str) -> str:
@@ -749,8 +864,8 @@ def _approved_lane_source_roots(
     check then behaves exactly as it did before this change rather than
     guessing at a topology.
     """
-    from specify_cli.lanes.branch_naming import worktree_path  # noqa: PLC0415
-    from specify_cli.lanes.persistence import CorruptLanesError, read_lanes_json  # noqa: PLC0415
+    from specify_cli.lanes.persistence import CorruptLanesError, read_lanes_json
+    from specify_cli.lanes.worktree_allocator import predict_lane_worktree
 
     accepted_wps = {*lanes.get("approved", []), *lanes.get("done", [])}
     if not accepted_wps:
@@ -767,11 +882,8 @@ def _approved_lane_source_roots(
         lane_wps = set(getattr(lane, "wp_ids", ()) or ())
         if not lane_wps or not lane_wps <= accepted_wps:
             continue
-        candidate = worktree_path(
-            repo_root,
-            manifest.mission_slug,
-            mission_id=manifest.mission_id,
-            lane_id=lane.lane_id,
+        candidate, _lane_branch = predict_lane_worktree(
+            repo_root, manifest.mission_slug, lane.lane_id
         )
         if candidate.is_dir():
             roots.append(candidate)
@@ -789,22 +901,24 @@ def _missing_artifacts(feature_dir: Path, mission: Mission | None) -> tuple[list
     return missing_required, missing_optional
 
 
-# Unicode smart-punctuation -> ASCII equivalents, applied by
-# :func:`_recover_normalized_text`.
-_ENCODING_NORMALIZE_MAP = {
-    "‘": "'",  # Left single quotation mark -> apostrophe
-    "’": "'",  # Right single quotation mark -> apostrophe
-    "‚": "'",  # Single low-9 quotation mark -> apostrophe
-    "“": '"',  # Left double quotation mark -> straight quote
-    "”": '"',  # Right double quotation mark -> straight quote
-    "„": '"',  # Double low-9 quotation mark -> straight quote
-    "—": "--",  # Em dash -> double hyphen
-    "–": "-",  # En dash -> hyphen
-    "…": "...",  # Horizontal ellipsis -> three dots
-    " ": " ",  # Non-breaking space -> regular space
-    "•": "*",  # Bullet -> asterisk
-    "·": "*",  # Middle dot -> asterisk
-}
+#: Suffix for the original-bytes backup written before an in-place encoding
+#: repair (#4968). Mirrors ``cli/commands/migrate/backfill_provenance.py``'s
+#: ``_CorpusWriteTransaction`` naming convention.
+_ENCODING_BACKUP_SUFFIX = ".bak"
+
+
+@dataclass(frozen=True)
+class _RecoveredArtifactText:
+    """A confidently-recovered, non-trivial encoding repair for one artifact.
+
+    Returned only when the artifact was NOT already valid UTF-8 and the
+    canonical detector reached a non-``ambiguous`` verdict — carries the
+    honest ``source_encoding``/``confidence`` the caller reports (#4968 FR-005).
+    """
+
+    text: str
+    source_encoding: str
+    confidence: float
 
 
 def _gather_primary_encoding_candidates(feature_dir: Path) -> list[Path]:
@@ -819,41 +933,79 @@ def _gather_primary_encoding_candidates(feature_dir: Path) -> list[Path]:
     return result
 
 
-def _recover_normalized_text(data: bytes) -> str | None:
-    """Decode legacy-encoded bytes to UTF-8 text with ASCII character mapping.
+def _recover_normalized_text(data: bytes) -> _RecoveredArtifactText | None:
+    """Recover legacy-encoded bytes to UTF-8 text via the canonical detector.
 
-    Returns ``None`` when ``data`` is already valid UTF-8 (nothing to rewrite);
-    otherwise the recovered + normalized text. Tries cp1252 then latin-1, falls
-    back to a lossy UTF-8 replace, strips a leading BOM, and maps Unicode
-    smart-punctuation to ASCII via :data:`_ENCODING_NORMALIZE_MAP`.
+    Delegates whole-file encoding recovery to
+    :func:`charter.encoding_recovery.recover` (WP01) — the SAME chokepoint the
+    charter read path and ``migrate charter-encoding`` use
+    (``contracts/detector-contract.md``). Returns ``None`` in two cases,
+    identically (no rewrite either way):
+
+    - ``data`` is already valid UTF-8 (nothing to repair), or
+    - the detector cannot confidently settle on a codepage (``ambiguous``).
+
+    An ambiguous artifact is left completely untouched — never silently
+    "Normalized" into mojibake — so a subsequent strict UTF-8 read of the
+    SAME unchanged bytes raises :class:`ArtifactEncodingError` again,
+    surfacing a blocking verdict to the caller (#4968). This retires the
+    former cp1252-then-latin-1-then-``utf-8``-``errors="replace"`` fallback
+    chain, which never refused and could silently corrupt content (either via
+    lossy ``U+FFFD`` replacement or, for a strictly-decodable cp1252 file,
+    via the ASCII smart-punctuation substitution this function no longer
+    performs at all).
     """
-    try:
-        data.decode("utf-8")
+    result = _recover_encoding(data, unsafe=False)
+    if result.ambiguous or result.text is None or not result.normalization_applied:
         return None
-    except UnicodeDecodeError:
-        pass
+    return _RecoveredArtifactText(
+        text=result.text,
+        source_encoding=result.source_encoding or "unknown",
+        confidence=result.confidence,
+    )
 
-    text: str | None = None
-    for encoding in ("cp1252", "latin-1"):
-        try:
-            text = data.decode(encoding)
-            break
-        except UnicodeDecodeError:
-            continue
-    if text is None:
-        text = data.decode("utf-8", errors="replace")
 
-    text = text.lstrip("﻿")  # strip UTF-8 BOM if present
-    for unicode_char, ascii_replacement in _ENCODING_NORMALIZE_MAP.items():
-        text = text.replace(unicode_char, ascii_replacement)
-    return text
+def _write_recovered_artifact(path: Path, text: str) -> Path:
+    """Back up the original bytes, then atomically rewrite ``path`` as UTF-8.
+
+    Mirrors the safe temp-file + ``Path.replace`` swap idiom
+    ``cli/commands/migrate/backfill_provenance.py``'s
+    ``_CorpusWriteTransaction.write`` uses: the ORIGINAL bytes are preserved
+    verbatim at ``<name>.bak`` (sibling file, same directory) BEFORE the
+    in-place rewrite, so a repaired artifact is never a one-way trip (#4968 —
+    the prior ``normalize_feature_encoding`` overwrote in place with no
+    backup at all).
+
+    Raises:
+        EncodingBackupCollisionError: a ``<name><_ENCODING_BACKUP_SUFFIX>``
+            sibling already exists (#4962 review fold B). Mirrors
+            ``migrate charter-encoding``'s ``_BackupCollisionError`` guard —
+            an existing backup is NEVER silently overwritten (it may be the
+            only surviving copy of a PRIOR repair's original bytes); this
+            function had no such guard before fold B, unlike migrate's
+            equivalent ``_write_normalized_with_backup``.
+    """
+    original_bytes = path.read_bytes()
+    backup_path = path.with_name(f"{path.name}{_ENCODING_BACKUP_SUFFIX}")
+    if backup_path.exists():
+        raise EncodingBackupCollisionError(path, backup_path)
+    backup_path.write_bytes(original_bytes)
+
+    tmp_path = path.with_name(f"{path.name}.tmp-{uuid4().hex}")
+    tmp_path.write_text(text, encoding="utf-8")
+    tmp_path.replace(path)
+    return backup_path
 
 
 def normalize_feature_encoding(repo_root: Path, feature: str, *, effective_root: Path | None = None) -> list[Path]:
-    """Normalize file encoding from Windows-1252 to UTF-8 with ASCII character mapping.
+    """Recover mission-artifact encoding to UTF-8 via the canonical detector.
 
-    Converts Windows-1252 encoded files to UTF-8, replacing Unicode smart quotes
-    and special characters with ASCII equivalents for maximum compatibility.
+    Every rewritten artifact is backed up (original bytes, ``<name>.bak``)
+    before its in-place UTF-8 rewrite, and the honest detected codepage +
+    confidence + backup path are logged (FR-005 "honest output" — #4968).
+    An artifact the detector cannot confidently settle (``ambiguous``) is
+    left completely untouched: no rewrite, no backup, so the caller's
+    (unchanged) next strict-UTF-8 read still refuses it.
     """
     # Every artifact this normalizer touches — the planning docs in
     # ``PRIMARY_ARTIFACT_FILES`` plus the ``tasks/`` (WORK_PACKAGE_TASK),
@@ -877,10 +1029,17 @@ def normalize_feature_encoding(repo_root: Path, feature: str, *, effective_root:
         if path in seen or not path.exists():
             continue
         seen.add(path)
-        text = _recover_normalized_text(path.read_bytes())
-        if text is None:
+        recovered = _recover_normalized_text(path.read_bytes())
+        if recovered is None:
             continue
-        path.write_text(text, encoding="utf-8")
+        backup_path = _write_recovered_artifact(path, recovered.text)
+        logger.info(
+            "Normalized artifact encoding: %s (detected %s, confidence %.2f, backup %s)",
+            path,
+            recovered.source_encoding,
+            recovered.confidence,
+            backup_path,
+        )
         rewritten.append(path)
     return rewritten
 
@@ -1682,6 +1841,7 @@ __all__ = [
     "AcceptanceSummary",
     "acceptance_lane_derivations",
     "ArtifactEncodingError",
+    "EncodingBackupCollisionError",
     "WorkPackageState",
     "choose_mode",
     "collect_feature_summary",

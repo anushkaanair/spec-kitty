@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from specify_cli.coordination.outbound import queue_saas_emission
+from specify_cli.core import hosted_posture
 from specify_cli.core.commit_guard import GuardCapability
 from specify_cli.core.errors import StructuredError
 from specify_cli.git.commit_helpers import SafeCommitRecoveryFailed
@@ -75,6 +76,7 @@ from specify_cli.status.store import read_event_stream_from_text as _read_event_
 from specify_cli.status.store import read_events as _read_raw_events
 from specify_cli.status.transition_pipeline import PreparedTransition, prepare_transition
 from specify_cli.status.views import DERIVED_STATUS_FILENAME as _DERIVED_STATUS_FILENAME
+from specify_cli.status.views import refresh_execution_projection as _refresh_execution_projection
 from specify_cli.status.transitions import is_terminal, resolve_lane_alias
 from specify_cli.status.wp_state import annotate as _annotate
 from specify_cli.workspace import canonicalize_feature_dir, delete_context
@@ -229,9 +231,7 @@ class FallbackCoordWorktreeUnresolved(StructuredError):
         )
 
 
-def _resolve_fallback_coord_worktree(
-    identity: _TransactionIdentity, mission_slug: str
-) -> Path | None:
+def _resolve_fallback_coord_worktree(identity: _TransactionIdentity, mission_slug: str) -> Path | None:
     """Resolve the coord worktree for the non-transactional coord fallback.
 
     Two layers, mirroring the read contract's shape-vs-existence split
@@ -268,18 +268,14 @@ def _resolve_fallback_coord_worktree(
 
     try:
         # Local annotation re-narrows the cross-module (``Any``) resolve result.
-        coord_worktree: Path = CoordinationWorkspace.resolve(
-            identity.repo_root, mission_slug, identity.mid8
-        )
+        coord_worktree: Path = CoordinationWorkspace.resolve(identity.repo_root, mission_slug, identity.mid8)
     except (
         OSError,
         subprocess.SubprocessError,
         CoordinationWorkspaceBranchMismatch,
         CoordinationWorkspaceIdentityUnresolved,
     ) as exc:
-        raise FallbackCoordWorktreeUnresolved(
-            mission_slug=mission_slug, mid8=identity.mid8, cause=exc
-        ) from exc
+        raise FallbackCoordWorktreeUnresolved(mission_slug=mission_slug, mid8=identity.mid8, cause=exc) from exc
     return coord_worktree
 
 
@@ -314,9 +310,7 @@ def _emit_via_non_transactional_fallback(
     return primary_emit()
 
 
-def _commit_status_artifacts_to_coord(
-    *, repo_root: Path, mission_slug: str, coord_worktree: Path, coord_feature_dir: Path
-) -> None:
+def _commit_status_artifacts_to_coord(*, repo_root: Path, mission_slug: str, coord_worktree: Path, coord_feature_dir: Path) -> None:
     """Commit the just-emitted status artifacts to the coord branch (FR-004 row 7).
 
     Composes canonical primitives only: ``CoordinationWorkspace.resolve`` already
@@ -340,9 +334,7 @@ def _commit_status_artifacts_to_coord(
     )
     if not paths:
         return
-    write_target = resolve_placement_only(
-        repo_root, mission_slug, kind=MissionArtifactKind.STATUS_STATE
-    )
+    write_target = resolve_placement_only(repo_root, mission_slug, kind=MissionArtifactKind.STATUS_STATE)
     safe_commit(
         repo_root=repo_root,
         worktree_root=coord_worktree,
@@ -423,12 +415,19 @@ def _fan_out_committed_coord_tail(
     mission_slug: str,
     repo_root: Path | None,
     ensure_sync_daemon: bool,
+    coord_feature_dir: Path | None = None,
 ) -> None:
     """Announce only the rows captured for the successful coord commit.
 
     The stream is captured under L1 before the commit. Fan-out happens after
     commit and lock release, so another writer cannot enter this operation's
     announcements and outbound I/O cannot hold the status lock.
+
+    F-3: also refreshes the derived execution-state projection (gated on
+    :func:`hosted_posture.ledger_posture`), from ``coord_feature_dir`` -- the
+    coord worktree's on-disk feature dir the commit just landed on -- against
+    ``repo_root``. Skipped when either is ``None`` (no coord feature dir was
+    resolved, or no repository root is known).
     """
     for event in stream.transitions:
         _emit._saas_fan_out(
@@ -439,7 +438,9 @@ def _fan_out_committed_coord_tail(
             ensure_sync_daemon=ensure_sync_daemon,
         )
     for annotation in stream.annotations:
-        _emit._resolved_binding_fan_out(annotation, mission_slug)
+        _emit._resolved_binding_fan_out(annotation, mission_slug, repo_root)
+    if coord_feature_dir is not None and repo_root is not None and hosted_posture.ledger_posture(repo_root).enabled:
+        _refresh_execution_projection(coord_feature_dir, repo_root)
 
 
 _CoordEmitResult = TypeVar("_CoordEmitResult")
@@ -511,6 +512,7 @@ def _emit_on_coord_then_commit(
         mission_slug=mission_slug,
         repo_root=repo_root,
         ensure_sync_daemon=ensure_sync_daemon,
+        coord_feature_dir=coord_fd,
     )
     return result, coord_fd
 
@@ -543,10 +545,17 @@ def _fallback_emit_single(
 
     def _coord(coord_worktree: Path) -> StatusEvent:
         def _flat_shell(coord_fd: Path) -> StatusEvent:
+            # B1 fix: this call runs BEFORE the coord commit, under
+            # _emit_on_coord_then_commit's bounded L1 -- refresh_projection
+            # must be False here (independent of fan_out=False) or the
+            # projection would refresh twice on success (again post-commit
+            # via _fan_out_committed_coord_tail) and show a phantom
+            # projection (a rolled-back event) on a commit failure.
             event: StatusEvent = _emit.emit_status_transition(
                 replace(request, feature_dir=coord_fd, mission_dir=None),
                 ensure_sync_daemon=ensure_sync_daemon,
                 fan_out=False,
+                refresh_projection=False,
             )
             return event
 
@@ -566,9 +575,7 @@ def _fallback_emit_single(
         )
         return event
 
-    return _emit_via_non_transactional_fallback(
-        identity, mission_slug, primary_emit=_primary, coord_emit=_coord
-    )
+    return _emit_via_non_transactional_fallback(identity, mission_slug, primary_emit=_primary, coord_emit=_coord)
 
 
 def _fallback_emit_batch(
@@ -588,17 +595,17 @@ def _fallback_emit_batch(
 
     def _primary() -> list[StatusEvent]:
         # Local annotation re-narrows the cross-module (``Any``) emit result.
-        events: list[StatusEvent] = _emit.emit_status_transition_batch(
-            requests, ensure_sync_daemon=ensure_sync_daemon
-        )
+        events: list[StatusEvent] = _emit.emit_status_transition_batch(requests, ensure_sync_daemon=ensure_sync_daemon)
         return events
 
     def _coord(coord_worktree: Path) -> list[StatusEvent]:
         def _flat_shell(coord_fd: Path) -> list[StatusEvent]:
+            # B1 fix: same reasoning as _fallback_emit_single's _flat_shell.
             events: list[StatusEvent] = _emit.emit_status_transition_batch(
                 [replace(req, feature_dir=coord_fd, mission_dir=None) for req in requests],
                 ensure_sync_daemon=ensure_sync_daemon,
                 fan_out=False,
+                refresh_projection=False,
             )
             return events
 
@@ -612,9 +619,7 @@ def _fallback_emit_batch(
         )
         return events
 
-    return _emit_via_non_transactional_fallback(
-        identity, mission_slug, primary_emit=_primary, coord_emit=_coord
-    )
+    return _emit_via_non_transactional_fallback(identity, mission_slug, primary_emit=_primary, coord_emit=_coord)
 
 
 def _is_under_worktree(feature_dir: Path) -> bool:
@@ -700,9 +705,7 @@ def _canonical_repo_root(feature_dir: Path, repo_root: Path) -> Path:
     return canonical
 
 
-def _canonical_primary_feature_dir(
-    repo_root: Path, mission_slug: str, fallback: Path
-) -> Path:
+def _canonical_primary_feature_dir(repo_root: Path, mission_slug: str, fallback: Path) -> Path:
     """Resolve the CWD-invariant primary feature-dir anchor via the facade.
 
     Consumes the single canonical authority
@@ -731,9 +734,7 @@ def _canonical_primary_feature_dir(
     )
 
     def _primary_anchor() -> Path:
-        anchor: Path = placement_seam(repo_root, mission_slug).read_dir(
-            MissionArtifactKind.PRIMARY_METADATA
-        )
+        anchor: Path = placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.PRIMARY_METADATA)
         return anchor
 
     def _fallback() -> Path:
@@ -780,9 +781,7 @@ def _canonical_primary_feature_dir(
     return resolved.primary_anchor
 
 
-def _resolve_write_target(
-    repo_root: Path, mission_slug: str, coord_branch: str | None
-) -> str:
+def _resolve_write_target(repo_root: Path, mission_slug: str, coord_branch: str | None) -> str:
     """Resolve the status write-target ref via the canonical placement resolver.
 
     FR-004 / D-2 adoption (the latent-bug fix): the prior inline selector was
@@ -921,14 +920,13 @@ def _identity_for_request(request: TransitionRequest) -> _TransactionIdentity:
         canonical_feature_dir = canonicalize_feature_dir(raw_feature_dir)
         interim_repo_root = _repo_root_for_feature(canonical_feature_dir, request.repo_root)
         canonical_repo_root = _canonical_repo_root(canonical_feature_dir, interim_repo_root)
-        feature_dir = _canonical_primary_feature_dir(
-            canonical_repo_root, mission_slug, fallback=canonical_feature_dir
-        )
+        feature_dir = _canonical_primary_feature_dir(canonical_repo_root, mission_slug, fallback=canonical_feature_dir)
         repo_root = request.repo_root or canonical_repo_root
 
     # FR-007: fail-closed reader routing. Malformed meta surfaces typed
     # MissionMetaReadError instead of raw ValueError.
     from specify_cli.core.paths import load_meta_fail_closed
+
     meta = load_meta_fail_closed(feature_dir)
 
     coord_branch: str | None = None
@@ -970,7 +968,9 @@ def _identity_for_request(request: TransitionRequest) -> _TransactionIdentity:
 
         assert primary_root is not None
         destination_ref = resolve_placement_only(
-            primary_root, mission_slug, kind=MissionArtifactKind.STATUS_STATE,
+            primary_root,
+            mission_slug,
+            kind=MissionArtifactKind.STATUS_STATE,
             effective_root=request.effective_root,
         ).ref
     else:
@@ -988,9 +988,7 @@ def _identity_for_request(request: TransitionRequest) -> _TransactionIdentity:
     )
 
 
-def _resolve_transaction_entry(
-    request: TransitionRequest, mission_slug: str
-) -> tuple[_TransactionIdentity, bool]:
+def _resolve_transaction_entry(request: TransitionRequest, mission_slug: str) -> tuple[_TransactionIdentity, bool]:
     """Shared preamble of the single and batch doors: identity + topology + owned check.
 
     ONE place decides whether a request may take the ``BookkeepingTransaction``
@@ -1005,9 +1003,7 @@ def _resolve_transaction_entry(
     if request.effective_root is not None and not topology_available:
         from mission_runtime import ActionContextError  # noqa: PLC0415
 
-        raise ActionContextError(
-            "OWNED_TRANSACTION_UNAVAILABLE", "Owned mission requires transactional status metadata."
-        )
+        raise ActionContextError("OWNED_TRANSACTION_UNAVAILABLE", "Owned mission requires transactional status metadata.")
     return identity, topology_available
 
 
@@ -1062,7 +1058,7 @@ def _defer_fan_out(
 ) -> None:
     """Step 7 of the transactional shell: fan-out fires only after commit success."""
     if prepared.annotation is not None:
-        txn.defer_outbound(_deferred_resolved_binding_fan_out(prepared.annotation, mission_slug))
+        txn.defer_outbound(_deferred_resolved_binding_fan_out(prepared.annotation, mission_slug, txn.repo_root))
     queue_saas_emission(
         txn,
         event,
@@ -1070,6 +1066,11 @@ def _defer_fan_out(
         repo_root=repo_root,
         ensure_sync_daemon=ensure_sync_daemon,
     )
+    # F-3: register the projection refresh as a post-commit deferred outbound
+    # (never called synchronously inside the transaction) -- the shared choke
+    # point for both the single-door (~1534) and batch-door (~1773) callers.
+    if hosted_posture.ledger_posture(txn.repo_root).enabled:
+        txn.defer_outbound(_deferred_execution_projection_refresh(txn.feature_dir, txn.repo_root))
 
 
 def _collapse_alias_in_transaction(
@@ -1115,13 +1116,32 @@ def _collapse_alias_in_transaction(
 def _deferred_resolved_binding_fan_out(
     annotation: InnerStateChanged,
     mission_slug: str,
+    repo_root: Path | None,
 ) -> Callable[[], None]:
-    """Return a typed post-commit resolved-binding fan-out callback."""
+    """Return a typed post-commit resolved-binding fan-out callback.
+
+    ``repo_root`` (m1): threaded through to :func:`_emit._resolved_binding_fan_out`
+    so its drain gate reads the emitting repo's own posture rather than the
+    process CWD -- this callback previously omitted it even though every
+    caller already has ``txn.repo_root`` in scope.
+    """
 
     def emit() -> None:
-        _emit._resolved_binding_fan_out(annotation, mission_slug)
+        _emit._resolved_binding_fan_out(annotation, mission_slug, repo_root)
 
     return emit
+
+
+def _deferred_execution_projection_refresh(
+    feature_dir: Path,
+    repo_root: Path,
+) -> Callable[[], None]:
+    """Return a typed post-commit execution-state projection refresh callback (F-3)."""
+
+    def refresh() -> None:
+        _refresh_execution_projection(feature_dir, repo_root)
+
+    return refresh
 
 
 def _read_events_from_transaction_target(
@@ -1130,9 +1150,7 @@ def _read_events_from_transaction_target(
 ) -> list[StatusEvent]:
     """Read target status events without creating worktrees or commits."""
     # Local annotation re-narrows the cross-module (``Any``) read result.
-    events: list[StatusEvent] = read_event_log(
-        _read_contract_from_transaction_target(identity, mission_slug)
-    )
+    events: list[StatusEvent] = read_event_log(_read_contract_from_transaction_target(identity, mission_slug))
     return events
 
 
@@ -1141,9 +1159,7 @@ def _read_event_stream_from_transaction_target(
     mission_slug: str,
 ) -> EventStream:
     """Read transitions and annotations without creating a worktree."""
-    return read_event_stream_log(
-        _read_contract_from_transaction_target(identity, mission_slug)
-    )
+    return read_event_stream_log(_read_contract_from_transaction_target(identity, mission_slug))
 
 
 def read_current_wp_state_transactional(
@@ -1302,9 +1318,13 @@ def _read_contract_from_transaction_target(
         mission_slug,
         identity.mid8,
     )
-    transaction_feature_dir = worktree_root / KITTY_SPECS_DIR / _transaction_dir_name(
-        mission_slug,
-        identity.mid8,
+    transaction_feature_dir = (
+        worktree_root
+        / KITTY_SPECS_DIR
+        / _transaction_dir_name(
+            mission_slug,
+            identity.mid8,
+        )
     )
     if worktree_root.exists():
         return EventLogReadContract.coordination_worktree(transaction_feature_dir)
@@ -1383,10 +1403,7 @@ def has_transition_to_transactional(
             repo_root=repo_root,
         )
     )
-    return any(
-        event.wp_id == wp_id and str(event.to_lane) == str(to_lane)
-        for event in _read_events_from_transaction_target(identity, mission_slug)
-    )
+    return any(event.wp_id == wp_id and str(event.to_lane) == str(to_lane) for event in _read_events_from_transaction_target(identity, mission_slug))
 
 
 # ---------------------------------------------------------------------------
@@ -1394,9 +1411,7 @@ def has_transition_to_transactional(
 # ---------------------------------------------------------------------------
 
 
-def _lane_wp_ids_all_terminal(
-    work_packages: dict[str, dict[str, Any]], wp_ids: tuple[str, ...]
-) -> bool:
+def _lane_wp_ids_all_terminal(work_packages: dict[str, dict[str, Any]], wp_ids: tuple[str, ...]) -> bool:
     """Return whether every WP in *wp_ids* has reached a terminal lane.
 
     Mirrors ``status/doctor.py``'s ``check_orphan_workspaces`` all-terminal
@@ -1441,9 +1456,7 @@ def _tombstone_lane_workspace_context_on_cancel(
     from mission_runtime import MissionArtifactKind, placement_seam  # noqa: PLC0415
     from specify_cli.lanes.persistence import CorruptLanesError, read_lanes_json  # noqa: PLC0415
 
-    lanes_read_dir: Path = placement_seam(repo_root, mission_slug).read_dir(
-        MissionArtifactKind.LANE_STATE
-    )
+    lanes_read_dir: Path = placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.LANE_STATE)
     try:
         lanes_manifest = read_lanes_json(lanes_read_dir)
     except CorruptLanesError:
@@ -1459,7 +1472,7 @@ def _tombstone_lane_workspace_context_on_cancel(
     if not _lane_wp_ids_all_terminal(snapshot.work_packages, lane.wp_ids):
         return
 
-    workspace_name = worktree_dir_name(mission_slug, mission_id=None, lane_id=lane.lane_id)
+    workspace_name = worktree_dir_name(mission_slug, lane_id=lane.lane_id)
     delete_context(repo_root, workspace_name)
 
 
@@ -1548,9 +1561,7 @@ def emit_status_transition_transactional(
         return event
 
 
-def _lanes_annotation_transaction_available(
-    identity: _TransactionIdentity, mission_slug: str
-) -> bool:
+def _lanes_annotation_transaction_available(identity: _TransactionIdentity, mission_slug: str) -> bool:
     """Return whether a stored LANES mission can commit a primary annotation.
 
     Modern ``LANES`` missions have no distinct coordination branch, but their
@@ -1568,11 +1579,7 @@ def _lanes_annotation_transaction_available(
         meta = load_meta_fail_closed(identity.feature_dir)
     except (OSError, MissionMetaReadError):
         return False
-    return (
-        meta is not None
-        and meta.get("topology") == MissionTopology.LANES.value
-        and _transaction_topology_available(identity, mission_slug)
-    )
+    return meta is not None and meta.get("topology") == MissionTopology.LANES.value and _transaction_topology_available(identity, mission_slug)
 
 
 def emit_inner_state_changed_transactional(
@@ -1660,11 +1667,7 @@ def emit_inner_state_changed_transactional(
             repo_root=repo_root,
         )
 
-    if (
-        effective_root is None
-        and identity.coordination_branch is None
-        and not _lanes_annotation_transaction_available(identity, mission_slug)
-    ):
+    if effective_root is None and identity.coordination_branch is None and not _lanes_annotation_transaction_available(identity, mission_slug):
         return _uncommitted_emit()
 
     annotation = _annotate(
@@ -1685,9 +1688,12 @@ def emit_inner_state_changed_transactional(
             capability=capability,
         ) as txn:
             txn.append_events([annotation])
-            txn.defer_outbound(
-                _deferred_resolved_binding_fan_out(annotation, mission_slug)
-            )
+            txn.defer_outbound(_deferred_resolved_binding_fan_out(annotation, mission_slug, txn.repo_root))
+            # F-3: this path persists an InnerStateChanged annotation rather
+            # than a lane-transition StatusEvent -- still a durably persisted
+            # change worth reflecting in the projection.
+            if hosted_posture.ledger_posture(txn.repo_root).enabled:
+                txn.defer_outbound(_deferred_execution_projection_refresh(txn.feature_dir, txn.repo_root))
     except BookkeepingWorktreeMissing:
         if effective_root is not None:
             raise
@@ -1725,9 +1731,7 @@ def emit_status_transition_batch_transactional(
     mission_slug = first.mission_slug or first._legacy_mission_slug
     first_feature_dir_raw = first.feature_dir or first.mission_dir
     if mission_slug is None or first.wp_id is None or first_feature_dir_raw is None:
-        raise TypeError(
-            "transactional status batch requires feature_dir/mission_dir, mission_slug, and wp_id"
-        )
+        raise TypeError("transactional status batch requires feature_dir/mission_dir, mission_slug, and wp_id")
 
     identity, topology_available = _resolve_transaction_entry(first, mission_slug)
     if not topology_available:

@@ -71,6 +71,12 @@ _PUBLIC_SURFACE = sorted(
         # mission_runtime/mission_resolver_port.py for the full rationale.
         "MissionResolver",
         "MissionTopology",
+        # issue-matrix-partition-integrity followups (#5222/F2): the ONE typed
+        # refusal ``read_issue_matrix_ref_content`` raises, promoted onto the
+        # root so review/doctor consumers of
+        # ``resolve_issue_matrix_partition`` can catch it by type instead of a
+        # bare ``Exception``.
+        "IssueMatrixRefReadError",
         # coord-primary-partition-lock WP01 (T001): the kind-aware placement seam
         # — the public face of resolve_action_context's derivation root (C-001) —
         # exposed as one authority object + its constructor, out-of-map edit
@@ -149,6 +155,7 @@ _PUBLIC_SURFACE = sorted(
         # creation's pre-readable-identity window. Kept on the package root so
         # mission_creation never imports the internal resolution submodule.
         "resolve_create_time_write_target",
+        "resolve_issue_matrix_partition",
         "resolve_mid8",
         "resolve_placement_only",
         "resolve_topology",

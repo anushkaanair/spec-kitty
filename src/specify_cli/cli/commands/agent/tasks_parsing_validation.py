@@ -1,10 +1,19 @@
-"""Issue-matrix evaluation, review-verdict, and review-readiness validation.
+"""Review-verdict and review-readiness validation, plus the issue-matrix re-export.
 
 WP06 (#2058): cohesive seam extracted from the ``tasks`` god-module. These
-helpers parse and validate review-side state: the issue-matrix approval
-blocker, the latest review-cycle verdict, the self-review fallback option
-guard, the stale/stalled review status annotations, and the
-``move-task → for_review/approved/done`` readiness validation.
+helpers parse and validate review-side state: the latest review-cycle
+verdict, the self-review fallback option guard, the stale/stalled review
+status annotations, and the ``move-task → for_review/approved/done``
+readiness validation.
+
+The issue-matrix approval-blocker family (``_issue_matrix_approval_blocker``
+and its helpers) moved to :mod:`specify_cli.tasks.issue_matrix_approval`
+(#5222, F4) -- a domain home, since ``policy.merge_gates`` reuses the SAME
+terminal-verdict rule and importing a private name from this CLI seam was a
+policy -> CLI layer inversion. Re-exported here (self-import) so every
+existing ``from ...tasks_parsing_validation import
+_issue_matrix_approval_blocker`` call site (``tasks.py``,
+``tasks_move_task.py``) is unaffected byte-for-byte.
 
 Import direction is one-way (INV-2): this module may import from
 ``tasks_outline`` / ``tasks_materialization`` / ``tasks_dependency_graph``
@@ -27,15 +36,10 @@ import logging
 import subprocess
 from collections.abc import Callable
 from kernel.clock import UTC, datetime, now_utc, parse_iso
-from kernel._safe_re import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from specify_cli.cli.commands.review._issue_matrix import (
-        IssueMatrixValidationResult,
-        IssueMatrixVerdict,
-    )
     from specify_cli.workspace.context import ResolvedWorkspace
 
 from specify_cli.cli.commands.agent.tasks_dependency_graph import (
@@ -58,278 +62,29 @@ from specify_cli.status import is_dossier_snapshot as _is_dossier_snapshot
 
 logger = logging.getLogger(__name__)
 
-# Mirror of the constant defined in ``tasks``. Hoisted as a module-local
-# constant so this seam has no back-import to the god-module.
-SPEC_MD_FILENAME = "spec.md"
-
 # Known verdict values from the review-cycle schema.
 # Unknown values warn but do NOT block (backward compatibility).
-_VALID_VERDICTS: frozenset[str] = frozenset(
-    {"approved", "approved_after_orchestrator_fix", "arbiter_override", "rejected"}
-)
-
-# S1192 (WP05/#2555.5): the "ERROR: <artifact>" prefix and the
-# "before approving" hint each recur across the approval-blocker error
-# strings below — hoisted so a 4th message does not reintroduce the
-# duplication.
-_FILL_VERDICTS_HINT = "before approving"
-
-# #3951 (F-36): the remedy command for an unfilled verdict row.  The
-# approve-gate blocker previously said only "Fill in verdicts" without
-# naming the command that does it, so orchestrating agents guessed at
-# ``agent mission issue-verdict`` / ``agent tasks issue-verdict`` and hit
-# "No such command".  Shared by the two "Fill verdicts" blocker messages.
-_ISSUE_VERDICT_REMEDY = (
-    "Record a verdict per row with: spec-kitty agent issue-verdict --mission "
-    "<handle> --issue <#NNN> --verdict "
-    "<fixed|verified-already-fixed|deferred-with-followup|in-mission|not-applicable> "
-    "--actor <actor> [--wp <WPnn>] [--evidence-ref <evidence>]"
-)
-
-
-def _issue_matrix_error_prefix(feature_dir: Path) -> str:
-    """``"ERROR: <actual-artifact>"`` for the approve-gate messages (#4330).
-
-    Names the artifact the gate actually reads, mirroring the canonical
-    dir-based reader's JSON-first resolution (:func:`load_issue_matrix`):
-    ``issue-matrix.json`` when one exists, else the legacy
-    ``issue-matrix.md``. When NEITHER exists the canonical, scaffolded
-    artifact is named (``issue-matrix.json`` — C-008: no new ``.md`` is ever
-    emitted), which is also what the regenerate hint in the missing-artifact
-    message tells the operator to produce. The old hardcoded
-    ``issue-matrix.md`` prefix reported the wrong filename for every
-    JSON-format mission.
-    """
-    from specify_cli.tasks.issue_matrix import (
-        ISSUE_MATRIX_JSON_FILENAME,
-        ISSUE_MATRIX_MD_FILENAME,
-    )
-
-    if (feature_dir / ISSUE_MATRIX_MD_FILENAME).exists() and not (
-        feature_dir / ISSUE_MATRIX_JSON_FILENAME
-    ).exists():
-        return f"ERROR: {ISSUE_MATRIX_MD_FILENAME}"
-    return f"ERROR: {ISSUE_MATRIX_JSON_FILENAME}"
-
+_VALID_VERDICTS: frozenset[str] = frozenset({"approved", "approved_after_orchestrator_fix", "arbiter_override", "rejected"})
 
 # ---------------------------------------------------------------------------
-# Issue-matrix evaluation helpers (verbatim move from tasks.py, WP06/T022)
+# Issue-matrix approval rule (#5222, F4): moved to a domain home under
+# ``specify_cli.tasks`` so ``policy.merge_gates`` (which reuses this SAME
+# terminal-verdict lever) imports a policy -> domain edge instead of reaching
+# up into this CLI ``agent`` command tree for a private name. Re-exported
+# here (self-import) so ``tasks.py`` / ``tasks_move_task.py`` -- and every
+# other existing ``from ...tasks_parsing_validation import
+# _issue_matrix_approval_blocker`` call site -- are unaffected byte-for-byte.
+# See :mod:`specify_cli.tasks.issue_matrix_approval` for the implementation.
 # ---------------------------------------------------------------------------
-
-
-def _issue_matrix_evaluation(
-    feature_dir: Path,
-    *,
-    spec_feature_dir: Path | None = None,
-) -> tuple[IssueMatrixValidationResult, set[str], list[str], list[str]]:
-    from specify_cli.cli.commands.review._issue_matrix import (
-        IssueMatrixVerdict,
-        validate_issue_matrix,
-    )
-    from specify_cli.tasks.issue_reference_discovery import (
-        discover_issue_references,
-        is_gating,
-    )
-
-    # WP08 T029/FR-004: discovery scans every PRIMARY-partition mission
-    # artifact (spec.md, plan.md, research.md, analysis-report.md,
-    # tasks/*.md, contracts/*.md) under the resolved primary dir, not
-    # spec.md alone.
-    refs = discover_issue_references(spec_feature_dir or feature_dir)
-    result = validate_issue_matrix(feature_dir / "issue-matrix.md")
-    # FR-012/FR-013 (move-task-approval-ergonomics-01M302R0 WP02, #3469):
-    # classification decides row-REQUIREMENT -- only the WP01 classifier's
-    # ``implementation_target`` references ever require an issue-matrix row.
-    # ``context_only``/``pr_or_commit_ref`` references are cited but owed no
-    # work, so they never contribute to "missing" or "unresolved in-mission".
-    referenced_issues = {f"#{ref.number}" for ref in refs if is_gating(ref)}
-    matrix_issues = _issue_matrix_row_issues(result)
-    unresolved_in_mission = _issue_matrix_in_mission_rows(
-        result,
-        referenced_issues,
-        IssueMatrixVerdict.IN_MISSION,
-    )
-    missing_issues = sorted(referenced_issues - matrix_issues)
-    return result, referenced_issues, missing_issues, unresolved_in_mission
-
-
-def _issue_matrix_row_issues(result: IssueMatrixValidationResult) -> set[str]:
-    matrix_issues = {row.issue for row in result.rows}
-    for diagnostic in result.diagnostics:
-        match = re.search(r"Row for issue '([^']+)'", diagnostic.get("message", ""))
-        if match:
-            matrix_issues.add(match.group(1))
-    return matrix_issues
-
-
-def _issue_matrix_in_mission_rows(
-    result: IssueMatrixValidationResult,
-    referenced_issues: set[str],
-    in_mission_verdict: IssueMatrixVerdict,
-) -> list[str]:
-    return sorted(
-        row.issue
-        for row in result.rows
-        if row.verdict is in_mission_verdict and row.issue in referenced_issues
-    )
-
-
-def _issue_matrix_diagnostic_lines(result: IssueMatrixValidationResult) -> list[str]:
-    """Render every diagnostic as a surfaced message line (#4330).
-
-    Each validator diagnostic already names the failing row and the concrete
-    rule it broke (e.g. ``Row for issue '#1582': verdict is
-    'deferred-with-followup' but evidence_ref contains no follow-up handle
-    (expected '#NNN' or 'Follow-up:' substring)``), so each is passed through
-    verbatim — the old VERDICT_UNKNOWN reduction to a bare ``Unknown: #NNN``
-    id list is exactly the per-row-cause masking #4330 files. FR-007
-    (#2555.5): a ``ISSUE_MATRIX_SCHEMA_DRIFT`` diagnostic (e.g. a mandatory
-    column spelled non-canonically) carries a ``detail`` payload naming the
-    found/normalized columns; appending it lets the approval blocker name the
-    offending column instead of leaving the caller to infer schema drift from
-    an all-issues "Missing rows" list.
-    """
-    from specify_cli.cli.commands.review._diagnostics import MissionReviewDiagnostic
-
-    messages: list[str] = []
-    for diagnostic in result.diagnostics:
-        message = diagnostic.get("message", "")
-        code = diagnostic.get("diagnostic_code")
-        if code == str(MissionReviewDiagnostic.ISSUE_MATRIX_SCHEMA_DRIFT):
-            detail = diagnostic.get("detail")
-            messages.append(f"{message} ({detail})" if detail else message)
-        else:
-            messages.append(message)
-    return messages
-
-
-def _issue_matrix_approval_blocker(
-    feature_dir: Path,
-    *,
-    target_lane: Lane | None = None,
-    primary_feature_dir: Path | None = None,
-) -> str | None:
-    """Return a blocking message when referenced issues still lack final verdicts.
-
-    ``target_lane`` controls how the non-terminal ``in-mission`` verdict is
-    treated. At ``approved`` (or when unspecified) an ``in-mission`` row is
-    acceptable — the issue is being closed by a later WP in this same mission,
-    so a dependency chain is not blocked on its own downstream work. At ``done``
-    (mission merge/acceptance) ``in-mission`` is rejected: every issue must have
-    reached a terminal verdict (``fixed`` / ``verified-already-fixed`` /
-    ``deferred-with-followup`` / ``not-applicable``) before the mission lands.
-
-    Lever SSOT (FR-013, move-task-approval-ergonomics-01M302R0 WP02, #3469):
-    classification decides whether a row is REQUIRED, verdict decides whether
-    an existing row is RESOLVED. Only a reference the WP01 classifier
-    (:mod:`specify_cli.tasks.issue_reference_discovery`) calls
-    ``implementation_target`` ever requires a row at all — a mission that
-    references only ``context_only``/``pr_or_commit_ref`` issues needs no
-    issue-matrix artifact, let alone a row, and is never blocked here. Once a
-    row exists, ``not-applicable`` is the mirror image of ``in-mission``: it
-    is non-gating at ``approved`` (nothing special needed — it simply is not
-    added to ``unresolved_in_mission``) AND terminal at ``done`` (unlike
-    ``in-mission``, it never re-blocks at merge).
-
-    Placement (coord-commit-integrity SURFACE A #1c): ``issue-matrix.md`` is a
-    COORD-partition kind, so the matrix is read from ``feature_dir`` — the
-    caller's topology-resolved read surface (the coordination worktree under
-    coord / lanes-with-coord topology; the primary dir when coord-less). There is
-    NO PRIMARY fallback: a PRIMARY fallback for a COORD kind was the split-brain
-    anti-pattern (a stale primary copy silently satisfying a stale/unfilled coord
-    matrix). ``primary_feature_dir`` is consulted ONLY for discovery (WP08
-    T029/FR-004: spec.md, plan.md, research.md, analysis-report.md,
-    tasks/*.md, contracts/*.md — all genuine PRIMARY-partition kinds) — to
-    detect the referenced issues.
-    """
-    spec_feature_dir = (
-        primary_feature_dir
-        if primary_feature_dir is not None and (primary_feature_dir / SPEC_MD_FILENAME).exists()
-        else feature_dir
-    )
-
-    try:
-        from specify_cli.tasks.issue_reference_discovery import (
-            discover_issue_references,
-            is_gating,
-        )
-
-        refs = discover_issue_references(spec_feature_dir)
-    except Exception as exc:  # noqa: BLE001 -- approval guard must fail closed
-        logger.debug("Could not evaluate issue-matrix approval blocker: %s", exc)
-        return (
-            f"{_issue_matrix_error_prefix(feature_dir)} could not be evaluated before approval.\n"
-            f"Reason: {exc}\n"
-            f"Fix the issue-matrix check {_FILL_VERDICTS_HINT}."
-        )
-
-    # FR-013 lever SSOT (move-task-approval-ergonomics-01M302R0 WP02, #3469):
-    # classification decides row-REQUIREMENT -- only a reference the WP01
-    # classifier calls ``implementation_target`` ever requires an
-    # issue-matrix row or artifact. A mission that references ONLY
-    # ``context_only``/``pr_or_commit_ref`` issues needs no matrix at all.
-    gating_refs = [ref for ref in refs if is_gating(ref)]
-    if not gating_refs:
-        return None
-
-    # T043 (C-008 / B-1 fix): presence is a dir-based check
-    # (:func:`issue_matrix_artifact_present`), not a ``.md``-only
-    # ``.exists()`` — the prior precheck made a JSON-only mission (B3) hard-
-    # fail approval before ``_issue_matrix_evaluation`` (which already
-    # resolves JSON-first via WP05's canonical dir-based reader,
-    # :func:`~specify_cli.tasks.issue_matrix_migration.load_issue_matrix`)
-    # ever ran.
-    from specify_cli.tasks.issue_matrix_migration import issue_matrix_artifact_present
-
-    if not issue_matrix_artifact_present(feature_dir):
-        issue_list = ", ".join(f"#{ref.number}" for ref in gating_refs)
-        return (
-            f"{_issue_matrix_error_prefix(feature_dir)} is required before approval.\n"
-            f"Referenced issues: {issue_list}\n"
-            f"Fill verdicts {_FILL_VERDICTS_HINT}.\n"
-            f"This file is normally scaffolded automatically. If it is missing, "
-            f"regenerate it: spec-kitty agent mission finalize-tasks --mission {feature_dir.name}\n"
-            f"{_ISSUE_VERDICT_REMEDY}\n"
-            f"Schema and worked example: src/specify_cli/cli/commands/review/ERROR_CODES.md"
-        )
-
-    result, _, missing_issues, unresolved_in_mission = _issue_matrix_evaluation(
-        feature_dir,
-        spec_feature_dir=spec_feature_dir,
-    )
-    if target_lane != Lane.DONE:
-        unresolved_in_mission = []
-
-    if result.passed and not missing_issues and not unresolved_in_mission:
-        return None
-
-    # #4330: every diagnostic line already carries the failing row + the
-    # concrete rule it broke, so they are surfaced FIRST, directly under the
-    # header that names the actual artifact — no bare-id reduction between
-    # the operator and the per-row cause.
-    diagnostic_lines = _issue_matrix_diagnostic_lines(result)
-
-    lines = [
-        f"{_issue_matrix_error_prefix(feature_dir)} has unresolved entries. "
-        f"Fill in verdicts {_FILL_VERDICTS_HINT}."
-    ]
-    for message in diagnostic_lines:
-        lines.append(f"- {message}")
-    # FR-007 (#2555.5): only claim rows are "missing" when rows were actually
-    # parsed. A malformed mandatory column (schema drift) makes the parser
-    # bail out with zero rows, at which point every referenced issue looks
-    # "missing" even though the real problem is the header — that signal is
-    # already surfaced via ``diagnostic_lines`` (schema-drift detail) above.
-    if missing_issues and result.rows:
-        lines.append(f"Missing rows: {', '.join(missing_issues)}")
-    if unresolved_in_mission:
-        lines.append(
-            "Still 'in-mission' (resolve to fixed / verified-already-fixed / "
-            f"deferred-with-followup before done): {', '.join(unresolved_in_mission)}"
-        )
-    lines.append(_ISSUE_VERDICT_REMEDY)
-    return "\n".join(lines)
-
+from specify_cli.tasks.issue_matrix_approval import (  # noqa: E402
+    SPEC_MD_FILENAME as SPEC_MD_FILENAME,
+    _issue_matrix_approval_blocker as _issue_matrix_approval_blocker,
+    _issue_matrix_diagnostic_lines as _issue_matrix_diagnostic_lines,
+    _issue_matrix_error_prefix as _issue_matrix_error_prefix,
+    _issue_matrix_evaluation as _issue_matrix_evaluation,
+    _issue_matrix_in_mission_rows as _issue_matrix_in_mission_rows,
+    _issue_matrix_row_issues as _issue_matrix_row_issues,
+)
 
 # ---------------------------------------------------------------------------
 # Self-review fallback option guard (verbatim move from tasks.py, WP06/T022)
@@ -467,9 +222,7 @@ def _apply_review_status_flags(
 
         lane = wp.get("lane")
         if lane in (Lane.APPROVED, Lane.DONE):
-            _apply_wp_review_verdict_flag(
-                wp, wp_id=wp_id, feature_dir=feature_dir, stale_verdicts=stale_verdicts
-            )
+            _apply_wp_review_verdict_flag(wp, wp_id=wp_id, feature_dir=feature_dir, stale_verdicts=stale_verdicts)
 
         if lane == Lane.IN_REVIEW:
             last_event_time = _latest_status_event_time(events, wp_id)
@@ -599,16 +352,11 @@ def _resolve_worktree_path(
     if workspace is None:
         from specify_cli.lanes.branch_naming import worktree_path as _seam_worktree_path
 
-        # Legacy lane-a worktree grammar ({slug}-lane-a, no mid8) ⇒
-        # mission_id=None reproduces the historical name byte-identically (FR-005).
+        # Lane naming is keyed on the creation input alone (WP07, FR-002/PD-1);
         # ``Path(...)`` is a narrow coercion: the cross-module ``specify_cli.*``
         # imports are ``follow_imports = skip`` under mypy --strict, so the
         # seam's already-``Path`` return is otherwise inferred as ``Any``.
-        return Path(
-            _seam_worktree_path(
-                main_repo_root, mission_slug, mission_id=None, lane_id="lane-a"
-            )
-        )
+        return Path(_seam_worktree_path(main_repo_root, mission_slug, lane_id="lane-a"))
     return Path(workspace.worktree_path)
 
 
@@ -745,9 +493,7 @@ def _check_uncommitted_worktree_changes(
     filter_runtime_state_paths: Callable[[str], str],
 ) -> list[str] | None:
     """Block when the worktree has genuine uncommitted implementation work."""
-    result = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=worktree_path, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
-    )
+    result = subprocess.run(["git", "status", "--porcelain"], cwd=worktree_path, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
     # FR-015 / C-003: strip spec-kitty's own runtime-state files (e.g.
     # .spec-kitty/review-lock.json written by the review tooling, or
     # .kittify/ merge metadata) before deciding whether the worktree
@@ -862,9 +608,7 @@ def _resolve_planning_branch_for_lane_guard(feature_dir: Path) -> str | None:
             _target: str | None = _read_target_branch_lggrd(feature_dir)
             return _target
     except Exception as _lane_meta_exc:  # noqa: BLE001 - lane guard still reports contamination without optional metadata
-        logger.debug(
-            "Could not resolve planning_base_branch for lane guard: %s", _lane_meta_exc
-        )
+        logger.debug("Could not resolve planning_base_branch for lane guard: %s", _lane_meta_exc)
     return None
 
 
@@ -901,9 +645,7 @@ def _check_kitty_specs_contamination(
         guidance.append(f"  ... and {len(contamination_files) - 5} more")
     guidance.append("")
     if _planning_branch:
-        _first_planning_path = (
-            contamination_files[0] if contamination_files else f"{KITTY_SPECS_DIR}/<path-to-file>"
-        )
+        _first_planning_path = contamination_files[0] if contamination_files else f"{KITTY_SPECS_DIR}/<path-to-file>"
         guidance.append(
             f"{KITTY_SPECS_DIR}/ changes are not allowed on lane branches.\n"
             f"Planning artifacts must live on: {_planning_branch}\n\n"
@@ -911,10 +653,7 @@ def _check_kitty_specs_contamination(
             f"  git show {_planning_branch}:{_first_planning_path}"
         )
     else:
-        guidance.append(
-            f"{KITTY_SPECS_DIR}/ changes are not allowed on lane branches "
-            f"(planning branch unknown — check {KITTY_SPECS_DIR}/ on the base branch)."
-        )
+        guidance.append(f"{KITTY_SPECS_DIR}/ changes are not allowed on lane branches (planning branch unknown — check {KITTY_SPECS_DIR}/ on the base branch).")
     guidance.append("")
     guidance.append(f"Clean the branch before moving to {target_lane}:")
     guidance.append(f"  cd {worktree_path}")
@@ -1096,11 +835,7 @@ def _validate_ready_for_review(
         placement_seam,
     )
 
-    feature_dir = placement_seam(
-        main_repo_root, mission_slug, effective_root=effective_root
-    ).read_dir(
-        MissionArtifactKind.RESEARCH
-    )
+    feature_dir = placement_seam(main_repo_root, mission_slug, effective_root=effective_root).read_dir(MissionArtifactKind.RESEARCH)
 
     # Detect mission type from feature's meta.json
     mission_type = get_mission_type(feature_dir)

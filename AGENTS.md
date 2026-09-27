@@ -497,7 +497,7 @@ Every mission carries a ULID-based `mission_id` in `meta.json`. `mission_number`
 
 `mission_id` is the only runtime identity. `mission_number` is never used for lookup, locking, or routing.
 
-**Naming:** Branch: `kitty/mission-<slug>-<mid8>-lane-<id>` | Worktree: `.worktrees/<slug>-<mid8>-lane-<id>`
+**Naming:** Lane branch/worktree are keyed on the recorded Mission slug + lane id only (the mid8 appears when the slug embeds it): Branch `kitty/mission-<slug-body>-lane-<id>` (a stale `NNN-` is dropped from the slug body only when the slug embeds a mid8) | Worktree `.worktrees/<slug>-lane-<id>` (full recorded slug, verbatim). Mission/coordination branches keep `kitty/mission-<human-slug>-<mid8>`. See ADR `docs/adr/3.x/2026-09-26-2-lane-naming-keyed-on-creation-input.md`.
 
 **Selector disambiguation:** Resolves `mission_id` → `mid8` → `mission_slug`. Ambiguous handles → structured error, **no silent fallback** (WP07 — reintroducing fallback is a regression).
 
@@ -616,7 +616,7 @@ Runbook: `spec-kitty-saas/docs/docker-development-modes.md` in the sibling SaaS 
 
 ## Documentation Mission Patterns (0.11.0+)
 
-**Modes:** `initial` (from scratch), `gap_filling` (audit + fill gaps), `feature_specific` (one feature/component).
+**Modes:** `initial` (from scratch), `gap_filling` (audit + fill gaps), `mission_specific` (one feature/component; legacy input alias `feature_specific`).
 
 **Divio types:** Tutorial (learning), How-To (task), Reference (API, often auto-generated), Explanation (architecture/why).
 

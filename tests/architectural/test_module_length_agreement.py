@@ -81,8 +81,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
+import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -146,6 +148,31 @@ _MISMATCH_ALLOWLIST: dict[str, str] = {
 _BASELINE_ALLOWLIST_COUNT = 20
 
 
+# spec-kitty#5189 interim relief: a committed/collected count drift no longer
+# reds the per-PR architectural battery. Any +1/-1 test-count change in a
+# pinned module (charter above all) otherwise forced a ~18-min serial measured
+# recapture as mandatory landing work, once per rebase. Drift now surfaces as a
+# `ShardTimingsDriftWarning` in the pytest warnings summary; set this env var to
+# "1" to restore the hard failure (local check, or a future scheduled lane).
+# The owning remedy (spec-kitty#5189, remedy d) replaces this switch.
+_STRICT_ENV_VAR = "SPEC_KITTY_STRICT_SHARD_TIMINGS"
+
+
+class ShardTimingsDriftWarning(UserWarning):
+    """Committed shard-timings length disagrees with live collection (non-blocking per PR)."""
+
+
+def _strict_mode() -> bool:
+    return os.environ.get(_STRICT_ENV_VAR) == "1"
+
+
+def _report_drift(message: str, *, strict: bool) -> None:
+    """Fail under strict mode; otherwise warn so the drift stays visible without blocking."""
+    if strict:
+        pytest.fail(message)
+    warnings.warn(ShardTimingsDriftWarning(message), stacklevel=2)
+
+
 @dataclass(frozen=True)
 class _Mismatch:
     module: str
@@ -183,7 +210,7 @@ def _committed_length(timings: dict[str, Any], module: str) -> int:
 
 
 @lru_cache(maxsize=1)
-def _load_capture_shard_timings_module() -> ModuleType:
+def _load_capture_shard_timings_module(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
     """Load ``scripts/ci/capture_shard_timings.py`` by file path.
 
     ``scripts/ci`` is not an importable package from this test's own import
@@ -198,7 +225,10 @@ def _load_capture_shard_timings_module() -> ModuleType:
     called once per registry module inside the session-scoped
     `_collected_counts` fixture loop -- this keeps the module load to once per
     session, matching what the prior `sys.path.insert` + bare `import` did via
-    Python's own `sys.modules` cache.
+    Python's own `sys.modules` cache. The single ``monkeypatch`` argument
+    (the same ``pytest.MonkeyPatch.context()`` instance across the whole
+    `_collected_counts` loop) is part of the cache key, which is exactly what
+    keeps this a session-lifetime cache rather than fragmenting per call.
     """
     spec = importlib.util.spec_from_file_location("capture_shard_timings", _SCRIPTS_CI_DIR / "capture_shard_timings.py")
     assert spec is not None and spec.loader is not None
@@ -207,12 +237,12 @@ def _load_capture_shard_timings_module() -> ModuleType:
     # while processing the class body, and an unregistered by-path module makes
     # that lookup return None (AttributeError at import, on 3.11) -- same
     # reasoning as `tests/ci/test_capture_shard_timings.py`'s `_load_module()`.
-    sys.modules[spec.name] = module
+    monkeypatch.setitem(sys.modules, spec.name, module)
     spec.loader.exec_module(module)
     return module
 
 
-def _resolve_test_dirs(registry: dict[str, Any], module: str) -> tuple[str, ...]:
+def _resolve_test_dirs(registry: dict[str, Any], module: str, monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:
     """The consumer's own test-directory resolution, imported -- never reimplemented.
 
     `scripts/ci/capture_shard_timings.resolve_test_dirs` already mirrors
@@ -221,7 +251,7 @@ def _resolve_test_dirs(registry: dict[str, Any], module: str) -> tuple[str, ...]
     precedence a third time here would risk exactly the kind of silent
     divergence this gate exists to catch elsewhere.
     """
-    _capture = _load_capture_shard_timings_module()
+    _capture = _load_capture_shard_timings_module(monkeypatch)
 
     return _capture.resolve_test_dirs(registry, module)
 
@@ -291,9 +321,12 @@ def _live_timings_state() -> dict[str, Any]:
 def _collected_counts(_live_registry_state: dict[str, Any]) -> dict[str, int]:
     """Live-collect every registry module exactly once per pytest session."""
     counts: dict[str, int] = {}
-    for module in _registry_modules(_live_registry_state):
-        test_dirs = _resolve_test_dirs(_live_registry_state, module)
-        counts[module] = _live_collected_count(test_dirs)
+    # Session-scoped: not the function-scoped `monkeypatch` fixture, which a
+    # session-scoped fixture cannot depend on.
+    with pytest.MonkeyPatch.context() as mp:
+        for module in _registry_modules(_live_registry_state):
+            test_dirs = _resolve_test_dirs(_live_registry_state, module, mp)
+            counts[module] = _live_collected_count(test_dirs)
     return counts
 
 
@@ -316,13 +349,14 @@ def test_non_allowlisted_modules_agree_with_live_collection(
     modules = _registry_modules(_live_registry_state)
     committed_lengths = {module: _committed_length(_live_timings_state, module) for module in modules}
     mismatches = _find_mismatches(modules, _MISMATCH_ALLOWLIST, committed_lengths, _collected_counts)
-    assert not mismatches, (
-        "committed/collected length mismatch for module(s) NOT in the frozen baseline allowlist: "
-        f"{[(m.module, m.committed, m.collected) for m in mismatches]}. Either the module's timings "
-        "drifted without recapture (recapture via scripts/ci/capture_shard_timings.py --module <name> "
-        "--write), or this is newly-drifted debt that must be added to _MISMATCH_ALLOWLIST with "
-        "_BASELINE_ALLOWLIST_COUNT bumped in the same PR, with a reason."
-    )
+    if mismatches:
+        _report_drift(
+            "committed/collected length mismatch for module(s) NOT in the frozen baseline allowlist: "
+            f"{[(m.module, m.committed, m.collected) for m in mismatches]}. The module's timings drifted "
+            "without recapture (recapture via scripts/ci/capture_shard_timings.py --module <name> --write); "
+            f"non-blocking per PR since spec-kitty#5189, strict when {_STRICT_ENV_VAR}=1.",
+            strict=_strict_mode(),
+        )
 
 
 @pytest.mark.slow
@@ -341,7 +375,12 @@ def test_charter_is_not_allowlisted_and_agrees(
     assert "charter" not in _MISMATCH_ALLOWLIST, "`charter` must never enter the mismatch allowlist -- it is this mission's own recaptured module."
     committed = _committed_length(_live_timings_state, "charter")
     collected = _collected_counts["charter"]
-    assert committed == collected, f"charter regressed: committed={committed} collected={collected} (was 6156==6156 at WP04/WP05 recapture)"
+    if committed != collected:
+        _report_drift(
+            f"charter drifted: committed={committed} collected={collected} (was 6156==6156 at WP04/WP05 recapture); "
+            f"non-blocking per PR since spec-kitty#5189, strict when {_STRICT_ENV_VAR}=1.",
+            strict=_strict_mode(),
+        )
 
 
 @pytest.mark.fast
@@ -419,3 +458,28 @@ def test_mismatch_detection_respects_allowlist() -> None:
     collected_counts = {"alpha": 10, "bravo": 999}
 
     assert _find_mismatches(modules, allowlist={"bravo": "known debt"}, committed_lengths=committed_lengths, collected_counts=collected_counts) == []
+
+
+@pytest.mark.fast
+def test_report_drift_warns_by_default() -> None:
+    """spec-kitty#5189: outside strict mode, drift is a visible warning, never a failure."""
+    with pytest.warns(ShardTimingsDriftWarning, match="charter drifted"):
+        _report_drift("charter drifted: committed=1 collected=2", strict=False)
+
+
+@pytest.mark.fast
+def test_report_drift_fails_in_strict_mode() -> None:
+    """Strict mode restores the hard gate, so the check can still be enforced on demand."""
+    with pytest.raises(pytest.fail.Exception, match="charter drifted"):
+        _report_drift("charter drifted: committed=1 collected=2", strict=True)
+
+
+@pytest.mark.fast
+def test_strict_mode_reads_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the exact opt-in value "1" turns strict mode on."""
+    monkeypatch.delenv(_STRICT_ENV_VAR, raising=False)
+    assert _strict_mode() is False
+    monkeypatch.setenv(_STRICT_ENV_VAR, "0")
+    assert _strict_mode() is False
+    monkeypatch.setenv(_STRICT_ENV_VAR, "1")
+    assert _strict_mode() is True

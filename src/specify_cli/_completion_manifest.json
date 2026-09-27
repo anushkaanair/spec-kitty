@@ -736,7 +736,7 @@
      "deprecated": false
     },
     "coordination": {
-     "help": "Run the WP04 #1348 coordination + sparse-checkout health checks.\n\nIterates over every mission under ``kitty-specs/`` whose ``meta.json``\ndeclares a ``coordination_branch`` field, runs the coord-worktree\nand lane-sparse-checkout health checks, and prints findings.\n\nAlso runs the minimum git-version (RR-01) check.\n\nExits with code 1 if any ``error`` finding is emitted; ``warning``\nfindings exit 0 but are still printed.\n\nWith ``--fix``, automatically flattens missions that have a stale\n``coordination_branch`` key (branch never created or already deleted),\nre-derives topology, and attempts the Gap-1 coord-vs-target fast-forward\n(FR-009) -- which fails loud with a unified diff and mutates nothing when\nthe coord branch has diverged or its worktree is dirty, and refuses\nwithout mutating when the coord worktree is on another branch, detached,\nor not a worktree of this repository. ``Fast-forwarded`` is printed only\nonce the coord branch really matches the target. Safe to run on\n100%-done missions before ``spec-kitty next`` or ``spec-kitty merge``.\n\nWith ``--check-staleness``, also reports Gap-1 coord-branch-vs-target\nstaleness (FR-008) — non-blocking either way.\n\nWith ``--mission <handle>``, scopes every per-mission check (and the\n``--fix`` Gap-1 fast-forward) to the single mission the shared resolver maps\nthe handle to. An unresolvable / ambiguous handle fails closed with exit 1.\n\nExamples:\n    spec-kitty doctor coordination\n    spec-kitty doctor coordination --fix\n    spec-kitty doctor coordination --json\n    spec-kitty doctor coordination --check-staleness\n    spec-kitty doctor coordination --mission 083-my-mission",
+     "help": "Run the WP04 #1348 coordination + sparse-checkout health checks.\n\nIterates over every mission under ``kitty-specs/`` whose ``meta.json``\ndeclares a ``coordination_branch`` field, runs the coord-worktree\nand lane-sparse-checkout health checks, and prints findings.\n\nAlso runs the minimum git-version (RR-01) check.\n\nExits with code 1 if any ``error`` finding is emitted; ``warning``\nfindings exit 0 but are still printed.\n\nWith ``--fix``, automatically materializes a missing coordination worktree\nwhose declared branch still exists in git (#5113 / FR-014, via the\ncanonical ``materialize_coord_surface_for_write`` helper — idempotent, and\nit refuses rather than crashing when the branch is remote-only), flattens\nmissions that have a stale ``coordination_branch`` key (branch never\ncreated or already deleted), re-derives topology, and attempts the Gap-1\ncoord-vs-target fast-forward (FR-009) -- which fails loud with a unified\ndiff and mutates nothing when\nthe coord branch has diverged or its worktree is dirty, and refuses\nwithout mutating when the coord worktree is on another branch, detached,\nor not a worktree of this repository. ``Fast-forwarded`` is printed only\nonce the coord branch really matches the target. Safe to run on\n100%-done missions before ``spec-kitty next`` or ``spec-kitty merge``.\n\nWith ``--check-staleness``, also reports Gap-1 coord-branch-vs-target\nstaleness (FR-008) — non-blocking either way.\n\nWith ``--mission <handle>``, scopes every per-mission check (and the\n``--fix`` Gap-1 fast-forward) to the single mission the shared resolver maps\nthe handle to. An unresolvable / ambiguous handle fails closed with exit 1.\n\nExamples:\n    spec-kitty doctor coordination\n    spec-kitty doctor coordination --fix\n    spec-kitty doctor coordination --json\n    spec-kitty doctor coordination --check-staleness\n    spec-kitty doctor coordination --mission 083-my-mission",
      "hidden": false,
      "deprecated": false
     },
@@ -1003,12 +1003,12 @@
    "deprecated": false
   },
   "merge-driver-review-cycle": {
-   "help": "Reconcile a ``review-cycle-N.md`` collision, best-effort, non-aborting.\n\nTwo distinct verdict documents colliding under the same filename are\nNEVER unioned/field-merged/interleaved into one document -- see the\nmodule-level design-decision comment immediately above this function for\nthe full reasoning (embed both verbatim, never fabricate a blended\nverdict). Unlike WP18's original T077 driver, a divergent collision no\nlonger aborts the squash (FR-014/D-PLAN-6): the ``.md`` render is\nnon-authoritative, unread prose now that ``status.events.jsonl``'s\n``review_result`` event slot is the sole verdict authority, so refusing\nthe merge over it is no longer justified.\n\nIdentical content on both sides (byte-for-byte) is the trivial fast path:\nresolves cleanly, exit 0, never reported as a conflict. Otherwise, both\nraw documents are embedded verbatim inside standard git-style conflict\nmarkers (never blended field-by-field -- a review verdict has no safely\nmergeable sub-fields the way a JSON matrix row does) and the driver\nexits 0, so ``git merge --squash`` treats the path as resolved\nand the squash proceeds.",
+   "help": "Reconcile a ``review-cycle-N.md`` collision, best-effort, non-aborting.\n\nTwo distinct verdict documents colliding under the same filename are\nNEVER unioned/field-merged/interleaved into one document -- see the\nmodule-level design-decision comment in ``specify_cli.merge.drivers``,\nimmediately above :func:`specify_cli.merge.drivers.run_review_cycle_driver`,\nfor the full reasoning (embed both verbatim, never fabricate a blended\nverdict). Unlike WP18's original T077 driver, a divergent collision no\nlonger aborts the squash (FR-014/D-PLAN-6): the ``.md`` render is\nnon-authoritative, unread prose now that ``status.events.jsonl``'s\n``review_result`` event slot is the sole verdict authority, so refusing\nthe merge over it is no longer justified.\n\nIdentical content on both sides (byte-for-byte) is the trivial fast path:\nresolves cleanly, exit 0, never reported as a conflict. Otherwise, both\nraw documents are embedded verbatim inside standard git-style conflict\nmarkers (never blended field-by-field -- a review verdict has no safely\nmergeable sub-fields the way a JSON matrix row does) and the driver\nexits 0, so ``git merge --squash`` treats the path as resolved\nand the squash proceeds.",
    "hidden": true,
    "deprecated": false
   },
   "merge-driver-traces": {
-   "help": "Union conflicting ``traces/*.md`` documents; write result to ``ours`` (#4894).\n\n3-way base-aware: reads ``%O`` so a section theirs left UNCHANGED from\nbase, while ours edited the same section, is recognized as stale and\ndropped rather than resurrected alongside ours' edit (see\n:func:`_drop_stale_theirs_trace_blocks`). The remaining union is still\nsection-granularity and append-only via :func:`union_trace_texts` --\nnever a lossy line-level global dedup, never fail-closed on an ordinary\nrepeat.",
+   "help": "Union conflicting ``traces/*.md`` documents; write result to ``ours`` (#4894).\n\n3-way base-aware: reads ``%O`` so a section theirs left UNCHANGED from\nbase, while ours edited the same section, is recognized as stale and\ndropped rather than resurrected alongside ours' edit (see\n:func:`specify_cli.merge.drivers._drop_stale_theirs_trace_blocks`). The\nremaining union is still section-granularity and append-only via\n:func:`specify_cli.merge.drivers.union_trace_texts` -- never a lossy\nline-level global dedup, never fail-closed on an ordinary repeat.",
    "hidden": true,
    "deprecated": false
   },
@@ -1207,6 +1207,28 @@
      "help": "Show the effective mode, which file decided it, and the active filters.",
      "hidden": false,
      "deprecated": false
+    },
+    "drain": {
+     "help": "Live drain (moments/presence/capability/relay) is effective only when BOTH scopes are on: the repository (.kittify/config.yaml hosted.drain) and your personal runtime-root config.toml (\\[hosted] drain). No environment variable can turn drain on -- env vars only narrow it further (e.g. SPEC_KITTY_NO_MOMENT_HANDLERS).",
+     "hidden": false,
+     "deprecated": false,
+     "commands": {
+      "on": {
+       "help": "Turn live drain ON for one scope. Live drain (moments/presence/capability/relay) is effective only when BOTH scopes are on: the repository (.kittify/config.yaml hosted.drain) and your personal runtime-root config.toml (\\[hosted] drain). No environment variable can turn drain on -- env vars only narrow it further (e.g. SPEC_KITTY_NO_MOMENT_HANDLERS).",
+       "hidden": false,
+       "deprecated": false
+      },
+      "off": {
+       "help": "Turn live drain OFF for one scope. Live drain (moments/presence/capability/relay) is effective only when BOTH scopes are on: the repository (.kittify/config.yaml hosted.drain) and your personal runtime-root config.toml (\\[hosted] drain). No environment variable can turn drain on -- env vars only narrow it further (e.g. SPEC_KITTY_NO_MOMENT_HANDLERS).",
+       "hidden": false,
+       "deprecated": false
+      },
+      "status": {
+       "help": "Show the effective live-drain posture, both scopes' values and source\nfiles, active narrowers, the ledger-projection posture, and all four\nhosted-posture file paths (existing or not).",
+       "hidden": false,
+       "deprecated": false
+      }
+     }
     }
    }
   },
@@ -1656,7 +1678,7 @@
        "deprecated": false
       },
       "approve": {
-       "help": "Approve ``item_id``. Requires typing back the item's own challenge at\nthe controlling terminal when prompted — there is no flag to skip this.",
+       "help": "Approve ``item_id``. Requires typing back the item's own challenge at\nthe controlling terminal when prompted — there is no flag to skip this.\n\nPre-flighted like every other relay-publishing command (R-3): approving\nan item is what publishes its prose to the relay, even though\n``outbox_approval.py`` itself never opens a socket (its docstring, line\n~91). ``list``/``show``/``reject``/``revoke`` are local-only and are\nNOT pre-flighted.",
        "hidden": false,
        "deprecated": false
       },
