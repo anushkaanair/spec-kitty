@@ -82,11 +82,14 @@ src/specify_cli/
 ├── merge/executor.py                     # threads repo_root/mission_slug into evaluate_merge_gates (FR-003)
 ├── merge/done_bookkeeping.py             # _mark_wp_merged_done / _record_merged_wps_done_for_merge (FR-006)
 ├── tasks/issue_reference_discovery.py    # gating_issue_numbers — PRIMARY discovery (reference)
-├── tasks/issue_matrix_migration.py       # load_issue_matrix / issue_matrix_artifact_present (read side)
-└── cli/commands/agent/tasks_move_task.py # _issue_matrix_approval_blocker — REFERENCE terminal-verdict rule (FR-006)
+├── tasks/issue_matrix_migration.py       # load_issue_matrix / issue_matrix_artifact_present (read side; gain a coord-ref content source)
+├── cli/commands/agent/tasks_parsing_validation.py # _issue_matrix_approval_blocker (DEFINED here, :206) — REFERENCE terminal-verdict rule (FR-006)
+└── cli/commands/agent/tasks_move_task.py # imports/calls _issue_matrix_approval_blocker (:1109); NOT its defining module
 
-src/charter/offering/skills/spec-kitty-mission-review/SKILL.md   # Gate-4 doctrine: resolver-backed read (FR-002)
-# regenerated agent copies (.claude/, .agents/skills/, ...) via `spec-kitty upgrade` — never hand-edited
+src/charter/offering/skills/spec-kitty-mission-review/SKILL.md   # Gate-4 doctrine (:593 raw cat): resolver-backed read (FR-002)
+# NOTE: this repo's own working tree has NO materialized .claude/ or .agents/skills/ copies — the
+# "regenerated agent copies via `spec-kitty upgrade`" is the consumer-side mechanism only; the fix
+# edits the SOURCE SKILL.md and is tested against SKILL.md directly (cf. tests/doctrine/test_mission_review_skill_gate3_floor.py)
 
 tests/
 ├── architectural/        # NEW guard: no raw issue-matrix path reads in review/merge consumers (FR-008); layer rules
@@ -104,66 +107,124 @@ tests/
 
 > Concerns are NOT work packages. `/spec-kitty.tasks` translates these into WPs.
 
-### IC-01 — Coordination-branch-ref read authority (the deep primitive)
+> **Sequencing (post-plan squad):** IC-01a → IC-01b → {IC-02, IC-03} → IC-04 → IC-05. The
+> IC-01b → IC-02/IC-03 edge is load-bearing (the gate consumers cannot read post-consolidation
+> content until the readers accept a ref-content source), not incidental.
+>
+> **⚠ MAJOR-3 precondition (open):** a focused investigation is reconciling where a
+> post-consolidation issue-matrix verdict is actually WRITTEN — the coordination branch ref
+> (per #5171's observed `surface=kitty/mission-<slug>`) vs the CONSOLIDATED PRIMARY surface (per
+> `_E2_CONSOLIDATED_ELIGIBLE_KINDS` / `_resolve_consolidated_e2_target`, resolution.py:154-162).
+> IC-01a's read MUST target the same surface the write path uses, or it introduces an inverse
+> read/write-divergence bug. The read-target below is provisional pending that finding; if the
+> write routes to consolidated-primary once the coord branch is deleted, IC-01a resolves
+> branch-ref-when-retained AND consolidated-primary-when-deleted rather than only the ref.
 
-- **Purpose**: Resolve issue-matrix (ISSUE_MATRIX) content from the coordination branch ref when
-  the coordination worktree is unmaterialized but the branch is retained (post-consolidation), so
-  authored verdicts stay readable; fail closed on a deleted ref, a probe error, or an empty
-  authored set while gating references exist.
+### IC-01a — Coordination-branch-ref content read primitive (the deep primitive)
+
+- **Purpose**: Add a NEW function in the seam that returns ISSUE_MATRIX **content** (bytes/text) from
+  the coordination branch ref (`git show <ref>:<path>`) when the coord worktree is
+  unmaterialized-but-retained; fail closed on a deleted ref, a probe error, or an empty authored set
+  while gating references exist.
 - **Relevant requirements**: FR-005, FR-007, NFR-002, NFR-003.
-- **Affected surfaces**: `src/mission_runtime/resolution.py` (new read authority layered on
-  `resolve_artifact_surface`/`read_dir`); git probes (`git rev-parse --verify`, `git show <ref>:<path>`).
-- **Sequencing/depends-on**: none (foundational; IC-02 and IC-03 consume it).
-- **Risks**: distinguishing deleted (ref absent) from unmaterialized (ref present) deterministically;
-  keeping the read fail-closed without swallowing probe errors; git-probe latency (NFR-003).
+- **Affected surfaces**: `src/mission_runtime/resolution.py` — a NEW ref-content function; **do not**
+  mutate `coord_read_dir_for`/`resolve_artifact_surface`'s existing `Path`/dir semantics (7+
+  consumers depend on them — MINOR-7). Reuse `coord_branch_has_committed_artifact`
+  (`coordination/surface_resolver.py:717`) for existence-on-ref rather than a new `git ls-tree`.
+- **#4959 carve-out (MAJOR-2)**: `_classify_artifact_surface` currently RAISES
+  `CoordinationWorktreeUnmaterialized` on `CoordState.UNMATERIALIZED` for **all** coord kinds
+  (deliberate #4959 tracer-clobber fix). IC-01a turns UNMATERIALIZED into a ref-read for
+  **ISSUE_MATRIX only**, and MUST keep the raise for the other coord kinds (TRACER_FILE,
+  REVIEW_CYCLE, ACCEPTANCE_MATRIX, STATUS_STATE). Land the carve-out inside
+  `_classify_artifact_surface`/`resolve_artifact_surface` (seam owner), never a parallel path.
+- **Sequencing/depends-on**: none (foundational).
+- **Risks**: `git show <ref>:<path>` returns content, not a dir — the return shape is bytes/text, not
+  a `Path` (drives IC-01b); deterministic deleted-vs-unmaterialized signal (`git rev-parse --verify`);
+  fail-closed without swallowing probe errors; must NOT import `specify_cli.*` (would trip the
+  shrink-only `tests/architectural/test_layer_rules.py::TestMissionRuntimeBoundary` ledger) — use
+  kernel/mission_runtime-local git plumbing; git-probe latency (NFR-003); #4959 non-regression.
+
+### IC-01b — Reader content-source adoption
+
+- **Purpose**: Extend the dir-based readers to accept a coordination-ref content source so consumers
+  can read post-consolidation content that has no on-disk directory.
+- **Relevant requirements**: FR-005 (consumer side), FR-001/FR-003/FR-004 (post-consolidation legs).
+- **Affected surfaces**: `src/specify_cli/tasks/issue_matrix_migration.py`
+  (`load_issue_matrix`/`issue_matrix_artifact_present`), `src/specify_cli/cli/commands/review/_issue_matrix.py`
+  (`validate_issue_matrix`), `src/specify_cli/status/doctor.py` (`check_issue_matrix`) — each today does
+  `dir / issue-matrix.{json,md}` + `.exists()`; give them a content/bytes source path.
+- **Sequencing/depends-on**: IC-01a.
+- **Risks**: the read contract's dir-vs-content shape must be resolved (see contract note below);
+  keep the change minimal and shared so the split isn't re-authored per consumer.
+
+### IC-shared — Two-partition split helper (DRY, MINOR-6)
+
+- **Purpose**: Factor the `(primary_discovery_dir, coord_matrix_source)` resolution into ONE helper
+  that review (IC-02), merge-completeness (IC-03), and merge-terminal-verdict (IC-04) all call, so the
+  split (discovery=PRIMARY, matrix=COORD/ref) is not re-authored 3×. `status/doctor.py::check_issue_matrix`
+  is the reference shape.
+- **Relevant requirements**: FR-001/FR-003/FR-004 (shared), NFR-001, C-001.
+- **Affected surfaces**: a shared resolver (in `mission_runtime`, or a review/merge-shared module that
+  imports the seam — never a second authority).
+- **Sequencing/depends-on**: IC-01b.
+- **Risks**: keep it a thin composition of the seam, not a new authority.
 
 ### IC-02 — Mission-review issue-matrix gate partition split (#5171)
 
 - **Purpose**: Make the mission-review Gate 4 read gating references from PRIMARY and authored
-  verdicts from COORD (via IC-01), and replace the doctrine's raw `cat` with a resolver-backed read.
+  verdicts from COORD/ref (via IC-shared), and replace the doctrine's raw `cat` with a resolver-backed read.
 - **Relevant requirements**: FR-001, FR-002, FR-008.
 - **Affected surfaces**: `src/specify_cli/cli/commands/review/__init__.py` (`_evaluate_issue_matrix` —
-  separate the two partition reads instead of one `feature_dir`), `review/_issue_matrix.py` (matrix
-  load), `src/charter/offering/skills/spec-kitty-mission-review/SKILL.md` (Gate-4 step), regenerated
-  agent copies.
-- **Sequencing/depends-on**: IC-01 (for the post-consolidation read).
-- **Risks**: the current partial fix (`coord_read_dir_for(...) or feature_dir`) conflates the two
-  reads — must fully separate discovery vs matrix; doctrine change must be a positive read, not a
-  deletion (FR-002 positive control).
+  the current `coord_read_dir_for(...) or feature_dir` at :428-434 feeds ONE dir into both
+  `gating_issue_numbers` (:309) and the matrix read — separate them), `review/_issue_matrix.py`,
+  `src/charter/offering/skills/spec-kitty-mission-review/SKILL.md:593` (Gate-4 step).
+- **Sequencing/depends-on**: IC-01b, IC-shared.
+- **Risks**: fully separate discovery vs matrix (not one "more correct" dir); the doctrine change must
+  be a POSITIVE read (rendered Gate-4 references the resolver), not a deletion (FR-002 positive control,
+  tested against SKILL.md directly).
 
 ### IC-03 — Merge issue-matrix completeness gate partition split (#4943 leg 1)
 
-- **Purpose**: Give `_evaluate_issue_matrix_completeness_gate` `repo_root`/`mission_slug`, discover
-  references from the PRIMARY spec dir (via the seam, as risk/dependency gates already do per #3439),
-  and read verdicts from COORD (via IC-01), so coord missions are enforced identically to lanes.
+- **Purpose**: Give `_evaluate_issue_matrix_completeness_gate` `repo_root`/`mission_slug` (the caller
+  `evaluate_merge_gates` already threads them to the risk/dependency gates; `executor.py:559` already
+  passes both), discover references from PRIMARY via the seam (mirroring `_evaluate_risk_gate`:237 /
+  `_evaluate_dependency_gate`:301, #3439), and read verdicts from COORD/ref (via IC-shared).
 - **Relevant requirements**: FR-003, FR-004.
-- **Affected surfaces**: `src/specify_cli/policy/merge_gates.py`, `src/specify_cli/merge/executor.py`
-  (caller threads the args, already available on `evaluate_merge_gates`).
-- **Sequencing/depends-on**: IC-01.
-- **Risks**: fail-open is the worse mode — a missing row must FAIL, never vacuously PASS; keep the
-  function ≤ complexity 15 when the signature grows (extract a helper).
+- **Affected surfaces**: `src/specify_cli/policy/merge_gates.py:360`; caller wiring at `merge_gates.py:140-142`.
+- **Sequencing/depends-on**: IC-01b, IC-shared.
+- **Risks**: fail-open is the worse mode — a missing row must FAIL; keep the function ≤ complexity 15
+  when the signature grows (extract a helper).
 
 ### IC-04 — Merge terminal-verdict enforcement (#4943 leg 2)
 
-- **Purpose**: Make merge apply the same `in-mission`/`unknown` -> `done` rejection `move-task`
-  applies: refuse in `block` mode (naming rows) before the target advances; warn with the same list
-  in `warn` mode (which still advances/records done).
+- **Purpose**: Make merge apply the `in-mission`/`unknown` -> `done` rejection: refuse in `block`
+  mode (naming rows) before the target advances; warn with the same list in `warn` mode (which still
+  advances/records done).
 - **Relevant requirements**: FR-006.
-- **Affected surfaces**: `src/specify_cli/policy/merge_gates.py` (verdict check), the merge
-  done-recording path `src/specify_cli/merge/done_bookkeeping.py`; mirrors
-  `tasks_move_task.py::_issue_matrix_approval_blocker` (reference rule, not re-invented).
-- **Sequencing/depends-on**: IC-01, IC-03 (shares the coord verdict read).
-- **Risks**: warn vs block semantics must match existing `merge_gates.mode` conventions; must read
-  verdicts from the correct partition (else re-introduces the bug it fixes).
+- **Affected surfaces**: `src/specify_cli/policy/merge_gates.py` as a sibling gate to
+  `_evaluate_issue_matrix_completeness_gate` — the existing gate mechanism already delivers
+  block-before-advance and warn-prints-list (`executor.py:559-571`: block aborts via `overall_pass`
+  before `_phase_merge_lanes`; warn prints `gate.details`), so **`done_bookkeeping.py` likely needs NO
+  change** (de-scoped, MINOR-5).
+- **REUSE, do not re-implement (MINOR-4)**: call/factor the existing rule
+  `_issue_matrix_approval_blocker` (DEFINED in `cli/commands/agent/tasks_parsing_validation.py:206`)
+  with `target_lane=Lane.DONE` and the resolved `coord_matrix` + `primary_feature_dir`. Note the
+  `unknown` half is enforced by a DIFFERENT (schema-validity) gate, not the in-mission lever — reuse
+  both checks so `unknown` is not missed. A hand-rolled "reject in-mission set" would be a second
+  authority and would miss `unknown`.
+- **Sequencing/depends-on**: IC-01b, IC-03, IC-shared (shares the coord verdict read).
+- **Risks**: warn vs block semantics must match existing `merge_gates.mode`; read verdicts from the
+  correct partition (else re-introduces the bug it fixes).
 
 ### IC-05 — Regression guard + test-remediation
 
 - **Purpose**: A non-vacuous architectural guard that trips if any review/merge consumer reconstructs
-  a topology-dependent `issue-matrix` path by hand; re-judge and correct any existing test that pins
-  the husk/residue read.
+  a topology-dependent `issue-matrix` path by hand OR bypasses the IC-shared split; re-judge and
+  correct any existing test that pins the husk/residue read. Include a #4959 non-regression guard
+  (other coord kinds still raise on UNMATERIALIZED — MAJOR-2).
 - **Relevant requirements**: FR-008, NFR-001, C-005.
-- **Affected surfaces**: `tests/architectural/` (new guard with a self-mutation check),
-  `tests/policy/`, `tests/specify_cli/cli/commands/review/` (re-judge buggy-behavior pins).
-- **Sequencing/depends-on**: IC-02, IC-03, IC-04 (guards their result).
+- **Affected surfaces**: `tests/architectural/` (new guard + self-mutation check), `tests/policy/`,
+  `tests/specify_cli/cli/commands/review/` (re-judge buggy-behavior pins).
+- **Sequencing/depends-on**: IC-01a/b, IC-02, IC-03, IC-04.
 - **Risks**: guard must be non-vacuous (injecting a raw read must trip it); do not green-wash a test
   that asserts the old wrong-partition behavior — correct it.

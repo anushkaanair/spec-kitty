@@ -11,9 +11,12 @@ through. Backed by ATDD tests; each MUST-clause names its witnessing scenario.
 
 ## Guarantees
 
-1. **Discovery/verdict partition split** — reference discovery reads the PRIMARY partition; matrix
-   verdicts read the matrix's owning partition. On coord topology the two are different directories.
-   *(FR-001, FR-003, FR-004; witnessed: US1.1/1.3, US2.1/2.2/2.3/2.4)*
+1. **Discovery/verdict partition split** — reference discovery reads the PRIMARY partition (always a
+   directory); matrix verdicts read the matrix's owning partition, which on coord topology is a
+   different source. That source is a **directory** when the coordination worktree is materialized and
+   **branch-ref content** (`git show <ref>:<path>`, no on-disk dir) when it is unmaterialized-but-retained
+   — so the read authority yields matrix *content*, not only a `Path`. Readers accept a content source
+   (IC-01b), not only a directory. *(FR-001, FR-003, FR-004, FR-005; witnessed: US1.1/1.3, US2.1/2.2/2.3/2.4, US4.1/4.2)*
 2. **Branch-flat unchanged** — on single_branch/lanes the matrix resolves to PRIMARY; behavior is
    byte-for-byte identical to today. *(US1.3, US2.4 parity)*
 3. **Post-consolidation branch-ref read** — when the coordination branch ref resolves
