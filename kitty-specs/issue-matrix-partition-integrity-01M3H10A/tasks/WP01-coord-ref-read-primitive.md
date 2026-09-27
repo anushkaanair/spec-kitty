@@ -60,17 +60,24 @@ Read `../plan.md` (IC-01a + the MAJOR-3 resolution box), `../research.md` (D2/D4
   (`:154-162`, includes ISSUE_MATRIX) → `_resolve_consolidated_e2_target` (consolidated PRIMARY ref,
   `:171-208`); otherwise coord topology → `destination_ref` = coordination branch (`:1442-1443,1674`).
 - `_classify_artifact_surface` (`resolution.py:1966-1983`) RAISES `CoordinationWorktreeUnmaterialized`
-  on `CoordState.UNMATERIALIZED` for **all** coord kinds (deliberate #4959 fix).
-- Existence-on-ref helper to reuse: `coord_branch_has_committed_artifact`
-  (`src/specify_cli/coordination/surface_resolver.py:717`) — but note the layer rule below.
+  on `CoordState.UNMATERIALIZED` for **all** coord kinds (deliberate #4959 fix). `CoordinationWorktreeUnmaterialized`
+  subclasses `StatusReadPathNotFound`, so `coord_read_dir_for` (`:2195`) silently absorbs it to `None` →
+  caller falls back to `feature_dir` → PRIMARY residue. **That absorb-to-residue is the live #5171 bug** —
+  do NOT try to make `_classify` / `coord_read_dir_for` return content (their `Path | None` contract cannot
+  carry it, and changing it re-introduces the residue path). The new read is **standalone** (see T002).
+- **In-layer git plumbing to reuse (MINOR-1, keeps the ledger clean)**: `src/mission_runtime/lifecycle_phase.py`
+  already ships `_rev_is_valid` (`:276`, `git rev-parse --verify --quiet` — the deleted-ref leg),
+  `_path_present_at_rev` / `_git_object_present` (`:291`/`:320`, `git cat-file -e <rev>:<path>` —
+  existence-on-ref, squash-robust, distinguishes absent-vs-broken), a shared `_GIT_PROBE_TIMEOUT`, and the
+  typed `LifecyclePhaseProbeError`. The FR-007 fail-closed legs map 1:1 onto these. The only net-new
+  plumbing is a `git show <rev>:<path>` content read alongside them.
 
 ## ⚠ Layer-rule constraint (do not trip the ledger)
 
 `src/mission_runtime/` must NOT import `specify_cli.*` (shrink-only ledger
-`tests/architectural/test_layer_rules.py::TestMissionRuntimeBoundary`). Use kernel/mission_runtime-local
-git plumbing for the `git rev-parse --verify` / `git show <ref>:<path>` probes; do NOT reach into a
-`specify_cli` helper. If an existence check equivalent to `coord_branch_has_committed_artifact` is
-needed, implement/locate it within the allowed layers.
+`tests/architectural/test_layer_rules.py::TestMissionRuntimeBoundary`). Reuse the in-layer
+`lifecycle_phase.py` git helpers above; do NOT reach into `specify_cli` (e.g. `coord_branch_has_committed_artifact`
+lives in `specify_cli.coordination.surface_resolver` — out of layer, do not import it).
 
 ## Subtasks
 
@@ -90,17 +97,25 @@ Create `tests/mission_runtime/test_issue_matrix_ref_read.py`. Build fixtures wit
   `CoordinationWorktreeUnmaterialized`.
 Confirm the whole file is RED on the mission base.
 
-### T002 — Ref-content read authority
-Add the read function in `resolution.py`. It MUST call `resolve_lifecycle_phase` /
-`resolve_placement_only` to pick the ref (PUBLISHED → consolidated-primary; CONSOLIDATED/PRE_CONSOLIDATION
-coord → coordination branch), then read content via `git show <ref>:<path>`. Do NOT mutate
-`coord_read_dir_for` / `resolve_artifact_surface`'s existing `Path`/dir semantics (7+ consumers depend on
-them). Keep the function ≤ complexity 15 (extract helpers).
+### T002 — Standalone ref-content read authority (MAJOR-2)
+Add a NEW **standalone** function in `resolution.py` (a sibling to `resolve_placement_only`, NOT an edit
+to `_classify_artifact_surface` and NOT a change to `coord_read_dir_for`/`resolve_artifact_surface` `Path`
+semantics). It resolves the ref via the same phase authority the write uses (call `resolve_lifecycle_phase`
+/ reuse `resolve_placement_only`'s ref selection: PUBLISHED → consolidated-primary; CONSOLIDATED/PRE_CONSOLIDATION
+coord → coordination branch), then reads content via `git show <ref>:<path>`. Returns **content** (or a
+typed refusal), never a `Path`. The WP02 helper calls this directly for ISSUE_MATRIX post-consolidation.
+Keep ≤ complexity 15 by extracting FOUR helpers (named for review): (i) ref resolution off the phase
+authority, (ii) existence probe (`_rev_is_valid`), (iii) content probe (`git show`), (iv) empty-authored-set
+check. Hoist repeated `git` arg / diagnostic literals to module constants (S1192, MINOR-2).
 
-### T003 — #4959 carve-out
-Inside `_classify_artifact_surface` / `resolve_artifact_surface`, turn `UNMATERIALIZED` into a ref-read
-path for **ISSUE_MATRIX only**; keep the `CoordinationWorktreeUnmaterialized` raise for every other coord
-kind. Land it in the seam owner, never a parallel path.
+### T003 — #4959 non-regression (NOT a `_classify` content change)
+Do **not** make `_classify_artifact_surface` return content or stop raising for ISSUE_MATRIX — the new
+standalone read (T002), dispatched by the WP02 helper, is the ISSUE_MATRIX post-consolidation path, so
+`_classify` keeps raising `CoordinationWorktreeUnmaterialized` unchanged for **all** coord kinds. T003 is a
+guarding test that (a) the raise still fires for the other coord kinds (TRACER_FILE / REVIEW_CYCLE /
+ACCEPTANCE_MATRIX / STATUS_STATE), and (b) the ISSUE_MATRIX post-consolidation read is actually served by
+the standalone T002 path (so the carve-out is not vacuous). If any tiny `_classify`/dispatch change proves
+necessary, it must be behavior-preserving for the other kinds and covered by (a).
 
 ### T004 — Fail-closed legs
 Existence via `git rev-parse --verify` (resolved ref). Ref absent → refuse (typed). Content probe error →

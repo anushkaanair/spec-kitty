@@ -75,8 +75,11 @@ fixture is unchanged. RED on base.
 ### T006 — Shared two-partition split helper (IC-shared)
 Create `src/mission_runtime/issue_matrix_partition.py` (new module in the seam layer — NOT specify_cli):
 a helper that, given `repo_root`/`mission_slug`, returns the primary discovery dir AND the coord matrix
-source (dir when materialized, else WP01's ref-content). Thin composition of the seam; not a second
-authority. (Layer note: fine to live in mission_runtime; specify_cli consumers import it.)
+source. It DISPATCHES the matrix source: try the materialized coord dir (`coord_read_dir_for`); when that
+returns `None` (unmaterialized/post-consolidation), call **WP01's standalone ref-content read** directly to
+get the content (do NOT let the `None` fall back to `feature_dir` — that is the residue bug). So the
+matrix source is a dir when materialized and ref-content otherwise. Thin composition of the seam; not a
+second authority. (Layer note: fine to live in mission_runtime; specify_cli consumers import it.)
 
 ### T007 — Extend the migration readers
 Give `load_issue_matrix` / `issue_matrix_artifact_present` a content-source path (in addition to the dir

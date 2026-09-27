@@ -24,6 +24,7 @@ execution_mode: code_change
 owned_files:
 - src/specify_cli/policy/merge_gates.py
 - src/specify_cli/merge/executor.py
+- src/specify_cli/cli/commands/agent/tasks_parsing_validation.py
 - tests/policy/test_merge_gates_issue_matrix.py
 role: implementer
 tags: []
@@ -88,11 +89,20 @@ Give `_evaluate_issue_matrix_completeness_gate` `repo_root, mission_slug`; disco
 via the seam (mirror risk/dependency gates); read verdicts via the WP02 helper (coord/ref). Update the
 caller wiring at `merge_gates.py:140-142`. Keep the function ≤ complexity 15 (extract a helper).
 
-### T014 — Terminal-verdict sibling gate (IC-04)
-Add a sibling gate in `merge_gates.py` that reuses `_issue_matrix_approval_blocker` (with
-`target_lane=Lane.DONE`, resolved coord matrix + primary dir) AND the schema-validity/unknown check, so a
-gating row at `in-mission`/`unknown` refuses in block mode and warns in warn mode. Do NOT re-implement the
-rule; do NOT modify `done_bookkeeping.py` unless a test proves it necessary.
+### T014 — Terminal-verdict sibling gate (IC-04) + make the reused rule content-aware (MAJOR-1)
+Add a sibling gate in `merge_gates.py` that reuses `_issue_matrix_approval_blocker`
+(`tasks_parsing_validation.py:206`) with `target_lane=Lane.DONE` AND the schema-validity/unknown check, so
+a gating row at `in-mission`/`unknown` refuses in block mode and warns in warn mode. Do NOT re-implement
+the rule; do NOT modify `done_bookkeeping.py` unless a test proves it necessary.
+
+**Content-aware reuse (blocks US3.1 post-consolidation otherwise):** `_issue_matrix_approval_blocker` and
+`_issue_matrix_evaluation` (`tasks_parsing_validation.py:120`) are DIR-based (`issue_matrix_artifact_present(feature_dir)`
+`:283`, `load_issue_matrix` via `feature_dir`). Post-consolidation there is no dir. Thread an **optional**
+coord matrix content-source parameter (from the WP02 helper) through both, defaulting to the current
+dir-behavior so the existing `move-task` caller (`tasks_move_task.py:1109`) is unaffected (backward-compatible
+— do NOT change `tasks_move_task.py`). Import `_issue_matrix_approval_blocker` into `merge_gates.py` with a
+**function-local import** (as merge_gates already does for its seam calls, `:231/:295/:392`) to avoid any
+import cycle (MINOR-3). Hoist the new gate's `gate_name` string to a module constant (S1192, MINOR-2).
 
 ## Definition of Done
 - T012 RED on base, GREEN on final; discovery, verdict half-by-half, terminality block/warn, coord-vs-lanes

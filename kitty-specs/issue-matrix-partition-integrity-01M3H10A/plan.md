@@ -144,12 +144,18 @@ tests/
   never diverge; **do not** mutate `coord_read_dir_for`/`resolve_artifact_surface`'s existing
   `Path`/dir semantics (7+ consumers depend on them — MINOR-7). Reuse `coord_branch_has_committed_artifact`
   (`coordination/surface_resolver.py:717`) for existence-on-ref rather than a new `git ls-tree`.
-- **#4959 carve-out (MAJOR-2)**: `_classify_artifact_surface` currently RAISES
-  `CoordinationWorktreeUnmaterialized` on `CoordState.UNMATERIALIZED` for **all** coord kinds
-  (deliberate #4959 tracer-clobber fix). IC-01a turns UNMATERIALIZED into a ref-read for
-  **ISSUE_MATRIX only**, and MUST keep the raise for the other coord kinds (TRACER_FILE,
-  REVIEW_CYCLE, ACCEPTANCE_MATRIX, STATUS_STATE). Land the carve-out inside
-  `_classify_artifact_surface`/`resolve_artifact_surface` (seam owner), never a parallel path.
+- **Standalone read, not a `_classify` content change (post-tasks MAJOR-2)**: the ref-content read is a
+  NEW standalone function; it does NOT edit `_classify_artifact_surface` to return content and does NOT
+  change `coord_read_dir_for`/`resolve_artifact_surface`'s `Path | None` contract.
+  `CoordinationWorktreeUnmaterialized` subclasses `StatusReadPathNotFound`, so `coord_read_dir_for`
+  absorbs it to `None` → `feature_dir` → residue (the live bug); routing content through that path would
+  re-introduce it. The WP02 helper dispatches to the standalone read when the dir is unmaterialized.
+- **#4959 non-regression**: `_classify` keeps raising `CoordinationWorktreeUnmaterialized` for **all**
+  coord kinds (TRACER_FILE, REVIEW_CYCLE, ACCEPTANCE_MATRIX, STATUS_STATE) unchanged; the standalone read
+  serves ISSUE_MATRIX post-consolidation. A guarding test proves the raise still fires for the other kinds
+  AND that the ISSUE_MATRIX post-consolidation read is served by the standalone path (non-vacuous carve-out).
+- **In-layer git plumbing**: reuse `lifecycle_phase.py`'s `_rev_is_valid` / `_path_present_at_rev` /
+  `_git_object_present` / `_GIT_PROBE_TIMEOUT` / `LifecyclePhaseProbeError` (no `specify_cli` import).
 - **Sequencing/depends-on**: none (foundational).
 - **Risks**: `git show <ref>:<path>` returns content, not a dir — the return shape is bytes/text, not
   a `Path` (drives IC-01b); deterministic deleted-vs-unmaterialized signal (`git rev-parse --verify`);
@@ -225,6 +231,12 @@ tests/
   `unknown` half is enforced by a DIFFERENT (schema-validity) gate, not the in-mission lever — reuse
   both checks so `unknown` is not missed. A hand-rolled "reject in-mission set" would be a second
   authority and would miss `unknown`.
+- **Make the reused rule content-aware (post-tasks MAJOR-1)**: `_issue_matrix_approval_blocker` and
+  `_issue_matrix_evaluation` (`tasks_parsing_validation.py:120`) are DIR-based, so post-consolidation
+  (US3.1: no worktree) pure reuse cannot go green. WP04 owns `tasks_parsing_validation.py` and threads an
+  OPTIONAL coord matrix content-source through both, defaulting to current dir-behavior so the `move-task`
+  caller (`tasks_move_task.py:1109`) is unaffected (backward-compatible). Function-local import into
+  `merge_gates.py`; hoist the new gate_name (S1192).
 - **Sequencing/depends-on**: IC-01b, IC-03, IC-shared (shares the coord verdict read).
 - **Risks**: warn vs block semantics must match existing `merge_gates.mode`; read verdicts from the
   correct partition (else re-introduces the bug it fixes).
