@@ -10,11 +10,14 @@
 
 ## Summary
 
-Project and organization packs can define reusable custom mission steps, but those types
-cannot yet participate in Spec Kitty's formal mission lifecycle. Creation rejects the
-custom type, while `mission run` can start an identity-less runtime with only minimal
-metadata. Work-package state, independent review, acceptance, merge, dossier completeness,
-and retrospective completion then either assume software-dev or cannot find the mission.
+Project and organization packs can define reusable custom mission steps, but reusable
+runtime discovery is not itself formal mission-type activation. A complete activated
+custom type already passes canonical creation and `mission run` attaches to its non-null
+identity; the issue's original identity-less reproduction omitted that activation/type
+configuration and is retained only as a fail-closed negative control. After valid creation,
+however, work-package state, independent review, acceptance, merge, dossier completeness,
+and retrospective completion still lack a resolved custom lifecycle contract or assume
+software-dev artifacts.
 
 This mission makes an activated custom type a first-class formal Mission. It reuses the
 charter's `ResolvedMissionType` as the single type authority, materializes canonical
@@ -57,7 +60,7 @@ Out of scope:
 ### User Story 1 — Create a custom type as a canonical Mission (Priority: P1)
 
 As a pack operator, I want `agent mission create --mission-type <custom>` to resolve an
-activated custom type and create the same canonical identity and dossier structure as any
+activated custom type and preserve the same canonical identity and dossier structure as any
 built-in type, so every later command addresses one real Mission instead of an ad-hoc run.
 
 **Why this priority**: Identity and type selection are upstream of all other lifecycle
@@ -69,15 +72,15 @@ directory, validated metadata, status stream, topology record, and resolvable do
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid activated custom type, **When** the operator creates a Mission with
-   that type, **Then** creation resolves the type through `ResolvedMissionType` and returns
-   a non-null canonical identity.
+1. **Given** a valid activated custom type with its projected steps and spec template,
+   **When** the operator creates a Mission with that type, **Then** creation resolves the
+   type through `ResolvedMissionType` and returns a non-null canonical identity.
 2. **Given** the custom definition is discoverable but not charter-activated, **When** the
    operator creates it, **Then** creation fails before writing mission or runtime state and
    names the activation remedy.
-3. **Given** a malformed or incomplete lifecycle contract, **When** creation is attempted,
-   **Then** validation fails atomically before a directory, branch, run, or success envelope
-   is produced.
+3. **Given** activation names a type with an empty action sequence, missing template, or
+   malformed/incomplete lifecycle contract, **When** creation is attempted, **Then** the
+   specific configuration failure is reported atomically before a run or success envelope.
 4. **Given** an existing Mission of another type, **When** a custom run is requested through
    any equivalent handle, **Then** the immutable type mismatch is refused without changing
    metadata or run state.
@@ -99,15 +102,18 @@ contract binding even after the authored live definition changes.
 
 **Acceptance Scenarios**:
 
-1. **Given** a created custom Mission, **When** `mission run` starts it, **Then** the selected
-   step definition and lifecycle policy are frozen with verifiable provenance before the
-   first step is issued.
-2. **Given** the starting process has exited, **When** a new process advances the Mission,
+1. **Given** a created custom Mission, **When** `mission run` starts it, **Then** it attaches
+   to the existing non-null identity and freezes the selected step definition and lifecycle
+   policy with verifiable provenance before the first step is issued.
+2. **Given** a custom definition but no canonical Mission matching the supplied handle,
+   **When** `mission run` is invoked, **Then** it refuses with the canonical-create remedy
+   and does not synthesize partial metadata or a null-identity run.
+3. **Given** the starting process has exited, **When** a new process advances the Mission,
    **Then** its active step, profile, and step contract resolve from durable frozen state.
-3. **Given** the live pack definition changes after run start, **When** the Mission advances,
+4. **Given** the live pack definition changes after run start, **When** the Mission advances,
    **Then** the runtime either continues from the frozen contract or reports governed drift;
    it never silently changes the in-flight workflow.
-4. **Given** a final step whose composition or required gate fails, **When** advancement is
+5. **Given** a final step whose composition or required gate fails, **When** advancement is
    attempted, **Then** the durable state remains resumable at that step.
 
 ---
@@ -217,11 +223,15 @@ stable done state.
 
 1. **Given** final-step composition fails, **When** advancement returns blocked, **Then** a
    subsequent query reports the same resumable current step, not `done`.
-2. **Given** a required retrospective fails or cannot persist, **When** the terminal call
-   runs, **Then** no terminal state or externally visible completion event is committed.
-3. **Given** all terminal obligations succeed, **When** completion commits, **Then** runtime
-   state, events, retrospective record, status projection, and query all report terminal.
-4. **Given** a successful terminal call is replayed, **When** the operator queries or retries,
+2. **Given** required review, acceptance, merge/baseline, or retrospective evidence is
+   absent, **When** the final step is attempted, **Then** it refuses before any durable
+   local state or event reports completion.
+3. **Given** a required retrospective fails or cannot persist, **When** the terminal call
+   runs, **Then** no durable local terminal state or completion event is committed.
+4. **Given** all terminal obligations succeed, **When** completion commits, **Then** runtime
+   state, durable events, retrospective record, status projection, and query all report
+   terminal; any external notification happens afterward and is not completion authority.
+5. **Given** a successful terminal call is replayed, **When** the operator queries or retries,
    **Then** it remains idempotent and emits no duplicate completion evidence.
 
 ### Edge Cases
@@ -254,15 +264,15 @@ stable done state.
 | ID | Title | User Story | Priority | Status | Delivery | No-op passable? |
 |---|---|---|---|---|---|---|
 | FR-001 | Canonical custom-type resolution | As an operator, I want every formal custom Mission entry point to resolve the requested activated type through the charter `ResolvedMissionType` authority so that discovery and lifecycle identity cannot disagree. | High | Open | [build] | no |
-| FR-002 | Activated custom creation | As an operator, I want `agent mission create --mission-type <custom>` to accept a valid activated custom type so that it is a peer of built-ins at creation. | High | Open | [build] | no |
-| FR-003 | Canonical identity materialization | As an auditor, I want successful create/run-start to have a non-null ULID, derived `mid8`, canonical directory, validated metadata, target, topology, and status stream before a run starts. | High | Open | [build] | no |
+| FR-002 | Activated custom creation | As an operator, I want `agent mission create --mission-type <custom>` to continue accepting a fully configured activated custom type so that lifecycle changes preserve its existing peer status at creation. | High | Open | [ratchet] | yes — the complete activated control succeeds today |
+| FR-003 | Canonical identity attachment | As an auditor, I want successful run-start to require and attach to the existing non-null ULID, derived `mid8`, canonical directory, validated metadata, target, topology, and status stream produced by creation. | High | Open | [ratchet] | yes — pre-created control attaches with the same ID |
 | FR-004 | Atomic creation refusal | As an operator, I want unresolved, unactivated, malformed, or lifecycle-incompatible types to fail before mission/run side effects so that failed creation leaves no false evidence. | High | Open | [ratchet] | yes — same fixture has a valid activated positive control |
 | FR-005 | Immutable type attachment | As an operator, I want run attachment to verify that instance, run index, frozen template, and requested type agree so that an existing Mission can never be silently retyped. | High | Open | [ratchet] | yes — paired same-type attachment succeeds |
 | FR-006 | Resolved lifecycle policy | As a pack author, I want one charter-owned lifecycle policy to declare delivery mode, WP policy, and gate applicability so that commands do not infer behavior from filenames or type names. | High | Open | [build] | no |
 | FR-007 | Policy combination validation | As a pack author, I want invalid lifecycle-policy combinations rejected with field-specific diagnostics so impossible workflows cannot be activated. | High | Open | [build] | no |
 | FR-008 | Manifest-owned artifacts | As a pack author, I want artifact role, path, step, required/optional, and blocking semantics to come from the resolved expected-artifact manifest so no second artifact list drifts. | High | Open | [ratchet] | yes — positive and missing-artifact arms share the manifest |
 | FR-009 | Frozen lifecycle provenance | As an auditor, I want the selected type, lifecycle policy, artifact manifest, and step definition frozen or fingerprinted at run start so later commands can prove what governed the Mission. | High | Open | [build] | no |
-| FR-010 | Durable cross-process step resolution | As an orchestrator, I want fresh CLI processes to resolve every active custom step, profile binding, and contract from durable frozen state so process-local registry state is never required. | High | Open | [ratchet] | yes — same-process control plus separate-process regression |
+| FR-010 | Durable cross-process step resolution | As an orchestrator, I want fresh CLI processes to continue resolving every active custom step, profile binding, and contract from durable frozen state so process-local registry state is never required. | High | Open | [ratchet] | yes — today’s separate-process positive plus missing-contract terminal negative |
 | FR-011 | Governed definition drift | As an operator, I want changes to the live custom definition after run start handled according to one explicit frozen/drift policy so in-flight behavior never changes silently. | High | Open | [build] | no |
 | FR-012 | WP-required materialization | As a custom executable-mission author, I want required WPs finalized into canonical task, dependency, status-event, and lane projections so existing implement/review machinery can consume them. | High | Open | [build] | no |
 | FR-013 | Explicit no-WP lifecycle | As a no-WP mission author, I want an explicit canonical no-WP state so accept/merge/close can proceed without fabricated tasks, WPs, checkboxes, or lane transitions. | High | Open | [build] | no |
@@ -278,7 +288,7 @@ stable done state.
 | FR-023 | No-WP completion | As an operator, I want an accepted no-WP custom Mission to merge or close through an explicit policy-selected route without synthesizing a lane manifest that claims work never performed. | High | Open | [build] | no |
 | FR-024 | Merge precondition integrity | As an operator, I want every custom merge route to refuse before target mutation when acceptance, target freshness, policy, topology, or declared evidence is invalid. | High | Open | [ratchet] | yes — accepted fresh control advances the same target fixture |
 | FR-025 | Baseline and terminal WP state | As an auditor, I want successful completion to record the resulting target baseline and terminal status for every declared WP or the explicit no-WP outcome. | High | Open | [build] | no |
-| FR-026 | Atomic custom terminus | As an auditor, I want final-step success, required retrospective, runtime reduction, durable events, and externally emitted completion to commit as one logical transition. | High | Open | [ratchet] | yes — paired successful and forced-failure terminal arms |
+| FR-026 | Atomic local custom terminus | As an auditor, I want final-step success, required prior-gate/retrospective evidence, runtime reduction, and durable local events to commit as one logical transition, with external notification explicitly outside the authoritative transaction. | High | Open | [ratchet] | yes — paired successful and forced-failure terminal arms |
 | FR-027 | Blocked-state query consistency | As an operator, I want a query after any blocked terminal attempt to report the same resumable non-terminal step so blocked and done can never coexist. | High | Open | [ratchet] | yes — same run succeeds after repair |
 | FR-028 | Terminal idempotency | As an auditor, I want replay after successful completion to preserve one terminal outcome and avoid duplicate completion or retrospective evidence. | High | Open | [ratchet] | yes — first successful terminal call is the control |
 | FR-029 | Full clean-consumer lifecycle proof | As the architecture-pack D06 integrator, I want an installed-CLI fixture to run create → planning → finalize → implement → independent review → accept → merge → retrospective in separate processes and verify all promised artifacts/state. | High | Open | [build] | no |
@@ -298,7 +308,7 @@ stable done state.
 | NFR-006 | Security and path safety | Authored paths and identifiers remain validated against traversal, absolute-path, symlink-swap, and non-ASCII storage-identifier hazards; negative fixtures perform no out-of-root write. | Security | High | Open |
 | NFR-007 | Backward compatibility | Targeted regression suites for mission creation, loader, runtime-next, status, review, acceptance, merge, dossier, and retrospective pass with no existing public JSON key removed or reinterpreted silently. | Compatibility | High | Open |
 | NFR-008 | Architectural non-vacuity | Each new architectural gate has a concrete production caller, a positive control, a negative self-mutation/control, and a shrink-only census where an allowlist is unavoidable. | Maintainability | High | Open |
-| NFR-009 | Test quality | New behavior is driven red-first through public CLI or existing production entry points and new/changed code meets the repository's 90% diff-coverage gate. | Testability | High | Open |
+| NFR-009 | Test quality | Every implementation WP is preceded by a separately committed acceptance test that fails on that WP's planning-base revision and passes at its final revision; tests use public CLI or existing production entry points, and new/changed code meets the repository's 90% diff-coverage gate. | Testability | High | Open |
 | NFR-010 | Offline operation | The complete lifecycle proof passes with network disabled after local package installation and fixture setup; no hosted service is required. | Operability | High | Open |
 | NFR-011 | Public-safe evidence | Generated diagnostics, logs, tests, and mission artifacts contain no credentials, customer data, developer-home paths, or private repository material. | Security | High | Open |
 | NFR-012 | Installed-package fidelity | The clean-consumer proof runs against the built wheel/sdist or equivalent isolated installed CLI, not imports from the developer checkout. | Compatibility | High | Open |
@@ -350,13 +360,14 @@ stable done state.
 
 ### Measurable Outcomes
 
-- **SC-001**: A valid activated custom type completes canonical create with non-null ULID,
-  derived `mid8`, validated metadata, dossier projection, status stream, and frozen
-  lifecycle provenance; the unactivated control writes none of them. — [build] · no-op
-  passable: no
-- **SC-002**: Every step in the positive custom fixture resolves from a fresh CLI process,
-  and changing the live authored definition does not silently alter the in-flight run. —
-  [build] · no-op passable: no
+- **SC-001**: A valid activated custom type preserves successful canonical create with
+  non-null ULID, derived `mid8`, validated metadata, and status stream; creation also records
+  the new resolved lifecycle/dossier provenance, and run-start attaches to that exact
+  identity, while unactivated/incomplete controls fail before run creation. — [build] ·
+  no-op passable: no
+- **SC-002**: Every step in the positive custom fixture continues to resolve from a fresh
+  CLI process, and changing the live authored definition does not silently alter the
+  in-flight run. — [ratchet] · no-op passable: yes
 - **SC-003**: A WP-required custom fixture completes implement → rejection → rework →
   independent approval with append-only status/review evidence. — [build] · no-op
   passable: no

@@ -14,14 +14,24 @@ software-dev artifacts?
 ## Executive finding
 
 The lifecycle is not absent; it is split across authorities that the current custom
-loader does not join. `create_mission_core` already mints canonical identity and mission
-metadata, the charter resolver already returns `ResolvedMissionType`, expected-artifact
-manifests already describe dossier roles, the runtime already freezes custom step
-templates, status events already own WP state, and merge already supports planning-only
-and direct-on-target shapes. The current `mission run` path bypasses those seams: it
-validates a reusable `mission.yaml`, registers synthesized step contracts only in the
-process singleton, starts a run, and writes only three type keys into a permissively
-loaded `meta.json`. That is why the command can return success with `mission_id: null`.
+loader does not fully join. `create_mission_core` already accepts a *fully configured and
+activated* custom type and mints canonical identity and mission metadata. A clean probe at
+this mission's base proved canonical create succeeds with a non-null ULID once activation,
+type descriptor, projected action step, and spec template are all present; `mission run`
+then attaches to that same identity, and later `next` processes resolve the frozen steps.
+The issue's original create/null-identity reproduction supplied only a reusable
+`mission.yaml`, so its create refusal is correct configuration behavior rather than proof
+that activated creation is defective.
+
+The residual defect starts after that boundary. `mission run` can still start an
+identity-less run when no canonical Mission exists, because it writes three type keys into
+a permissively loaded `meta.json`. For a correctly pre-created custom Mission, implement
+cannot find a WP, acceptance asks for software-dev `plan.md`/`tasks.md` and `lanes.json`,
+merge requires lanes, and a failed final retrospective composition can coexist with a
+`done` query. Expected-artifact manifests already describe dossier roles, status events
+already own WP state, and merge already supports planning-only/direct-on-target shapes;
+the missing piece is a shared resolved lifecycle policy and command routing, not another
+identity writer.
 
 The appropriate design is therefore a lifecycle bridge through the existing charter and
 mission-runtime authorities, not a second custom runtime. A custom type must resolve to
@@ -36,7 +46,9 @@ combinations fail before a dossier or run is created.
 
 | Ref | Current evidence | Consequence |
 |---|---|---|
-| E-01 | Issue #4983 reproduces `agent mission create --mission-type architecture` rejecting an activated custom key on both the stable and then-current `main` lines. | Creation does not yet consume the same custom-type authority as runtime discovery. |
+| E-01 | Issue #4983 reproduces create refusal and a null-identity run after writing only reusable `.kittify/missions/architecture/mission.yaml`; it does not activate or fully configure a formal type. | Treat this as the unactivated/incomplete negative control, not evidence against canonical activated creation. |
+| E-01A | A clean base-revision probe with config activation, an org `mission_types` descriptor, projected step, and resolvable spec template completed canonical create with ULID `01M3HSM7R7CGABA9NS3P09SYTA`; `mission run` returned the same ID and fresh-process `next` resolved the frozen custom steps. | Preserve this existing positive path and focus changes on lifecycle policy, missing-canonical refusal, downstream gates, and terminal consistency. |
+| E-01B | On that activated/canonically-created fixture, implement lacked `WP01`, acceptance requested software-dev `plan.md`/`tasks.md` plus `lanes.json`, merge required `lanes.json`, and failed retrospective composition was followed by `mission_state: done`. | The post-creation lifecycle bridge and terminal reducer remain genuine, independently reproduced defects. |
 | E-02 | `src/specify_cli/core/mission_creation.py::_create_mission_core_impl` already mints ULID identity, `mid8`, canonical directory name, `meta.json`, status stream, task directory, topology, and scaffold commit after resolving an activated type. | Reuse this funnel; do not duplicate its writes in `mission_loader`. |
 | E-03 | `src/specify_cli/mission_loader/command.py::run_custom_mission` calls `_ensure_feature_metadata`, which writes type keys with `validate=False`; `_read_mission_id` explicitly returns `None` when identity is absent. | This is the bypass that must be removed from successful new-run behavior. |
 | E-04 | `src/charter/activation/mission_type_profiles.py::ResolvedMissionType` is the charter result carrying action sequence plus lazy template, governance, expected-artifact, and step-contract projections. | Extend or compose this result; no parallel resolver or registry. |
@@ -80,19 +92,21 @@ The only new authored policy is the combination the system cannot infer safely:
 - delivery mode: executable or planning-only;
 - work-package policy: required, optional, or forbidden;
 - gate applicability: required, optional, or not-applicable for implement, independent
-  review, acceptance, merge, and retrospective.
+  review, merge, and retrospective; acceptance itself remains required for every formal
+  completion path.
 
 The plan phase must choose the smallest schema home that keeps this under the charter
 offering model. A new CLI-local YAML format or a second type registry is rejected.
 
 ### D-03 — Canonical materialization precedes run creation
 
-For a new handle, `mission run` first materializes a canonical mission through the same
-transactional core used by `agent mission create`, then starts the frozen runtime. For an
-existing handle, it verifies the immutable mission type and lifecycle-contract identity
-before attaching. It never rewrites a different mission's type (the corruption separately
-tracked in #4965), never starts with null identity, and never uses `validate=False` as a
-substitute for creation.
+`agent mission create` remains the canonical materialization command. `mission run` accepts
+only an existing canonical handle, verifies the immutable mission type and
+lifecycle-contract identity, and then attaches the frozen runtime. When no canonical
+Mission exists it refuses with a create-first remedy; it does not invent defaults or act as
+a second identity writer. It never rewrites a different mission's type (the corruption
+separately tracked in #4965), never starts with null identity, and never uses
+`validate=False` as a substitute for creation.
 
 Creation failure is atomic: no run-index entry, partial dossier, orphan coordination
 branch, or success envelope survives.
@@ -131,11 +145,13 @@ expectations.
 
 ### D-07 — Terminal advancement is atomic
 
-The final custom step, retrospective outcome, runtime snapshot, emitted completion event,
-and user-visible `done` state form one logical transition. If composition, artifact
-validation, retrospective capture, or persistence blocks, the step remains resumable and
-the reduced state is not terminal. A subsequent query must report the same blocked/current
-state, never `done`. Replaying the successful terminal call is idempotent.
+The final custom step, required prior-gate/retrospective evidence, runtime snapshot,
+durable local completion event, and user-visible `done` state form one logical local
+transition. If composition, artifact validation, review, acceptance, merge/baseline,
+retrospective capture, or persistence blocks, the step remains resumable and the reduced
+state is not terminal. A subsequent query must report the same blocked/current state,
+never `done`. Replaying the successful terminal call is idempotent. External notification
+is downstream of the durable local commit and is neither atomic with it nor authoritative.
 
 ### D-08 — One black-box lifecycle proof is the release contract
 
@@ -143,7 +159,7 @@ The primary acceptance test uses the installed CLI in a clean temporary consumer
 separate processes for every command:
 
 ```text
-install/activate custom type
+install/fully configure/activate custom type
   -> create canonical mission
   -> run planning steps
   -> finalize declared WPs
@@ -158,9 +174,10 @@ install/activate custom type
 It asserts the canonical ULID/directory/meta tuple, dossier/artifact projection, status
 event provenance, lane manifest, acceptance evidence, target-branch baseline commit, frozen
 step/profile resolution, and atomic terminal state. A paired no-WP arm proves explicit
-accept/merge behavior without fake files. Negative controls cover unactivated type,
-malformed lifecycle policy, missing manifest, cross-type attach, missing required gate,
-and terminal-step failure.
+accept/merge behavior without fake files. Negative controls cover unactivated/incomplete
+type, run without canonical creation, malformed lifecycle policy, missing manifest,
+cross-type attach, missing required gate, premature final-step invocation, and terminal-step
+failure.
 
 ## Rejected alternatives
 
@@ -184,10 +201,9 @@ and terminal-step failure.
   current `MissionType` projection and pack overlays; adding a separate artifact may be
   justified only if it remains a charter-owned, uniquely resolved component of
   `ResolvedMissionType`.
-- `mission run` does not currently collect all human-facing fields accepted by `agent
-  mission create`. The plan must define deterministic defaults or require pre-creation,
-  while still satisfying the issue's requirement that run-start never succeeds with null
-  identity.
+- `mission run` does not collect the human-facing fields accepted by `agent mission
+  create`; it therefore requires pre-creation and must return an actionable refusal instead
+  of starting a null-identity run.
 - The no-WP lane representation must compose with accept and merge without weakening the
   existing fail-closed missing-`lanes.json` fix (#4891).
 - #4965's existing-type overwrite defect is on the same entry path. This mission must not

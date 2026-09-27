@@ -32,7 +32,7 @@ The minimal policy that cannot safely be inferred from existing artifacts.
 | `work_package_policy` | `required`, `optional`, `forbidden` | Forbidden is the explicit no-WP lifecycle; absence is not enough. |
 | `implement_gate` | `required`, `optional`, `not_applicable` | Must agree with delivery and WP policy. |
 | `review_gate` | `required`, `optional`, `not_applicable` | Required review must carry independent reviewer evidence. |
-| `accept_gate` | `required`, `optional` | Formal missions always have an explicit terminal acceptance policy. |
+| `accept_gate` | `required` | Every formal mission must be accepted before any merge/close path or terminal transition. |
 | `merge_gate` | `required`, `optional`, `not_applicable` | The selected merge path must agree with topology and delivery mode. |
 | `retrospective_gate` | `required`, `optional` | Completion is atomic with its declared retrospective outcome. |
 
@@ -42,6 +42,8 @@ Candidate invariants for plan validation:
   executable steps own their own durable state; otherwise reject.
 - `work_package_policy=forbidden` requires implement/review to be `not_applicable` unless
   the contract declares a non-WP review surface.
+- acceptance is never optional for a formal Mission; `merge_gate=not_applicable` selects a
+  non-merge close path but still requires a durable accepted verdict;
 - a required gate must have a canonical evidence source;
 - `not_applicable` is a declared state with a structured command response, not absence;
 - invalid combinations fail before mission identity or run state is written.
@@ -128,18 +130,21 @@ Each applicable lifecycle gate produces or consumes a durable evidence record:
 
 ## 8. Terminal transition
 
-The terminus is a transaction over:
+The authoritative local terminus is a transaction over:
 
 1. final issued-step completion;
 2. composition/step guard result;
-3. retrospective outcome;
-4. `state.json` reduction;
-5. `run.events.jsonl` append;
-6. externally emitted completion moment.
+3. required review, acceptance, merge/baseline, and retrospective preconditions;
+4. retrospective outcome;
+5. `state.json` reduction;
+6. durable local event append(s), including the completion moment.
 
-If any required part refuses or fails, none of 4–6 may describe the mission as done. A
+If any required part refuses or fails, none of 5–6 may describe the mission as done. A
 retry from the same pre-terminal state is deterministic and does not duplicate success
-events.
+events. External notification/relay occurs only after this local commit. It is not a
+completion authority, does not participate in the atomic write boundary, and its failure
+cannot produce a second local completion; any retry/reporting behavior remains governed by
+the existing relay contract rather than this lifecycle policy.
 
 ## 9. Relationships
 
