@@ -75,9 +75,15 @@ fixture already fails today — both arms must fail after the fix.
 1. **Given** a coord mission citing `#1234` with no matrix row and `mode: block`, **When**
    the merge gate runs, **Then** it discovers the reference from the primary spec
    directory and FAILs (not "nothing to enforce").
-2. **Given** a coord mission whose gating references all carry terminal rows on the
-   coordination surface, **When** the merge gate runs, **Then** it PASSes.
-3. **Given** a lanes mission with the same missing row, **When** the merge gate runs,
+2. **Given** a coord mission whose gating rows are `in-mission`/absent in the primary
+   residue but terminal (`fixed`) on the coordination surface, **When** the merge gate
+   runs, **Then** it PASSes — proving it read the coordination verdicts, not the stale
+   primary residue.
+3. **Given** the same fixture inverted (primary `fixed`, coordination `in-mission`),
+   **When** the merge gate runs, **Then** it FAILs and names the row — the same-fixture
+   mirror proving FR-003 discovery and FR-004 verdict-read are each independently exercised
+   (half-by-half).
+4. **Given** a lanes mission with the same missing row, **When** the merge gate runs,
    **Then** it FAILs with the same diagnostic as the coord arm (parity control).
 
 ---
@@ -99,13 +105,18 @@ identical mission with the row resolved to `fixed` merges cleanly.
 
 **Acceptance Scenarios**:
 
-1. **Given** a gating row at `in-mission` (or `unknown`) and `mode: block`, **When**
-   merge runs, **Then** it refuses before the target advances and names the offending
+1. **Given** a coord mission (post-consolidation: coordination worktree torn down, branch
+   retained) with a gating row at `in-mission`/`unknown` on the coordination branch and
+   `mode: block`, **When** merge runs, **Then** it resolves the verdict from the
+   coordination branch ref and refuses before the target advances, naming the offending
    row(s).
-2. **Given** the same state and `mode: warn`, **When** merge runs, **Then** it advances
-   but prints the same unresolved-row list the `done` transition prints.
-3. **Given** the same mission with the row resolved to a terminal verdict, **When** merge
-   runs, **Then** it advances with no verdict-terminality complaint (positive control).
+2. **Given** the same state and `mode: warn`, **When** merge runs, **Then** it still
+   advances and records the work packages `done` (warn does not block); the change from
+   today is that it now prints the same unresolved-row list the `done` transition prints,
+   not a changed landing outcome under `warn`.
+3. **Given** the same mission with the row resolved to a terminal verdict on the
+   coordination branch, **When** merge runs in either mode, **Then** it advances with no
+   verdict-terminality complaint (positive control).
 
 ---
 
@@ -128,17 +139,30 @@ mission-review; assert it reads `fixed` from the branch ref, not the primary res
 **Acceptance Scenarios**:
 
 1. **Given** a consolidated coord mission (worktree removed, branch retained) with
-   `#11 -> fixed` on the coordination branch, **When** review reads the matrix, **Then**
-   it resolves the verdict from the branch ref and reports `fixed`.
-2. **Given** the coordination branch has genuinely been deleted, **When** a consumer
-   attempts the read, **Then** resolution fails closed (refuse/raise) rather than
-   silently reading the primary residue and passing vacuously.
+   `#11 -> fixed` on the coordination branch, **When** the mission-review gate reads the
+   matrix, **Then** it resolves the verdict from the branch ref and reports `fixed`.
+2. **Given** the same consolidated mission, **When** the merge issue-matrix / terminal-verdict
+   gate runs, **Then** it too resolves verdicts from the coordination branch ref: a coord
+   `fixed` advances, and the same fixture with a coord `in-mission` refuses — proving the
+   deep read threads the **merge** path, not only review.
+3. **Given** the coordination branch has genuinely been deleted (its ref does not resolve
+   via `git rev-parse --verify`), **When** the mission-review or merge gate attempts the
+   read, **Then** resolution fails closed (refuse/raise) rather than silently reading the
+   primary residue and passing vacuously.
+4. **Given** the coordination ref resolves but the authored matrix is empty while gating
+   references exist, **When** the gate reads it, **Then** it REFUSEs; **and** the same
+   fixture with a non-empty authored matrix resolves the verdict (paired positive control).
+5. **Given** the coordination ref resolves but the content probe raises (unreadable object /
+   IO error), **When** the gate reads it, **Then** it REFUSEs; **and** the same fixture with
+   a succeeding probe reads `fixed` (paired positive control).
 
 ### Edge Cases
 
-- **Coordination surface deleted vs unmaterialized.** A retained-but-unmaterialized coord
-  branch must be read from the ref; a genuinely deleted coord branch must fail closed, not
-  degrade to the primary residue.
+- **Coordination surface deleted vs unmaterialized.** The consumer distinguishes the two by a
+  deterministic ref check (`git rev-parse --verify refs/heads/<coordination_branch>`): ref
+  present but no worktree ⇒ read content from the branch ref; ref absent ⇒ deleted, fail
+  closed (FR-007 deleted leg); ref present but the content probe errors ⇒ fail closed (FR-007
+  probe leg) — a distinct path from ref-absent, not the same code path with two justifications.
 - **References on the husk.** If reference discovery ever reads the coordination husk, zero
   references are found and the gate passes vacuously — discovery must always anchor to the
   primary partition.
@@ -155,10 +179,10 @@ mission-review; assert it reads `fixed` from the branch ref, not the primary res
 
 | ID | Title | User Story | Priority | Status | Delivery | No-op passable? |
 |----|-------|------------|----------|--------|----------|-----------------|
-| FR-001 | Mission-review resolves the issue-matrix partition before reading | As a reviewer, I want the issue-matrix gate to read authored verdicts from the coordination partition on coord topology so that a terminal, correct matrix is not reported as a hard FAIL. | High | Open | [ratchet] | no — paired same-fixture control: a real `in-mission` on the coord surface still FAILs (Scenario 1.2) |
-| FR-002 | Review Gate-4 doctrine uses a resolver-backed read, not a raw path | As a reviewer following the documented procedure, I want Gate 4 to invoke a partition-aware read rather than reconstruct `kitty-specs/<slug>/issue-matrix` by hand so that the documented steps do not read the wrong partition. | High | Open | [build] | no — the current doctrine instructs a raw working-tree read; the guard (FR-008) proves the raw read is gone |
-| FR-003 | Merge gate discovers gating references from the primary partition on all topologies | As the merge process, I want gating issue references discovered from the primary spec directory so that a coord mission is not falsely reported as having "nothing to enforce". | High | Open | [ratchet] | no — parity control: coord and lanes arms of one fixture must both FAIL on a missing row (Scenario 2.3) |
-| FR-004 | Merge gate reads verdicts from the coordination partition | As the merge process, I want matrix verdicts read from the coordination partition so that authored verdicts, not primary residue, decide the gate. | High | Open | [ratchet] | no — same fixture proves a terminal coord verdict PASSes while a stale primary residue would have failed |
+| FR-001 | Mission-review resolves the issue-matrix partition before reading | As a reviewer, I want the issue-matrix gate to read authored verdicts from the coordination partition on coord topology so that a terminal, correct matrix is not reported as a hard FAIL. | High | Open | [build] | no — paired same-fixture control: a real `in-mission` on the coord surface still FAILs (Scenario 1.2) |
+| FR-002 | Review Gate-4 doctrine reads verdicts from the correct partition | As a reviewer following the documented procedure, I want the documented Gate-4 steps to read authored verdicts from the correct (coordination) partition via a resolver-backed read so that following the procedure does not read primary residue. | High | Open | [build] | no — positive control: the rendered Gate-4 doctrine references the partition-aware read command/API (not merely the absence of a raw path, which FR-008 guards) |
+| FR-003 | Merge gate discovers gating references from the primary partition on all topologies | As the merge process, I want gating issue references discovered from the primary spec directory so that a coord mission is not falsely reported as having "nothing to enforce". | High | Open | [build] | no — parity control: coord and lanes arms of one fixture must both FAIL on a missing row (Scenario 2.4) |
+| FR-004 | Merge gate reads verdicts from the coordination partition | As the merge process, I want matrix verdicts read from the coordination partition so that authored verdicts, not primary residue, decide the gate. | High | Open | [build] | no — divergent fixture (primary vs coord) proves a terminal coord verdict PASSes and the inverted fixture FAILs (Scenarios 2.2/2.3) |
 | FR-005 | Coordination-branch-ref read authority for unmaterialized worktrees | As a consumer of coordination-partition artifacts, I want the authored matrix resolved from the coordination branch ref when the worktree is unmaterialized-but-retained so that verdicts stay readable after consolidation. | High | Open | [build] | no — RED before the authority exists (post-consolidation read returns residue) |
 | FR-006 | Merge enforces the terminal-verdict rule | As the merge process, I want to apply the same `in-mission -> done` rejection `move-task` applies — refuse in block mode (naming rows), warn with the same list in warn mode — so that an unresolved verdict cannot land on the target. | High | Open | [build] | no — positive control: the same mission with a terminal verdict merges cleanly (Scenario 3.3) |
 | FR-007 | Fail-closed resolution on ambiguity or probe failure | As a consumer, I want an unresolved/deleted coordination surface, an empty authored set with live references, or a git-probe error to REFUSE rather than fall back to primary residue or pass vacuously, so that a broken read is never a silent PASS. | High | Open | [build] | no — negative probe paired with the FR-005 positive read on one fixture |
@@ -170,7 +194,7 @@ mission-review; assert it reads `fixed` from the branch ref, not the primary res
 |----|-------|-------------|----------|----------|--------|
 | NFR-001 | Single read authority | All issue-matrix consumers route through the existing placement-seam read authority; a static audit finds zero direct working-tree `issue-matrix` reads in the review and merge gate consumers (count = 0). | Maintainability | High | Open |
 | NFR-002 | Fail-closed integrity | 100% of ambiguity/probe-failure paths (deleted coord surface, empty authored set with live references, git-probe error) resolve to a refusal, never a vacuous PASS, proven by dedicated tests. | Reliability | High | Open |
-| NFR-003 | Resolution latency | The coordination-branch-ref read adds no more than the CLI budget allows: mission-review and merge gate evaluation stay under 2s for a typical mission (charter CLI performance bar). | Performance | Medium | Open |
+| NFR-003 | Resolution latency | For a pinned fixture of 10 gating issues / 25 matrix rows on a retained coordination branch, mission-review and merge gate evaluation each complete in under 2s (charter CLI <2s bar), and the branch-ref read adds no measurable overhead versus the equivalent worktree read on the same fixture. | Performance | Medium | Open |
 
 ### Constraints
 
@@ -190,7 +214,8 @@ mission-review; assert it reads `fixed` from the branch ref, not the primary res
   are the resolved set; `in-mission` and `unknown` are non-terminal.
 - **Coordination partition / coordination branch**: the surface where lifecycle artifacts
   (status, notes, trace, issue-matrix) and authored verdicts live on coord topology; may be
-  materialized as a worktree or exist only as a retained branch ref.
+  materialized as a worktree (including a status-only "husk" carrying no spec/plan content),
+  or exist only as a retained branch ref.
 - **Primary partition**: the stable planning surface (spec, plan, tasks) and the source of
   gating issue-reference discovery, on every topology.
 - **Gating issue reference**: a bare `#NNNN` citation in the spec that obliges a matrix row;
@@ -204,10 +229,10 @@ mission-review; assert it reads `fixed` from the branch ref, not the primary res
 
 - **SC-001**: A coord-topology mission whose gating verdicts are terminal on the
   coordination surface passes mission review with zero false hard FAILs (down from 100% on
-  affected missions today). — [ratchet] · no-op passable: no
+  affected missions today). — [build] · no-op passable: no
 - **SC-002**: A coord-topology mission with a gating issue and no matrix row is reported
   identically to a lanes mission (no false "nothing to enforce" PASS) — parity across both
-  topology arms of one fixture. — [ratchet] · no-op passable: no
+  topology arms of one fixture. — [build] · no-op passable: no
 - **SC-003**: A mission with any gating row at `in-mission`/`unknown` cannot be landed by
   merge in `block` mode (refused, rows named) and prints the same list in `warn` mode; the
   same mission with terminal verdicts lands cleanly. — [build] · no-op passable: no
@@ -221,11 +246,13 @@ mission-review; assert it reads `fixed` from the branch ref, not the primary res
 ## Assumptions
 
 - The placement-seam partition-resolution authority already exists and is the canonical
-  surface to adopt; this mission is an adoption + depth-extension effort, not a new-primitive
-  design (confirmed by the pre-spec analysis squad against live code).
+  surface to adopt for FR-001–FR-004 (mirroring the existing healthy two-partition consumer).
+  FR-005/FR-007's coordination-branch-ref content read is a NEW primitive layered on that
+  seam — in scope per the operator's deep-fix decision, delivery-labelled `[build]`
+  accordingly — and is not characterized as pure adoption.
 - The canonical two-partition split pattern (discovery from primary, verdicts from
   coordination) is already demonstrated by an existing healthy consumer and is the reference
-  shape to mirror.
+  shape to mirror for FR-001–FR-004.
 - `#5171` and `#4943` are the same defect class (partition resolution for the issue-matrix
   kind) plus one orthogonal merge verdict-terminality gap; both are in scope by operator
   decision. The nightly P0s (#5169, #5172) are unrelated and out of scope.
