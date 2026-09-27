@@ -25,3 +25,51 @@ Seeded at spec-authoring time per the mission-tracer-files procedure (charter St
    tooling defect (dispatch flagged this in advance); left as-is, not amended, per instruction.
 
 No spec-kitty CLI bug blocked spec authoring itself.
+
+4. **Plan phase: transient `spec-kitty safe-commit` failure, `global_assets`-related, succeeded on
+   retry.** Reported by a subagent during the plan-authoring phase (not verified first-hand by the
+   tasks-phase agent writing this entry): the first `spec-kitty safe-commit` attempt at plan-commit
+   time failed with an error whose message referenced `global_assets`; the exact error text was not
+   preserved by the reporting subagent. A bare retry of the same `safe-commit` invocation succeeded
+   immediately, with no other change to the tree between attempts. A search of this checkout
+   (`grep -rn "global_assets"` across tracked and untracked files under this mission's workspace, and
+   `src/specify_cli/`) found no matching error string or log capturing the original failure — only
+   unrelated, pre-existing `global_assets`/`assess_global_assets` identifiers in other missions'
+   planning artifacts (`kitty-specs/ci-suite-stability-test-isolation-01M22MM5/`,
+   `kitty-specs/startup-assess-cold-concurrency-01M3EQ9S/`) and in
+   `src/specify_cli/runtime/asset_preparation.py` / `src/specify_cli/runtime/agent_skills.py` /
+   `src/specify_cli/skills/installer.py` / `src/specify_cli/upgrade/assessment.py` — none of which is
+   evidence of *this* mission's transient failure. Recorded here per instruction as **reported by a
+   subagent**, not reproduced or verified first-hand; no workaround was needed since the retry
+   succeeded. If this recurs, capture the full stderr/JSON output before retrying so a future entry
+   (or a ledger entry) can carry the actual error text.
+
+5. **Tasks phase: dispatch assumed a `tasks-outline -> tasks-packages -> finalize-tasks` flow; the
+   checkout's actual active sequence is a single `tasks` authoring step + `finalize-tasks`.
+   Verified first-hand by the tasks-phase agent.** The dispatch's own tooling-surface note asked
+   this to be checked and recorded rather than treated as a blocker, and it is confirmed exactly as
+   the dispatch suspected:
+   - `packs/built-in/missions/mission-steps/software-dev/tasks/step.yaml` carries
+     `sequence_index: 2` and `in_action_sequence: true` — this is the one active task-authoring step
+     for the `software-dev` mission type on this checkout.
+   - `packs/built-in/missions/mission-steps/software-dev/tasks-outline/step.yaml` and
+     `.../tasks-packages/step.yaml` both carry `sequence_index: null` and
+     `in_action_sequence: false` — neither is part of the active sequence.
+   - `.venv/bin/spec-kitty tasks-outline --help` and `.venv/bin/spec-kitty tasks-packages --help`
+     both fail with `Error: No such command 'tasks-outline'.` / `'tasks-packages'.` (exit code 2) —
+     neither is registered as a top-level CLI command on this checkout at all, confirming the
+     step-sequence finding operationally, not just via the YAML flag.
+   - `.venv/bin/spec-kitty tasks --help` IS registered, but as a **different** action than the
+     `software-dev/tasks` mission-step prompt: its own `--help` text is "Finalize tasks metadata
+     after task generation" (exit 0) — i.e. this top-level `tasks` CLI command is a finalize-tasks
+     equivalent, not the task-authoring step. `packs/built-in/missions/mission-steps/software-dev/
+     tasks-finalize/step.yaml` (`in_action_sequence: false` there too, since `finalize-tasks`/`tasks`
+     is invoked directly rather than through the mission-step sequence) confirms this shape.
+
+   **Net effect on this mission's tasks-phase workflow**: this agent authored `tasks.md` and
+   `kitty-specs/<mission>/tasks/WP##-*.md` directly by hand, following the `tasks` step's own
+   `prompt.md`/`guidelines.md` (the canonical, currently-active task-authoring procedure), then ran
+   `spec-kitty agent mission finalize-tasks --mission <handle> --json` (documented as "then commit
+   to target branch") as the finalize entry point — never `tasks-outline`, `tasks-packages`, or the
+   bare top-level `spec-kitty tasks` command. No workaround was needed; the dispatch's own
+   fallback instruction (prefer `agent mission finalize-tasks`) was followed exactly.
