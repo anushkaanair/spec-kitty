@@ -1,8 +1,11 @@
 # Mission Specification: Canonical lifecycle for custom mission types
 
-**Mission Branch**: `issue-4983-custom-mission-canonical-lifecycle`  
-**Created**: 2026-09-27  
-**Status**: Draft  
+**Mission Branch**: `issue-4983-custom-mission-canonical-lifecycle`
+
+**Created**: 2026-09-27
+
+**Status**: Draft
+
 **Input**: GitHub issue #4983 and the architecture-pack D03→D06 runtime-integration contract
 
 ## Summary

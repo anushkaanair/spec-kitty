@@ -1,8 +1,11 @@
 # Research: Canonical lifecycle for custom mission types
 
-**Mission**: `custom-mission-canonical-lifecycle-01M3HRAJ`  
-**Audience**: Spec Kitty runtime, charter, mission-runtime, and CLI maintainers  
-**Research cut**: repository `5e29a0b4e7b9203b0c6760d68af84e60679feae8`, 2026-09-27  
+**Mission**: `custom-mission-canonical-lifecycle-01M3HRAJ`
+
+**Audience**: Spec Kitty runtime, charter, mission-runtime, and CLI maintainers
+
+**Research cut**: repository `5e29a0b4e7b9203b0c6760d68af84e60679feae8`, 2026-09-27
+
 **Question**: How can a charter-activated custom mission type use the same identity,
 dossier, work-package, review, acceptance, merge, and retrospective lifecycle as a
 built-in mission without creating another mission-type authority or fabricating

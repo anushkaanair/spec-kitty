@@ -1,6 +1,7 @@
 # Data model: Canonical custom-mission lifecycle
 
-**Status**: research model; field names remain subject to plan-time schema placement.  
+**Status**: research model; field names remain subject to plan-time schema placement.
+
 **Authority rule**: every relationship below points to an existing authority. The model
 does not authorize duplicate copies in CLI modules.
 
