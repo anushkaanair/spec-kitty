@@ -158,11 +158,14 @@ mission-review; assert it reads `fixed` from the branch ref, not the primary res
 
 ### Edge Cases
 
-- **Coordination surface deleted vs unmaterialized.** The consumer distinguishes the two by a
-  deterministic ref check (`git rev-parse --verify refs/heads/<coordination_branch>`): ref
-  present but no worktree ⇒ read content from the branch ref; ref absent ⇒ deleted, fail
-  closed (FR-007 deleted leg); ref present but the content probe errors ⇒ fail closed (FR-007
-  probe leg) — a distinct path from ref-absent, not the same code path with two justifications.
+- **Surface selection follows lifecycle phase, not worktree state.** The read resolves its surface via
+  the same lifecycle-phase authority the write uses: PUBLISHED phase (Target Ref / `meta.target_branch`
+  deleted + baseline + completion) ⇒ read the consolidated-primary ref; CONSOLIDATED / pre-consolidation
+  on coord topology (the #5171 case) ⇒ read the coordination branch ref. A read that hardcodes either
+  surface risks diverging from the write.
+- **Resolved ref deleted vs present.** Existence via `git rev-parse --verify`: resolved ref present ⇒
+  read content from it; ref absent ⇒ fail closed (FR-007 deleted leg); ref present but the content probe
+  errors ⇒ fail closed (FR-007 probe leg) — a distinct path from ref-absent.
 - **References on the husk.** If reference discovery ever reads the coordination husk, zero
   references are found and the gate passes vacuously — discovery must always anchor to the
   primary partition.
@@ -183,7 +186,7 @@ mission-review; assert it reads `fixed` from the branch ref, not the primary res
 | FR-002 | Review Gate-4 doctrine reads verdicts from the correct partition | As a reviewer following the documented procedure, I want the documented Gate-4 steps to read authored verdicts from the correct (coordination) partition via a resolver-backed read so that following the procedure does not read primary residue. | High | Open | [build] | no — positive control: the rendered Gate-4 doctrine references the partition-aware read command/API (not merely the absence of a raw path, which FR-008 guards) |
 | FR-003 | Merge gate discovers gating references from the primary partition on all topologies | As the merge process, I want gating issue references discovered from the primary spec directory so that a coord mission is not falsely reported as having "nothing to enforce". | High | Open | [build] | no — parity control: coord and lanes arms of one fixture must both FAIL on a missing row (Scenario 2.4) |
 | FR-004 | Merge gate reads verdicts from the coordination partition | As the merge process, I want matrix verdicts read from the coordination partition so that authored verdicts, not primary residue, decide the gate. | High | Open | [build] | no — divergent fixture (primary vs coord) proves a terminal coord verdict PASSes and the inverted fixture FAILs (Scenarios 2.2/2.3) |
-| FR-005 | Coordination-branch-ref read authority for unmaterialized worktrees | As a consumer of coordination-partition artifacts, I want the authored matrix resolved from the coordination branch ref when the worktree is unmaterialized-but-retained so that verdicts stay readable after consolidation. | High | Open | [build] | no — RED before the authority exists (post-consolidation read returns residue) |
+| FR-005 | Post-consolidation matrix read via the write's surface authority | As a consumer of coordination-partition artifacts, I want the authored matrix read from the same surface the write path used — resolved by the shared lifecycle-phase authority (coordination branch ref in the CONSOLIDATED/pre-consolidation case, consolidated-primary ref in the PUBLISHED case) — so verdicts stay readable after the worktree is gone and a read can never diverge from where the verdict was written. | High | Open | [build] | no — RED before the authority exists (post-consolidation read returns residue); positive control: verdict written then read back via the same authority resolves identically |
 | FR-006 | Merge enforces the terminal-verdict rule | As the merge process, I want to apply the same `in-mission -> done` rejection `move-task` applies — refuse in block mode (naming rows), warn with the same list in warn mode — so that an unresolved verdict cannot land on the target. | High | Open | [build] | no — positive control: the same mission with a terminal verdict merges cleanly (Scenario 3.3) |
 | FR-007 | Fail-closed resolution on ambiguity or probe failure | As a consumer, I want an unresolved/deleted coordination surface, an empty authored set with live references, or a git-probe error to REFUSE rather than fall back to primary residue or pass vacuously, so that a broken read is never a silent PASS. | High | Open | [build] | no — negative probe paired with the FR-005 positive read on one fixture |
 | FR-008 | Regression guard against improvised issue-matrix path reads | As a maintainer, I want a non-vacuous gate asserting no mission-review doctrine step or gate consumer reconstructs a topology-dependent `issue-matrix` path by hand so that the partition-resolution regression cannot re-enter. | Medium | Open | [build] | no — self-mutation check: injecting a raw read must trip the gate |
