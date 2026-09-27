@@ -1,0 +1,336 @@
+# Mission Specification: Per-PR charter shard-timings recapture friction
+
+**Mission Branch**: `issue-5189-per-pr-shard-timings-recapture-friction`
+**Created**: 2026-09-27
+**Status**: Draft
+**Input**: GitHub issue [#5189](https://github.com/spec-kitty/spec-kitty/issues/5189) — "Per-PR `test_module_length_agreement` forces a full ~18-min charter shard-timings recapture on any test-count change"
+
+## Provenance
+
+This mission is issue-directed. GitHub issue #5189 documents the friction (evidenced twice, on
+PRs #5164 and #5175) and its owner, `MOES-Media`, claimed the mission and named the remedy
+directly in an issue comment: *"Claiming: mission per-pr-shard-timings-recapture-friction in
+progress. Direction chosen: remedy (d) — demote the per-PR exact-count assertion to non-blocking
+and add a scheduled recapture workflow that opens a PR."* The operator subsequently resolved two
+design forks the issue itself left open (recapture scope; PR-authoring auth). Both rulings are
+recorded verbatim below as binding decision records, per the same pattern used by
+`kitty-specs/up-mission-type-seam-01KZY1JB/spec.md`'s `## Clarifications` section.
+
+## Clarifications / Operator Decisions
+
+The following decisions were made by the operator before this spec was written. They are
+**binding decision records**, not options for a reviewer or implementer to re-litigate.
+
+### CL-001 — Remedy (d) + a real nightly
+
+Demote the per-PR exact-count assertion for `charter` in
+`tests/architectural/test_module_length_agreement.py`
+(`test_charter_is_not_allowlisted_and_agrees`) from a hard, blocking failure to a **non-blocking
+warning** — the per-PR architectural-battery shard no longer reds on a charter test-count change
+alone. Add a **SCHEDULED** workflow that runs `scripts/ci/capture_shard_timings.py` and **opens a
+PR** with the recapture (`main` is PR-only; `.github/workflows/protect-main.yml` flags direct
+pushes to `main`).
+
+### CL-002 — Auth: a dedicated PAT / GitHub App token, named and fail-loud
+
+Authentication for the scheduled job's PR-open step is a **dedicated PAT / GitHub App token**
+stored as a repository secret, mirroring the existing `RELEASE_NIGHTLY_DISPATCH_TOKEN` pattern
+documented in `.github/workflows/release.yml`'s `nightly-gate` job. The operator will create the
+secret. The design must **name** the secret explicitly and **fail loudly** (a clear, non-zero-exit
+error naming the missing secret) if it is absent — it must **never** silently fall back to the
+default `GITHUB_TOKEN`, because a PR opened with `GITHUB_TOKEN` does not trigger other workflows'
+`pull_request` events (GitHub's documented anti-recursion behavior; the same limitation
+`release.yml`'s own comment records for its `workflow_dispatch` case) — a silent fallback would be
+a silent CI-gate bypass on the very PR meant to restore the invariant.
+
+### CL-003 — Scope: `charter` only
+
+This mission's scope is **`charter` only**. The other 20 modules tracked by ledger entry SK-247
+(the operator's cross-mission ledger, "the module shard-timing authority is the WRONG LENGTH for
+20 of 21 modules") stay **out of scope**. This spec states that explicitly as
+a non-goal (see Non-Goals below) and does not contradict SK-247: SK-247's broader defect remains
+open as separate follow-up work, not folded into this mission.
+
+## User Scenarios & Testing *(mandatory)*
+
+### User Story 1 - Land a trivial charter test-count change without a full recapture (Priority: P1)
+
+A maintainer adds, removes, splits, or renames one test under `tests/charter/` or
+`tests/doctrine/` (the module `charter`'s dual test tree). Today this reds the per-PR
+architectural-battery shard via `test_charter_is_not_allowlisted_and_agrees` and forces a
+mandatory, serial, ~18-minute local recapture
+(`python scripts/ci/capture_shard_timings.py --module charter --write`) plus a ~5-6k-line JSON
+diff before the PR can land — landing friction wholly disproportionate to a +1/-1 test-count
+change, and the mechanism `module-tests.yml` protects (shard-balance quality, not test
+correctness or coverage — see NFR-001 below) does not require same-PR remediation.
+
+**Why this priority**: This is the concrete, evidenced pain (#5164, #5175) the issue exists to
+fix. Without it, every future charter test-count change repeats the same forced recapture.
+
+**Independent Test**: Add one test under `tests/charter/`, open a PR, and confirm the
+architectural-battery shard's `test_module_length_agreement.py` tests do not fail the job/shard
+because of the resulting charter length disagreement — the PR is not blocked from merging by this
+gate alone.
+
+**Acceptance Scenarios**:
+
+1. **Given** a PR that adds one test under `tests/charter/` (or `tests/doctrine/`) with no
+   recapture performed, **When** the architectural-battery shard runs
+   `tests/architectural/test_module_length_agreement.py`, **Then** the run does not fail the job
+   because of the charter committed/collected length disagreement, and the disagreement is
+   reported visibly in the job's output (not a silent pass — see FR-004).
+2. **Given** the same PR, **When** a maintainer inspects `_MISMATCH_ALLOWLIST` in
+   `tests/architectural/test_module_length_agreement.py`, **Then** `charter` is still **not**
+   present in it (the exact-count invariant is relocated to the scheduled recapture described in
+   User Story 2, never dropped by silently exempting `charter` the same way the 20 pre-existing
+   mismatches are exempted).
+
+---
+
+### User Story 2 - Charter's shard timings self-heal on a schedule, without a maintainer in the loop (Priority: P1)
+
+Because `charter`'s per-PR exact-count assertion is now advisory, something else must keep
+`.github/ci-shard-timings.json`'s charter entry converging on truth, or the demotion in User
+Story 1 just defers the SK-247-class decay indefinitely. A new scheduled workflow runs
+`scripts/ci/capture_shard_timings.py --module charter --write` on a cadence, and — only when the
+recapture actually changes the committed data — opens a PR carrying the update, so a human
+reviews and merges the recapture through the normal PR-only path.
+
+**Why this priority**: Without this, remedy (d) is just gate-removal — the exact-count invariant
+would have nowhere to be restored, which the charter's Standing Order #5 (architectural gate
+discipline: never disable a gate to get green without relocating what it protected) forbids.
+
+**Independent Test**: Manually dispatch the new workflow (`workflow_dispatch`) against a
+checkout where `charter`'s committed length has been made stale (e.g. one test added without
+recapture); confirm it opens exactly one PR carrying an updated
+`.github/ci-shard-timings.json` whose committed charter length matches live collection. Re-run
+the workflow with no further drift; confirm it opens no PR (see FR-006).
+
+**Acceptance Scenarios**:
+
+1. **Given** `charter`'s committed shard-timings length disagrees with live collection, **When**
+   the scheduled workflow runs (on its cron, or via manual `workflow_dispatch`), **Then** it
+   recaptures `charter`'s timings, commits the change on a new branch, and opens exactly one PR
+   targeting `main` (never a direct push — `main` is PR-only per `protect-main.yml`).
+2. **Given** `charter`'s committed shard-timings length already agrees with live collection
+   (no drift), **When** the scheduled workflow runs, **Then** it opens **no** PR (see FR-006 —
+   a no-drift run must not produce an empty/no-op PR).
+3. **Given** a prior recapture PR from this workflow is still open, **When** the scheduled
+   workflow runs again, **Then** it does not open a second, duplicate recapture PR (see FR-007).
+4. **Given** the named auth secret (CL-002) is absent from the repository, **When** the scheduled
+   workflow runs, **Then** the job fails loudly with an error naming the missing secret, and does
+   **not** fall back to opening the PR with the default `GITHUB_TOKEN` (see FR-005 / CL-002).
+5. **Given** the recapture script itself fails (non-zero exit, e.g. a collection error), **When**
+   the scheduled workflow runs, **Then** the job fails (visible as a failed Actions run) and does
+   **not** commit or open a PR with partial/corrupt data (see FR-008).
+
+---
+
+### User Story 3 - The demoted gate stays honest, not silently green (Priority: P2)
+
+A maintainer or reviewer looking at a PR (or at the scheduled workflow's run history) can tell,
+without reading source, whether `charter`'s committed/collected lengths currently agree or have
+drifted — the demotion in User Story 1 must not make drift invisible, per the charter's dominant
+failure-mode warning ("silent success").
+
+**Why this priority**: Standing Order #5 requires a gate-unmask (turning a hard failure into a
+non-failure) to remain observable; an assertion that just stops asserting, with no visible trace,
+is exactly the silent-success anti-pattern the charter warns against.
+
+**Independent Test**: Introduce a charter length disagreement (e.g., add a test under
+`tests/charter/` without recapturing) and run
+`tests/architectural/test_module_length_agreement.py::test_charter_is_not_allowlisted_and_agrees`
+locally; confirm the test run's own output (not just its exit code) surfaces the mismatch,
+distinguishable from the case where lengths agree.
+
+**Acceptance Scenarios**:
+
+1. **Given** a charter length disagreement, **When**
+   `test_charter_is_not_allowlisted_and_agrees` runs, **Then** its result is visibly distinct
+   from the agreeing case (e.g., reported as `xfailed`/a captured warning/an emitted
+   `::warning::`-class annotation carrying the committed/collected counts) — never a plain
+   `PASSED` indistinguishable from genuine agreement.
+2. **Given** `charter`'s lengths agree, **When** the same test runs, **Then** it reports a clean
+   pass with no warning noise.
+
+### Edge Cases
+
+- What happens when the scheduled job's own recapture leaves `charter` still disagreeing (e.g.
+  the capture script errors partway, or a race lands a new charter test between collection and
+  commit)? → Covered by FR-008: the job must fail rather than commit/open a PR with data it
+  cannot verify is now correct.
+- What happens when two open PRs (see Reflexivity below) both touch
+  `.github/ci-shard-timings.json` at the same time as a new recapture PR? → Not this mission's
+  problem to solve structurally (ordinary git conflict/rebase, not a design defect this mission
+  introduces); called out explicitly under Reflexivity so implementers and reviewers do not
+  mistake ordinary rebase churn for a regression.
+- What happens if the demotion mechanism chosen at plan time (e.g. `pytest.mark.xfail`) makes the
+  test collection-time marked rather than result-time marked, and a genuine collection/tooling
+  break (missing registry file, subprocess crash) gets silently swallowed as "expected failure"
+  instead of surfacing as an infrastructure error? → FR-004's acceptance criteria require the
+  demoted test to still distinguish "length mismatch" (expected, warn) from "could not determine
+  the lengths at all" (must still error/fail loudly) — plan/implementation must not fold both into
+  one blanket non-blocking outcome.
+
+## Requirements *(mandatory)*
+
+### Functional Requirements
+
+| ID | Title | User Story | Priority | Status | Delivery | No-op passable? |
+|----|-------|------------|----------|--------|----------|-----------------|
+| FR-001 | Demote `test_charter_is_not_allowlisted_and_agrees` to non-blocking | As a maintainer, I want a charter test-count change to stop reding the per-PR architectural-battery shard so that a trivial change doesn't force a mandatory 18-minute recapture. | High | Open | [ratchet] | no — the fixture must exercise both a disagreeing and an agreeing charter state on the same assertion path |
+| FR-002 | Keep `charter` out of `_MISMATCH_ALLOWLIST` | As a maintainer, I want `charter`'s exact-count invariant relocated, not dropped, so that Standing Order #5 (never disable a gate without relocating what it protected) is honored. | High | Open | [ratchet] | yes — a static check that `"charter" not in _MISMATCH_ALLOWLIST` remains an unconditional assertion |
+| FR-003 | Leave the other three ratchet tests and the 20-entry allowlist untouched | As a maintainer, I want `test_allowlist_does_not_exceed_baseline`, `test_allowlisted_modules_still_genuinely_mismatch`, `test_allowlist_entries_are_real_registry_modules`, and `test_non_allowlisted_modules_agree_with_live_collection` to keep their current (hard, blocking) behavior so that this mission's charter-only demotion cannot be read as weakening SK-247's other 20 tracked mismatches. | High | Open | [ratchet] | yes — these four tests' assertions are unchanged; diff review confirms no edit to their bodies |
+| FR-004 | Demoted assertion still visibly reports drift | As a reviewer, I want a charter length disagreement to be visibly reported (not a silent pass) so that drift is never invisible per the charter's silent-success warning. | High | Open | [build] | no — requires one fixture proving the disagreeing case emits a distinguishable signal and one proving the agreeing case emits none |
+| FR-005 | New scheduled workflow authenticates via a named, required secret; fails loudly if absent | As a maintainer, I want the recapture-PR job to name its auth secret explicitly and refuse to run (rather than silently falling back to `GITHUB_TOKEN`) when that secret is missing, so that a missing operator prerequisite cannot silently become a CI-gate bypass. | High | Open | [build] | no — requires a fixture/dry-run proving the job errors (not warns-and-continues) when the secret is unset |
+| FR-006 | Scheduled workflow opens no PR when there is no drift | As a maintainer, I want the recapture job to skip opening a PR when the recapture produces no change, so that the recapture workflow never spams an empty/no-op PR. | High | Open | [build] | no — requires a fixture proving both the drift case (PR opened) and the no-drift case (no PR) |
+| FR-007 | Scheduled workflow does not open a duplicate PR while one is already open | As a maintainer, I want the recapture job to detect an already-open recapture PR and skip opening a second one, so that repeated scheduled runs before the first PR merges do not spam duplicate PRs. | High | Open | [build] | no — requires a fixture proving a second run with an open prior PR opens nothing new |
+| FR-008 | Scheduled workflow fails (does not commit or open a PR) when the recapture script itself fails | As a maintainer, I want a `capture_shard_timings.py` failure to fail the job outright, so that a broken or partial recapture never gets committed and opened as a PR that looks trustworthy. | High | Open | [build] | no — requires a fixture proving a non-zero recapture-script exit aborts before any commit/PR step |
+| FR-009 | Scheduled workflow recaptures `charter` only | As a maintainer, I want the new workflow's `--module` scope pinned to `charter`, so that the mission's scope stays bounded to CL-003 and does not silently expand into the other 20 SK-247 modules or an allowlist-mutation feature. | High | Open | [build] | yes — the workflow's invocation names `--module charter` explicitly; no loop over the registry's other modules |
+| FR-010 | Recapture PR carries a bot identity and a clear body | As a reviewer, I want the recapture PR's committer identity and description to make its automated, single-purpose nature obvious, so that it is trivially distinguishable from a human-authored change during review. | Medium | Open | [build] | yes — a fixed commit-author/PR-body convention, independently verifiable by inspection |
+
+### Non-Functional Requirements
+
+| ID | Title | Requirement | Category | Priority | Status |
+|----|-------|-------------|----------|----------|--------|
+| NFR-001 | Gate protects shard balance, not correctness | The spec and its acceptance criteria must not claim or imply that demoting `test_charter_is_not_allowlisted_and_agrees` risks masking a test-coverage or correctness regression: `module-tests.yml`'s positional pairing degrades to a uniform-weight fallback (verified at `.github/workflows/module-tests.yml`'s "Select this shard's tests" step) on any length mismatch, so the gate's sole protected property is shard-balance quality (bounded inter-shard skew), never which tests run. | Correctness-of-claim | High | Open |
+| NFR-002 | Scheduled job stays within the module registry's per-shard time ceiling | The new workflow, recapturing `charter` alone, must complete within a bounded, documented runtime budget (the issue's own ~18-minute local figure is the reference point; the plan phase must record the actual measured in-Actions runtime once dispatched) and must not be scoped to run unbounded across all 21 registry modules (that would risk exceeding `module-tests.yml`'s per-shard ceiling with no measured baseline — see CL-003 / readiness report Open Question 2). | Performance | Medium | Open |
+| NFR-003 | No credential leakage | The named auth secret (CL-002) must never be echoed, logged, or written into workflow output, commit messages, or the opened PR's body — consistent with the charter's `DIRECTIVE_050` credential-handling requirement. | Security | High | Open |
+
+### Constraints
+
+| ID | Title | Constraint | Category | Priority | Status |
+|----|-------|------------|----------|----------|--------|
+| C-001 | Charter-only scope | This mission touches only `charter`'s handling in `tests/architectural/test_module_length_agreement.py` and adds one new scheduled workflow scoped to `charter`. It does not recapture, allowlist-edit, or otherwise touch any of the other 20 modules tracked by SK-247. | Technical | High | Open |
+| C-002 | No allowlist-mutation feature | This mission does not add tooling that programmatically edits `_MISMATCH_ALLOWLIST` or `_BASELINE_ALLOWLIST_COUNT`. Per the test file's own docstring, only a human edits that ratchet today, and this mission does not change that. | Technical | High | Open |
+| C-003 | `main` is PR-only | The scheduled workflow must never push directly to `main`. It commits to a new branch and opens a PR, consistent with `.github/workflows/protect-main.yml` and the charter's Programme PR Workflow / Agent Push Authorization sections. | Technical | High | Open |
+| C-004 | No silent auth fallback | The scheduled workflow must never fall back to the default `GITHUB_TOKEN` for the PR-open step when the named secret (CL-002) is absent. | Technical | High | Open |
+| C-005 | Public repo — no absolute local paths, no credentials | No artifact this mission commits may contain a literal `/home/<user>` path, a credential value, or private-repo/readiness-report detail. `.venv/bin/spec-kitty` internals, the readiness report, and this dispatch are background context only, never cited verbatim in committed files. | Technical | High | Open |
+
+### Key Entities
+
+- **`.github/ci-shard-timings.json`**: the committed measured-duration authority for the CI
+  module-test shard matrix; `module_test_durations["charter"]` is the list this mission's
+  scheduled job re-measures and commits.
+- **`_MISMATCH_ALLOWLIST`** (`tests/architectural/test_module_length_agreement.py`): the
+  frozen, shrink-only debt ledger of 20 modules whose committed/collected lengths are known to
+  disagree; `charter` must never enter it (FR-002).
+- **The scheduled recapture workflow** (new file under `.github/workflows/`, name TBD at plan
+  time): runs on `schedule` + `workflow_dispatch` only (no `pull_request`/`push` trigger,
+  mirroring `.github/workflows/ci-stale-running-sweep.yml`'s pattern), invokes
+  `scripts/ci/capture_shard_timings.py --module charter --write`, and conditionally opens a PR.
+- **The named auth secret** (CL-002): a dedicated PAT / GitHub App token repository secret,
+  named explicitly by the plan, mirroring `RELEASE_NIGHTLY_DISPATCH_TOKEN`.
+
+## Success Criteria *(mandatory)*
+
+### Measurable Outcomes
+
+- **SC-001**: A PR that changes only a charter test count (no recapture performed) no longer
+  fails the architectural-battery shard because of
+  `test_charter_is_not_allowlisted_and_agrees` — [ratchet] · no-op passable: no.
+- **SC-002**: `charter` is absent from `_MISMATCH_ALLOWLIST` both before and after this mission's
+  change — [ratchet] · no-op passable: yes.
+- **SC-003**: A manually-dispatched run of the new scheduled workflow against a deliberately
+  stale `charter` entry produces exactly one PR whose merged content makes
+  `test_charter_is_not_allowlisted_and_agrees` pass without warning — [build] · no-op passable:
+  no.
+- **SC-004**: A manually-dispatched run of the new scheduled workflow against an already-agreeing
+  `charter` entry produces zero PRs — [build] · no-op passable: no.
+- **SC-005**: A manually-dispatched run of the new scheduled workflow with the named secret unset
+  fails the job with an error naming the missing secret, and no PR is opened using
+  `GITHUB_TOKEN` — [build] · no-op passable: no.
+- **SC-006**: The other 20 `_MISMATCH_ALLOWLIST` entries and the four unrelated ratchet tests are
+  byte-identical in behavior before and after this mission (diff review) — [ratchet] · no-op
+  passable: yes.
+
+## Non-Goals
+
+- **The other 20 SK-247 modules** (`merge`, `missions`, `post_merge`, `release`, `status`,
+  `review`, `next`, `lanes`, `dashboard`, `upgrade`, `cli`, `kernel`, `glossary`,
+  `execution_context`, `core_misc`, `unit`, `specify_cli_runtime`, `ci`, `auth`, and any other
+  entry in `_MISMATCH_ALLOWLIST`) are **not** recaptured, allowlisted, or otherwise touched by
+  this mission. SK-247 remains open as separate follow-up work; this spec does not contradict it.
+- **No allowlist-mutation feature.** This mission does not build tooling to programmatically add,
+  remove, or resize `_MISMATCH_ALLOWLIST` / `_BASELINE_ALLOWLIST_COUNT`. That remains a manual
+  edit, per the test file's existing docstring convention.
+- **No change to `ci-router.yml`'s `architectural-heavy` job trigger conditions.** The path-filter
+  logic that selects when `tests/architectural/**` runs on a PR is unchanged; only the assertion
+  behavior inside one test in that suite changes.
+- **No retroactive fix to already-open PRs.** #5175 and #5177 (see Reflexivity) are not modified
+  by this mission; they are only affected by rebasing against whichever of this mission's PR,
+  #5175, or #5177 merges first (ordinary git history churn on a shared file, not a design change
+  this mission must engineer around).
+
+## Reflexivity — Impact on In-Flight Work
+
+This mission changes machinery that other in-flight PRs depend on.
+
+- **#5175** ("Merge-seam relocation, test-isolation sweep & model-slot verdict") and **#5177**
+  ("fix(review): rejection feedback survives to the implementer's regenerated prompt") both
+  currently list `.github/ci-shard-timings.json` as a changed file. Neither touches
+  `tests/architectural/test_module_length_agreement.py`, `.github/workflows/module-tests.yml`,
+  `scripts/ci/capture_shard_timings.py`, or `.github/ci-module-registry.yml`, so there is **no
+  direct code collision** with this mission's diff. Whichever of {this mission, #5175, #5177}
+  merges first, the others rebase against a changed `.github/ci-shard-timings.json` — an ordinary
+  git-history sequencing concern, not a blocker, and not something this mission's design needs to
+  prevent.
+- **Any PR mid-flight when this mission's demotion lands**: before merge, such a PR is still
+  bound by the current hard assertion (if it happens to touch charter test counts, it must
+  recapture as today). After merge, the demotion applies to every subsequent CI run on that PR's
+  branch once it is rebased/re-run against the new `main` — it does not retroactively change a
+  run already completed. This confirms the readiness report's characterization: rebase churn, not
+  a blocker.
+- **Docs**: PR #5190 (merged, docs-only) recorded this friction as a known-friction-points bullet
+  and explicitly stated it does not close #5189. This mission is the actual fix; at
+  implementation/review time, the PR should note in its body that the doc bullet in
+  `docs/development/reference/known-friction-points.md` is now superseded (leaving the specific
+  doc-file edit, if any, to implementation's judgment — not prescribed here).
+
+## Charter Tension — Standing Order #5 (Architectural Gate Discipline)
+
+Standing Order #5 requires: a NON-VACUOUS call-site gate (concrete floor + self-mutation test +
+shrink-only allowlist), and explicitly forbids disabling a gate merely to get green. Demoting
+`test_charter_is_not_allowlisted_and_agrees` is an **operator ruling** (CL-001/CL-002/CL-003), not
+a green-wash, for the following reasons — each is a testable property of this mission's design,
+not an assertion to take on faith:
+
+1. **Relocated, not dropped.** The exact-count invariant is not deleted; it is moved from a
+   per-PR blocking check to a scheduled, automatic recapture (FR-005–FR-009) that restores
+   agreement on a bounded cadence. FR-006/FR-007/FR-008 make that automatic path itself
+   non-vacuous: it must actually change the committed data when drift exists (not a no-op PR),
+   must not spam duplicates, and must fail rather than commit bad data on script failure.
+2. **`charter` stays out of `_MISMATCH_ALLOWLIST`.** FR-002 keeps the absence of `charter` from
+   that allowlist a hard, unconditional assertion — the mechanism the 20 pre-existing mismatches
+   use to be exempted is explicitly **not** applied to `charter`. This preserves the file's own
+   stated invariant (`test_charter_is_not_allowlisted_and_agrees`'s docstring: "a count-preserving
+   swap (fix one module, sneak `charter` in) cannot mask a real regression").
+3. **The other ratchet tests are untouched (FR-003).** `test_allowlist_does_not_exceed_baseline`,
+   `test_allowlisted_modules_still_genuinely_mismatch`, and
+   `test_allowlist_entries_are_real_registry_modules` keep their current, fully-blocking
+   behavior — this mission's demotion is scoped to exactly one assertion for exactly one module,
+   never a general weakening of the gate file.
+4. **Drift stays visible, not silent (FR-004, User Story 3).** The demoted assertion must still
+   produce a distinguishable signal on disagreement (e.g., `xfailed` rather than `passed`, or an
+   emitted warning/annotation carrying the committed/collected counts) — this repo's dominant
+   failure mode is silent success, and a demotion that just stops asserting with no visible trace
+   would reproduce exactly that failure mode. The exact mechanism (pytest `xfail`,
+   `warnings.warn`, a GitHub Actions `::warning::` annotation, or a combination) is a plan-time
+   choice; the observable requirement — visibly distinct from a genuine pass — is fixed here.
+5. **Silent-success failure modes for the scheduled job are explicitly specified** (FR-005
+   through FR-008 / Acceptance Scenarios under User Story 2): a missing auth secret fails loudly
+   and never falls back to `GITHUB_TOKEN` (FR-005/CL-002); a no-drift run opens no PR (FR-006); an
+   already-open recapture PR is not duplicated (FR-007); a recapture-script failure aborts before
+   any commit/PR step rather than committing partial data (FR-008).
+
+## Ledger Cross-Reference
+
+The operator's cross-mission ledger's **SK-247** entry documents that 20 of
+21 registry modules mismatch and that the prior mission (`ci-nightly-wallclock-budget-01M34HNZ`)
+recaptured `charter` only, "scoped the rest out" by operator ruling, and left SK-247 open with a
+suggested fix of running the length-agreement check in CI per module and hardening the
+selection-marker-expression mismatch between the capture script and its consumer. This mission
+does not contradict that entry: it stays `charter`-only (CL-003 / C-001), leaves the 20-entry
+allowlist untouched (FR-003), and does not attempt SK-247's broader per-module CI-config-path gap
+(the readiness report's cited `#3241`-class issue) or the `SELECTION_MARKER_EXPR` alignment SK-247
+separately flags. Both remain open follow-up work.
