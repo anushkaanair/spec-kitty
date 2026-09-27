@@ -91,10 +91,11 @@ gate alone.
 
 Because `charter`'s per-PR exact-count assertion is now advisory, something else must keep
 `.github/ci-shard-timings.json`'s charter entry converging on truth, or the demotion in User
-Story 1 just defers the SK-247-class decay indefinitely. A new scheduled workflow runs
-`scripts/ci/capture_shard_timings.py --module charter --write` on a cadence, and — only when the
-recapture actually changes the committed data — opens a PR carrying the update, so a human
-reviews and merges the recapture through the normal PR-only path.
+Story 1 just defers the SK-247-class decay indefinitely. A new scheduled workflow checks whether
+a recapture PR from a fixed head branch is already open and, if so, does nothing further;
+otherwise it runs `scripts/ci/capture_shard_timings.py --module charter --write` on a cadence
+and — only when the recapture actually changes the committed data — opens a PR carrying the
+update, so a human reviews and merges it through the normal PR-only path.
 
 **Why this priority**: Without this, remedy (d) is just gate-removal — the exact-count invariant
 would have nowhere to be restored, which the charter's Standing Order #5 (architectural gate
@@ -103,26 +104,33 @@ discipline: never disable a gate to get green without relocating what it protect
 **Independent Test**: Manually dispatch the new workflow (`workflow_dispatch`) against a
 checkout where `charter`'s committed length has been made stale (e.g. one test added without
 recapture); confirm it opens exactly one PR carrying an updated
-`.github/ci-shard-timings.json` whose committed charter length matches live collection. Re-run
-the workflow with no further drift; confirm it opens no PR (see FR-006).
+`.github/ci-shard-timings.json` whose committed charter length matches live collection. Merge
+(or close) that PR so no PR from the fixed head branch remains open, then re-run the workflow
+with no further drift; confirm it opens no PR this time because the committed and collected
+lengths already agree (see FR-006) — not because a PR is still open, which is FR-007's
+skip-if-open path, exercised separately by Acceptance Scenario 3 below.
 
 **Acceptance Scenarios**:
 
 1. **Given** `charter`'s committed shard-timings length disagrees with live collection, **When**
    the scheduled workflow runs (on its cron, or via manual `workflow_dispatch`), **Then** it
-   recaptures `charter`'s timings, commits the change on a new branch, and opens exactly one PR
-   targeting `main` (never a direct push — `main` is PR-only per `protect-main.yml`).
+   recaptures `charter`'s timings, commits the change on the fixed recapture head branch (see Key
+   Entities), and opens exactly one PR targeting `main` (never a direct push — `main` is PR-only
+   per `protect-main.yml`).
 2. **Given** `charter`'s committed shard-timings length already agrees with live collection
    (no drift, per FR-006's length-only definition — even though `--write` still rewrites
    `run_id`/`captured_at`/per-test duration values on this run, producing a routine file diff
    that must **not** itself be treated as drift), **When** the scheduled workflow runs, **Then**
    it opens **no** PR (see FR-006 — a no-drift run must not produce an empty/no-op PR).
-3. **Given** a prior recapture PR from this workflow is still open — identifiable by the fixed
-   marker in Key Entities (label / branch-name prefix / bot commit-author), never by incidentally
-   touching the same file — **When** the scheduled workflow runs again, **Then** it does not open
-   a second, duplicate recapture PR (see FR-007), and an unrelated open PR that also happens to
-   touch `.github/ci-shard-timings.json` (e.g. the #5175/#5177 pattern under Reflexivity) is not
-   mistaken for one.
+3. **Given** a prior recapture PR from this workflow is still open — identifiable by its head
+   branch being the single fixed branch this workflow is permanently pinned to (used whenever it
+   does push; see Key Entities), never by incidentally touching the same file — **When** the
+   scheduled workflow runs again, **Then**
+   it does **not** push, force-push, comment, or open anything; it writes one line to the job
+   summary naming the open PR's number and exits successfully (see FR-007), never opening a
+   second, duplicate recapture PR, and an unrelated open PR that also happens to touch
+   `.github/ci-shard-timings.json` (e.g. the #5175/#5177 pattern under Reflexivity) is not
+   mistaken for one, because its head branch differs.
 4. **Given** the named auth secret (CL-002) is absent from the repository, **When** the scheduled
    workflow runs, **Then** the job fails loudly with an error naming the missing secret **before**
    any recapture, commit, or push occurs, and does **not** fall back to opening the PR with the
@@ -199,10 +207,10 @@ distinguishable from the case where lengths agree.
 | FR-004 | Demoted assertion still visibly reports drift, and still fails loudly on a genuine infrastructure break | As a reviewer, I want a charter length disagreement to be visibly reported (not a silent pass) so that drift is never invisible per the charter's silent-success warning, and I want a genuine collection/infrastructure break (missing artefact, live-collection crash) to still fail/error visibly rather than collapse into the same warn/xfail outcome as an ordinary length mismatch. | High | Open | [build] | no — requires three fixtures: one proving the disagreeing case emits a distinguishable signal, one proving the agreeing case emits none, and one proving a genuine infrastructure/collection break (missing timings/registry artefact, live-collection crash) fails/errors visibly, distinguishable from both the length-mismatch-warn case and the clean-pass case (see User Story 3, Acceptance Scenario 3) |
 | FR-005 | New scheduled workflow authenticates via a named, required secret; fails loudly if absent, before any recapture, commit, or push | As a maintainer, I want the recapture-PR job to name its auth secret explicitly and refuse to run (rather than silently falling back to `GITHUB_TOKEN`) when that secret is missing, so that a missing operator prerequisite cannot silently become a CI-gate bypass. This check must run and fail the job **before** the recapture-and-commit steps execute — not merely before the PR-open call — so a missing secret can never leave a pushed branch+commit in the remote with no PR and no failure signal at the moment of the mutation, and so `capture_shard_timings.py` is never even invoked when the secret is absent. | High | Open | [build] | no — requires a fixture/dry-run proving the job errors (not warns-and-continues) when the secret is unset, and a fixture proving no recapture-script invocation occurred at all (not merely that no branch/commit exists in the remote afterward — that weaker check cannot distinguish "recapture ran, then the check failed before commit" from "the check failed before recapture ran") |
 | FR-006 | Scheduled workflow opens no PR when there is no drift | As a maintainer, I want the recapture job to skip opening a PR when the recapture produces no substantive change — defined as the committed and freshly-collected `module_test_durations["charter"]` list **length** agreeing (mirroring `test_charter_is_not_allowlisted_and_agrees`'s own comparison), never "the recapture script produced any file diff" — so that the recapture workflow never spams an empty/no-op PR from `--write`'s routine rewrite of `run_id`/`captured_at`/per-test duration values (which change on every invocation even when the test count is unchanged). The plan phase must specify a length-only or noise-stripped comparison for this decision, never a raw file-diff/`git diff` check. | High | Open | [build] | no — requires a fixture proving both the drift case (length disagrees → PR opened) and the no-drift case (length agrees, even though `--write` still rewrote timestamp/duration-value noise → no PR) |
-| FR-007 | Scheduled workflow does not open a duplicate PR while one is already open | As a maintainer, I want the recapture job to detect an already-open recapture PR — identified by a fixed marker this workflow controls (a label, a branch-name prefix, or a bot commit-author identity; see Key Entities), required to stay consistent with, and never contradicted by, FR-010's bot-identity/PR-body convention (FR-010's own mechanism can only ever produce a bot-commit-author identity/PR-body, never a label or a branch-name prefix, so the two need not be the identical marker — see FR-010), never incidental overlap with an unrelated PR that also happens to touch `.github/ci-shard-timings.json` — and skip opening a second one, so that repeated scheduled runs before the first PR merges do not spam duplicate PRs. | High | Open | [build] | no — requires a fixture proving a second run with a prior PR open (correctly identified by the fixed marker) opens nothing new, and a fixture proving an unrelated open PR that also touches `.github/ci-shard-timings.json` (e.g. the #5175/#5177 pattern) is NOT mistaken for a prior recapture PR |
+| FR-007 | Scheduled workflow skips entirely when a recapture PR is already open, instead of opening a duplicate | As a maintainer, I want the recapture job to push its capture to one constant, fixed head branch (e.g. `ci/recapture-charter-shard-timings`; see Key Entities) whenever no PR from that branch is currently open, and to detect "already open" as an open PR whose head is that branch and whose base is `main` — GitHub permits only one open PR per head branch into a given base, so a duplicate recapture PR from this workflow is structurally impossible. When such a PR exists, the job does **not** push, force-push, comment, or open anything — it writes one line to the job summary naming the open PR's number and exits successfully (never force-pushes, in any case); when none exists, the job proceeds to run the recapture, and FR-006's independent, length-only drift check then decides whether it actually pushes and opens one (no drift ⇒ nothing pushed, nothing opened). An unrelated PR that also happens to touch `.github/ci-shard-timings.json` is never matched, because its head branch differs. | High | Open | [build] | no — requires a fixture proving a second run, with the fixed branch's PR already open, performs no push/force-push/comment/open and only writes the job-summary line naming that PR's number, and a fixture proving an unrelated open PR that also touches `.github/ci-shard-timings.json` on a different head branch (e.g. the #5175/#5177 pattern) is never matched by the open-PR search |
 | FR-008 | Scheduled workflow fails (does not commit or open a PR) when the recapture MECHANISM itself fails — never merely because the measured suite has failing tests | As a maintainer, I want a genuine `capture_shard_timings.py` mechanism failure (a collection crash, an uncaught exception, or another tooling/environment failure in the script's own machinery) to fail the job outright, so that a broken or partial recapture never gets committed and opened as a PR that looks trustworthy. An ordinary failing test inside the measured `tests/charter`/`tests/doctrine` run is explicitly **not** this failure mode: `DurationRecorder` records every reported test regardless of outcome, so the captured duration data stays complete and trustworthy even when `pytest.main()` itself returns non-zero because a measured test failed — exactly the case already accepted in the currently-committed `module_capture_provenance.charter` entry (`exit_code: 1`). | High | Open | [build] | no — requires two fixtures: one proving a genuine mechanism crash aborts before any commit/PR step, and one proving an ordinary failing measured test (non-zero `pytest.main()` exit with complete `DurationRecorder` output) does **not** abort the commit/PR step |
 | FR-009 | Scheduled workflow recaptures `charter` only | As a maintainer, I want the new workflow's `--module` scope pinned to `charter`, so that the mission's scope stays bounded to CL-003 and does not silently expand into the other 19 SK-247 modules or an allowlist-mutation feature. | High | Open | [build] | yes — the workflow's invocation names `--module charter` explicitly; no loop over the registry's other modules |
-| FR-010 | Recapture PR carries a bot identity and a clear body | As a reviewer, I want the recapture PR's committer identity and description to make its automated, single-purpose nature obvious, so that it is trivially distinguishable from a human-authored change during review, and so that FR-007's duplicate-PR detection — whichever of the three Key Entities markers the plan selects for its own check — stays consistent with, and is never contradicted by, this same bot-identity/PR-body signal, rather than the two evolving as independently-invented, potentially-conflicting conventions. | Medium | Open | [build] | yes — a fixed commit-author/PR-body convention, independently verifiable by inspection, and consistent with — never contradicting — whichever marker(s) FR-007's duplicate check uses |
+| FR-010 | Recapture PR carries a bot identity and a clear body | As a reviewer, I want the recapture PR's committer identity, commit message, and PR body to plainly state — in fixed, falsifiable-by-inspection text — that the change is a single-purpose, automated recapture produced by the scheduled workflow, so that it is trivially distinguishable from a human-authored change during review. | Medium | Open | [build] | yes — a fixed commit-author identity and PR-body/commit-message convention that states plainly the change is an automated recapture by the scheduled workflow, independently verifiable by inspection of the fixed text |
 
 ### Non-Functional Requirements
 
@@ -218,10 +226,10 @@ distinguishable from the case where lengths agree.
 |----|-------|------------|----------|----------|--------|
 | C-001 | Charter-only scope | This mission touches only `charter`'s handling in `tests/architectural/test_module_length_agreement.py` and adds one new scheduled workflow scoped to `charter`. It does not recapture, allowlist-edit, or otherwise touch any of the other 19 modules tracked by SK-247. | Technical | High | Open |
 | C-002 | No allowlist-mutation feature | This mission does not add tooling that programmatically edits `_MISMATCH_ALLOWLIST` or `_BASELINE_ALLOWLIST_COUNT`. Per the test file's own docstring, only a human edits that ratchet today, and this mission does not change that. | Technical | High | Open |
-| C-003 | `main` is PR-only | The scheduled workflow must never push directly to `main`. It commits to a new branch and opens a PR, consistent with `.github/workflows/protect-main.yml` and the charter's Programme PR Workflow / Agent Push Authorization sections. | Technical | High | Open |
+| C-003 | `main` is PR-only | The scheduled workflow must never push directly to `main`. It commits to the fixed recapture head branch (see Key Entities) and opens a PR from it only when both hold: no PR from that branch is already open (FR-007), and the recapture shows drift (FR-006). It commits and opens nothing in either of the other two cases — a PR from that branch is already open (per ruling 2, skips entirely) or no PR is open but the recapture shows no drift (FR-006) — consistent with `.github/workflows/protect-main.yml` and the charter's Programme PR Workflow / Agent Push Authorization sections. | Technical | High | Open |
 | C-004 | No silent auth fallback | The scheduled workflow must never fall back to the default `GITHUB_TOKEN` for the PR-open step when the named secret (CL-002) is absent, and the presence check for that secret must run and fail **before** any recapture, commit, or push occurs — never merely immediately before the PR-open call, and never after the recapture script has already been invoked. | Technical | High | Open |
 | C-005 | Public repo — no absolute local paths, no credentials | No artifact this mission commits may contain a literal `/home/<user>` path, a credential value, or private-repo/readiness-report detail. `.venv/bin/spec-kitty` internals, the readiness report, and this dispatch are background context only, never cited verbatim in committed files. | Technical | High | Open |
-| C-006 | Scheduled workflow is concurrency-guarded | The new scheduled workflow must carry a `concurrency:` group (mirroring `.github/workflows/ci-stale-running-sweep.yml`'s own `concurrency: {group: ci-stale-running-sweep, cancel-in-progress: false}` block) so that overlapping invocations — a cron run racing a manual `workflow_dispatch`, or two manual dispatches close together — queue rather than race FR-007's open-PR check and both open a PR. | Technical | High | Open |
+| C-006 | Scheduled workflow is concurrency-guarded | The new scheduled workflow must carry a `concurrency:` group (mirroring `.github/workflows/ci-stale-running-sweep.yml`'s own `concurrency: {group: ci-stale-running-sweep, cancel-in-progress: false}` block) so that overlapping invocations — a cron run racing a manual `workflow_dispatch`, or two manual dispatches close together — queue rather than race FR-007's open-PR check, where both could otherwise observe "no PR is open" at the same instant, each proceed to run the recapture and independently evaluate FR-006's drift check, and — only if both find drift — each attempt to push and open its own PR against the fixed branch. | Technical | High | Open |
 
 ### Key Entities
 
@@ -233,29 +241,55 @@ distinguishable from the case where lengths agree.
   disagree; `charter` must never enter it (FR-002).
 - **The scheduled recapture workflow** (new file under `.github/workflows/`, name TBD at plan
   time): runs on `schedule` + `workflow_dispatch` only (no `pull_request`/`push` trigger,
-  mirroring `.github/workflows/ci-stale-running-sweep.yml`'s pattern), invokes
-  `scripts/ci/capture_shard_timings.py --module charter --write`, conditionally opens a PR, and
+  mirroring `.github/workflows/ci-stale-running-sweep.yml`'s pattern), and on every run follows a
+  three-step sequence, not a two-way branch: (1) it checks FIRST, before invoking the recapture
+  script at all, whether a PR from the single fixed head branch defined below is already open
+  against `main` (FR-007); if so, it skips entirely — no recapture script invocation, no push, no
+  PR — and instead writes one line to the job summary naming the open PR's number and exits
+  successfully; (2) only when no such PR is open does it invoke
+  `scripts/ci/capture_shard_timings.py --module charter --write`; (3) it then applies FR-006's
+  independent, length-only drift check to the result — when the committed and freshly-collected
+  `charter` lengths agree (no drift), it pushes nothing and opens no PR, even though `--write`
+  still rewrote routine `run_id`/`captured_at`/duration noise; when they disagree (drift found), it
+  pushes the fresh capture to the fixed head branch and opens a PR from it. FR-006's no-drift gate
+  is independent of, and additional to, FR-007's open-PR check — it is evaluated only in the
+  no-open-PR branch (step 3, after step 2), never subsumed by the open-PR check. The workflow also
   carries a `concurrency:` group serializing overlapping runs (C-006) so a same-instant race
-  between two invocations cannot both pass the open-PR check.
-- **The recapture PR's identifying signal** (FR-007 / FR-010): "a recapture PR from this
-  workflow" is identifiable by one fixed marker this workflow controls — a label, a
-  branch-name prefix, or a bot commit-author identity (the plan picks which) — never by
-  incidentally touching the same file as an unrelated PR (e.g. the #5175/#5177 pattern under
-  Reflexivity, both of which currently list `.github/ci-shard-timings.json` as a changed file).
-  FR-007's duplicate-PR check and FR-010's bot-identity/PR-body convention are never two
-  independently-invented signals: FR-010's mechanism can only ever produce a bot-commit-author
-  identity and PR-body text — it cannot itself BE a label or a branch-name prefix — so whichever
-  of the three markers named above FR-007's own duplicate check actually uses, FR-010's
-  convention must stay consistent with it and never contradict it, without being required to be
-  the identical marker. The recapture branch itself is **freshly
-  generated per run** (e.g. timestamp/run-id suffixed, mirroring `capture_shard_timings.py`'s
-  own `generate_run_id()` convention already used for provenance) rather than a single fixed,
-  reused branch name — so if the branch-name-prefix option is the one chosen at plan time, the
-  duplicate-detection match must be against the fixed **prefix** portion this workflow controls
-  (e.g. `recapture-charter-`), never the full per-run-varying branch name, since a prefix
-  convention is specifically designed to survive that varying suffix. All three markers — label,
-  branch-name prefix, and bot commit-author identity — remain equally legitimate plan-time
-  choices for the stable identity signal; none is eliminated here.
+  between two invocations cannot both observe "no PR is open" and both attempt to push/open one.
+- **The recapture head branch** (FR-007): a single, constant, reused branch name that the
+  plan pins (e.g. `ci/recapture-charter-shard-timings`) — **not** freshly generated per run (no
+  timestamp/run-id suffix, unlike `capture_shard_timings.py`'s own `generate_run_id()` convention
+  used for provenance elsewhere). Because GitHub permits only one open PR per head branch into a
+  given base, a duplicate recapture PR from this workflow is structurally impossible. FR-007's
+  detection mechanism is "an open PR exists with head = this branch and base = `main`", and it is
+  evaluated FIRST, before the recapture script ever runs: when one exists, the job never invokes
+  the recapture script and never pushes, force-pushes, comments, or opens anything against it — it
+  only writes one line to the job summary naming that PR's number and exits successfully (**skip if
+  open**, per operator ruling 2; while a PR from this branch is open, the job never force-pushes,
+  in any case); when none exists, the job
+  runs the recapture and then applies FR-006's independent, length-only drift check — only when
+  that check finds drift does it push the fresh capture to the branch and open a PR; a no-drift
+  result pushes nothing and opens nothing (FR-006). FR-006's drift check applies only in this
+  no-open-PR branch, and is additional to — never subsumed by — FR-007's open-PR check. An
+  unrelated PR that also happens to touch
+  `.github/ci-shard-timings.json` (e.g. the #5175/#5177 pattern under Reflexivity) is never
+  matched, because its head branch differs from this fixed one. If the fixed branch exists with no
+  open PR (e.g. a previously closed PR), the plan phase decides how that stale branch is replaced
+  before the next push — this is a plan-time choice deferred here the same way FR-004's Charter
+  Tension point 4 defers the exact demotion mechanism, with one fixed, falsifiable observable
+  requirement: the stale branch's prior content is fully replaced by the fresh capture, whatever
+  git mechanism (delete-and-recreate the ref, force-push, or another approach) accomplishes that.
+  Because no PR is open at that point, this replacement is never a force-update of a PR under
+  review — the specific case operator ruling 2 forecloses — and is a distinct scenario from the
+  skip-if-open path above, whose "never force-pushes, in any case" guarantee is scoped to while a
+  PR from this branch is open. **Accepted cost (ruling 2, point 5):** because a still-open recapture PR
+  is never refreshed, its captured content can go stale relative to `main` while it sits open; this
+  is tolerable because the per-PR `test_charter_is_not_allowlisted_and_agrees` check is now a
+  warning only (FR-001), never a merge blocker, and closing a stale open PR lets the next scheduled
+  run open a fresh one against current `main`. FR-010's bot-identity/PR-body convention is
+  independent of this branch-based detection mechanism — it only needs to state plainly, in fixed
+  text, that the change is an automated recapture by the scheduled workflow; it carries no
+  identity-matching relationship to FR-007's check.
 - **The named auth secret** (CL-002): a dedicated PAT / GitHub App token repository secret,
   named explicitly by the plan, mirroring `RELEASE_NIGHTLY_DISPATCH_TOKEN`.
 
@@ -281,6 +315,14 @@ distinguishable from the case where lengths agree.
 - **SC-006**: The other 19 `_MISMATCH_ALLOWLIST` entries and the four unrelated untouched tests
   (FR-003) are byte-identical in behavior before and after this mission (diff review) —
   [ratchet] · no-op passable: yes.
+- **SC-008**: A manually-dispatched run of the new scheduled workflow against the fixed
+  recapture head branch that already has an open PR pushes nothing, force-pushes nothing,
+  comments nothing, and opens no new PR — it only writes one job-summary line naming that PR's
+  number — [build] · no-op passable: no.
+- **SC-009**: A manually-triggered or simulated failure inside `capture_shard_timings.py`'s own
+  mechanism (a collection crash or uncaught exception in the script's machinery, not an ordinary
+  failing measured test) produces a failed Actions run with no commit and no PR opened —
+  [build] · no-op passable: no.
 
 ## Non-Goals
 
@@ -359,8 +401,14 @@ not an assertion to take on faith:
 5. **Silent-success failure modes for the scheduled job are explicitly specified** (FR-005
    through FR-008 / Acceptance Scenarios under User Story 2): a missing auth secret fails loudly
    and never falls back to `GITHUB_TOKEN` (FR-005/CL-002); a no-drift run opens no PR (FR-006); an
-   already-open recapture PR is not duplicated (FR-007); a recapture-script failure aborts before
-   any commit/PR step rather than committing partial data (FR-008).
+   already-open recapture PR is never touched — the job does not push, force-push, comment, or open
+   anything, and only writes one job-summary line naming that PR's number (FR-007, operator ruling
+   2: skip if open, never force-update); a recapture-script failure aborts before any commit/PR
+   step rather than committing partial data (FR-008). The one accepted, explicitly-stated cost of
+   the skip-if-open behavior (ruling 2, point 5) is that a still-open recapture PR's capture can go
+   stale relative to `main` while it sits open — tolerable because the per-PR check it feeds is
+   only a warning (FR-001), never a merge blocker, and closing a stale PR lets the next scheduled
+   run open a fresh one.
 
 ## Ledger Cross-Reference
 
