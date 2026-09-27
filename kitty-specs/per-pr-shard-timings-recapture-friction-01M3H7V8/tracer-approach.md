@@ -65,5 +65,11 @@ testable FRs/ACs so a review squad has something falsifiable to check, not prose
   NAME the secret" (plan-time responsibility) and the dispatch did not hand down a fixed name.
 - Duplicate-PR and no-drift detection mechanisms (FR-006/FR-007): specified as observable
   acceptance criteria (no PR when no drift; no second PR when one is already open), not as a
-  prescribed implementation (e.g., `gh pr list --state open --label ...` vs. checking for an
-  existing branch) — again a plan-time choice.
+  prescribed implementation (e.g., `gh pr list --state open --label ...` vs. matching a
+  branch-name prefix vs. a bot commit-author check) — again a plan-time choice among the three
+  markers Key Entities names. Note this is narrower than it may first look: the spec's Key
+  Entities section now specifies the recapture branch is freshly generated per run (a
+  timestamp/run-id suffix, mirroring `generate_run_id()`), so checking for a single fixed,
+  reused branch name is **not** a viable option any plan may pick — a branch-based check, if
+  chosen, must match the fixed prefix portion of the name, never the full (per-run-varying)
+  branch name.
