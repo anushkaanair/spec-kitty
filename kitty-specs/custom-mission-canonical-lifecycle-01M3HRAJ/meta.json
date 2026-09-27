@@ -1,0 +1,15 @@
+{
+  "coordination_branch": "kitty/mission-custom-mission-canonical-lifecycle-01M3HRAJ",
+  "created_at": "2026-09-27T15:39:18.223783+00:00",
+  "flattened": false,
+  "friendly_name": "custom mission canonical lifecycle",
+  "mission_id": "01M3HRAJA31S92TP971E0ZPEH5",
+  "mission_number": null,
+  "mission_slug": "custom-mission-canonical-lifecycle-01M3HRAJ",
+  "mission_type": "software-dev",
+  "purpose_context": "This mission advances custom mission canonical lifecycle on issue-4983-custom-mission-canonical-lifecycle so stakeholders can track the work from mission creation onward.",
+  "purpose_tldr": "custom mission canonical lifecycle",
+  "slug": "custom-mission-canonical-lifecycle-01M3HRAJ",
+  "target_branch": "issue-4983-custom-mission-canonical-lifecycle",
+  "topology": "lanes_with_coord"
+}
