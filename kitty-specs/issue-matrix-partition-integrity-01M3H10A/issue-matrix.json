@@ -25,7 +25,7 @@
       "wp": null
     },
     "#5169": {
-      "evidence_ref": "<link or commit>",
+      "evidence_ref": "Out of scope: nightly interpreter-3.13 shard reds, unrelated to issue-matrix partition resolution (see spec Assumptions)",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -33,7 +33,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "unknown",
+      "verdict": "not-applicable",
       "wp": null
     },
     "#5171": {
