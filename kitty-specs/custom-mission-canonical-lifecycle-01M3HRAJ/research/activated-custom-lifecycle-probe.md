@@ -117,23 +117,39 @@ spec-kitty agent mission create architecture-probe \
   --friendly-name "Docs audit" \
   --purpose-tldr probe \
   --purpose-context probe \
-  --json
+  --json | tee create-result.json
+
+# Derive the generated handle from canonical create output. Do not copy the
+# example ULID from this research record into a replay.
+MISSION_HANDLE="$(python -c \
+  'import json, pathlib; print(json.loads(pathlib.Path("create-result.json").read_text())["mission_slug"])')"
 
 spec-kitty mission run docs-audit \
-  --mission architecture-probe-01M3HSM7 \
+  --mission "$MISSION_HANDLE" \
   --json
 
+# Query, claim, and complete the first custom step in separate CLI processes.
+spec-kitty next --mission "$MISSION_HANDLE" --json
+spec-kitty next --agent codex --mission "$MISSION_HANDLE" --json
 spec-kitty next --agent codex \
-  --mission architecture-probe-01M3HSM7 \
+  --mission "$MISSION_HANDLE" \
   --result success \
   --json
+spec-kitty next --mission "$MISSION_HANDLE" --json
 
-# Run repeatedly from fresh processes through the final custom step, then query.
-spec-kitty next --mission architecture-probe-01M3HSM7 --json
+# Claim and complete the final custom step, then query its terminal state from
+# one more fresh process. The observed contradiction occurs on these last two
+# commands: completion reports blocked, while the query reports done.
+spec-kitty next --agent codex --mission "$MISSION_HANDLE" --json
+spec-kitty next --agent codex \
+  --mission "$MISSION_HANDLE" \
+  --result success \
+  --json
+spec-kitty next --mission "$MISSION_HANDLE" --json
 
-spec-kitty implement WP01 --mission architecture-probe-01M3HSM7 --json
-spec-kitty accept --mission architecture-probe-01M3HSM7
-spec-kitty merge --mission architecture-probe-01M3HSM7 --target main --yes
+spec-kitty implement WP01 --mission "$MISSION_HANDLE" --json
+spec-kitty accept --mission "$MISSION_HANDLE"
+spec-kitty merge --mission "$MISSION_HANDLE" --target main --yes
 ```
 
 ## Sanitized observations

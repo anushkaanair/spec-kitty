@@ -243,6 +243,9 @@ stable done state.
 - A custom type uses Unicode display text while all storage identifiers remain ASCII.
 - `mission run` receives a slug, `mid8`, numeric prefix, or full ULID resolving to an
   existing Mission of the same or a different type.
+- `mission run` receives a plausible custom handle for which no canonical Mission identity
+  exists; it refuses before creating run metadata, a null-identity event, or any partial
+  lifecycle state.
 - Canonical creation succeeds but later run freezing fails; the pre-existing Mission remains
   intact, run-start effects roll back, and the command must not claim a live run.
 - A manifest is missing, malformed, shadowed, or changes after Mission creation.
@@ -264,7 +267,7 @@ stable done state.
 |---|---|---|---|---|---|---|
 | FR-001 | Canonical custom-type resolution | As an operator, I want every formal custom Mission entry point to resolve the requested activated type through the charter `ResolvedMissionType` authority so that discovery and lifecycle identity cannot disagree. | High | Open | [build] | no |
 | FR-002 | Activated custom creation | As an operator, I want `agent mission create --mission-type <custom>` to continue accepting a fully configured activated custom type so that lifecycle changes preserve its existing peer status at creation. | High | Open | [ratchet] | yes — the complete activated control succeeds today |
-| FR-003 | Canonical identity attachment | As an auditor, I want successful run-start to require and attach to the existing non-null ULID, derived `mid8`, canonical directory, validated metadata, target, topology, and status stream produced by creation. | High | Open | [ratchet] | yes — pre-created control attaches with the same ID |
+| FR-003 | Canonical identity attachment | As an auditor, I want successful run-start to require and attach to the existing non-null ULID, derived `mid8`, canonical directory, validated metadata, target, topology, and status stream produced by creation, while a handle without that canonical identity is refused before any run side effect. | High | Open | [build] | no — successful attachment exists, but missing-canonical-identity refusal is not yet proved |
 | FR-004 | Atomic creation refusal | As an operator, I want unresolved, unactivated, malformed, or lifecycle-incompatible types to fail before mission/run side effects so that failed creation leaves no false evidence. | High | Open | [ratchet] | yes — same fixture has a valid activated positive control |
 | FR-005 | Immutable type attachment | As an operator, I want run attachment to verify that instance, run index, frozen template, and requested type agree so that an existing Mission can never be silently retyped. | High | Open | [ratchet] | yes — paired same-type attachment succeeds |
 | FR-006 | Resolved lifecycle policy | As a pack author, I want one charter-owned lifecycle policy to declare delivery mode, WP policy, and gate applicability so that commands do not infer behavior from filenames or type names. | High | Open | [build] | no |
@@ -291,7 +294,7 @@ stable done state.
 | FR-027 | Blocked-state query consistency | As an operator, I want a query after any blocked terminal attempt to report the same resumable non-terminal step so blocked and done can never coexist. | High | Open | [ratchet] | yes — same run succeeds after repair |
 | FR-028 | Terminal idempotency | As an auditor, I want replay after successful completion to preserve one terminal outcome and avoid duplicate completion or retrospective evidence. | High | Open | [ratchet] | yes — first successful terminal call is the control |
 | FR-029 | Full clean-consumer lifecycle proof | As the architecture-pack D06 integrator, I want an installed-CLI fixture to run create → planning → finalize → implement → independent review → accept → merge → retrospective in separate processes and verify all promised artifacts/state. | High | Open | [build] | no |
-| FR-030 | Paired no-WP and negative proof | As the architecture-pack D06 integrator, I want a no-WP fixture plus unactivated, malformed, cross-type, missing-evidence, and terminal-failure controls so compatibility cannot be claimed from one happy path. | High | Open | [build] | no |
+| FR-030 | Paired no-WP and negative proof | As the architecture-pack D06 integrator, I want a no-WP fixture plus unactivated, malformed, cross-type, missing-canonical-identity run-start, missing-evidence, and terminal-failure controls so compatibility cannot be claimed from one happy path. | High | Open | [build] | no |
 | FR-031 | Stable structured diagnostics | As an external orchestrator, I want every refusal and not-applicable outcome to carry a stable error/status code, mission identity when available, governing type/policy, and actionable remediation. | Medium | Open | [build] | no |
 | FR-032 | Existing built-in behavior preservation | As a Spec Kitty user, I want built-in software-dev creation and lifecycle behavior unchanged except where shared correctness is explicitly covered, so custom support does not regress the primary workflow. | High | Open | [ratchet] | yes — byte/behavior controls use existing built-in fixtures |
 
