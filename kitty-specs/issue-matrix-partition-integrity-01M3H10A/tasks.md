@@ -75,3 +75,9 @@ paired with same-fixture positive controls (coord-vs-flat, in-mission-vs-termina
 
 WP01+WP02 are the enabling foundation. WP03 (closes #5171) and WP04 (closes both #4943 legs) are the
 user-visible deliverables and run in parallel once WP02 lands. WP05 locks the class shut.
+
+## Completion verdicts (issue-matrix)
+
+The finalize-tasks auto-classifier mis-scaffolded some rows (see traces/tooling-friction.md). Corrected: #5169/#5172 → not-applicable (out of scope); #3044 → not-applicable (epic parent). **At mission completion the implementer/reviewer MUST author the gating verdicts** (the row for #4943 currently scaffolds `not-applicable` but the mission closes it):
+- `spec-kitty agent issue-verdict --mission <slug> --issue '#5171' --verdict fixed --actor <id> --wp WP03 --evidence-ref <link>`
+- `spec-kitty agent issue-verdict --mission <slug> --issue '#4943' --verdict fixed --actor <id> --wp WP04 --evidence-ref <link>`
