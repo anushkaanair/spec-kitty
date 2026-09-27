@@ -1,7 +1,7 @@
 {
-  "event_count": 2,
-  "last_event_id": "01M3JEFX9FS27RKZKPJMKFRP8V",
-  "materialized_at": "2026-09-27T22:06:41.967478+00:00",
+  "event_count": 3,
+  "last_event_id": "01M3JEFXFY9Z0X821D7B8TPT80",
+  "materialized_at": "2026-09-27T22:06:42.174796+00:00",
   "mission_number": "",
   "mission_slug": "per-pr-shard-timings-recapture-friction-01M3H7V8",
   "mission_type": "software-dev",
@@ -15,7 +15,7 @@
     "for_review": 0,
     "in_progress": 0,
     "in_review": 0,
-    "planned": 2
+    "planned": 3
   },
   "work_packages": {
     "WP01": {
@@ -31,6 +31,13 @@
       "lane": "planned",
       "last_event_id": "01M3JEFX9FS27RKZKPJMKFRP8V",
       "last_transition_at": "2026-09-27T22:06:41.967478+00:00"
+    },
+    "WP03": {
+      "actor": "finalize-tasks",
+      "force_count": 0,
+      "lane": "planned",
+      "last_event_id": "01M3JEFXFY9Z0X821D7B8TPT80",
+      "last_transition_at": "2026-09-27T22:06:42.174796+00:00"
     }
   }
 }
