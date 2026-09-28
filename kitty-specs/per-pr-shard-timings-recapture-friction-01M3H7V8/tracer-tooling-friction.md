@@ -73,3 +73,20 @@ No spec-kitty CLI bug blocked spec authoring itself.
    to target branch") as the finalize entry point — never `tasks-outline`, `tasks-packages`, or the
    bare top-level `spec-kitty tasks` command. No workaround was needed; the dispatch's own
    fallback instruction (prefer `agent mission finalize-tasks`) was followed exactly.
+
+6. **WP01 implementation start: `spec-kitty agent action implement WP01 ... --mission
+   per-pr-shard-timings-recapture-friction-01M3H7V8` failed 4 of 6 attempts with the known
+   `global_assets` race (ledger SK-243), before succeeding.** Every failure carried the same shape
+   -- `Error: slash_commands: Global asset input changed: <home>/.<agent-dir>/workflows[/<file>.md];
+   re-run the command; if it persists, run \`spec-kitty doctor --help\`` -- but the specific path
+   named a *different* agent's workflow directory each time (`.kilocode/workflows`,
+   `.agent/workflows`, `.agent/workflows/spec-kitty.analyze.md` twice more), consistent with other
+   missions concurrently running on this same machine mutating the global per-agent asset inventory
+   mid-scan (this checkout's ledger SK-243 shape: a shared-host race, not a bug in this mission's
+   own WP01 tasks). A widened retry batch (beyond the nominal 3, run because the failure kept
+   naming a different transient path each time rather than repeating) succeeded on its second
+   attempt within that batch: claimed WP01, resolved the lane worktree at
+   `.worktrees/per-pr-shard-timings-recapture-friction-01M3H7V8-lane-a`, and printed the WP prompt
+   path. No absolute home path is reproduced above (the operator's home directory is written as
+   `<home>` per instruction); the workaround was the documented one -- re-run, no CLI or state
+   change needed.
