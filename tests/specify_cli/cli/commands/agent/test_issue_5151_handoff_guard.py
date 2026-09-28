@@ -106,6 +106,25 @@ def _add_planning_conflict_revision(repo_root: Path, rel_path: str, *, enabled: 
     )
 
 
+def _fresh_planning_lane_base(
+    repo_root: Path,
+    plan_path: Path,
+    planning_pin: str,
+    *,
+    base_at_pin: bool,
+    base_at_later_tip: bool,
+) -> str | None:
+    if base_at_pin and base_at_later_tip:
+        raise ValueError("fresh planning lane base can select only one snapshot")
+    if base_at_pin:
+        return planning_pin
+    if not base_at_later_tip:
+        return None
+    plan_path.write_text(plan_path.read_text(encoding="utf-8") + "\nPlanning target advanced before fresh lane claim.\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: advance before fresh lane claim")
+    return _git(repo_root, "rev-parse", "HEAD")
+
+
 def _apply_lane_edit(
     lane_worktree: Path,
     primary_dir: Path,
@@ -191,6 +210,8 @@ def _build_handoff_repo(
     lane_edit_on_side_branch: bool = False,
     force_coordination_merge_commit: bool = False,
     resolve_planning_coord_conflict_to_fork: bool = False,
+    lane_base_at_planning_pin: bool = False,
+    lane_base_at_later_planning_tip: bool = False,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -289,6 +310,13 @@ def _build_handoff_repo(
         (primary_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
     _commit_all(repo_root, "planning: advance after coordination snapshot")
     recorded_planning_commit = _git(repo_root, "rev-parse", "HEAD")
+    fresh_lane_planning_base = _fresh_planning_lane_base(
+        repo_root,
+        plan_path,
+        recorded_planning_commit,
+        base_at_pin=lane_base_at_planning_pin,
+        base_at_later_tip=lane_base_at_later_planning_tip,
+    )
     if planning_drift_after_lane_merge:
         from specify_cli.lanes.persistence import read_lanes_json, write_lanes_json
 
@@ -300,7 +328,7 @@ def _build_handoff_repo(
 
     lane_branch = lane_branch_name(mission_slug, "lane-a")
     lane_worktree = lane_worktree_path(repo_root, mission_slug, "lane-a")
-    lane_base_commit = coord_base_commit if coordination_updates_after_lane_base else coord_tip
+    lane_base_commit = fresh_lane_planning_base or (coord_base_commit if coordination_updates_after_lane_base else coord_tip)
     _git(repo_root, "worktree", "add", "-b", lane_branch, str(lane_worktree), lane_base_commit)
     if coordination_updates_after_lane_base:
         _merge_coordination_update(lane_worktree, coord_tip, force_merge_commit=force_coordination_merge_commit)
@@ -415,6 +443,32 @@ def test_recorded_p1_plan_stays_clean_after_planning_target_advances_to_p2(tmp_p
         tmp_path,
         monkeypatch,
         planning_drift_after_lane_merge=True,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize(
+    ("lane_base_at_planning_pin", "lane_base_at_later_planning_tip"),
+    [(True, False), (False, True)],
+)
+def test_clean_claim_pin_equal_to_or_behind_lane_fork(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lane_base_at_planning_pin: bool,
+    lane_base_at_later_planning_tip: bool,
+) -> None:
+    repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        coordination_updates_after_lane_base=True,
+        d07_noncoord_inherited_paths=True,
+        merge_claim_time_planning_commit=False,
+        lane_base_at_planning_pin=lane_base_at_planning_pin,
+        lane_base_at_later_planning_tip=lane_base_at_later_planning_tip,
     )
     monkeypatch.chdir(repo_root)
 
