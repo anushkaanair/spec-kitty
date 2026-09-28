@@ -113,11 +113,6 @@ def _build_handoff_repo(
         + "\nCoordinator-owned prompt update after planning target moved.\n",
         encoding="utf-8",
     )
-    if missing_planning_ref:
-        meta["planning_base_branch"] = "missing-planning-ref"
-        (coord_dir / "meta.json").write_text(
-            json.dumps(meta, indent=2) + "\n", encoding="utf-8"
-        )
     _commit_all(coord_worktree, "coord: record current mission state")
     coord_tip = _git(coord_worktree, "rev-parse", "HEAD")
 
@@ -130,6 +125,11 @@ def _build_handoff_repo(
         + "\nPlanning target advanced after coordination snapshot.\n",
         encoding="utf-8",
     )
+    if missing_planning_ref:
+        meta["planning_base_branch"] = "missing-planning-ref"
+        (primary_dir / "meta.json").write_text(
+            json.dumps(meta, indent=2) + "\n", encoding="utf-8"
+        )
     _commit_all(repo_root, "planning: advance after coordination snapshot")
     planning_tip = _git(repo_root, "rev-parse", "HEAD")
 
