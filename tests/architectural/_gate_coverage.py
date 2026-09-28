@@ -964,6 +964,56 @@ def _walk_marker_ast(node: ast.expr, *, negated: bool, positive: set[str]) -> No
         )
 
 
+def marker_names(marker_expr: str) -> frozenset[str]:
+    """Every marker name a pytest ``-m`` expression references, positively
+    OR negatively — sign-blind, unlike :func:`positive_marker_tokens` (which
+    tracks ``not``-parity). A test opted OUT of a tier by carrying ``slow``
+    is exactly as explicitly marked as one opted IN by carrying ``fast``; a
+    caller that needs the full name VOCABULARY a marker expression ranges
+    over (a boolean-equivalence truth table's domain, a tier-completeness
+    vocabulary) wants this function. A caller that needs to know which names
+    a ``-m`` expression actually SELECTS wants ``positive_marker_tokens``
+    instead.
+
+    Compiled first with pytest's own grammar (the same premise
+    ``positive_marker_tokens`` relies on: an invalid expression fails loudly,
+    and a breaking move of the private API fails at import time here), then
+    walked with stdlib ``ast`` — pytest's expression grammar is a strict
+    subset of Python's for the identifier/boolean-operator expressions the
+    workflows and Makefile vocabularies calling this use. Promoted here
+    (landing pass #5244, LAND-PAT-004) as the ONE shared, STRICT (raises on
+    an unsupported node rather than silently ignoring it) sign-blind walker,
+    replacing two near-identical private copies:
+    ``_fast_tier_gate._collect_names`` and
+    ``test_interpreter_shard_coverage._marker_names_referenced`` (which was
+    the lenient of the two, an ``ast.walk`` over every node rather than a
+    strict recursive descent — this function keeps the strict shape, which
+    is behavior-equivalent for every real caller today and loudly safer for
+    a future one).
+    """
+    Expression.compile(marker_expr)  # loud fail on an invalid expression
+    tree = ast.parse(marker_expr, mode="eval")
+    names: set[str] = set()
+    _collect_marker_names(tree.body, names)
+    return frozenset(names)
+
+
+def _collect_marker_names(node: ast.expr, names: set[str]) -> None:
+    """Strict, sign-blind recursive descent backing :func:`marker_names`."""
+    if isinstance(node, ast.Name):
+        names.add(node.id)
+    elif isinstance(node, ast.UnaryOp):
+        _collect_marker_names(node.operand, names)
+    elif isinstance(node, ast.BoolOp):
+        for value in node.values:
+            _collect_marker_names(value, names)
+    else:
+        raise RuntimeError(
+            f"unsupported marker-expression node {ast.dump(node)} — extend "
+            "_collect_marker_names before trusting marker_names' output.",
+        )
+
+
 def routed_marker_names(gates: Sequence[Gate]) -> frozenset[str]:
     """Union of positively-referenced marker names across ``gates`` (FR-001 (i)).
 

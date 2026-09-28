@@ -2514,7 +2514,6 @@ exclude = [
     "tests/upgrade/test_m_3_2_0rc35_default_charter_pack.py",
     "tests/upgrade/test_metadata_schema_roundtrip.py",
     "tests/upgrade/test_migrate_integration.py",
-    "tests/upgrade/test_migration_robustness.py",
     "tests/upgrade/test_pre30_guard.py",
     "tests/upgrade/test_pre30_guard_wiring.py",
     "tests/upgrade/test_read_cutover_integration.py",
