@@ -1,0 +1,42 @@
+schema: review-findings/v1
+complete: true
+phase: spec
+lens_group: fresh
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: SPEC-FRESH3-001
+    lens: reuse-mechanism shape-fit (conceptual alignment / evidence verification)
+    severity: 3
+    title: research.md still calls the BaselineTarget/gates_for_target mechanism "real, tested infrastructure" although no test anywhere in the repo exercises it
+    evidence:
+      - artifact: "research.md § 7 (line 233-234, unchanged since round 1): \"This is real, tested infrastructure purpose-built for exactly the falsification target FR-004/NFR-002 need\""
+      - artifact: "research.md § 7, round-3 addition (line 268-286): adds a caveat about the missing selector field, but does not mention test coverage of the mechanism itself"
+      - code: "tests/architectural/_gate_coverage.py:2625 — BASELINE_TARGETS: tuple[BaselineTarget, ...] = () (empty, so nothing is currently baselined)"
+      - code: "grep -rn \"BASELINE_TARGETS|collect_real_union_for_target|gates_for_target|BaselineTarget\" across the entire tests/ tree and the rest of the repo (excluding _gate_coverage.py itself) returns ZERO hits — verified first-hand, 2026-09-27"
+      - code: "tests/architectural/test_ci_collection_completeness.py:1-30 (module docstring): explicitly states the end-to-end orphan/duplicate \"collection-completeness oracle\" _gate_coverage.py's own top-of-file docstring (lines 36-42) attributes to this file was RETIRED (\"were retired with it rather than left calling a helper that now raises FileNotFoundError\"); the file's only surviving tests exercise `active_job_keys`, `job_runs_under`, `split_top_level`, `normalize_condition`, and a baseline-reach AST escape-hatch checker — none of them call `collect_real_union_for_target`, `gates_for_target`, or reference `BaselineTarget`"
+      - code: "No Makefile target or .github/workflows/*.yml invokes freeze_baselines / --emit-census / --verify-census / --freeze-baselines for this mechanism (verified by grep)"
+    claim: >-
+      The general Gate-parsing substrate (`parse_workflow`, `load_gates`, the `Gate` dataclass) is
+      genuinely live and tested — several real test files (test_marker_job_completeness.py,
+      test_suite_jobs_gate_blocking.py, test_same_tier_uniqueness.py, test_workflow_coherence.py)
+      import and exercise it. But the SPECIFIC narrower mechanism research.md's §7 proposes as a
+      reuse candidate for FR-004/FR-016/FR-017 — `BaselineTarget` / `collect_real_union_for_target`
+      / `gates_for_target` / `BASELINE_TARGETS` — has no consumer anywhere: `BASELINE_TARGETS` is an
+      empty tuple, no pytest test imports these three symbols, and no CI job or Makefile target
+      invokes the CLI entry points (`--emit-census`/`--verify-census`/`--freeze-baselines`) that
+      would exercise them. The module's own docstring even names the test file that was supposed to
+      consume this class of oracle (`test_ci_collection_completeness.py`) as the "companion
+      end-to-end oracle" — but that file's own docstring says that exact oracle was retired. Calling
+      this "real, tested infrastructure" and a "near-turnkey reuse candidate" therefore overstates
+      its readiness: if the plan phase decides to reuse it for FR-004/FR-016 by adding an
+      `interpreter-matrix` entry to `BASELINE_TARGETS`, nothing in CI or the test suite will actually
+      invoke `collect_real_union_for_target`/`gates_for_target` unless the plan phase ALSO authors a
+      brand-new consuming test from scratch — a materially bigger lift than "extend existing tested
+      infrastructure" implies, and directly relevant to FR-017/SC-010's own reuse-vs-rejection
+      decision, which is supposed to be a fully-informed comparison.
+    remediation: >-
+      Add one sentence to research.md §7 (alongside the existing "BASELINE_TARGETS is currently ()"
+      caveat) stating that no test file or CI job currently exercises `collect_real_union_for_target`
+      / `gates_for_target` at all — the mechanism is unconsumed, not merely unconfigured — so the
+      plan phase's FR-017/SC-010 reuse-vs-rejection decision accounts for the cost of authoring a new
+      consuming test/oracle, not just adding a `BaselineTarget` entry to an already-wired check.

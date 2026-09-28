@@ -1,0 +1,60 @@
+{
+  "event_count": 9,
+  "last_event_id": "01M3HHADG9GAXQ5Q0XVEHKY3RA",
+  "materialized_at": "2026-09-27T13:36:53.257098+00:00",
+  "mission_number": "",
+  "mission_slug": "ci-nightly-interpreter-matrix-45min-timeout-01M3G17F",
+  "mission_type": "software-dev",
+  "schema_version": 2,
+  "summary": {
+    "approved": 1,
+    "blocked": 0,
+    "canceled": 0,
+    "claimed": 0,
+    "done": 0,
+    "for_review": 0,
+    "in_progress": 0,
+    "in_review": 0,
+    "planned": 0
+  },
+  "work_packages": {
+    "WP01": {
+      "actor": "claude",
+      "agent": "claude",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 4,
+      "implementer_of_record": "claude",
+      "lane": "approved",
+      "last_event_id": "01M3HHADG9GAXQ5Q0XVEHKY3RA",
+      "last_transition_at": "2026-09-27T13:36:53.257098+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "Operator-authorised --force (2026-09-27): only the lane kitty-specs contamination guard blocked; tracer edits were pre-authorised in-lane by the WP prompt (T008/T012). Readiness checks otherwise verified clean by the orchestrator.",
+        "Review cycle 1 rejected: WP01-R1-001 sev3 (vacuous coverage-completeness mutation tests), R1-002 sev1, R1-003 sev1 (dispositioned by orchestrator: evidence posted to #3189/#5169/#5172).",
+        "Cycle 2: same operator-authorised --force as cycle 1 (2026-09-27) — only the lane kitty-specs guard, tripped by the cycle-1 tracer commits the operator chose to keep in-lane; cycle 2 added no kitty-specs commits. Lane clean, pushed at 3b08a478e, gates green.",
+        "Review cycle 2 approved (reviews/wp01.review-2.yaml, commit 1cdcc2aca): R1-001/002/003 resolved, no new findings. --force: same operator-authorised override (2026-09-27) for the lane kitty-specs guard tripped only by cycle-1 tracer commits; review artifact committed, issue-matrix resolved, lane clean at 3b08a478e."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review": null,
+      "role": "reviewer",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
+      "subtasks": {
+        "T001": "done",
+        "T002": "done",
+        "T003": "done",
+        "T004": "done",
+        "T005": "done",
+        "T006": "done",
+        "T007": "done",
+        "T008": "done",
+        "T009": "done",
+        "T010": "done",
+        "T011": "done",
+        "T012": "done",
+        "T013": "done"
+      }
+    }
+  }
+}

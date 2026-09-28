@@ -1,0 +1,170 @@
+schema: review-findings/v1
+complete: true
+phase: spec
+lens_group: verify
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: SPEC-VERIFY-001
+    lens: mission-derived (coverage-completeness check is a real, buildable falsification target)
+    severity: 4
+    title: >-
+      User Story 2's AC2 (empty shard) and AC3 (missing shard) produce the
+      same node-id signature under the check design described, and AC3
+      invents an undefined "coverage-completeness manifest" entity no FR
+      creates
+    evidence:
+      - artifact: "spec.md § User Story 2, Acceptance Scenarios 2-3 (lines 100-105)"
+      - artifact: "spec.md § FR-004 (line 225), § NFR-002 (line 242)"
+      - artifact: "spec.md § Edge Cases (lines 178-181), § Key Entities (lines 259-272)"
+    claim: >-
+      AC2 says "a shard's selector is deliberately mutated to collect 0
+      tests ... it fails loudly naming the empty shard." AC3 says "a shard
+      is deliberately removed from the job list while its test files remain
+      in the coverage-completeness manifest ... it fails loudly naming the
+      missing shard." FR-004/NFR-002 specify the check's only inputs as
+      three collected node-id counts (full selection, sum of shards, dedup
+      union) compared for gap/overlap -- pure set arithmetic over whatever
+      shard selectors currently exist in the job list. Under that design,
+      "shard 3 is present in the job list but its selector now collects 0
+      tests" (AC2) and "shard 3 was deleted from the job list entirely"
+      (AC3) produce an IDENTICAL signature: the full selection contains
+      node-ids absent from the union, and the check has no record of shard
+      3's expected identity in either case (a deleted job leaves nothing in
+      the workflow file to read a shard name from). To "name the missing
+      shard" distinctly from "name the empty shard" (as the ACs both
+      require) needs a separate, independently-maintained manifest of which
+      shard identities SHOULD exist -- exactly what AC3's own text invokes
+      ("coverage-completeness manifest") but which is never defined: it is
+      not in Key Entities (only "Nightly interpreter shard," "Coverage-
+      completeness check," "Shard-sizing capture" appear), no FR requires
+      creating it, and the parallel Edge Cases bullet (line 178-181)
+      describes the same scenario without ever using the word "manifest,"
+      instead saying only "its intended test files still exist on disk" --
+      a materially different data source (the general test corpus, already
+      visible to `pytest --collect-only`) than a shard-identity manifest.
+      AC3 is therefore untestable as literally written: the plan phase
+      would have to invent an artifact the spec never specifies, and even
+      then the AC2/AC3 distinction the spec promises ("naming the empty
+      shard" vs "naming the missing shard") is not achievable from node-id
+      sets alone.
+    remediation: >-
+      Add a Key Entity (and a supporting FR) for the shard-identity roster
+      that the coverage-completeness check reads independently of the job
+      list -- e.g. a small in-repo declaration (shard name -> assigned
+      test paths) that both the job list and the check consume, so a
+      shard's absence from the job list is detectable by diffing the
+      roster against `jobs:` keys, distinctly from a present-but-empty
+      shard's collected count being 0. Rewrite AC3 to name that roster
+      artifact explicitly (not "manifest," used nowhere else) and clarify
+      that FR-004's node-id comparison alone only proves AC2 (a gap exists);
+      a second, roster-based comparison is needed to prove AC3 (which named
+      shard produced it).
+
+  - id: SPEC-VERIFY-002
+    lens: mission-derived (coverage-completeness check is a real, buildable falsification target)
+    severity: 4
+    title: >-
+      Spec/research never evaluates the existing tests/architectural/_gate_coverage.py
+      BaselineTarget/E3 mechanism -- built for exactly "does a shard split
+      preserve coverage" -- as an implementation path for FR-004/NFR-002,
+      or flags the risk that a plan-invented parallel mechanism could
+      silently diverge from or break the pre-existing global oracle
+    evidence:
+      - code: "tests/architectural/_gate_coverage.py:118-131 (WORKFLOW_FILES includes \"ci-nightly.yml\")"
+      - code: "tests/architectural/_gate_coverage.py:2606-2693 (BaselineTarget, collect_job_nodeids, collect_real_union_for_target)"
+      - code: "tests/architectural/_gate_coverage.py:2610-2617 (docstring: \"a shard split alone (same total coverage, more legs) cannot false-red GC-2b\")"
+      - artifact: "spec.md § FR-004, § NFR-002, § User Story 2 Independent Test (line 88-91, leaves check location as \"a pytest test OR a dedicated workflow step\", undecided)"
+      - artifact: "research.md (no mention of _gate_coverage.py anywhere; Section 3 verifies capture_shard_timings.py and SK-247 in comparable depth but this file is absent)"
+    claim: >-
+      `_gate_coverage.py` already statically parses every pytest invocation
+      in `ci-nightly.yml` (it is a member of `WORKFLOW_FILES`) into `Gate`
+      objects feeding a repo-wide orphan/duplicate coverage oracle
+      (`test_ci_collection_completeness.py`), and separately ships a
+      purpose-built `BaselineTarget` / `collect_real_union_for_target`
+      substrate whose own docstring states its design goal verbatim: a job
+      matched by `(workflow, job)` "transparently covers however many
+      shard legs the job has TODAY... or GROWS to under [a later mission]
+      (a matrix): collect_real_union_for_target unions every matching leg's
+      real selection, so a shard split alone (same total coverage, more
+      legs) cannot false-red GC-2b." This is a real, tested, already-
+      running mechanism for the exact falsification target User Story 2 /
+      FR-004 / NFR-002 ask for (real `pytest --collect-only` node-id union
+      across shard legs of one job, compared against a frozen/full
+      baseline) -- narrower in one sense (per-job baseline, not built for
+      a from-scratch "full 3.13 selection" comparison) but directly
+      reusable as either the implementation or the load-bearing precedent
+      for FR-004. The mission's own research.md performed comparably deep
+      first-hand verification of `capture_shard_timings.py` and the SK-247
+      registry mechanism (explicitly to avoid reinventing a broken wheel)
+      but never looked at this sibling, working wheel in the same
+      directory. Two concrete risks follow: (1) the plan phase may build a
+      bespoke, less-battle-tested coverage script from nothing, duplicating
+      effort and diverging from the charter's "single canonical authority /
+      reconcile-don't-duplicate" Governing Principle and Standing Order #6
+      (canonical sources & unification); (2) because `_gate_coverage.py`'s
+      `Gate` parser already treats `interpreter-matrix`'s current single
+      `pytest -m "fast or unit"` invocation as one Gate feeding a GLOBAL
+      coverage oracle that C-005 requires the plan to run in full, the new
+      shard steps' exact invocation shape (how each shard's `pytest`
+      command is expressed in the workflow YAML) must remain parseable by
+      that existing AST/regex-based parser or the pre-existing global
+      oracle silently mis-models (or hard-fails) post-split -- a
+      contradicts-existing-code hazard FR-001/FR-003 do not mention at all.
+    remediation: >-
+      Add a spec-level note (Clarifications or a new FR) requiring the plan
+      phase to (a) read `tests/architectural/_gate_coverage.py` and its
+      `BaselineTarget` mechanism before designing FR-004's implementation,
+      explicitly deciding reuse vs. a documented rejection rationale (mirroring
+      the SK-247 rejection write-up already done for Option B), and (b)
+      confirm each new shard's `pytest` invocation in `ci-nightly.yml`
+      remains one of the invocation shapes `_gate_coverage.py`'s
+      `parse_workflow` recognizes, so the split does not silently break or
+      mis-count the pre-existing repo-wide coverage oracle that C-005's full
+      `tests/architectural/` run will exercise.
+
+  - id: SPEC-VERIFY-003
+    lens: baseline honesty
+    severity: 3
+    title: >-
+      Spec/research never names issue #3284 (known-red main) despite
+      SC-002/FR-014/User-Story-1 depending on correctly interpreting a
+      shard's real pass/fail verdict during the Q2 measurement/validation
+      dispatch runs
+    evidence:
+      - artifact: "spec.md SC-001, SC-002 (lines 391-397): \"every shard's conclusion is success or failure ... never cancelled\""
+      - artifact: "spec.md FR-014 (line 235): dispatch runs \"produce durable evidence\" of each shard's conclusion"
+      - artifact: "spec.md Edge Cases (lines 200-204): generic charter Pre-existing Failure Reporting Rule pointer only, no issue number named"
+      - artifact: "research.md (no mention of #3284 or #3283 anywhere)"
+    claim: >-
+      This mission's dispatch mandate (CONCURRENCY NOTE) states main
+      currently carries known-red tests tracked by issue #3284. SC-001/
+      SC-002 require every post-split shard to reach a real success/failure
+      verdict, and FR-014/NFR-005 require recording each shard's conclusion
+      as durable evidence from the Q2 baseline-capture and validation
+      dispatch runs. When those real dispatch runs execute `pytest -m
+      "fast or unit"` on 3.13 across N shards, some shard(s) may legitimately
+      report `failure` purely because of #3284's already-known-red tests --
+      not because of a shard-boundary defect this mission introduced. The
+      spec's only defense against misclassifying that is the generic,
+      unnamed charter Pre-existing Failure Reporting Rule edge case (open a
+      GitHub issue "before treating those failures as accepted baseline")
+      -- it never tells the plan/implementation phase that #3284 already
+      exists and should be checked first (to avoid filing a duplicate issue,
+      and to avoid the opposite error of waving through a real regression as
+      "known baseline" without checking it actually matches #3284's content).
+      This is exactly the kind of claim-depends-on-trustworthy-test-outcomes
+      spot this lens targets: SC-002's "never cancelled" bar is satisfied
+      regardless of red-vs-green (so it is not fully undermined), but
+      FR-014's evidentiary record and the plan's shard-boundary-correctness
+      judgment calls at Q2 validation time are not protected without naming
+      the specific known-red tracker.
+    remediation: >-
+      Add one sentence to spec.md's Edge Cases or Clarifications naming
+      issue #3284 explicitly and instructing the plan/implementation phase
+      to diff any Q2 dispatch-run shard failure against #3284's tracked
+      test list before filing a new Pre-existing Failure issue or accepting
+      a shard as validated-green; optionally note #3283 (shared pytest
+      test-venv lock timeout) as a distinct risk for any LOCAL
+      `tests/architectural/` runs the plan/implementation phase performs
+      (separate from the GitHub-hosted dispatch runs, which use per-shard
+      dedicated venvs and are not exposed to a local shared-lock).

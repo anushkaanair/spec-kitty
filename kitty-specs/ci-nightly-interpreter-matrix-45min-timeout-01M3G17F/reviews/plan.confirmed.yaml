@@ -1,0 +1,190 @@
+# review-findings/v1 — R3 output: confirmed subset of reviews/plan.merged.yaml.
+# All 7 merged findings were CONFIRMED by the refuter (reviews/plan.refute-1.yaml);
+# none refuted. This file is therefore identical in content to plan.merged.yaml's
+# findings list, reproduced here as the fixer's input per protocol.
+schema: review-findings/v1
+complete: true
+phase: plan
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+source: reviews/plan.merged.yaml
+refutation: reviews/plan.refute-1.yaml
+findings:
+  - id: PLAN-GOV-001
+    lens: Dispatch-run sequencing fidelity to operator Q2 (mission-derived lens)
+    severity: 2
+    title: >-
+      Stop-rule text is written around "run 2 fails" / "run 3 exhausted" and
+      does not explicitly say how a failed run 1 (baseline/timing-capture)
+      is accounted against the up-to-3 budget
+    evidence:
+      - artifact: "plan.md § B, point 4 (line 272), the 'Explicit stop rule' sentence"
+      - artifact: "plan.md § B, point 1 (line 269), run 1's own description"
+      - artifact: "spec.md § Clarifications, Q2 (lines 322-327)"
+    claim: >-
+      plan.md §B names three specific-purpose runs and its only explicit
+      stop rule is anchored to "if run 2 fails ..." / "if run 3 is also
+      exhausted" / "if a 4th run would be needed for any reason." It never
+      addresses the case where run 1 itself fails to produce usable data
+      before ever reaching its measurement purpose. The catch-all clause
+      still caps the total at 3, but the plan gives no explicit rule for
+      which run's "slot" a run-1 redo consumes.
+    remediation: >-
+      Add one sentence to §B (after point 4, or as a 4a) stating explicitly
+      that a failed run 1 still counts against the up-to-3 total, its
+      replacement consumes the next run's slot (renumbering rather than
+      adding a 4th attempt), and the same escalate-to-operator stop rule
+      applies if that replacement also fails.
+
+  - id: PLAN-GOV-002
+    lens: Directive — Standing Order #7 (git/workflow discipline, DIRECTIVE_045)
+    severity: 2
+    title: >-
+      Charter Check claims a blanket "PASS" for Standing Order #7 without
+      engaging its worktree-isolation clause
+    evidence:
+      - artifact: "plan.md § Charter Check (line 52)"
+      - artifact: ".kittify/charter/charter.md § Quality & Tech-Debt Standing Orders, item 7 (lines 85-87)"
+    claim: >-
+      Standing Order #7 includes "isolate PR-touching agents in a worktree"
+      (DIRECTIVE_045). plan.md's Charter Check addresses only "PRs only,"
+      "never push main," and "dispatches run on the mission's own named
+      branch," then marks the whole standing order PASS. Neither plan.md nor
+      spec.md contains the word "worktree" anywhere.
+    remediation: >-
+      Add a sentence to the Charter Check's SO#7 line citing that
+      implement-phase execution runs through spec-kitty's own resolved
+      worktree (CLAUDE.md's Execution Workspace Strategy /
+      resolve_workspace_for_wp), or, if this mission's shape would not
+      automatically go through that resolver, add an explicit line to §I
+      stating which isolated worktree the build/implement-phase agent
+      operates from before pushing/dispatching.
+
+  - id: PLAN-GOV-003
+    lens: Campsite scope / dispatch-run sequencing (mission-derived lens)
+    severity: 3
+    title: >-
+      No explicit instruction to remove IC-03's temporary per-shard
+      `--collect-only` measurement scaffolding before the shape that ships
+      in the merged workflow
+    evidence:
+      - artifact: "plan.md § B, point 1 (line 269)"
+      - artifact: "plan.md § I, step 4 (line 356)"
+      - artifact: "plan.md § A, 'nightly-summary update (FR-006)' (line 250), SC-006"
+    claim: >-
+      §B point 1 describes adding, for run 1 only, a temporary per-shard
+      `--collect-only` measurement step. §I step 4 never explicitly says
+      this scaffolding is removed (or its absence verified) before run 2 or
+      the PR. SC-006's dangling-old-job-name check does not cover leftover
+      throwaway measurement steps.
+    remediation: >-
+      Add an explicit instruction to §I step 4 (or a new step 4a): remove
+      IC-03's temporary per-shard `--collect-only` measurement step(s) from
+      the workflow before run 2 is dispatched, and confirm their absence
+      with a final grep/diff before the PR is opened.
+
+  - id: PLAN-ARCH-001
+    lens: FR-017/SC-010 reuse-vs-rejection decision soundness
+    severity: 4
+    title: >-
+      "Parseability confirmed" is factually false: _gate_coverage.py's
+      parse_workflow already fails to parse the CURRENT interpreter-matrix
+      job into any Gate, and will fail identically for every proposed shard
+      job, breaking gates_for_target's FR-016 detection as designed.
+    evidence:
+      - artifact: "plan.md §A 'Reuse-vs-rejection decision' point 6 ('Parseability confirmed'), and §A 'Per-shard job shape' code block"
+      - code: ".github/workflows/ci-nightly.yml:416 (current interpreter-matrix pytest step: `uv run --frozen --python \"${{ matrix.python-version }}\" --all-extras pytest -m \"fast or unit\" ...`)"
+      - code: "tests/architectural/_gate_coverage.py:230-268 (_FLAG_TOKENS / _PREFIX_RE), :354-376 (strip_to_command), :398-414 (parse_pytest_invocation), :814-848 (parse_workflow)"
+    claim: >-
+      Independently re-derived by executing the parser twice (R1's arch lens
+      and R3's refuter both ran `parse_workflow` directly): it returns
+      exactly 5 gates for `ci-nightly.yml` (performance, e2e, stress,
+      full-module-matrix, integration-next) — ZERO for interpreter-matrix.
+      Root cause: `_FLAG_TOKENS`'s bare `--frozen` optional-value alternative
+      greedily swallows the next flag's name (`--python`), leaving
+      `--python`'s quoted value unconsumed, breaking the prefix-strip loop
+      before it reaches `pytest`. Unique to the two-flag
+      `--frozen --python "<value>" --all-extras` shape; the five other
+      ci-nightly.yml jobs use the simpler `--frozen pytest ...` form and
+      parse fine. Plan.md's proposed per-shard template reproduces this
+      broken prefix verbatim, so `gates_for_target` will unconditionally
+      raise "resolved to 0 gates" for EVERY shard, always — breaking
+      FR-016's deleted-shard detection and FR-004's roster-vs-live-selector
+      comparison as designed.
+    remediation: >-
+      Before authoring test_interpreter_shard_coverage.py, actually run
+      `_gate_coverage.parse_workflow`/`gates_for_target` against a draft
+      copy of the proposed shard job YAML and confirm a non-empty Gate list.
+      Either (1) fix `_gate_coverage.py`'s `_FLAG_TOKENS` regex so a bare
+      `--flag` immediately followed by another `--flag "<value>"` does not
+      consume the second flag's name as the first flag's value, or (2) drop
+      the redundant `--python "<value>"` flag from the per-shard `uv run`
+      line (Python is already pinned via actions/setup-python +
+      UV_PROJECT_ENVIRONMENT), matching the already-parsing job shape. Add a
+      regression test to _gate_coverage.py's own suite pinning that the
+      chosen shape parses into a Gate, and re-verify gates_for_target
+      empirically before relying on it for FR-016.
+
+  - id: PLAN-ARCH-002
+    lens: FR-017/SC-010 reuse-vs-rejection decision soundness
+    severity: 2
+    title: >-
+      Plan.md misattributes a quoted docstring sentence to the wrong
+      function when justifying the reuse of collect_real_union_for_target.
+    evidence:
+      - artifact: "plan.md §A 'Reuse-vs-rejection decision' bullet on collect_real_union_for_target"
+      - code: "tests/architectural/_gate_coverage.py:2605-2616 (BaselineTarget docstring) vs :2677-2694 (collect_real_union_for_target's actual docstring)"
+    claim: >-
+      Plan.md attributes the quoted sentence "a shard split alone (same
+      total coverage, more legs) cannot false-red" to
+      collect_real_union_for_target's "own docstring" — it is actually in
+      BaselineTarget's class docstring. Underlying conclusion still correct;
+      only the citation is wrong.
+    remediation: >-
+      Correct the attribution to name BaselineTarget's class docstring.
+
+  - id: PLAN-VERIFY-001
+    lens: "Escalation suite-key distinctness and mutation-testability (FR-011/FR-015/NFR-003)"
+    severity: 3
+    title: "Suite-key-uniqueness scan method is under-specified and cites a precedent that does not do what plan.md says it does"
+    evidence:
+      - artifact: "plan.md §A 'Suite-key-uniqueness assertion' (lines 261-263)"
+      - code: "tests/architectural/test_performance_marker_guard.py:349-363 (_spec_kitty_run_performance_leaks)"
+      - code: "tests/architectural/test_performance_marker_guard.py:516-529 (test_nightly_fail_loud_step_treats_marker_empty_exit_5_as_non_failing)"
+      - code: "tests/architectural/test_performance_marker_guard.py:25-32 (no `re` import)"
+    claim: >-
+      Plan.md cites `_spec_kitty_run_performance_leaks` as precedent for
+      "scan run: script text" — that function inspects a structured `env:`
+      dict, not run text. The file's real precedent uses `run.splitlines()`,
+      a per-line scan. Plan.md leaves the extraction method undecided
+      without pinning quote-style handling or line-vs-blob scoping — a
+      per-line scan could miss a `--suite-key` split across a continued
+      line, letting a real future collision slip past the guard silently.
+    remediation: >-
+      In plan.md §A, commit to one concrete extraction method: parse the
+      already-loaded YAML jobs: mapping and iterate each job's steps[].run
+      string, matching both single- and double-quoted --suite-key values
+      applied to the FULL run: string (not line-by-line). Correct the
+      citation to name the real per-line-scan precedent. Add a mutation
+      test variant colliding two suite-keys with different quote styles.
+
+  - id: PLAN-VERIFY-002
+    lens: "Gates — §E gate-set verification against live workflow files"
+    severity: 2
+    title: "plan.md's packs.yml claim ('should NOT fire') describes the wrong mechanism — the workflow always triggers; only its lane jobs skip"
+    evidence:
+      - artifact: "plan.md §E 'NOT ENFORCED' list, packs.yml line"
+      - code: ".github/workflows/packs.yml:12-19 (deliberately no top-level on.*.paths, #3008)"
+      - code: ".github/workflows/packs.yml:39-44 (top-level on: has no paths: filter)"
+      - code: ".github/workflows/packs.yml:245-258 (packs-gate terminal job: if: always() && !cancelled())"
+    claim: >-
+      packs.yml deliberately carries no top-level path filter (#3008
+      Gate-0 avoidance) — it fires on every PR unconditionally; only its
+      per-lane verification jobs skip via if: false for a non-packs/-
+      touching diff. Plan.md's phrasing describes the opposite mechanism.
+      Net practical conclusion still correct; cited mechanism backwards.
+    remediation: >-
+      In plan.md §E, state that packs.yml triggers on every PR (deliberately
+      no top-level path filter, #3008) but its changes job's filter does not
+      match .github/workflows/** or tests/architectural/**, so every
+      built-in/internal lane job reports if: false and the terminal
+      packs-gate resolves green with no packs-specific work performed.

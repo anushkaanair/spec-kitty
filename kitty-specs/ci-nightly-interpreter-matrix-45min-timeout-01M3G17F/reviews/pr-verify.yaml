@@ -1,0 +1,13 @@
+schema: review-verify/v1
+complete: true
+phase: pr
+results:
+  - id: PR-BOUNDARY-001
+    status: resolved
+    reason: "Copied ci-nightly.yml to a scratch file, dropped tests/cli from shard 1's run: line, and drove the real test_every_roster_shard_paths_and_ignores_equal_the_committed_workflow (via monkeypatching the module's NIGHTLY_WORKFLOW constant) against it: it raised AssertionError naming interpreter-matrix-shard-1 with the missing path; against an unaltered scratch copy of the same file it passed cleanly, and the shipped test_shard_workflow_divergence_check_fails_when_a_real_path_is_altered mutation test calls the same production _shard_workflow_divergences function the real assertion uses."
+  - id: PR-BOUNDARY-002
+    status: resolved
+    reason: "Built a scratch ci-nightly.yml with interpreter-matrix-shard-1 removed from nightly-summary.needs and drove the real test_nightly_summary_needs_includes_every_roster_shard (via the same NIGHTLY_WORKFLOW monkeypatch) against it: it raised AssertionError naming interpreter-matrix-shard-1 as missing; the shipped test_nightly_summary_needs_check_fails_when_a_shard_is_dropped mutation test calls the same production _missing_shards_from_needs function used by the real assertion."
+  - id: PR-TESTS-002
+    status: resolved
+    reason: "Temporarily set INTERPRETER_SHARDS = () in _interpreter_shard_roster.py (reverted; md5sum 6c142e9294cef875b66d16d7ad0e8fd6 matches before/after) and ran the three named consumer files: pre-fix behavior (15 passed/6 skipped, fully green) is now 5 failed/17 passed/6 skipped, with the new guards in all three files (test_shard_roster_non_vacuity, test_interpreter_shard_lanes_are_present_and_match_the_roster, TestVenvCorruptionHazardFR003b::test_interpreter_shard_roster_is_non_vacuous) failing loudly with 'must not be empty' messages; a follow-up shrunken-roster-only experiment (job keys sliced to 5 of 6) also failed the two guards that compare against the real ci-nightly.yml job count (naming '5' vs '6'), while the full architectural+ci+upgrade suites pass (12 and 58 tests respectively) against the real, unmodified roster."

@@ -1,0 +1,79 @@
+schema: wp-verdict/v1
+wp: WP01
+reviewer: reviewer-renata
+round: 2
+verdict: approved
+diff_range: 51f0d6dc3..3b08a478e (fix) ; ee7494599..3b08a478e (WP)
+prior_findings:
+  - id: WP01-R1-001
+    status: resolved
+    evidence: >
+      Read tests/architectural/test_interpreter_shard_coverage.py:139-260 (fix diff
+      51f0d6dc3..3b08a478e). The two mutation tests now call the SAME
+      `_coverage_completeness_violations(shards)` helper the live
+      `test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap` calls,
+      over the REAL `INTERPRETER_SHARDS` roster, with only the leaf
+      `collect_job_nodeids` monkeypatched to a small deterministic world -- the
+      union/overlap/missing-id computation under test is unchanged production code.
+      Empirically proved by breaking the production computation myself, in the lane,
+      undone after each break (git status --porcelain empty before/after each):
+      (1) `missing_ids = full_ids - union_ids` -> `missing_ids = set()`: ran
+      `.venv/bin/python -m pytest tests/architectural/test_interpreter_shard_coverage.py
+      -k "dropped_test_file or duplicated_test_file"` -> dropped-file test FAILED
+      ("got set()" vs expected the real dropped id), duplicated-file test unaffected
+      (PASSED) -- gap detection is genuinely exercised. Reverted; md5sum of the file
+      matched the pre-break baseline (d26a1e70e1565431f679c22d26019aab).
+      (2) added `overlap_ids = set()` after the loop: same command -> duplicated-file
+      test FAILED ("got set()" vs expected the real duplicated id), dropped-file test
+      unaffected (PASSED) -- overlap detection is genuinely exercised. Reverted; tree
+      clean.
+      (3) Live-test weakening check: dropped "tests/cli" from shard-1's real paths in
+      tests/architectural/_interpreter_shard_roster.py -> ran
+      `test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap` alone ->
+      FAILED naming 513 real missing node ids under tests/cli/commands/... by exact
+      test name. Reverted; git status --porcelain empty, HEAD still 3b08a478e
+      throughout.
+  - id: WP01-R1-002
+    status: resolved
+    evidence: >
+      kitty-specs/.../tasks/WP01-interpreter-matrix-shard-split.md Activity Log
+      (primary checkout) now carries T001-T013 chronological entries plus a
+      2026-09-27T10:27:10Z cycle-2 fix-mode entry explicitly naming
+      WP01-R1-001/002/003 as addressed.
+  - id: WP01-R1-003
+    status: resolved
+    evidence: >
+      tracer-design-decisions.md (primary checkout) carries a "WP01 review-cycle-1
+      finding WP01-R1-003 -- pre-existing-failure disposition CLOSED" section citing
+      issue #3189. Verified live: `gh issue view 3189 --repo spec-kitty/spec-kitty
+      --json comments` shows a 2026-09-27T09:57:27Z comment by MOES-Media beginning
+      "Evidence from the #4951 validation run: the first time the Python 3.13
+      fast/unit leg has run to completion." -- matches the tracer's claim exactly.
+      No tracer note asserts "pending" for this disposition (the primary checkout's
+      tracer-approach.md "Dispatch evidence" section still shows placeholder
+      `_pending_` run-URL text, but this is unrelated to R1-003 -- it is pre-merge
+      staleness of the not-yet-merged lane tracer file, explicitly called out by
+      tracer-design-decisions.md's own text ("not yet merged to this planning
+      branch as of this note"); the LANE's own tracer-approach.md has the real
+      filled run-1/run-2 URLs and tables, matching cycle 1's already-verified
+      dispatch_evidence_verification gate).
+findings: []
+gates:
+  ruff_check: "All checks passed!"
+  ruff_format_check: "2378 files already formatted"
+  tests_interpreter_shard_coverage_and_perf_marker_guard: "32 passed in 93.32s"
+  tests_ci: "555 passed in 27.86s"
+  tests_architectural_full: "orchestrator-witnessed 2893 passed, 0 failed on 3b08a478e (not re-run per instructions; not required for this round)"
+  git_history_leak: "git log -p origin/main..3b08a478e | grep -cE '/home/[A-Za-z0-9_.-]+/|$(whoami)' = 0"
+  revert_discipline_R1_001_gap: "PASS (real): missing_ids forced to set() -> dropped-file mutation test failed naming empty set vs real dropped id; reverted, tree clean"
+  revert_discipline_R1_001_overlap: "PASS (real): overlap_ids forced to set() -> duplicated-file mutation test failed naming empty set vs real duplicated id; reverted, tree clean"
+  revert_discipline_R1_001_live_test: "PASS (real): dropped tests/cli from shard-1 roster paths -> live coverage test failed naming 513 real tests/cli node ids; reverted, tree clean"
+  lane_tree_clean_final: "git status --porcelain empty, HEAD 3b08a478e (unchanged)"
+directives_applied:
+  - "030 Test and Typecheck Quality Gate (re-ran ruff check/format, the touched module's tests, tests/ci with real counts)"
+  - "041 Tests as Scaffold, Not Friction (independently re-derived WP01-R1-001's resolution by breaking and restoring the production guard twice, plus the live-test weakening check)"
+  - "024 Locality of Change (fix diff touches only tests/architectural/test_interpreter_shard_coverage.py, matching the remedy's scope)"
+  - "032 Conceptual Alignment (mutation-test naming/terminology still matches roster/job-key vocabulary used elsewhere in the diff)"
+  - "tactic: delete-the-assertion-not-the-test (confirmed the remedy replaced the fabricated assertions while preserving/extending real test setup, per WP01-R1-001's own remedy)"
+  - "tactic: reverse-speccing (reconstructed the mutation tests' and helper's behavior from code alone before checking it against R1-001's remedy text)"
+complete: true

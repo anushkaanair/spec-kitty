@@ -1,0 +1,7 @@
+schema: review-verify/v1
+complete: true
+phase: spec
+results:
+  - id: SPEC-FRESH3-001
+    status: resolved
+    reason: research.md §7 now adds a verified paragraph stating no test/CI job imports or invokes collect_real_union_for_target/gates_for_target/BaselineTarget, names the test_ci_collection_completeness.py retirement contradiction, and explicitly reframes FR-017/SC-010's reuse-vs-rejection cost as "add the entry AND author a brand-new consuming test/oracle from scratch" rather than reusing an already-wired check.

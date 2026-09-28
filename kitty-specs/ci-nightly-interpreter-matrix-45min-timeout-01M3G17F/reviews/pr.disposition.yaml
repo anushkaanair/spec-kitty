@@ -1,0 +1,27 @@
+schema: squad-disposition/v1
+phase: pr
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+complete: true
+rounds_used: 3            # cap is 3 fix->verify rounds
+halts: 1                  # round 2 tripped the stop-early rule; operator ruled truth-table equivalence (2026-09-27)
+blocking_open: 0          # no finding at severity >= 3 remains unresolved
+summary:
+  r1_raw: 9
+  r1_confirmed: 3          # PR-BOUNDARY-001 (4), PR-BOUNDARY-002 (3), PR-TESTS-002 (3): all resolved (pr-verify.yaml)
+  round2_fresh: 3          # PR-FRESH-001 unresolved in round 2, resolved in round 3; FRESH-002/003 resolved
+  round3_fresh_in: 3       # PR-FRESH2-001 (4), -002 (2), -003 (2): all resolved (pr-verify-3.yaml)
+open_below_blocking:
+  - id: PR-FRESH3-001
+    severity: 2
+    disposition: deferred-to-landing-fold
+    reason: >-
+      Documentation/guard only (bound or document the 2^N truth-table cost; today 2-3 names).
+      Fix round cap reached; carried to the sk-land pass as one test(landing) commit, named in the PR body.
+  - id: PR-FRESH3-002
+    severity: 2
+    disposition: deferred-to-landing-fold
+    reason: Stale "token-based" docstring wording after the truth-table rewrite; no behaviour effect. Same landing commit.
+  - id: PR-FRESH3-003
+    severity: 1
+    disposition: deferred-to-landing-fold
+    reason: Docstring says Gate has five fields (it has seven); no behaviour effect. Same landing commit.

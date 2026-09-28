@@ -1,0 +1,80 @@
+schema: review-findings/v1
+complete: true
+phase: pr
+lens_group: fresh
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PR-FRESH-001
+    lens: fresh-sweep
+    severity: 3
+    title: PR-BOUNDARY-001's new marker check does exact literal-string comparison, brittle to a harmless reformat
+    evidence:
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:182"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:75 (diff 3b08a478e..b56c0cf1c)"
+    claim: >
+      `_shard_workflow_divergences` (new in commit 7f492b02e, PR-BOUNDARY-001) computes
+      `bad_markers = real_markers - {"fast or unit"}`, where `real_markers` is the
+      verbatim `marker_expr` string parsed out of the committed workflow's `-m "..."`
+      flag by `parse_workflow`/`Gate` (confirmed via `tests/architectural/_gate_coverage.py`:
+      `Gate.marker_expr` stores the raw expression text, not a normalized token set).
+      This is a live comparison against the real, committed YAML (unlike the file's
+      pre-existing `marker_expr="fast or unit"` literals, which are static baseline
+      fixture inputs, not comparisons against external text). A future edit that
+      reorders or reformats the marker with identical pytest semantics -- e.g.
+      `"unit or fast"`, `"fast  or  unit"`, or `"(fast or unit)"` -- would make every
+      shard fail `test_every_roster_shard_paths_and_ignores_equal_the_committed_workflow`
+      with a false "unexpected marker(s)" error, even though the actual test selection
+      is unchanged. The repo already ships a normalizer for exactly this
+      (`positive_marker_tokens()` in `_gate_coverage.py`, used elsewhere at line ~975),
+      which this new check does not reuse.
+    remediation: >
+      Compare normalized marker tokens instead of the raw string, e.g.
+      `positive_marker_tokens(gate.marker_expr) - positive_marker_tokens("fast or unit")`,
+      so a semantically-identical reformat of the `-m` flag does not trip the guard.
+
+  - id: PR-FRESH-002
+    lens: fresh-sweep
+    severity: 2
+    title: New PR-TESTS-002 guard in test_migration_robustness.py hand-parses the workflow YAML instead of reusing the repo's canonical loader
+    evidence:
+      - code: "tests/upgrade/test_migration_robustness.py:462-464"
+    claim: >
+      The new `test_interpreter_shard_roster_is_non_vacuous` (commit b56c0cf1c,
+      PR-TESTS-002) reads `.github/workflows/ci-nightly.yml` via a fresh
+      `with workflow_path.open(...) as handle: workflow = yaml.safe_load(handle)`
+      rather than the repo's canonical workflow loader,
+      `load_spliced_workflow`/`parse_workflow` (`tests/architectural/_gate_coverage.py`),
+      whose own docstring states "EVERY reader of a workflow ... must load through
+      this — not a raw yaml.safe_load". The sibling PR-BOUNDARY-001/002 tests added in
+      the SAME fix round (`tests/architectural/test_interpreter_shard_coverage.py`)
+      correctly route through `load_spliced_workflow`/`parse_workflow`, so the
+      inconsistency is avoidable and now compounds a pre-existing instance of the same
+      pattern already in this file (`test_interpreter_matrix_job_pins_a_dedicated_project_environment`,
+      predating this fix round). It happens to be harmless today because splicing only
+      fills in `uses:`-delegated job `steps:`, never adds/removes top-level job keys, so
+      the job-key-membership check this test performs is unaffected -- but it is a
+      second, unreviewed YAML-loading code path per DIRECTIVE_044 (canonical-source
+      unification), and would silently mis-model a reusable-workflow/composite-action
+      job if one is ever introduced here.
+    remediation: >
+      Import and call `load_spliced_workflow(workflow_path)` from
+      `tests.architectural._gate_coverage` instead of a local `yaml.safe_load`, matching
+      the pattern the same fix round's other new file (`test_interpreter_shard_coverage.py`)
+      already uses.
+
+  - id: PR-FRESH-003
+    lens: fresh-sweep
+    severity: 1
+    title: Stale "Shard 1/3" comment left over from the earlier 3-shard layout
+    evidence:
+      - code: ".github/workflows/ci-nightly.yml:381"
+    claim: >
+      The comment immediately above `interpreter-matrix-shard-1:` reads
+      "# Shard 1/3: tests/unit, tests/status, tests/cli." while every other shard's
+      comment correctly says "N/6" (shards 2/6 through 6/6), reflecting the 3->6 boundary
+      redraw done in commit 7b8953e95. Shard 1's comment was not updated to match. No
+      functional effect -- purely a stale in-repo doc trail that could confuse a future
+      reader about how many shards currently exist.
+    remediation: >
+      Change the comment to "# Shard 1/6: tests/unit, tests/status, tests/cli." to match
+      the other five shard headers.

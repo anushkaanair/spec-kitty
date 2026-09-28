@@ -1,0 +1,36 @@
+schema: review-verify/v1
+complete: true
+phase: plan
+round: 2
+results:
+  - id: PLAN-FRESH-001
+    status: resolved
+    reason: >-
+      plan.md:265 now commits to a three-way pattern
+      (--suite-key\s+(?:"([^"]+)"|'([^']+)'|(\S+))) and its bare \S+ alternative
+      is independently confirmed against .github/workflows/ci-nightly.yml
+      lines 165/252/347/629 (performance/e2e/stress/integration are genuinely
+      bare/unquoted) and line 438 (only the interpreter leg's key is quoted),
+      with \S+ correctly stopping at whitespace so it cannot swallow the
+      trailing --conclusion "$conclusion" token, and a three-variant
+      non-vacuity mutation test (quote-style-mismatch and bare-vs-quoted
+      collision) now proves the two pools are checked against each other.
+  - id: PLAN-FRESH-002
+    status: resolved
+    reason: >-
+      IC-02's sequencing note (plan.md:110) now names "§I step 4a" explicitly
+      and explains step 4 itself only finalizes N/timeout without touching
+      parseability, while §I step 4a (plan.md:364) restates the same pointer
+      back the other way ("the first ran on ... §I step 2 ... this one" is the
+      second), so both anchors are consistent, name the correct step, and
+      cross-reference the step-2 and step-4a checks explicitly with no
+      remaining ambiguity.
+  - id: PLAN-FRESH-003
+    status: resolved
+    reason: >-
+      "no WP split"/"no-WP-split" no longer appears anywhere in plan.md; a new
+      §I paragraph ("WP granularity is a TASKS-phase decision, not this
+      plan's") explicitly defers WP count to the tasks phase while clarifying
+      single_branch topology governs lane/branch count not WP count, and
+      spells out that splitting WPs would not create a second PR — so it
+      cleanly avoids contradicting §I's existing ONE-PR phasing decision.

@@ -1,0 +1,58 @@
+# review-verify/v1 — canonical format for fix-verification output.
+schema: review-verify/v1
+complete: true
+phase: spec
+results:
+  - id: SPEC-GOV-001
+    status: resolved
+    reason: >-
+      Correction #1 now states only the verified fact (no SPEC-KITTY-LEDGER.md
+      exists; this checkout's own AGENTS.md/CLAUDE.md reference only
+      .kittify/charter/charter.md), explicitly retracts the "drift" framing
+      rather than softening it, and attributes the earlier conflation to the
+      outer orchestration workspace's separate CLAUDE.md; User Story 2's "Why
+      this priority" line (spec.md:82-83) no longer restates the false claim,
+      only pointing to Correction #1 "on the provenance of this framing" —
+      verified directly against AGENTS.md (grep for SPEC-KITTY-LEDGER returns
+      zero matches; CLAUDE.md is a symlink to AGENTS.md).
+  - id: SPEC-ARCH-001
+    status: resolved
+    reason: >-
+      New FR-015 requires test_performance_marker_guard.py to parse every
+      shard's literal --suite-key out of ci-nightly.yml (plus the
+      performance/e2e/stress keys) and assert pairwise distinctness, backed by
+      a mutation test with two deliberately-identical keys (also SC-008), and
+      NFR-003 is amended to point to FR-015 as the proof instead of manual
+      inspection — this is now a concrete, machine-checked, non-vacuity-proven
+      requirement rather than inspection-based.
+  - id: SPEC-VERIFY-001
+    status: resolved
+    reason: >-
+      New Key Entity "Shard-identity roster" and FR-016 require an in-repo
+      roster the coverage-completeness check reads independently of the job
+      list and diffs against the workflow's job keys; AC3 and the matching
+      Edge Cases bullet are rewritten to name the roster explicitly (never
+      "manifest") and explicitly state FR-004's node-id comparison alone only
+      proves AC2, resolving the AC2/AC3 indistinguishability with a real
+      second data source rather than a rename.
+  - id: SPEC-VERIFY-002
+    status: resolved
+    reason: >-
+      New FR-017 requires the plan phase to evaluate _gate_coverage.py's
+      BaselineTarget/collect_real_union_for_target mechanism before building
+      anything new for FR-004, and research.md Section 7 documents first-hand
+      verification of it; a direct read of tests/architectural/_gate_coverage.py
+      confirms WORKFLOW_FILES includes ci-nightly.yml, the BaselineTarget
+      docstring language quoted verbatim matches the source, and
+      BASELINE_TARGETS is indeed currently an empty tuple, as research.md
+      claims.
+  - id: SPEC-VERIFY-003
+    status: resolved
+    reason: >-
+      Edge Cases now names issue #3284 explicitly plus sibling #3283, states
+      both are CLOSED (closed 2026-09-08) and instructs the plan/implementation
+      phase to re-check live state at Q2 dispatch time rather than trust the
+      note; gh issue view 3284 and 3283 against spec-kitty/spec-kitty confirms
+      both are currently closed, with closedAt timestamps of
+      2026-09-08T12:49:02Z and 2026-09-08T12:49:03Z respectively, matching the
+      spec's claim exactly as of today (2026-09-27).

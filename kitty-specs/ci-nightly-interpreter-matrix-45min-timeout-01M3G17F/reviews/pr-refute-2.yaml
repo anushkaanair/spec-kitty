@@ -1,0 +1,61 @@
+schema: review-refute/v1
+complete: true
+phase: pr
+batch: 2
+verdicts:
+  - id: PR-TESTS-001
+    verdict: refuted
+    reason: >-
+      Reproduced (added needs:[interpreter-matrix-shard-1] to shard-2, ran the
+      cited 5-file surface, got 83 passed with no failure, matching the
+      finder's 75+8), but plan.md §G's Red-first table explicitly designates
+      a real dispatch run with one shard forced red -- not a unit test -- as
+      the proof mechanism for FR-012 ("a unit test alone cannot prove
+      cross-job scheduling independence; this is proven at run 2"), and no
+      WP01 subtask (T004/T006's required mutation tests cover only
+      FR-004/FR-016/FR-009/FR-010/FR-015) promises a static needs: absence
+      guard, so the gap is the mission's own documented, deliberate design
+      choice, not a broken promise.
+  - id: PR-TESTS-002
+    verdict: confirmed
+    reason: >-
+      Reproduced exactly (temporarily reassigned INTERPRETER_SHARDS=() in
+      _interpreter_shard_roster.py, ran the three named consumer files: 15
+      passed/6 skipped, zero failures, including one bare "1 passed" with no
+      skip marker in test_migration_robustness.py's empty for-loop body); this
+      sits squarely in files this mission's own commit 1e62bab99 edited
+      specifically to close "discovered failing only once a real dispatch run
+      actually exercised them" staleness risk in files "not covered by this
+      mission's C-005 gate" -- the mission's own remediation for this exact
+      hazard class is incomplete for the roster-emptied case, a residual gap
+      in work this mission itself performed, not pre-existing or out-of-scope
+      behavior.
+  - id: PR-TESTS-003
+    verdict: refuted
+    reason: >-
+      Reproduced (test_interpreter_shard_coverage.py: 8 passed in 79.73s,
+      50.11s+29.27s on the two cited tests, matching the finder's 51s/31s;
+      confirmed no lru_cache/fixture sharing between the two
+      collect_job_nodeids call sites), but no FR/NFR or plan §G row promises
+      test-suite collection efficiency -- NFR-004 only accepts N-times
+      checkout/sync cost in the workflow itself -- and the finding's own
+      evidence concedes it is bounded and non-release-blocking, so it is a
+      valid low-severity nit but not a defect against anything this mission
+      promised.
+  - id: PR-TESTS-004
+    verdict: refuted
+    reason: >-
+      Reproduced (added tests/zzz_temp_experiment_dir/test_temp_new_dir.py,
+      test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap
+      failed naming the exact missing node id; cleaned up, tree verified
+      clean), but this is precisely FR-004/NFR-002's intended fail-loud
+      design confirmed by spec.md's own Edge Cases ("a wrong shard boundary is
+      a loud CI failure, never a silent partial run") and plan.md §G, and
+      ci-router.yml's pre-existing unmatched-path fail-closed catch-all
+      already routes any unrecognized top-level tests/ dir into
+      architectural-heavy regardless of this mission; no spec/plan/tasks
+      artifact promises AGENTS.md/CONTRIBUTING documentation of the roster
+      obligation, and the assertion message does name the specific missing
+      node id(s), which is actionable enough by this codebase's own guard-
+      message conventions -- the remediation is a reasonable UX enhancement,
+      not a broken promise.

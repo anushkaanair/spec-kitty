@@ -1,0 +1,31 @@
+schema: review-verify/v1
+complete: true
+phase: tasks
+results:
+  - id: TASKS-FRESH-001
+    status: resolved
+    reason: >-
+      tasks.md's "Known Issue" section now uses only the open-ended
+      (a)-real-leak/(b)-self-quoting-prose classification with no fixed
+      target number anywhere (including the "What this means for T008"
+      bullet, which now reads "EXPECTED to read nonzero" and explicitly says
+      "the baseline is no longer a fixed number"), and T008/T011/T013's
+      fallback blockquotes in WP01-interpreter-matrix-shard-split.md were
+      verified byte-for-byte identical (1344-char match confirmed
+      programmatically) and all three, plus the Review Guidance bullet, use
+      the same (a)/(b) classification with "do not compare the total against
+      any fixed number"; a fresh `git log -p main..HEAD | grep -cE
+      '/home/|/tmp/'` returns 41 now (grown further, as the fix's own
+      philosophy predicts) and a text sweep for "currently N" / "return to"
+      / "known baseline (currently" found zero residual hits in either file.
+  - id: TASKS-FRESH-002
+    status: resolved
+    reason: >-
+      The "Exact commits responsible" bullet in tasks.md now explicitly
+      names both categories — (a) the real-leak pair afcf3bcd6/13dc5d966,
+      and (b) self-referential quotation commits, with afcf3bcd6, c1736bfa5,
+      5e1cd7b1d, and 99084be4b given as current examples while stating this
+      is an open-ended, growing set that must never be enumerated
+      exhaustively by SHA — so the bullet a reader is pointed to by its own
+      title is now complete rather than requiring reconstruction from a
+      separate bullet.

@@ -1,0 +1,10 @@
+schema: review-verify/v1
+complete: true
+phase: spec
+results:
+  - id: SPEC-FRESH2-001
+    status: resolved
+    reason: research.md §7 now adds a verified paragraph stating BaselineTarget has only (slug, workflow, job) fields and gates_for_target matches live-parsed gates by that identity alone, requiring the plan phase to separately declare each shard's intended selector for FR-016.
+  - id: SPEC-FRESH2-002
+    status: resolved
+    reason: FR-017's Title cell was shortened to a single short phrase consistent with every other FR Title, with the full rationale retained in the User Story cell and SC-010.

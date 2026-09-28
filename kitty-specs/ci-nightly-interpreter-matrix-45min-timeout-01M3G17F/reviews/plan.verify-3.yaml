@@ -1,0 +1,14 @@
+schema: review-verify/v1
+complete: true
+phase: plan
+round: 3
+results:
+  - id: PLAN-FRESH2-001
+    status: resolved
+    reason: The suite-key extraction now joins run-line continuations, splits into statements, and only applies the three-form pattern to a statement that also contains "nightly_escalation.py" (plan.md lines ~265, with a new test_suite_key_extraction_ignores_non_invocation_mentions mutation test), and a direct grep of .github/workflows/ci-nightly.yml confirms all five real --suite-key occurrences (lines 165, 252, 347, 438, 629) sit on the same statement as a nightly_escalation.py invocation, so the new scoping cannot exclude a real key.
+  - id: PLAN-FRESH2-002
+    status: resolved
+    reason: IC-02's sequencing note (plan.md line ~110) and §I step 4 (line ~367) now state that step 4's boundary-redraw can edit run:-line-adjacent content and require re-running the parseability check there conditionally, while step 4a (line ~368) is now correctly described as an unconditional re-check that always runs regardless of what step 4 did, eliminating the prior contradiction with §B point 2.
+  - id: PLAN-FRESH2-003
+    status: resolved
+    reason: The WP-granularity paragraph (plan.md lines ~356-360) now adds an explicit "Caveat" explaining that IC-03's dispatch-driven revisit of IC-01/IC-02 has no forward-only-status-model-compatible per-IC WP expression (no "reopen an approved/done WP" transition exists), grounding the single-WP01 recommendation in that structural reason while still explicitly leaving the final call to the tasks phase ("This plan does not mandate either shape").
