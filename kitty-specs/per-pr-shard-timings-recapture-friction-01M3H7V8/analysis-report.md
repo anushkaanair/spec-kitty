@@ -4,139 +4,95 @@ artifact_type: spec-kitty.analysis-report
 command: /spec-kitty.analyze
 mission_slug: per-pr-shard-timings-recapture-friction-01M3H7V8
 mission_id: 01M3H7V865DG4BNBKP2ETZSZ1A
-generated_at: '2026-09-27T23:06:52.743071+00:00'
-analyzer_agent: unknown
+generated_at: '2026-09-28T01:09:09.638957+00:00'
+analyzer_agent: claude-sonnet-5-design-amendment
 input_artifacts:
   spec.md:
     path: kitty-specs/per-pr-shard-timings-recapture-friction-01M3H7V8/spec.md
-    sha256: 0d99ca1020ca8a164db5f05ff1aab6a5a148c2f354fd200d802f22492a8ecf43
+    sha256: 87190c606d80ed63ee4c94f911a552c49aa72d44e6e3f35b387ac47559662457
   plan.md:
     path: kitty-specs/per-pr-shard-timings-recapture-friction-01M3H7V8/plan.md
-    sha256: 671c3db443c8065beab0e1e313a9c1d72cf1697e07e7a3b26a7084a38e77654d
+    sha256: cb1c5c0c4adb980e85fc3250622415afdb8c1ca94650e3b4bfe1f77bedec7cb8
   tasks.md:
     path: kitty-specs/per-pr-shard-timings-recapture-friction-01M3H7V8/tasks.md
-    sha256: c15d887a46516630e945e91e07d0bb57b840e8e37d536ec04067ec0d9b188525
+    sha256: 570f8d48d4197d46afc12c085ae87797de6282348ebd6e1957d0f47c5eb23084
   charter:
     path: .kittify/charter/charter.yaml
     sha256: a2b2f62cf1c0fa8987b67f6759d18bcc18b2fb47a8d3ad2783f8fac68b192c77
 verdict: ready
 issue_counts:
-  medium: 0
-  high: 0
-  critical: 0
   low: 0
+  high: 0
+  medium: 2
+  critical: 0
   info: 0
-findings: []
+findings:
+- id: I1
+  severity: medium
+  category: inconsistency
+  summary: WP02 frontmatter requirement_refs omits NFR-003, though tasks.md's WP02 header, WP02's own Objectives prose, and tasks.md's FR/NFR/Constraint traceability table all attribute NFR-003 to WP02.
+- id: I2
+  severity: medium
+  category: inconsistency
+  summary: tasks.md's traceability table credits WP03 (via T019) with partial ownership of NFR-001, but neither tasks.md's WP03 header line nor WP03.md's frontmatter requirement_refs lists NFR-001.
 ---
 
 ## Specification Analysis Report
 
-> **Superseded note (2026-09-28):** this report records the `/spec-kitty.analyze` run from before
-> PR #5240 was discovered and before the 2026-09-28 design amendment. Two specific claims below —
-> "the four untouched tests" and "the visible-xfail-not-silent-pass design" (Charter Alignment
-> Issues paragraph) — are now false of the amended spec.md/plan.md: there are **three** untouched
-> tests, and the demotion mechanism is `ShardTimingsDriftWarning`, never `xfail`. See
-> `tracer-design-decisions.md`'s "Design amendment (2026-09-28)" entry for the corrected text. A
-> fresh `analyze` run is expected to regenerate this report against the amended artifacts.
-
-No findings. All detection passes (duplication, ambiguity, underspecification, charter
-alignment, coverage gaps, inconsistency/terminology drift) returned clean across
-`spec.md`, `plan.md`, and `tasks.md`.
-
 | ID | Category | Severity | Location(s) | Summary | Recommendation |
 |----|----------|----------|-------------|---------|----------------|
-| — | — | — | — | No findings | — |
+| I1 | Inconsistency | MEDIUM | `tasks/WP02-recapture-decision-script.md:5-16` (frontmatter `requirement_refs`) vs. `tasks.md:252-253` (WP02 header `**Requirements**:` line) vs. `tasks/WP02-recapture-decision-script.md:87-89` (Objectives prose) vs. `tasks.md:137` (traceability table row) | WP02's own YAML frontmatter `requirement_refs` list is `[FR-005..FR-010, C-001, C-003, C-004, C-005, C-006]` — it omits `NFR-003`. Yet tasks.md's WP02 header line ends "...C-006; NFR-003", WP02's own Objectives paragraph states "...and **NFR-003** (no credential leakage)", and tasks.md's FR/NFR/Constraint traceability table has a dedicated row "`NFR-003 (no credential leakage) \| WP02 \| T012, T013 \|`...". Three independent sources agree WP02 owns NFR-003; only the machine-readable frontmatter field disagrees. | Add `NFR-003` to WP02's frontmatter `requirement_refs` list so automated requirement-coverage/traceability tooling (e.g. `map-requirements`, coverage reports) sees the same ownership the prose and table already assert. No code-behavior change needed — T012/T013 already implement the no-credential-leakage behavior. |
+| I2 | Inconsistency | MEDIUM | `tasks.md:135` (traceability table row) vs. `tasks.md:296-300` (WP03 header `**Requirements**:` line) vs. `tasks/WP03-scheduled-workflow-wiring.md:6-10` (frontmatter `requirement_refs`) | tasks.md's traceability table states "`NFR-001 (gate protects shard balance, not correctness) \| WP01, WP03 \| T002 (code shape, read-and-confirm), T019 (PR-body statement)`" — crediting WP03's T019 with a share of NFR-001. WP03's own body (T019 step 3, Review Guidance) does in fact discuss and require the NFR-001 shard-balance-only PR-body statement. But WP03's tasks.md header line ("**Requirements**: NFR-002, C-003, C-005, C-006 (workflow-file half); IC-04 (docs note)") and WP03.md's frontmatter `requirement_refs` (`[NFR-002, C-003, C-005, C-006]`) both omit NFR-001 — internally consistent with each other, but both disagree with the traceability table's explicit dual-WP attribution. | Either add `NFR-001` to WP03's header line and frontmatter `requirement_refs` (to reflect the traceability table's claim that WP03's T019 partially discharges it), or narrow the traceability table's row to list WP01 only and describe T019's NFR-001 mention as incidental PR-body content rather than requirement ownership. Either fix is a documentation-only change; T019's actual content is unaffected. |
 
 **Coverage Summary Table:**
 
 | Requirement Key | Has Task? | Task IDs | Notes |
 |-----------------|-----------|----------|-------|
-| fr-001-demote-non-blocking | Yes | T004, T007 | WP01 |
-| fr-002-charter-out-of-allowlist | Yes | T003, T008 | WP01 |
-| fr-003-untouched-tests-and-allowlist | Yes | T008 | WP01, diff review (SC-006) |
-| fr-004-visible-drift-and-infra-fail-loud | Yes | T004, T005, T006 | WP01 |
-| fr-005-secret-fail-loud-first | Yes | T012, T014(fixture 5) | WP02 |
-| fr-006-no-pr-when-no-drift | Yes | T010, T014(fixtures 3,6) | WP02 |
-| fr-007-skip-if-open | Yes | T011, T013, T014(fixtures 1,2), T015(fixture 7) | WP02 |
-| fr-008-mechanism-fail-vs-ordinary-fail | Yes | T009, T014(fixture 4), T015(fixtures 8,9,10) | WP02 |
-| fr-009-charter-only-scope | Yes | T009, T013 | WP02, code-shape inspection |
-| fr-010-bot-identity-fixed-text | Yes | T013 | WP02, code-shape inspection |
-| nfr-001-shard-balance-not-correctness | Yes | T003, T019 | WP01 code-shape + WP03 PR-body note |
-| nfr-002-timeout-budget | Yes | T016, T019 | WP03; measured runtime deferred to post-dispatch PR-body update per plan ruling |
-| nfr-003-no-credential-leakage | Yes | T012, T013 | WP02 |
-| c-001-charter-only-scope | Yes | T003, T009 | WP01, WP02 |
-| c-002-no-allowlist-mutation | Yes | T003 | WP01 |
-| c-003-main-pr-only | Yes | T013, T016 | WP02, WP03 |
-| c-004-no-github-token-fallback | Yes | T012, T014(fixture 5) | WP02 |
-| c-005-no-absolute-paths-or-credentials | Yes | (all WPs) | reviewer/self-check grep, per WP |
-| c-006-concurrency-guarded | Yes | T016 | WP03 |
+| FR-001 | Yes | WP01 T002, T003, T005 | Verified against merged `#5240` code; production-function signatures and fixture shapes match the actual checkout. |
+| FR-002 | Yes | WP01 T002, T008 | Unconditional `assert "charter" not in _MISMATCH_ALLOWLIST` confirmed present in checkout. |
+| FR-003 | Yes | WP01 T004, T008 | Cross-module gate demotion confirmed in checkout (`_report_drift` called from both gate functions). |
+| FR-004 | Yes | WP01 T002, T003, T003b, T004, T004b, T005, T006 | All three dispositions (disagree/agree/infra-break) covered for both gates; T003b/T004b restore the agreeing-case fixture a prior fresh-sweep found missing. |
+| FR-005 | Yes | WP02 T012, T014 (fixture 5) | Truthy check ordering (before open-PR check and capture) explicitly specified in T013. |
+| FR-006 | Yes | WP02 T010, T014 (fixtures 3, 6) | `has_drift` is a pure length-only comparator, matches spec's anti-noise requirement. |
+| FR-007 | Yes | WP02 T011, T013, T014 (fixtures 1, 2), T015 (fixture 7) | Fixed-branch matching + TOCTOU re-check both specified; T011's superseded `--json number,headRefName` correction is self-documented (TASKS-FRESH2-001). |
+| FR-008 | Yes | WP02 T009, T014 (fixture 4), T015 (fixtures 8, 9, 10) | `run_capture_or_die` catches `(Exception, SystemExit)`, re-raises `KeyboardInterrupt`; ordinary-failure-continues fixture present. |
+| FR-009 | Yes | WP02 T009, T013 | `MODULE = "charter"` hardcoded constant, no `--module` flag exposed. |
+| FR-010 | Yes | WP02 T013 | Fixed bot identity/commit message/PR body template, verbatim. |
+| NFR-001 | Yes (attribution gap — see I2) | WP01 T002; WP03 T019 (per table only) | Table credits WP03; WP03 header/frontmatter do not. |
+| NFR-002 | Yes | WP03 T016, T019, T020 | 30-min recapture budget + 10-min strict-mode budget, both with measured-evidence rationale. |
+| NFR-003 | Yes (frontmatter gap — see I1) | WP02 T012, T013 | Header/prose/table agree; frontmatter `requirement_refs` omits it. |
+| C-001 – C-006 | Yes | WP01/WP02/WP03 (see traceability table) | All six constraints mapped; frontmatter lists match tasks.md headers for every WP except the NFR-003 gap on WP02. |
 
-Every functional requirement, non-functional requirement, and constraint in `spec.md`
-maps to at least one concrete task with a concrete fixture or inspection point, per the
-"FR / NFR / Constraint / Ruling traceability" table already maintained in `tasks.md`
-(lines 108-146), which this analysis independently re-derived and confirms matches.
-Success criteria SC-003/SC-004/SC-005/SC-008/SC-009 (the end-to-end dispatched-workflow
-scenarios) have no separate pre-merge fixture of their own by design — plan.md item (c)
-explicitly scopes these to "only confirmable post-merge" / operator-secret-dependent
-manual dispatch, and each is structurally backed pre-merge by the corresponding FR's unit
-fixtures (SC-003/SC-008→FR-007, SC-004→FR-006, SC-005→FR-005, SC-009→FR-008). This is
-documented plan/tasks design, not a gap.
+**Charter Alignment Issues:** None found. Standing Order #5 (architectural gate discipline), Standing Order #2 (campsite cleaning), DIRECTIVE_044/045/050, and the Pre-existing Failure Reporting Rule were checked against spec.md/plan.md/tasks.md's specific citations — all citations resolve to real charter sections with matching content. `.github/workflows/protect-main.yml` was independently read and does perform the post-hoc "flags direct pushes to main" behavior spec.md's CL-001 describes (post-hoc commit inspection, not GitHub branch-protection blocking) — no overstatement found.
 
-**Charter Alignment Issues:** None. Standing Order #5 (architectural gate discipline) is
-directly addressed by the spec's own "Charter Tension" section and plan.md's Charter
-Check, both citing the relocate-not-drop mechanism, the unconditional
-`"charter" not in _MISMATCH_ALLOWLIST"` assertion, the four untouched tests, and the
-visible-xfail-not-silent-pass design. `NO_FULL_HEAVY_SUITES_IN_MISSION` is honored
-explicitly in plan.md item (f) and tasks.md's "Baseline discipline reminder" (targeted
-files only, never a bare `tests/architectural/` or `tests/ci/` directory sweep).
-DIRECTIVE_050 (credential handling) is honored by NFR-003 and its WP02 fixtures.
-
-**Unmapped Tasks:** None. Every subtask T001-T019 maps to at least one FR/NFR/C/ruling
-row in the traceability table or to WP-scoped campsite/PR-body bookkeeping (T001 baseline,
-T017 workflow-shape checklist, T018 docs supersession note, T019 `make ci-parity` +
-PR-body notes).
+**Unmapped Tasks:** None found. Every subtask (T001–T020, including T003b/T004b) maps to at least one requirement, ruling point, or the FR/NFR/Constraint traceability table.
 
 **Metrics:**
 
-- Total Requirements: 10 FR + 3 NFR + 6 Constraints = 19
-- Total Tasks: 19 (T001-T019)
+- Total Requirements (FR+NFR+C): 19 (10 FR, 3 NFR, 6 C)
+- Total Tasks (subtasks): 22 (T001–T020 plus T003b, T004b)
 - Coverage % (requirements with >=1 task): 100%
 - Ambiguity Count: 0
 - Duplication Count: 0
 - Critical Issues Count: 0
 
-Additional verification performed beyond the standard passes, specific to this mission's
-already-extensive review history (multiple prior fresh/verify/refute rounds across all
-three phases):
+## Verification notes (fresh, from scratch this run)
 
-- Confirmed no stale references remain to the requirements/success-criteria the operator's
-  spec HALT ruling 2 deleted (FR-011, FR-012, SC-007) — none found in spec.md, plan.md,
-  tasks.md, or any `tasks/WP*.md` file.
-- Confirmed the `tasks/WP02-recapture-decision-script.md` T011 supersession note
-  (TASKS-FRESH2-001) is present, unambiguous, and correctly identifies plan.md's stale
-  `gh pr list --json number` sample as superseded by T011's `--json number,headRefName`
-  command — per the orchestrator's explicit instruction, this known/ruled item is not
-  re-flagged here.
-- Confirmed WP01/WP02/WP03 frontmatter (`dependencies`, `requirement_refs`, `subtasks`,
-  `owned_files`) is internally consistent with tasks.md's prose and with `lanes.json`'s
-  `write_scope`/`depends_on_lanes` (WP03 depends on WP02; three disjoint file sets; no
-  overlap).
-- Confirmed the mission's own GitHub issue citations (#5164, #5175, #5177, #5189, #5190,
-  #3241) are either already rows in `issue-matrix.json` or explicitly non-gating
-  context-only references (per the Issue-Matrix Approval Heads-Up, #3469) — no new
-  bare/unmarked citation requiring a row was found. #5224/#5244 in tasks.md are
-  informational open-PR write-scope context, not FR-linked citations.
-- Swept for unresolved placeholders (`TODO`, `TKTK`, `???`, `<placeholder>`) and vague,
-  unmeasurable adjectives (fast/scalable/secure/intuitive/robust) with no measurable
-  criteria — none found outside of already-qualified, measurable usages (e.g. "4 new fast
-  unit tests", which names the concrete no-subprocess/no-marker property that makes
-  "fast" falsifiable here, not an unmeasured claim).
+- Re-verified all four `pytest.raises(...)` call sites in WP01 (T005 x2, T006 x2): every one uses `pytest.raises(pytest.fail.Exception, ...)`, never bare `pytest.raises(Exception)`. Confirmed `pytest.fail()` raises `_pytest.outcomes.Failed` (subclass of `BaseException`, not `Exception`), so this is the only exception class that would actually catch it — no defect found here (the prior round's fix holds).
+- Read the live `tests/architectural/test_module_length_agreement.py` on the current checkout and confirmed: `ShardTimingsDriftWarning`, `_strict_mode()`, `_report_drift()`, `_STRICT_ENV_VAR`, `_TIMINGS_PATH`, `_REGISTRY_PATH`, `_registry_modules()`, `_committed_length()` all exist exactly as WP01's T002/T003/T003b/T004/T004b/T005/T006 describe, and the production gate functions' actual parameter signatures/order match every illustrative fixture's positional-argument shape in WP01.
+- Checked all three WP files' frontmatter `subtasks:` lists against their own body's `### Subtask T...` headers: all three are 1:1 (WP01: 10/10, WP02: 7/7, WP03: 5/5). No orphaned or missing subtask IDs.
+- Grepped for `_charter_disposition` / `pytest.xfail` / "charter-only demotion" across spec.md, plan.md, tasks.md, and all three WP files: every live occurrence is explicitly framed as a dead/superseded design in amendment/history prose ("do not build", "originally specified", Activity Log entries) — no live reference asserts the old design is current.
+- Confirmed `lanes.json`'s `write_scope` per lane matches each WP's `owned_files` frontmatter exactly, and `depends_on_lanes`/`parallel_group` match the WP `dependencies` fields (WP03 depends on WP02).
+- Confirmed `docs/development/reference/known-friction-points.md` currently does contain the #5189/#5190 bullet WP03's T018 branches on — the "bullet IS present" path applies on this checkout.
+- Confirmed SC-007's absence from spec.md's Success Criteria list is intentional and documented (`reviews/spec.ruling.md`: "SC-007 are deleted — they have no subject under this [ruling]"), not a numbering gap.
+- All cross-referenced files (`reviews/amendment.ruling.md`, `reviews/spec.ruling.md`, `reviews/plan.ruling.md`, `reviews/tasks.ruling.md`, `tracer-approach.md`, `tracer-design-decisions.md`, `lanes.json`) exist and were spot-checked for the specific claims spec.md/plan.md/tasks.md make about them.
 
 ## Next Actions
 
-No CRITICAL, HIGH, MEDIUM, or LOW issues were found. The mission may proceed to
-`/spec-kitty.implement`. No remediation is required.
+- Both findings are MEDIUM (documentation/traceability-metadata drift, not a functional or charter defect) — this analysis's verdict is **ready**. Implementation is not blocked.
+- Recommended (non-blocking) follow-up before/at implementation start: add `NFR-003` to WP02's frontmatter `requirement_refs` (I1), and reconcile WP03's NFR-001 attribution one way or the other (I2) — both are single-line frontmatter/table edits, not new work.
+- No spec/plan/tasks rework is required to proceed to `/spec-kitty.implement`.
 
-## Remediation Offer
+## Offer to Remediate
 
-No findings exist to remediate. This report is ready to record as-is.
+Should these two findings be addressed before moving on to implementation? I can suggest concrete remediation edits (a one-line frontmatter addition to WP02, and either a one-line frontmatter addition to WP03 or a one-line traceability-table edit) for either or both findings you want resolved — no edits have been applied automatically.
