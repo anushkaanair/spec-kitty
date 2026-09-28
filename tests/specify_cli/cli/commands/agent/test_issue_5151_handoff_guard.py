@@ -55,6 +55,17 @@ def _commit_all(cwd: Path, message: str) -> None:
     _git(cwd, "commit", "-q", "-m", message)
 
 
+def _merge_coordination_update(lane_worktree: Path, coord_tip: str, *, force_merge_commit: bool) -> None:
+    if force_merge_commit:
+        (lane_worktree / "src").mkdir(parents=True, exist_ok=True)
+        (lane_worktree / "src" / "pre_coord_sync.py").write_text("def anchor() -> None: pass\n", encoding="utf-8")
+        _commit_all(lane_worktree, "lane: add pre-sync implementation anchor")
+        _git(lane_worktree, "merge", "--no-edit", "--no-ff", coord_tip)
+        assert len(_git(lane_worktree, "show", "-s", "--format=%P", "HEAD").split()) == 2
+        return
+    _git(lane_worktree, "merge", "--no-edit", coord_tip)
+
+
 def _apply_lane_edit(
     lane_worktree: Path,
     primary_dir: Path,
@@ -138,6 +149,7 @@ def _build_handoff_repo(
     include_claim_time_planning_pin: bool = True,
     merge_claim_time_planning_commit: bool = True,
     lane_edit_on_side_branch: bool = False,
+    force_coordination_merge_commit: bool = False,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -248,7 +260,7 @@ def _build_handoff_repo(
     lane_base_commit = coord_base_commit if coordination_updates_after_lane_base else coord_tip
     _git(repo_root, "worktree", "add", "-b", lane_branch, str(lane_worktree), lane_base_commit)
     if coordination_updates_after_lane_base:
-        _git(lane_worktree, "merge", "--no-edit", coord_tip)
+        _merge_coordination_update(lane_worktree, coord_tip, force_merge_commit=force_coordination_merge_commit)
     if merge_claim_time_planning_commit:
         _git(lane_worktree, "merge", "--no-edit", recorded_planning_commit)
 
@@ -419,6 +431,22 @@ def test_existing_lane_history_proves_p1_and_d07_coordination_content(tmp_path: 
         coordination_updates_after_lane_base=True,
         d07_noncoord_inherited_paths=True,
         include_claim_time_planning_pin=False,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code == 0, result.output
+
+
+def test_clean_coordination_merge_commit_is_inherited(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        coordination_updates_after_lane_base=True,
+        d07_noncoord_inherited_paths=True,
+        include_claim_time_planning_pin=False,
+        force_coordination_merge_commit=True,
     )
     monkeypatch.chdir(repo_root)
 
