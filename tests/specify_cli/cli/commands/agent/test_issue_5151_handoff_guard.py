@@ -57,6 +57,7 @@ def _build_handoff_repo(
     missing_planning_ref: bool = False,
     planning_drift_after_lane_merge: bool = False,
     missing_workspace_base_commit: bool = False,
+    refresh_planning_commit_after_lane_merge: bool = False,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -150,6 +151,15 @@ def _build_handoff_repo(
             encoding="utf-8",
         )
         _commit_all(repo_root, "planning: advance target to P2 after lane claim")
+        p2_commit = _git(repo_root, "rev-parse", "HEAD")
+        if refresh_planning_commit_after_lane_merge:
+            from specify_cli.lanes.persistence import read_lanes_json, write_lanes_json
+
+            lanes_manifest = read_lanes_json(primary_dir)
+            assert lanes_manifest is not None
+            lanes_manifest.planning_commit_sha = p2_commit
+            write_lanes_json(primary_dir, lanes_manifest)
+            _commit_all(repo_root, "finalize: refresh planning commit to P2")
 
     # A real source commit satisfies move-task's implementation-commit guard.
     (lane_worktree / "src").mkdir(parents=True, exist_ok=True)
@@ -169,6 +179,10 @@ def _build_handoff_repo(
             encoding="utf-8",
         )
         changed_paths.append(f"kitty-specs/{mission_slug}/plan.md")
+    elif lane_edit == "plan-match-p2":
+        plan_path = lane_worktree / "kitty-specs" / mission_slug / "plan.md"
+        plan_path.write_bytes((primary_dir / "plan.md").read_bytes())
+        changed_paths.append(f"kitty-specs/{mission_slug}/plan.md")
     elif lane_edit == "coord":
         matrix_path = lane_worktree / "kitty-specs" / mission_slug / "acceptance-matrix.json"
         matrix_path.write_text(
@@ -183,7 +197,7 @@ def _build_handoff_repo(
         changed_paths.append(f"kitty-specs/{mission_slug}/acceptance-matrix.json")
     _commit_all(lane_worktree, "lane: implement WP01")
 
-    save_context(
+    context_path = save_context(
         repo_root,
         WorkspaceContext(
             wp_id="WP01",
@@ -201,6 +215,12 @@ def _build_handoff_repo(
             current_wp="WP01",
         ),
     )
+    # The claim-time planning pin is persisted in workspace context. Write the
+    # field into raw JSON so this regression remains red until the context model
+    # and handoff guard consume it as immutable claim provenance.
+    context_data = json.loads(context_path.read_text(encoding="utf-8"))
+    context_data["planning_commit_sha"] = recorded_planning_commit
+    context_path.write_text(json.dumps(context_data, indent=2) + "\n", encoding="utf-8")
     return repo_root, mission_slug, lane_worktree, changed_paths
 
 
@@ -257,6 +277,36 @@ def test_lane_plan_edit_after_recorded_p1_is_still_rejected_after_p2(tmp_path: P
     assert result.exit_code != 0
     assert "kitty-specs/ changes are not allowed on lane branches" in result.output
     assert changed_paths[0] in result.output
+
+
+def test_lane_plan_edit_matching_p2_is_still_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root, mission_slug, _lane_worktree, changed_paths = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        lane_edit="plan-match-p2",
+        planning_drift_after_lane_merge=True,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "kitty-specs/ changes are not allowed on lane branches" in result.output
+    assert changed_paths[0] in result.output
+
+
+def test_claim_time_p1_survives_finalize_refresh_to_p2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        planning_drift_after_lane_merge=True,
+        refresh_planning_commit_after_lane_merge=True,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code == 0, result.output
 
 
 def test_quoted_kitty_specs_path_fails_closed(tmp_path: Path) -> None:
