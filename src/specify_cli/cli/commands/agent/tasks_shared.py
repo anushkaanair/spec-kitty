@@ -729,6 +729,98 @@ def _lane_hygiene_candidates(changed: tuple[str, ...]) -> list[str] | None:
     return candidates
 
 
+def _trusted_handoff_snapshots(
+    worktree_path: Path,
+    planning_ref: str,
+    planning_commit_sha: str | None,
+    workspace_base_commit: str,
+    coordination_ref: str | None,
+) -> tuple[str, str | None, str | None] | None:
+    """Resolve exact post-fork snapshots trusted by the handoff guard."""
+    planning_tip = capture_branch_tip(worktree_path, planning_ref)
+    if planning_tip is None:
+        return None
+    recorded_pin = planning_commit_sha
+    if recorded_pin is None:
+        recorded_pin = git_merge_base(worktree_path, "HEAD", planning_tip)
+    if recorded_pin is None or not _commit_is_post_fork_lane_ancestor(worktree_path, recorded_pin, workspace_base_commit):
+        return None
+
+    merged_planning_tip = planning_tip if _commit_is_post_fork_lane_ancestor(worktree_path, planning_tip, workspace_base_commit) else None
+    coordination_snapshot = None
+    if coordination_ref is not None:
+        coordination_tip = capture_branch_tip(worktree_path, coordination_ref)
+        if coordination_tip is None:
+            return None
+        snapshot = git_merge_base(worktree_path, "HEAD", coordination_tip)
+        if snapshot is None:
+            return None
+        if _commit_is_post_fork_lane_ancestor(worktree_path, snapshot, workspace_base_commit):
+            coordination_snapshot = snapshot
+    return recorded_pin, merged_planning_tip, coordination_snapshot
+
+
+def _lane_authored_kitty_specs_paths(
+    worktree_path: Path,
+    fork_commit: str,
+    trusted_snapshots: tuple[str, ...],
+) -> tuple[str, ...] | None:
+    """List kitty-specs paths touched by authored first-parent lane commits.
+
+    The fork-to-tip tree diff cannot see a lane commit that restores a path to
+    its fork bytes or deletes a file introduced by a later coordination merge.
+    First-parent commits already present in an exact trusted planning or
+    coordination snapshot are inherited fast-forwards; the remaining
+    first-parent non-merge commits represent lane-authored path touches.
+    """
+    from specify_cli.cli.commands.agent import tasks as _tasks
+
+    try:
+        result = _tasks.subprocess.run(
+            [
+                "git",
+                "rev-list",
+                "--first-parent",
+                "--no-merges",
+                f"{fork_commit}..HEAD",
+            ],
+            cwd=str(worktree_path),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=30,
+        )
+    except (OSError, _tasks.subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    commits = tuple(line.strip() for line in result.stdout.splitlines() if line.strip())
+    authored_paths: list[str] = []
+    for commit in commits:
+        inherited = False
+        for snapshot in trusted_snapshots:
+            merge_base = git_merge_base(worktree_path, commit, snapshot)
+            if merge_base is None:
+                return None
+            if merge_base == commit:
+                inherited = True
+                break
+        if inherited:
+            continue
+        changed_paths = git_diff_names_checked(
+            worktree_path,
+            f"{commit}^",
+            commit,
+            pathspec=f"{KITTY_SPECS_DIR}/",
+        )
+        if changed_paths is None:
+            return None
+        authored_paths.extend(changed_paths)
+    return tuple(authored_paths)
+
+
 def _coordination_hygiene_candidates(candidates: list[str], mission_slug: str | None, topology: MissionTopology | None) -> set[str]:
     """Identify coordination-partition candidates that planning equality cannot clear."""
     if topology is None:
@@ -738,13 +830,35 @@ def _coordination_hygiene_candidates(candidates: list[str], mission_slug: str | 
     }
 
 
+def _coordination_candidate_violations(
+    worktree_path: Path,
+    candidates: set[str],
+    authored_paths: set[str],
+    coordination_snapshot: str | None,
+) -> set[str] | None:
+    """Allow coordination files only when exact post-fork inherited bytes remain."""
+    if not candidates:
+        return set()
+    if coordination_snapshot is None:
+        return set(candidates)
+
+    violations = set(candidates)
+    from specify_cli.cli.commands.agent import tasks as _tasks
+
+    divergence = _tasks._filter_by_planning_tip_content(worktree_path, sorted(candidates), coordination_snapshot)
+    if divergence is None:
+        return None
+    violations.difference_update(set(candidates) - set(divergence))
+    violations.update(candidates & authored_paths)
+    return violations
+
+
 def _planning_candidate_violations(
     worktree_path: Path,
     candidates: list[str],
     planning_ref: str,
-    planning_commit_sha: str | None,
     workspace_base_commit: str | None,
-    coordination_ref: str | None,
+    trusted_snapshots: tuple[str, str | None, str | None] | None,
 ) -> set[str] | None:
     """Keep candidates not explained by a verified inherited snapshot.
 
@@ -767,15 +881,9 @@ def _planning_candidate_violations(
         current = _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_ref)
         return None if current is None else set(current)
 
-    planning_tip = capture_branch_tip(worktree_path, planning_ref)
-    if planning_tip is None:
+    if trusted_snapshots is None:
         return None
-
-    recorded_pin = planning_commit_sha
-    if recorded_pin is None:
-        recorded_pin = git_merge_base(worktree_path, "HEAD", planning_tip)
-    if recorded_pin is None or not _commit_is_post_fork_lane_ancestor(worktree_path, recorded_pin, workspace_base_commit):
-        return None
+    recorded_pin, merged_planning_tip, coordination_snapshot = trusted_snapshots
 
     recorded_divergence = _tasks._filter_by_planning_tip_content(worktree_path, candidates, recorded_pin)
     if recorded_divergence is None:
@@ -784,8 +892,8 @@ def _planning_candidate_violations(
 
     # P2 can explain a changed candidate only when that exact primary tip is
     # present after the lane's fork. Otherwise its bytes are not lane history.
-    if _commit_is_post_fork_lane_ancestor(worktree_path, planning_tip, workspace_base_commit):
-        current_divergence = _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_tip)
+    if merged_planning_tip is not None:
+        current_divergence = _tasks._filter_by_planning_tip_content(worktree_path, candidates, merged_planning_tip)
         if current_divergence is None:
             return None
         violations.intersection_update(current_divergence)
@@ -794,18 +902,11 @@ def _planning_candidate_violations(
     # and an existing WP prompt) can be inherited after lane birth. Compare
     # against the exact coordination snapshot already merged into this lane,
     # never a basename exemption or a newer unmerged coordinator tip.
-    if coordination_ref is not None:
-        coordination_tip = capture_branch_tip(worktree_path, coordination_ref)
-        if coordination_tip is None:
+    if coordination_snapshot is not None:
+        coordination_divergence = _tasks._filter_by_planning_tip_content(worktree_path, candidates, coordination_snapshot)
+        if coordination_divergence is None:
             return None
-        coordination_snapshot = git_merge_base(worktree_path, "HEAD", coordination_tip)
-        if coordination_snapshot is None:
-            return None
-        if _commit_is_post_fork_lane_ancestor(worktree_path, coordination_snapshot, workspace_base_commit):
-            coordination_divergence = _tasks._filter_by_planning_tip_content(worktree_path, candidates, coordination_snapshot)
-            if coordination_divergence is None:
-                return None
-            violations.intersection_update(coordination_divergence)
+        violations.intersection_update(coordination_divergence)
 
     return violations
 
@@ -845,7 +946,8 @@ def _list_wp_branch_mission_specs_changes(
     planning candidate is clean only when it matches a claim-time planning
     snapshot, a current planning tip actually merged after the fork, or a
     coordination snapshot actually merged after the fork. Coordination-kind
-    candidates remain violations regardless of snapshot equality.
+    candidates require the exact coordination snapshot; a first-parent lane
+    touch always remains a violation even if its final bytes match a snapshot.
 
     An unknown base, missing merge-base, or failed content diff is not evidence
     of a clean lane and returns ``None`` so the caller can fail closed.
@@ -863,24 +965,50 @@ def _list_wp_branch_mission_specs_changes(
     if changed is None:
         return None
 
-    candidates = _lane_hygiene_candidates(changed)
+    trusted_snapshots: tuple[str, str | None, str | None] | None = None
+    authored_changes: tuple[str, ...] = ()
+    if workspace_base_commit is not None:
+        trusted_snapshots = _trusted_handoff_snapshots(
+            worktree_path,
+            planning_ref,
+            planning_commit_sha,
+            workspace_base_commit,
+            coordination_ref,
+        )
+        if trusted_snapshots is None:
+            return None
+        trusted_commits = tuple(snapshot for snapshot in trusted_snapshots if snapshot is not None)
+        resolved_authored_changes = _lane_authored_kitty_specs_paths(worktree_path, workspace_base_commit, trusted_commits)
+        if resolved_authored_changes is None:
+            return None
+        authored_changes = resolved_authored_changes
+    candidates = _lane_hygiene_candidates((*changed, *authored_changes))
     if candidates is None:
         return None
+    authored_paths = {path for path in authored_changes if not is_occurrence_map_path(path)}
 
     coordination_candidates = _coordination_hygiene_candidates(candidates, mission_slug, topology)
 
-    planning_candidates = [path for path in candidates if path not in coordination_candidates]
+    planning_candidates = [path for path in candidates if path not in coordination_candidates and path not in authored_paths]
     planning_violations = _planning_candidate_violations(
         worktree_path,
         planning_candidates,
         planning_ref,
-        planning_commit_sha,
         workspace_base_commit,
-        coordination_ref,
+        trusted_snapshots,
     )
     if planning_violations is None:
         return None
-    return [path for path in candidates if path in coordination_candidates or path in planning_violations]
+    coordination_violations = _coordination_candidate_violations(
+        worktree_path,
+        coordination_candidates,
+        authored_paths,
+        trusted_snapshots[2] if trusted_snapshots is not None else None,
+    )
+    if coordination_violations is None:
+        return None
+    violations = authored_paths | planning_violations | coordination_violations
+    return [path for path in candidates if path in violations]
 
 
 def _list_wp_branch_specs_changes_for_guard(
