@@ -25,6 +25,7 @@ actually dispatching a run.
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -32,6 +33,8 @@ import pytest
 import yaml
 
 from tests.architectural._ast_scan import UnparseableSourceError, read_and_parse
+from tests.architectural._gate_coverage import join_continuations, load_spliced_workflow
+from tests.architectural._interpreter_shard_roster import INTERPRETER_SHARD_JOB_KEYS, INTERPRETER_SHARDS, InterpreterShard
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -476,7 +479,7 @@ def test_nightly_suite_steps_are_fail_loud() -> None:
     """
     data = yaml.safe_load(NIGHTLY_WORKFLOW.read_text(encoding="utf-8")) or {}
     jobs = data.get("jobs") or {}
-    for job_name in ("performance", "e2e", "stress", "interpreter-matrix"):
+    for job_name in ("performance", "e2e", "stress", *INTERPRETER_SHARD_JOB_KEYS):
         job = jobs.get(job_name)
         assert isinstance(job, dict), f"{job_name} job missing"
         steps = _job_steps(job)
@@ -509,7 +512,7 @@ def test_nightly_fail_loud_step_treats_marker_empty_exit_5_as_non_failing() -> N
     """
     data = yaml.safe_load(NIGHTLY_WORKFLOW.read_text(encoding="utf-8")) or {}
     jobs = data.get("jobs") or {}
-    for job_name in ("performance", "e2e", "stress", "interpreter-matrix"):
+    for job_name in ("performance", "e2e", "stress", *INTERPRETER_SHARD_JOB_KEYS):
         job = jobs.get(job_name)
         assert isinstance(job, dict), f"{job_name} job missing"
         terminal_steps = [step for step in _job_steps(job) if "exit 1" in str(step.get("run") or "")]
@@ -517,9 +520,9 @@ def test_nightly_fail_loud_step_treats_marker_empty_exit_5_as_non_failing() -> N
         for step in terminal_steps:
             run = str(step["run"])
             # The per-suite comparisons read the captured pytest exit codes
-            # (``PERF_EXIT`` / ``E2E_EXIT`` / ``INTERPRETER_EXIT``). The aggregate
-            # ``$status`` flag is driven BY those, so scope the guard to the exit-
-            # code conditions themselves.
+            # (``PERF_EXIT`` / ``E2E_EXIT`` / ``INTERPRETER_SHARD_<N>_EXIT``
+            # per shard). The aggregate ``$status`` flag is driven BY those,
+            # so scope the guard to the exit-code conditions themselves.
             exit_conditions = [line for line in run.splitlines() if "-ne 0" in line and "EXIT" in line]
             assert exit_conditions, f"{job_name}: terminal fail-loud step has no pytest-exit `-ne 0` failure trigger to guard"
             for line in exit_conditions:
@@ -541,31 +544,88 @@ def test_nightly_workflow_declares_dispatch_and_honors_mode_input() -> None:
     assert "inputs.mode" in NIGHTLY_WORKFLOW.read_text(encoding="utf-8")
 
 
-def test_nightly_workflow_houses_performance_and_interpreter_jobs() -> None:
-    """T067/T068: the nightly lane houses the perf/e2e jobs AND the >3.12
-    interpreter matrix, off the per-PR path."""
-    data = yaml.safe_load(NIGHTLY_WORKFLOW.read_text(encoding="utf-8")) or {}
+def _setup_python_version(job: dict[str, object]) -> str | None:
+    """The ``python-version`` a job's ``actions/setup-python`` step pins, if any."""
+    for step in _job_steps(job):
+        uses = str(step.get("uses") or "")
+        if uses.startswith("actions/setup-python@"):
+            with_block = step.get("with") or {}
+            version = with_block.get("python-version") if isinstance(with_block, dict) else None
+            return str(version) if version is not None else None
+    return None
+
+
+def _sync_step_pins_python(job: dict[str, object], version: str) -> bool:
+    """Whether one of the job's ``run:`` steps syncs with ``--python "<version>"``."""
+    needle = f'--python "{version}"'
+    return any(needle in str(step.get("run") or "") for step in _job_steps(job))
+
+
+def test_nightly_workflow_houses_performance_and_interpreter_shards() -> None:
+    """T067/T068/FR-009: the nightly lane houses the perf/e2e jobs AND every
+    roster-declared interpreter-matrix shard (>3.12), off the per-PR path.
+
+    Every roster-declared shard job key (:data:`INTERPRETER_SHARD_JOB_KEYS`,
+    imported from ``_interpreter_shard_roster.py`` -- the single source of
+    truth for shard identity, never a second hardcoded literal list here)
+    must exist in ``jobs:`` and must pin Python 3.13 both on its
+    ``actions/setup-python`` step AND on its ``uv sync --python "3.13"``
+    step (the ``uv run ... pytest`` line deliberately does NOT carry that
+    flag -- see plan.md SS A's parseability note; this test does not check
+    the pytest invocation for it).
+    """
+    data = load_spliced_workflow(NIGHTLY_WORKFLOW)
     jobs = data.get("jobs") or {}
     assert "performance" in jobs
     assert "e2e" in jobs
     assert "stress" in jobs
     assert "-m performance" in NIGHTLY_WORKFLOW.read_text(encoding="utf-8")
 
-    interpreter_job = jobs.get("interpreter-matrix")
-    assert interpreter_job is not None, "T068: interpreter-matrix job missing"
-    versions = (
-        (interpreter_job.get("strategy") or {})
-        .get("matrix", {})
-        .get(
-            "python-version",
-        )
-    )
-    assert versions, "interpreter-matrix must declare a python-version matrix"
-    assert all(_version_tuple(v) > (3, 12) for v in versions), f"interpreter-matrix must run ABOVE 3.12: {versions}"
+    assert INTERPRETER_SHARD_JOB_KEYS, "T068: no interpreter-matrix shards declared in the roster"
+    for job_key in INTERPRETER_SHARD_JOB_KEYS:
+        shard_job = jobs.get(job_key)
+        assert shard_job is not None, f"T068: shard job {job_key!r} missing from ci-nightly.yml jobs:"
+        setup_version = _setup_python_version(shard_job)
+        assert setup_version, f"{job_key}: actions/setup-python step missing a python-version pin"
+        assert _version_tuple(setup_version) > (3, 12), f"{job_key} must run ABOVE 3.12: {setup_version}"
+        assert _sync_step_pins_python(shard_job, setup_version), f'{job_key}: uv sync step must pin --python "{setup_version}" (FR-008)'
 
 
 def _version_tuple(version: str) -> tuple[int, ...]:
     return tuple(int(part) for part in str(version).split("."))
+
+
+def _shard_job_presence_ok(jobs: dict[str, object]) -> bool:
+    """The exact job-presence assertion :func:`test_nightly_workflow_houses_performance_and_interpreter_shards`
+    applies to every roster-declared shard -- factored out so the non-vacuity
+    mutation tests below can exercise it directly against a scratch ``jobs:``
+    mapping without re-parsing YAML."""
+    return all(job_key in jobs for job_key in INTERPRETER_SHARD_JOB_KEYS)
+
+
+def test_guard_fails_when_a_shard_is_dropped_from_the_job_list() -> None:
+    """FR-010/Standing Order #5: the updated guard is provably non-vacuous
+    against a dropped shard -- deleting one roster-declared shard's ``jobs:``
+    entry (in-memory only, never written to disk) must make the job-presence
+    assertion fail."""
+    data = load_spliced_workflow(NIGHTLY_WORKFLOW)
+    jobs = dict(data.get("jobs") or {})
+    assert _shard_job_presence_ok(jobs), "sanity: the real workflow must pass before mutation"
+
+    victim = INTERPRETER_SHARD_JOB_KEYS[0]
+    scratch_jobs = {key: value for key, value in jobs.items() if key != victim}
+    assert not _shard_job_presence_ok(scratch_jobs), f"dropping shard {victim!r} from the job list must fail the presence assertion"
+
+
+def test_guard_fails_when_shards_are_reverted_to_a_single_job() -> None:
+    """FR-010/Standing Order #5: reverting the split entirely -- replacing
+    every shard entry with one synthetic pre-split ``interpreter-matrix``
+    job -- must also fail the same job-presence assertion."""
+    data = load_spliced_workflow(NIGHTLY_WORKFLOW)
+    jobs = dict(data.get("jobs") or {})
+    scratch_jobs = {key: value for key, value in jobs.items() if key not in INTERPRETER_SHARD_JOB_KEYS}
+    scratch_jobs["interpreter-matrix"] = {"name": "Interpreter matrix (pre-split, reverted)"}
+    assert not _shard_job_presence_ok(scratch_jobs), "reverting to a single interpreter-matrix job must fail the shard-presence assertion"
 
 
 def test_nightly_workflow_actions_are_sha_pinned() -> None:
@@ -581,3 +641,287 @@ def test_nightly_workflow_actions_are_sha_pinned() -> None:
             if not all(c in "0123456789abcdef" for c in ref) or len(ref) < 40:
                 offenders.append(f"{job_name}: {uses!r} is not SHA-pinned")
     assert not offenders, "\n".join(offenders)
+
+
+# ---------------------------------------------------------------------------
+# FR-015/SC-008: `--suite-key` uniqueness across every nightly job. A
+# copy-paste that forgets to renumber a shard's key (or collides with one of
+# performance/e2e/stress/integration-next's existing BARE keys) must be
+# caught by CI, not left to human inspection.
+# ---------------------------------------------------------------------------
+
+_SUITE_KEY_JOB_NAMES: tuple[str, ...] = ("performance", "e2e", "stress", *INTERPRETER_SHARD_JOB_KEYS, "integration-next")
+
+# Matches THREE quoting forms: double-quoted, single-quoted, and bare/
+# unquoted (most of today's real committed keys -- performance/e2e/stress/
+# integration -- are bare, unquoted tokens; only the interpreter leg's key is
+# quoted). Applied ONLY to a statement that also contains the literal
+# substring `nightly_escalation.py` (see `_suite_keys_in_run` below) so a
+# stray comment/echo mentioning `--suite-key` can never be misread as a real
+# key by the unanchored bare-token alternative.
+_SUITE_KEY_RE = re.compile(r"--suite-key\s+(?:\"([^\"]+)\"|'([^']+)'|(\S+))")
+
+
+def _suite_keys_in_run(run_text: str) -> list[str]:
+    """Every real `--suite-key <literal>` value in one job step's `run:` text.
+
+    Landing pass #5244 (LAND-PAT-004): joins shell line-continuations via the
+    canonical ``_gate_coverage.join_continuations`` (shared with
+    ``parse_workflow``'s own pytest-invocation reader, and more robust than
+    the local regex this replaced -- it ``rstrip()``s each physical line
+    BEFORE checking for a trailing backslash, so a continued line with
+    trailing whitespace after the ``\\`` still joins; a bare ``r"\\\\\\n"``
+    regex would miss that), then splits each joined logical line into
+    individual statements on `;`. The three-form suite-key pattern is
+    applied ONLY to a statement that ALSO contains `nightly_escalation.py`
+    -- i.e., only within a statement that is itself an actual invocation of
+    the escalation script. A statement without that substring (a bare
+    comment, an `echo`, or any other shell line) is never scanned.
+    """
+    keys: list[str] = []
+    for logical_line in join_continuations(run_text):
+        for statement in logical_line.split(";"):
+            if "nightly_escalation.py" not in statement:
+                continue
+            for match in _SUITE_KEY_RE.finditer(statement):
+                keys.append(next(group for group in match.groups() if group is not None))
+    return keys
+
+
+def _all_suite_keys(jobs: dict[str, object], job_names: tuple[str, ...] = _SUITE_KEY_JOB_NAMES) -> list[str]:
+    keys: list[str] = []
+    for job_name in job_names:
+        job = jobs.get(job_name)
+        if not isinstance(job, dict):
+            continue
+        for step in _job_steps(job):
+            keys.extend(_suite_keys_in_run(str(step.get("run") or "")))
+    return keys
+
+
+def test_nightly_suite_keys_are_pairwise_distinct() -> None:
+    """FR-015: every nightly job's real `--suite-key` literal is pairwise
+    distinct across ALL nightly jobs -- bare and quoted forms feed the SAME
+    list, so a shard's key colliding with an existing bare key (e.g.
+    `performance`) is caught exactly as a shard-vs-shard collision would be.
+    """
+    data = load_spliced_workflow(NIGHTLY_WORKFLOW)
+    jobs = data.get("jobs") or {}
+    keys = _all_suite_keys(jobs)
+    assert len(keys) >= len(_SUITE_KEY_JOB_NAMES), f"expected at least one --suite-key per nightly job, got {len(keys)} keys from {keys}"
+    duplicates = {key for key in keys if keys.count(key) > 1}
+    assert not duplicates, f"duplicate --suite-key value(s) across nightly jobs: {sorted(duplicates)} (full list: {keys})"
+
+
+def test_suite_key_uniqueness_guard_is_non_vacuous() -> None:
+    """SC-008's required positive control: two shards' `--suite-key` values
+    deliberately collided (both quoted, both identical) must fail the
+    uniqueness assertion."""
+    jobs = {
+        "shard-a": {
+            "steps": [
+                {"run": 'python3 scripts/ci/nightly_escalation.py --suite-key "interpreter-3.13-shard-1" --conclusion success'},
+            ],
+        },
+        "shard-b": {
+            "steps": [
+                {"run": 'python3 scripts/ci/nightly_escalation.py --suite-key "interpreter-3.13-shard-1" --conclusion success'},
+            ],
+        },
+    }
+    keys = _all_suite_keys(jobs, job_names=("shard-a", "shard-b"))
+    assert len(keys) != len(set(keys)), "the deliberate collision must be detectable"
+
+
+def test_suite_key_uniqueness_guard_is_non_vacuous_across_quote_styles() -> None:
+    """SC-008: the SAME collision expressed with one single-quoted and one
+    double-quoted value must still be caught -- extraction must not key off
+    quote character."""
+    jobs = {
+        "shard-a": {
+            "steps": [
+                {"run": "python3 scripts/ci/nightly_escalation.py --suite-key 'interpreter-3.13-shard-1' --conclusion success"},
+            ],
+        },
+        "shard-b": {
+            "steps": [
+                {"run": 'python3 scripts/ci/nightly_escalation.py --suite-key "interpreter-3.13-shard-1" --conclusion success'},
+            ],
+        },
+    }
+    keys = _all_suite_keys(jobs, job_names=("shard-a", "shard-b"))
+    assert len(keys) != len(set(keys)), "a cross-quote-style collision must still be detectable"
+
+
+def test_suite_key_uniqueness_guard_is_non_vacuous_bare_vs_quoted() -> None:
+    """SC-008: an existing BARE key (e.g. `performance`) colliding with a
+    shard's QUOTED key given the same literal must be caught -- proving bare
+    and quoted forms feed the identical `keys` list, not separate pools."""
+    jobs = {
+        "performance": {
+            "steps": [
+                {"run": "python3 scripts/ci/nightly_escalation.py --suite-key performance --conclusion success"},
+            ],
+        },
+        "shard-a": {
+            "steps": [
+                {"run": 'python3 scripts/ci/nightly_escalation.py --suite-key "performance" --conclusion success'},
+            ],
+        },
+    }
+    keys = _all_suite_keys(jobs, job_names=("performance", "shard-a"))
+    assert len(keys) != len(set(keys)), "a bare-vs-quoted collision on the same literal must be detectable"
+
+
+def test_suite_key_extraction_ignores_non_invocation_mentions() -> None:
+    """Proves the statement-scoping fix, not just quote handling: a
+    `#`-prefixed comment mentioning `--suite-key` (a statement that does NOT
+    also contain `nightly_escalation.py`) must never register as a key,
+    even alongside a normal, correctly-scoped invocation in the same `run:`
+    string."""
+    run_text = (
+        '# --suite-key convention: interpreter-3.13-shard-9\npython3 scripts/ci/nightly_escalation.py --suite-key "interpreter-3.13-shard-1" --conclusion success\n'
+    )
+    keys = _suite_keys_in_run(run_text)
+    assert "interpreter-3.13-shard-9" not in keys, "a stray comment mentioning --suite-key must not register as a key"
+    assert keys == ["interpreter-3.13-shard-1"], f"expected only the real invocation's key, got {keys}"
+
+
+# ---------------------------------------------------------------------------
+# LAND-PAT-001 (landing pass #5244, MAJOR): the roster's ``suite_key`` /
+# ``resolved_suite_key()`` claims to be the SSOT for which ``--suite-key``
+# each shard's escalation call must use, but nothing tied it back --
+# ``test_nightly_suite_keys_are_pairwise_distinct`` above only proves the
+# real keys are pairwise DISTINCT, never that each one matches its OWN
+# shard's roster entry. A shard's key silently renamed in the workflow (e.g.
+# to a stray ``shard-9``) would pass every existing test while forking that
+# shard's deduped-P0 escalation issue history. This section closes that gap.
+# ---------------------------------------------------------------------------
+
+
+def _shard_suite_key_mismatches(
+    jobs: dict[str, object],
+    shards: tuple[InterpreterShard, ...] = INTERPRETER_SHARDS,
+) -> list[str]:
+    """PRODUCTION comparison for LAND-PAT-001: for each shard, the escalation
+    ``--suite-key`` literal(s) actually found in its own job's ``run:`` text
+    (via :func:`_all_suite_keys`, scoped to that ONE job) must equal exactly
+    ``[shard.resolved_suite_key()]`` -- not merely be present-and-distinct
+    from every other job's key, which is all
+    ``test_nightly_suite_keys_are_pairwise_distinct`` checks. Returns one
+    message per shard whose real key(s) diverge from the roster, or ``[]``
+    when every shard agrees. Both the guard test below (the REAL workflow)
+    and its required mutation control (a scratch, renamed key) call this
+    SAME function."""
+    mismatches: list[str] = []
+    for shard in shards:
+        keys = _all_suite_keys(jobs, job_names=(shard.job_key,))
+        expected = [shard.resolved_suite_key()]
+        if keys != expected:
+            mismatches.append(f"{shard.job_key}: real escalation --suite-key(s) {keys!r} != roster's resolved_suite_key() {expected!r}")
+    return mismatches
+
+
+def test_each_shard_escalation_suite_key_matches_the_roster() -> None:
+    """LAND-PAT-001: every roster-declared shard's REAL escalation
+    ``--suite-key`` must equal that shard's own ``resolved_suite_key()``."""
+    data = load_spliced_workflow(NIGHTLY_WORKFLOW)
+    jobs = data.get("jobs") or {}
+    mismatches = _shard_suite_key_mismatches(jobs)
+    assert not mismatches, "\n".join(mismatches)
+
+
+def test_shard_suite_key_check_fails_on_a_renamed_suite_key() -> None:
+    """Standing Order #5 positive control (LAND-PAT-001's required RED-FIRST
+    proof (a)): renaming shard 3's committed ``--suite-key`` literal to a
+    stray ``interpreter-3.13-shard-9`` -- a scratch ``jobs`` dict only, the
+    tracked workflow is never touched -- must be caught by
+    ``_shard_suite_key_mismatches``, the SAME function the guard above
+    calls."""
+    victim = next(shard for shard in INTERPRETER_SHARDS if shard.job_key == "interpreter-matrix-shard-3")
+    scratch_jobs = {
+        victim.job_key: {
+            "steps": [
+                {"run": 'python3 scripts/ci/nightly_escalation.py --suite-key "interpreter-3.13-shard-9" --conclusion success'},
+            ],
+        },
+    }
+    mismatches = _shard_suite_key_mismatches(scratch_jobs, shards=(victim,))
+    assert mismatches, "renaming shard 3's suite key to shard-9 must be caught"
+    assert "shard-9" not in victim.resolved_suite_key(), "sanity: the roster's real key must not itself be shard-9"
+
+
+# ---------------------------------------------------------------------------
+# LAND-PAT-002 (landing pass #5244, MINOR, escalation-exit-var half): FIND-1's
+# existing check (``f"${{{var}:-1}}" in run_text``) only proves SOME
+# ``INTERPRETER_SHARD_<N>_EXIT`` token appears somewhere in a shard's job --
+# it would miss shard 3's escalation step accidentally reading shard 2's
+# exit var while shard 3's OWN suite step still writes its own
+# ``INTERPRETER_SHARD_3_EXIT``. This section asserts the escalation step
+# reads ITS OWN shard's exit variable specifically.
+# ---------------------------------------------------------------------------
+
+_ESCALATION_EXIT_VAR_RE = re.compile(r"INTERPRETER_SHARD_(\d+)_EXIT")
+
+
+def _shard_escalation_exit_var_mismatches(
+    jobs: dict[str, object],
+    shards: tuple[InterpreterShard, ...] = INTERPRETER_SHARDS,
+) -> list[str]:
+    """PRODUCTION comparison for LAND-PAT-002: every shard's escalation step
+    (the step whose ``run:`` text contains ``nightly_escalation.py``) must
+    reference ONLY its own shard's exit-var number -- never another shard's.
+    Returns one message per violating shard, or ``[]`` when every escalation
+    step agrees with its own shard. Both the guard test below (the REAL
+    workflow) and its required mutation control (a scratch cross-wired
+    exit var) call this SAME function."""
+    mismatches: list[str] = []
+    for shard in shards:
+        job = jobs.get(shard.job_key)
+        if not isinstance(job, dict):
+            mismatches.append(f"{shard.job_key}: missing from jobs:")
+            continue
+        escalation_steps = [step for step in _job_steps(job) if "nightly_escalation.py" in str(step.get("run") or "")]
+        for step in escalation_steps:
+            run_text = str(step.get("run") or "")
+            referenced = set(_ESCALATION_EXIT_VAR_RE.findall(run_text))
+            expected = {str(shard.shard_number)}
+            if referenced and referenced != expected:
+                mismatches.append(
+                    f"{shard.job_key}: escalation step references exit-var shard number(s) {sorted(referenced)}, expected only {sorted(expected)}: {run_text!r}"
+                )
+    return mismatches
+
+
+def test_each_shard_escalation_reads_its_own_exit_var() -> None:
+    """LAND-PAT-002: every roster-declared shard's escalation step must read
+    ITS OWN ``INTERPRETER_SHARD_<N>_EXIT`` variable, not another shard's."""
+    data = load_spliced_workflow(NIGHTLY_WORKFLOW)
+    jobs = data.get("jobs") or {}
+    mismatches = _shard_escalation_exit_var_mismatches(jobs)
+    assert not mismatches, "\n".join(mismatches)
+
+
+def test_shard_escalation_exit_var_check_fails_when_a_shard_reads_anothers_exit_var() -> None:
+    """Standing Order #5 positive control (LAND-PAT-002's required RED-FIRST
+    proof (b)): shard 3's escalation step reading shard 2's exit var (a
+    scratch ``jobs`` dict only) must be caught -- FIND-1's existing
+    membership-only check (``${VAR:-1}`` appears somewhere in the job) would
+    miss this exact defect, since shard 3's own suite step still writes its
+    own ``INTERPRETER_SHARD_3_EXIT`` elsewhere in the same job."""
+    shard_3 = next(shard for shard in INTERPRETER_SHARDS if shard.job_key == "interpreter-matrix-shard-3")
+    scratch_jobs = {
+        shard_3.job_key: {
+            "steps": [
+                {
+                    "run": (
+                        'if [ "${INTERPRETER_SHARD_2_EXIT:-1}" -ne 0 ] && '
+                        '[ "${INTERPRETER_SHARD_2_EXIT:-1}" -ne 5 ]; then conclusion=failure; else conclusion=success; fi\n'
+                        'python3 scripts/ci/nightly_escalation.py --suite-key "interpreter-3.13-shard-3" --conclusion "$conclusion" --run-url "x"'
+                    ),
+                },
+            ],
+        },
+    }
+    mismatches = _shard_escalation_exit_var_mismatches(scratch_jobs, shards=(shard_3,))
+    assert mismatches, "shard 3's escalation step reading shard 2's exit var must be caught"

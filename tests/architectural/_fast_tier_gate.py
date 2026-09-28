@@ -19,11 +19,10 @@ test under those roots carries at least one vocabulary marker.
 
 from __future__ import annotations
 
-import ast
 import re
 from pathlib import Path
 
-from _pytest.mark.expression import Expression
+from tests.architectural._gate_coverage import marker_names as _marker_names
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAKEFILE_PATH = REPO_ROOT / "Makefile"
@@ -53,32 +52,15 @@ def fast_tier_markers_expr(makefile_path: Path | None = None) -> str:
 def fast_tier_marker_vocabulary(makefile_path: Path | None = None) -> frozenset[str]:
     """Every marker name ``FAST_TIER_MARKERS`` references, positive or negated.
 
-    Compiled first with pytest's own expression grammar (guarantees this
-    module's reading matches what ``-m`` actually selects on -- a breaking
-    change to that private API fails loudly at import time here, the same
-    contract ``_gate_coverage.py`` relies on) then walked with stdlib ``ast``
-    to collect every identifier regardless of ``not``: a test opted OUT of
-    the fast tier by carrying ``slow`` is exactly as *explicitly marked* as
-    one opted IN by carrying ``fast`` -- only a test with ZERO of these names
-    is the silent drop this module exists to catch.
+    Delegates to the shared, canonical ``_gate_coverage.marker_names`` walker
+    (landing pass #5244, LAND-PAT-004) -- previously a near-identical local
+    copy (``_collect_names``) lived here; promoting it closes the
+    copy-drift hazard between this module and
+    ``test_interpreter_shard_coverage.py``'s own (now-removed) marker-name
+    walker. Sign-blind: a test opted OUT of the fast tier by carrying
+    ``slow`` is exactly as *explicitly marked* as one opted IN by carrying
+    ``fast`` -- only a test with ZERO of these names is the silent drop this
+    module exists to catch.
     """
     expr = fast_tier_markers_expr(makefile_path)
-    Expression.compile(expr)  # loud fail on a grammar this module can't model
-    tree = ast.parse(expr, mode="eval")
-    names: set[str] = set()
-    _collect_names(tree.body, names)
-    return frozenset(names)
-
-
-def _collect_names(node: ast.expr, names: set[str]) -> None:
-    if isinstance(node, ast.Name):
-        names.add(node.id)
-    elif isinstance(node, ast.UnaryOp):
-        _collect_names(node.operand, names)
-    elif isinstance(node, ast.BoolOp):
-        for value in node.values:
-            _collect_names(value, names)
-    else:
-        raise RuntimeError(
-            f"unsupported marker-expression node {ast.dump(node)} in FAST_TIER_MARKERS -- extend _collect_names before trusting this module's vocabulary.",
-        )
+    return _marker_names(expr)
