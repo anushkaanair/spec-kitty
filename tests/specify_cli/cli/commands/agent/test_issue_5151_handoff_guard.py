@@ -137,6 +137,7 @@ def _build_handoff_repo(
     include_issue_matrix_after_coord_update: bool = True,
     include_claim_time_planning_pin: bool = True,
     merge_claim_time_planning_commit: bool = True,
+    lane_edit_on_side_branch: bool = False,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -267,17 +268,34 @@ def _build_handoff_repo(
             write_lanes_json(primary_dir, lanes_manifest)
             _commit_all(repo_root, "finalize: refresh planning commit to P2")
 
+    changed_paths: list[str] = []
+    if lane_edit_on_side_branch:
+        side_branch = f"{lane_branch}-side"
+        _git(lane_worktree, "switch", "-q", "-c", side_branch)
+        changed_paths = _apply_lane_edit(
+            lane_worktree,
+            primary_dir,
+            mission_slug,
+            lane_edit,
+            fork_commit=lane_base_commit,
+            planning_commit=recorded_planning_commit,
+        )
+        _commit_all(lane_worktree, "lane-side: edit WP01 planning artifact")
+        _git(lane_worktree, "switch", "-q", lane_branch)
+        _git(lane_worktree, "merge", "--no-edit", "--no-ff", side_branch)
+
     # A real source commit satisfies move-task's implementation-commit guard.
     (lane_worktree / "src").mkdir(parents=True, exist_ok=True)
     (lane_worktree / "src" / "handoff_impl.py").write_text("def ready() -> bool:\n    return True\n", encoding="utf-8")
-    changed_paths = _apply_lane_edit(
-        lane_worktree,
-        primary_dir,
-        mission_slug,
-        lane_edit,
-        fork_commit=lane_base_commit,
-        planning_commit=recorded_planning_commit,
-    )
+    if not lane_edit_on_side_branch:
+        changed_paths = _apply_lane_edit(
+            lane_worktree,
+            primary_dir,
+            mission_slug,
+            lane_edit,
+            fork_commit=lane_base_commit,
+            planning_commit=recorded_planning_commit,
+        )
     _commit_all(lane_worktree, "lane: implement WP01")
 
     context_path = save_context(
@@ -461,6 +479,31 @@ def test_lane_authored_reversal_of_post_fork_coord_content_is_rejected(
         include_status_artifacts_after_lane_base=lane_edit == "status-events-delete",
         materialize_status_snapshot_after_lane_base=lane_edit == "status-json-delete",
         include_issue_matrix_after_coord_update=lane_edit != "coord-revert",
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "kitty-specs/ changes are not allowed on lane branches" in result.output
+    assert changed_paths[0] in result.output
+
+
+@pytest.mark.parametrize("lane_edit", ["coord-revert", "wp-prompt-revert", "mission-events-delete"])
+def test_side_branch_lane_authored_reversal_of_post_fork_coord_content_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lane_edit: str,
+) -> None:
+    repo_root, mission_slug, _lane_worktree, changed_paths = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        lane_edit=lane_edit,
+        lane_edit_on_side_branch=True,
+        planning_drift_after_lane_merge=True,
+        coordination_updates_after_lane_base=True,
+        d07_noncoord_inherited_paths=lane_edit != "coord-revert",
+        include_claim_time_planning_pin=False,
     )
     monkeypatch.chdir(repo_root)
 
