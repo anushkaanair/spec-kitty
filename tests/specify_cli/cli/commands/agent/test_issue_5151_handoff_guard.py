@@ -572,6 +572,20 @@ def test_lane_authorship_history_command_failure_fails_closed(
     assert result is None
 
 
+def test_lane_authorship_history_timeout_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _timed_out(args, **_kwargs):
+        raise subprocess.TimeoutExpired(args, timeout=30)
+
+    monkeypatch.setattr("specify_cli.cli.commands.agent.tasks.subprocess.run", _timed_out)
+
+    result = _lane_authored_kitty_specs_paths(tmp_path, "fork", ("planning", "coordination"))
+
+    assert result is None
+
+
 def test_lane_authored_coordination_matrix_change_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo_root, mission_slug, _lane_worktree, changed_paths = _build_handoff_repo(tmp_path, monkeypatch, lane_edit="coord")
     monkeypatch.chdir(repo_root)
