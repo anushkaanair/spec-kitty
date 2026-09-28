@@ -66,6 +66,46 @@ def _merge_coordination_update(lane_worktree: Path, coord_tip: str, *, force_mer
     _git(lane_worktree, "merge", "--no-edit", coord_tip)
 
 
+def _merge_planning_commit(
+    lane_worktree: Path,
+    planning_commit: str,
+    *,
+    fork_commit: str,
+    resolve_path_to_fork: str | None,
+) -> None:
+    if resolve_path_to_fork is None:
+        _git(lane_worktree, "merge", "--no-edit", planning_commit)
+        return
+
+    result = subprocess.run(
+        ["git", "merge", "--no-edit", planning_commit],
+        cwd=lane_worktree,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0, result.stdout + result.stderr
+    assert f"UU {resolve_path_to_fork}" in _git(lane_worktree, "status", "--porcelain")
+    target_path = lane_worktree / resolve_path_to_fork
+    target_path.write_bytes(_git_bytes(lane_worktree, "show", f"{fork_commit}:{resolve_path_to_fork}"))
+    _git(lane_worktree, "add", resolve_path_to_fork)
+    _git(lane_worktree, "commit", "-q", "-m", "lane: resolve planning conflict to fork bytes")
+    parents = _git(lane_worktree, "show", "-s", "--format=%P", "HEAD").split()
+    assert len(parents) == 2
+    resolved_bytes = target_path.read_bytes()
+    assert resolved_bytes == _git_bytes(lane_worktree, "show", f"{fork_commit}:{resolve_path_to_fork}")
+    assert all(resolved_bytes != _git_bytes(lane_worktree, "show", f"{parent}:{resolve_path_to_fork}") for parent in parents)
+
+
+def _add_planning_conflict_revision(repo_root: Path, rel_path: str, *, enabled: bool) -> None:
+    if not enabled:
+        return
+    planning_matrix = repo_root / rel_path
+    planning_matrix.write_text(
+        planning_matrix.read_text(encoding="utf-8") + "\nPlanning-owned matrix revision.\n",
+        encoding="utf-8",
+    )
+
+
 def _apply_lane_edit(
     lane_worktree: Path,
     primary_dir: Path,
@@ -150,6 +190,7 @@ def _build_handoff_repo(
     merge_claim_time_planning_commit: bool = True,
     lane_edit_on_side_branch: bool = False,
     force_coordination_merge_commit: bool = False,
+    resolve_planning_coord_conflict_to_fork: bool = False,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -241,6 +282,8 @@ def _build_handoff_repo(
         plan_path.read_text(encoding="utf-8") + "\nPlanning target advanced after coordination snapshot.\n",
         encoding="utf-8",
     )
+    conflict_path = f"kitty-specs/{mission_slug}/acceptance-matrix.json"
+    _add_planning_conflict_revision(repo_root, conflict_path, enabled=resolve_planning_coord_conflict_to_fork)
     if missing_planning_ref:
         meta["planning_base_branch"] = "missing-planning-ref"
         (primary_dir / "meta.json").write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
@@ -262,7 +305,12 @@ def _build_handoff_repo(
     if coordination_updates_after_lane_base:
         _merge_coordination_update(lane_worktree, coord_tip, force_merge_commit=force_coordination_merge_commit)
     if merge_claim_time_planning_commit:
-        _git(lane_worktree, "merge", "--no-edit", recorded_planning_commit)
+        _merge_planning_commit(
+            lane_worktree,
+            recorded_planning_commit,
+            fork_commit=lane_base_commit,
+            resolve_path_to_fork=conflict_path if resolve_planning_coord_conflict_to_fork else None,
+        )
 
     if planning_drift_after_lane_merge:
         plan_path.write_text(
@@ -453,6 +501,22 @@ def test_clean_coordination_merge_commit_is_inherited(tmp_path: Path, monkeypatc
     result = _move_for_review(repo_root, mission_slug)
 
     assert result.exit_code == 0, result.output
+
+
+def test_conflict_resolution_to_fork_bytes_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        coordination_updates_after_lane_base=True,
+        resolve_planning_coord_conflict_to_fork=True,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "kitty-specs/ changes are not allowed on lane branches" in result.output
+    assert f"kitty-specs/{mission_slug}/acceptance-matrix.json" in result.output
 
 
 @pytest.mark.parametrize("lane_edit", ["mission-events", "wp-prompt"])
