@@ -20,6 +20,7 @@ from specify_cli.cli.commands.agent.tasks import (
     _list_wp_branch_mission_specs_changes,
     app as tasks_app,
 )
+from specify_cli.cli.commands.agent.tasks_shared import _lane_authored_kitty_specs_paths
 from specify_cli.coordination.workspace import CoordinationWorkspace
 from specify_cli.status.models import Lane, StatusEvent
 from specify_cli.status.reducer import materialize
@@ -94,12 +95,16 @@ def _apply_lane_edit(
         "wp-prompt-revert",
         "wp-prompt-match-p1",
         "mission-events-delete",
+        "status-events-delete",
+        "status-json-delete",
     }:
         rel_path = {
             "coord-revert": f"kitty-specs/{mission_slug}/acceptance-matrix.json",
             "wp-prompt-revert": f"kitty-specs/{mission_slug}/tasks/WP01.md",
             "wp-prompt-match-p1": f"kitty-specs/{mission_slug}/tasks/WP01.md",
             "mission-events-delete": f"kitty-specs/{mission_slug}/mission-events.jsonl",
+            "status-events-delete": f"kitty-specs/{mission_slug}/status.events.jsonl",
+            "status-json-delete": f"kitty-specs/{mission_slug}/status.json",
         }[lane_edit]
         target_path = lane_worktree / rel_path
         if lane_edit.endswith("-delete"):
@@ -126,7 +131,9 @@ def _build_handoff_repo(
     refresh_planning_commit_after_lane_merge: bool = False,
     coordination_updates_after_lane_base: bool = False,
     d07_noncoord_inherited_paths: bool = False,
+    status_events_at_lane_base: bool = False,
     include_status_artifacts_after_lane_base: bool = True,
+    materialize_status_snapshot_after_lane_base: bool = True,
     include_issue_matrix_after_coord_update: bool = True,
     include_claim_time_planning_pin: bool = True,
     merge_claim_time_planning_commit: bool = True,
@@ -152,6 +159,24 @@ def _build_handoff_repo(
     coord_branch = str(meta["coordination_branch"])
     coord_worktree = CoordinationWorkspace.worktree_path(repo_root, mission_slug, mission_id[:8])
     coord_dir = coord_worktree / "kitty-specs" / mission_slug
+    if status_events_at_lane_base:
+        append_event(
+            coord_dir,
+            StatusEvent(
+                event_id="01KX5151HANDOFFBASESTATE000001",
+                mission_slug=mission_slug,
+                mission_id=mission_id,
+                wp_id="WP01",
+                from_lane=Lane.PLANNED,
+                to_lane=Lane.IN_PROGRESS,
+                at="2026-09-28T11:00:00+00:00",
+                actor="test-runner",
+                force=False,
+                execution_mode="worktree",
+                reason="seed status log before lane fork",
+            ),
+        )
+        _commit_all(coord_worktree, "coord: seed status log before lane fork")
     coord_base_commit = _git(coord_worktree, "rev-parse", "HEAD")
 
     if include_status_artifacts_after_lane_base:
@@ -171,6 +196,7 @@ def _build_handoff_repo(
                 reason="seed live handoff fixture",
             ),
         )
+    if materialize_status_snapshot_after_lane_base:
         materialize(coord_dir)
 
     if not d07_noncoord_inherited_paths:
@@ -414,6 +440,8 @@ def test_lane_authored_d07_coordination_content_is_rejected(
         ("wp-prompt-revert", True),
         ("wp-prompt-match-p1", True),
         ("mission-events-delete", True),
+        ("status-events-delete", True),
+        ("status-json-delete", True),
     ],
 )
 def test_lane_authored_reversal_of_post_fork_coord_content_is_rejected(
@@ -429,7 +457,9 @@ def test_lane_authored_reversal_of_post_fork_coord_content_is_rejected(
         planning_drift_after_lane_merge=True,
         coordination_updates_after_lane_base=True,
         d07_noncoord_inherited_paths=d07_paths,
-        include_status_artifacts_after_lane_base=False,
+        status_events_at_lane_base=lane_edit == "status-json-delete",
+        include_status_artifacts_after_lane_base=lane_edit == "status-events-delete",
+        materialize_status_snapshot_after_lane_base=lane_edit == "status-json-delete",
         include_issue_matrix_after_coord_update=lane_edit != "coord-revert",
     )
     monkeypatch.chdir(repo_root)
@@ -483,6 +513,20 @@ def test_quoted_kitty_specs_path_fails_closed(tmp_path: Path) -> None:
 
     assert flagged is None
     assert _filter_by_planning_tip_content(repo, [], "main") is None
+
+
+def test_lane_authorship_history_command_failure_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _failed_git(*args, **_kwargs):
+        return subprocess.CompletedProcess(args, 128, stdout="", stderr="git history unavailable")
+
+    monkeypatch.setattr("specify_cli.cli.commands.agent.tasks.subprocess.run", _failed_git)
+
+    result = _lane_authored_kitty_specs_paths(tmp_path, "fork", ("planning", "coordination"))
+
+    assert result is None
 
 
 def test_lane_authored_coordination_matrix_change_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
