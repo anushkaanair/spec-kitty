@@ -1,0 +1,57 @@
+schema: review-refute/v1
+complete: true
+phase: pr
+batch: 1
+verdicts:
+  - id: PR-BOUNDARY-001
+    verdict: confirmed
+    reason: >-
+      Direct read of tests/architectural/test_interpreter_shard_coverage.py at 3b08a478e confirms
+      _shard_gate()/_coverage_completeness_violations() build every shard's Gate from shard.paths
+      (the roster's own declared paths) and never from parse_workflow(NIGHTLY_WORKFLOW)'s real
+      per-job paths, while the two tests that do consume _real_workflow_gates()
+      (test_every_roster_shard_exists_in_the_workflow_job_list,
+      test_no_dangling_job_key_outside_the_roster) compare only job keys via gates_for_target's
+      (workflow, job) match, never gate.paths against shard.paths, so a hand-edited pytest path
+      list in the committed workflow's run step diverging from the roster would pass every test
+      in the file.
+  - id: PR-BOUNDARY-002
+    verdict: confirmed
+    reason: >-
+      Grepping the git-show'd content of every file the mission touches
+      (test_interpreter_shard_coverage.py, test_performance_marker_guard.py) for
+      "nightly-summary" and "needs" returns zero hits, and the only pre-existing test that reads
+      jobs.nightly-summary.needs (test_module_shard_registry.py lines 363-364) asserts only that
+      "integration-next" is present, never checking any INTERPRETER_SHARD_JOB_KEYS membership,
+      confirming FR-006's needs list has no regression coverage tying it to the roster.
+  - id: PR-CONTRACT-001
+    verdict: refuted
+    reason: >-
+      NFR-001's exact wording ties the timeout-minutes requirement to "the Q2 baseline capture"
+      (run 36294808024), not to the later validation run; recomputed against that baseline,
+      shard-2's committed 20min (1200s) has 1.6-1.9x headroom over its real run-1 measurement
+      (747s job wall-clock / 639s step wall-clock) and shard-5's 25min was headroomed to about
+      2.15x over its extrapolated estimate, both meeting or exceeding the approximately 1.3-1.5x
+      floor at derivation time. The thinner margin the finding computes from run 36300726806
+      (about 1.117x for shard-2, 1.092x for shard-5) is real, but it is already disclosed in the
+      mission's own tracer-approach.md, which states shard-5's 92 percent budget utilization has
+      less headroom than the approximately 1.5-2x design target and explicitly calls it a watch
+      item for a future re-tune, not a defect in this PR, so the artifact already surfaces this
+      exact risk rather than hiding it.
+  - id: PR-CONTRACT-002
+    verdict: refuted
+    reason: >-
+      Live GitHub data contradicts the claim's core premise. Issue number 5169, "Nightly suite
+      red: interpreter-3.13-shard-3", was created at 2026-09-27T05:26:23Z, two seconds before run
+      36294808024's shard-3 job recorded its cancelled conclusion at 05:26:25Z, and a maintainer
+      provenance comment on that same issue explicitly confirms it was opened by
+      nightly_escalation.py from that cancelled run. The escalation step did fire and an
+      escalation issue was opened for the timed-out shard, directly refuting the claim that no
+      corresponding escalation issue was opened for that run.
+  - id: PR-CONTRACT-003
+    verdict: refuted
+    reason: >-
+      The finding explicitly self-classifies as a factual disclosure, not a live defect, with
+      remediation stating no code change is required, so by its own text it does not meet the
+      bar of a real defect against a mission promise, even though its underlying verification
+      (an issue search finding no exact old-suite-key issue) is accurate.

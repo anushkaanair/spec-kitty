@@ -1,0 +1,116 @@
+schema: review-findings/v1
+complete: true
+phase: plan
+lens_group: fresh
+round: 2
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PLAN-FRESH2-001
+    lens: suite-key bare-token regex false-positive risk (widened extraction pattern)
+    severity: 3
+    title: Bare-token `--suite-key` regex scans the whole `run:` script text with no invocation anchor, so a future comment/echo mentioning `--suite-key <word>` is captured as a real key
+    evidence:
+      - artifact: "plan.md § Suite-key-uniqueness assertion (FR-015), lines ~265"
+      - artifact: "plan.md § C. Campsite-clean scope, lines ~281 (instructs rewriting the job's descriptive comments)"
+    claim: >
+      Round 2 widened the extraction pattern from two quoted alternatives to
+      `--suite-key\s+(?:"([^"]+)"|'([^']+)'|(\S+))`, matched against the FULL
+      `run:` string of each step (not per-invocation). The new bare-token
+      alternative `(\S+)` has no anchor requiring the match to be an actual
+      argument to a `nightly_escalation.py` invocation — it will fire equally
+      inside a shell comment (`# --suite-key convention: <name>`) or an echo
+      string inside the same `run:` block. This mission's own §C campsite-clean
+      step explicitly instructs rewriting the interpreter job's descriptive
+      comments to describe "the shard shape and the roster's existence" before
+      the mechanical split lands, which is exactly the kind of edit likely to
+      introduce a prose mention of `--suite-key` without quotes. Two such
+      comments (in different jobs) that happen to use the same word after
+      `--suite-key` would register as a spurious duplicate and fail
+      `test_nightly_suite_keys_are_pairwise_distinct` even though no real
+      `--suite-key` collision exists — a false-positive the plan's own
+      non-vacuity framing (Standing Order #5) does not anticipate or guard
+      against. (Widening only adds matches, so this is a false-positive/noise
+      risk, not a false-negative that would let a real collision through.)
+    remediation: >
+      Scope the regex (or a pre-filter) to only match `--suite-key` occurrences
+      on lines that are themselves an actual `nightly_escalation.py` invocation
+      (e.g., require the same line/statement to contain
+      `nightly_escalation.py`), or strip `#`-prefixed shell comments from the
+      `run:` text before applying the pattern. Add a mutation-test variant that
+      asserts a `--suite-key`-shaped mention inside a comment is NOT picked up
+      as a key.
+
+  - id: PLAN-FRESH2-002
+    lens: step-4/step-4a cross-reference correction (round-2 fix) vs §B's own design
+    severity: 3
+    title: IC-02's corrected cross-reference asserts step 4 "only updates the workflow/roster numbers," contradicting §B point 2's own boundary-redraw design, which is exactly a run:-line-adjacent edit
+    evidence:
+      - artifact: "plan.md § IC-02 Sequencing/depends-on, lines ~110"
+      - artifact: "plan.md § B. Dispatch-run sequence, point 2, lines ~272"
+      - artifact: "plan.md § I. Phasing, step 4, line ~363"
+    claim: >
+      Round 2's fix to the step-4/step-4a cross-reference now reads: "§I step
+      4a — the step that actually edits the `run:`-line-adjacent workflow
+      content a second time ... not step 4 itself, which only updates the
+      workflow/roster numbers and re-runs the local gate set." But §B point 2
+      (unchanged this round) explicitly states: "If any shard's real
+      wall-clock suggests its directory partition is badly imbalanced ..., the
+      boundaries are re-drawn before run 2" — and §I step 4 ("Finalize N and
+      each shard's timeout-minutes from run 1's real numbers; update the
+      workflow and roster accordingly") is precisely where that "before run 2"
+      boundary redraw happens. A boundary redraw changes each affected shard's
+      `paths`/`--ignore` arguments, which live directly on the `run:` line's
+      pytest invocation — not merely a "number" the way `timeout-minutes` or N
+      are. So step 4 CAN touch run:-line-adjacent content, contradicting the
+      IC-02 note's own characterization used to justify skipping the check at
+      step 4 and only requiring it at step 4a. (The full local architectural
+      gate re-run step 4 also calls for happens to exercise `gates_for_target`
+      transitively via IC-02's own coverage test, so the actual safety net
+      likely still catches a step-4-introduced parseability regression — but
+      the plan's stated rationale for *why* the explicit empirical check is
+      deferred to 4a is now internally inconsistent with §B's own design.)
+    remediation: >
+      Either (a) correct the IC-02 note to acknowledge step 4 can also touch
+      run:-line-adjacent content (boundary redraws) and explicitly call for
+      the empirical parseability check there too, not only at 4a, or (b) if
+      the intent is that boundary finalization in step 4 never changes the
+      pytest invocation shape (only which paths list it references, with the
+      same syntactic shape), say so explicitly and reconcile that with §B
+      point 2's "boundaries are re-drawn" language so the two sections agree
+      on what step 4 actually edits.
+
+  - id: PLAN-FRESH2-003
+    lens: WP-granularity paragraph vs IC-03's mid-sequence position in §I's phasing
+    severity: 3
+    title: The new "WP granularity is a tasks-phase decision" paragraph treats "one WP per Implementation Concern" as an equally valid shape, but IC-03 (dispatch-run capture) does not fit that shape given §I's own interleaved phasing sequence
+    evidence:
+      - artifact: "plan.md § I. Phasing, WP-granularity paragraph, lines ~356"
+      - artifact: "plan.md § Implementation Concern Map, IC-03, lines ~113-119"
+      - artifact: "plan.md § I. Phasing, Sequence steps 2-4a, lines ~361-364"
+    claim: >
+      The round-2-added paragraph says tasks-phase "could" produce "several
+      WPs (e.g. one per Implementation Concern)" and frames this as compatible
+      with the plan's ONE-PR shape without further qualification. But IC-03
+      ("Fresh shard-sizing capture") is not a self-contained, independently
+      approvable deliverable the way IC-01/IC-02/IC-04 are: its own
+      Sequencing/depends-on line states "IC-01's final shape depends on this
+      concern's output," and §I's own sequence shows IC-01/IC-02/IC-04's
+      artifacts being authored (step 2), then dispatched via IC-03 (step 3),
+      then IC-01/IC-02's artifacts being *revisited* to finalize N/timeout and
+      redraw boundaries (step 4) — i.e., work on the "IC-01 WP" and "IC-02 WP"
+      would need to resume AFTER the "IC-03 WP" completes. The mission's own
+      9-lane WP state machine (CLAUDE.md Status Model Patterns) has no defined
+      "reopen an approved/done WP" transition, and WP dependency gating only
+      supports forward gating (a dependent WP waits for its dependency to
+      reach approved/done), not a dependency's own artifact being edited again
+      after a downstream WP finishes. The new paragraph's "still undecided,
+      either shape works" framing does not surface this asymmetry, so a
+      tasks-phase author taking "one WP per IC" at face value could design an
+      unworkable WP graph.
+    remediation: >
+      Either narrow the paragraph's example to acknowledge IC-03 is not a
+      typical candidate for its own WP (it is a build/implement-phase dispatch
+      action gating a *revisit* of IC-01/IC-02's WP, not an independent
+      deliverable), or explicitly note that a "several WPs" split — if chosen
+      — would need to fold IC-03's dispatch/finalize step into whichever WP
+      owns IC-01/IC-02, rather than implying a clean 1:1 IC-to-WP mapping.

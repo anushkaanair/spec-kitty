@@ -1,0 +1,135 @@
+schema: review-findings/v1
+complete: true
+phase: spec
+lens_group: fresh
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: SPEC-FRESH-001
+    lens: terminology drift / broken cross-reference
+    severity: 3
+    title: >-
+      FR-005 still says "the coverage manifest" -- an undefined term this
+      fix round never reconciled with the new "shard-identity roster"
+      (FR-016) it introduced to solve the exact same problem
+    evidence:
+      - artifact: "spec.md § Functional Requirements, FR-005 (row unchanged by this fix round)"
+      - artifact: "spec.md § Key Entities (only 'Nightly interpreter shard', 'Coverage-completeness check', 'Shard-sizing capture', 'Shard-identity roster (FR-016)' are defined -- no 'coverage manifest')"
+      - artifact: "spec.md § FR-016, § User Story 2 AC3 (both now use 'shard-identity roster', not 'manifest')"
+    claim: >-
+      FR-005 reads: "I want the nightly workflow to fail loudly ... if the
+      job list omits a shard the coverage manifest expects." This is the
+      same undefined-artifact problem the prior review round flagged in
+      AC3 (SPEC-VERIFY-001, confirmed) -- the fix round rewrote AC3, the
+      Edge Cases bullet, and added FR-016/Key Entities to name the real
+      artifact ("shard-identity roster"), but never touched FR-005, which
+      still references a "coverage manifest" that is defined nowhere in
+      the document. A plan-phase reader implementing FR-005 in isolation
+      could reasonably infer a third, distinct artifact rather than
+      recognizing this as the same roster FR-016 already specifies,
+      risking a redundant or inconsistent structure in the same WP.
+    remediation: >-
+      Edit FR-005 to say "... if the job list omits a shard the
+      shard-identity roster (FR-016) expects ..." so the FR table and the
+      newly-added FR-016/Key Entities agree on one artifact name.
+
+  - id: SPEC-FRESH-002
+    lens: FR-without-coverage
+    severity: 4
+    title: >-
+      FR-017 (new) has no Acceptance Scenario or Success Criterion --
+      unlike its sibling new FRs (FR-015 -> SC-008, FR-016 -> SC-009),
+      nothing in spec.md makes FR-017 falsifiable
+    evidence:
+      - artifact: "spec.md § Functional Requirements, FR-017"
+      - artifact: "spec.md § Success Criteria (SC-001..SC-009 -- none reference FR-017 or _gate_coverage.py)"
+      - artifact: "spec.md § User Scenarios & Testing, Acceptance Scenarios (none reference the reuse-vs-rejection decision or _gate_coverage.py)"
+    claim: >-
+      FR-017 is marked Priority High, Status Open, Delivery [build],
+      "No-op passable? no" -- the same rigor markers as every other FR --
+      but there is no AC or SC anywhere in spec.md that a reviewer or a
+      later gate could check to determine whether FR-017 was satisfied.
+      Its two new siblings from the same fix round were each paired with
+      a dedicated SC (FR-015 with SC-008, FR-016 with SC-009), so the
+      omission for FR-017 is inconsistent with the pattern this very fix
+      round established, and leaves a "the plan phase must evaluate X"
+      requirement with no way to prove it happened versus was skipped --
+      exactly the vacuous/unverifiable-FR hazard this mission's own User
+      Story 2 exists to prevent for the coverage check itself.
+    remediation: >-
+      Add a Success Criterion (e.g. SC-010) requiring the plan.md (or a
+      tracer file) to record an explicit reuse-vs-rejection decision
+      against `tests/architectural/_gate_coverage.py`'s BaselineTarget /
+      collect_real_union_for_target mechanism for FR-004/NFR-002 (and,
+      per SPEC-FRESH-004 below, FR-016 too), citable and independently
+      checkable at spec-kitty's analyze/review gates -- mirroring how the
+      SK-247 Option-B rejection was recorded as durable spec content
+      rather than left as an unverifiable intention.
+
+  - id: SPEC-FRESH-003
+    lens: internal consistency (independent test vs. acceptance scenarios)
+    severity: 3
+    title: >-
+      User Story 2's "Independent Test" line still describes a single
+      coverage check, but this fix round's AC3 rewrite now requires TWO
+      distinct checks (FR-004 node-id arithmetic + FR-016 roster diff)
+    evidence:
+      - artifact: "spec.md § User Story 2, Independent Test (unchanged by this fix round)"
+      - artifact: "spec.md § User Story 2, Acceptance Scenario 3 (rewritten by this fix round to require a 'second, roster-based comparison — distinct from FR-004's node-id comparison')"
+    claim: >-
+      The Independent Test for User Story 2 reads "Run the
+      coverage-completeness check ... and confirm it compares actual
+      collected node-id sets ... not a manual review of directory lists,"
+      describing only FR-004's mechanism. But AC3, rewritten in this same
+      fix round, now says node-id arithmetic alone "proves only AC2 ...
+      not which shard produced it" and requires a second, independent
+      roster-based comparison (FR-016) to satisfy AC3. A reader executing
+      only the stated Independent Test would never exercise the FR-016
+      roster path AC3 requires, so the story's single stated verification
+      procedure no longer covers the full set of acceptance scenarios it
+      introduces.
+    remediation: >-
+      Extend User Story 2's Independent Test to name both checks
+      explicitly: the node-id coverage-completeness check (FR-004) and
+      the shard-identity roster diff (FR-016), so the stated test
+      procedure covers AC1-AC3, not just AC1-AC2.
+
+  - id: SPEC-FRESH-004
+    lens: "canonical-source reuse (charter: single canonical authority)"
+    severity: 3
+    title: >-
+      FR-017's reuse-vs-rejection mandate against `_gate_coverage.py` is
+      scoped only to FR-004/NFR-002, but the same mechanism (verified
+      directly) already fails loudly on exactly the hazard FR-016 --
+      introduced in this same fix round -- exists to solve
+    evidence:
+      - artifact: "spec.md § FR-017 ('... record an explicit reuse-vs-documented-rejection decision for FR-004/NFR-002 ...')"
+      - artifact: "spec.md § FR-016 (shard-identity roster distinguishing a deleted shard from an empty one)"
+      - code: "tests/architectural/_gate_coverage.py:2628-2642 (gates_for_target: 'Raises loudly (rather than silently baselining zero legs) if the workflow was restructured and the target's job no longer parses to any gate — a stale BASELINE_TARGETS entry must be fixed, not ignored', raising a RuntimeError naming the target slug/workflow/job when a BaselineTarget's job resolves to 0 gates)"
+    claim: >-
+      Directly verified by reading `_gate_coverage.py`: `gates_for_target`
+      already raises loudly, naming the stale target, when a
+      `BaselineTarget`'s `(workflow, job)` no longer resolves to any
+      parsed `Gate` -- i.e. when that job was renamed or deleted from the
+      workflow. That is precisely FR-016's "a shard deleted from the job
+      list entirely ... is detected and named" requirement, at the
+      per-target level a one-BaselineTarget-per-shard design would use.
+      FR-017, added in this very fix round alongside FR-016, only directs
+      the plan phase to evaluate reuse of this mechanism for FR-004/
+      NFR-002 (the node-id union/coverage-completeness check) -- it never
+      mentions FR-016 at all, despite both FRs being introduced together
+      and the same verified code passage being relevant to both. Left as
+      written, the plan phase could satisfy FR-017 to the letter while
+      still building a wholly separate, bespoke roster mechanism for
+      FR-016 that duplicates a canonical, already-tested facility one
+      table row away -- against the charter's "single canonical
+      authority... reconcile rather than add a second authority"
+      Governing Principle and the SK-247-style duplication risk this
+      mission is otherwise careful to avoid (Clarifications, "Why Option
+      B ... was rejected").
+    remediation: >-
+      Widen FR-017 (or add a parallel clause) to require the plan phase
+      to evaluate `_gate_coverage.py`'s `BaselineTarget`/`gates_for_target`
+      reuse-vs-rejection question for FR-016 as well as FR-004/NFR-002,
+      recording one combined or two paired decisions, so the roster
+      mechanism and the coverage-completeness mechanism are not designed
+      in isolation from the same pre-existing canonical substrate.

@@ -1,0 +1,224 @@
+schema: review-findings/v1
+complete: true
+phase: spec
+lens_group: confirmed
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+note: Findings from spec.merged.yaml with verdict=confirmed in spec-refute-1.yaml. All 5 of 5 findings
+  confirmed; none refuted.
+findings:
+- id: SPEC-GOV-001
+  lens: Ledger/CLAUDE.md drift-claim accuracy
+  severity: 3
+  title: 'Spec''s "Correction #1" falsely claims this checkout''s CLAUDE.md/AGENTS.md instructs reading
+    a nonexistent SPEC-KITTY-LEDGER.md, framing a misattribution as onboarding "drift"'
+  evidence:
+  - artifact: spec.md § Clarifications → Corrections, item 1 (lines 333-344)
+  - code: AGENTS.md:1-20 (this checkout's actual onboarding text)
+  - artifact: 'spec.md § User Story 2 → Why this priority (line 83), which cites Correction #1'
+  claim: 'spec.md''s Correction #1 states: "CLAUDE.md (a symlink to AGENTS.md in this checkout) instructs
+    reading it [SPEC-KITTY-LEDGER.md] before starting; a repo-wide search ... found no such file at any
+    path. ... This is drift between the project''s own onboarding instructions and this checkout''s actual
+    contents." This is verified false. Direct inspection of this checkout''s AGENTS.md (CLAUDE.md is a
+    symlink to it, confirmed via `ls -la CLAUDE.md`) shows it does NOT instruct reading any file called
+    SPEC-KITTY-LEDGER.md anywhere — `grep -n "SPEC-KITTY-LEDGER" AGENTS.md CLAUDE.md` returns zero matches.
+    This checkout''s own onboarding instruction is instead "Every LLM agent working in this repository
+    MUST read the project charter at .kittify/charter/charter.md at the start of a session" — an entirely
+    different file. The half of the claim that "no SPEC-KITTY-LEDGER.md file exists in this checkout"
+    is true (confirmed by `find . -iname ''SPEC-KITTY-LEDGER.md''`, no hits), but the other half — that
+    this checkout''s own CLAUDE.md/AGENTS.md instructs reading it — is not. The actual "Read SPEC-KITTY-LEDGER.md
+    before starting" instruction lives in a different document entirely: the outer mission-orchestration
+    workspace''s own CLAUDE.md, one directory level up from this checkout (SK-missions/CLAUDE.md), which
+    is not part of the spec-kitty repo under review and was never meant to be found by grepping this checkout.
+    The spec conflates the orchestrator''s own outer-workspace project instructions with this checkout''s
+    onboarding doc, then publishes the conflation as a permanent, factual "drift between the project''s
+    own onboarding instructions and this checkout''s actual contents" — there is no such drift; the two
+    CLAUDE.md files are unrelated documents at different levels, and this checkout''s own onboarding text
+    is internally consistent (it points to charter.md, which does exist and was read). This citation also
+    feeds User Story 2''s "Why this priority" rationale (line 83: "this repo''s dominant failure mode
+    is a code path that reports success while silently doing less than it claims (see SPEC-KITTY-LEDGER.md''s
+    pattern, referenced but not present as a file in this checkout...)"), so the false framing propagates
+    beyond the Clarifications section into a User Story''s stated rationale, and is explicitly flagged
+    by the spec itself for "the mission''s closing review" — meaning, uncorrected, it will consume a future
+    reviewer''s time chasing nonexistent onboarding drift in a public repo.'
+  remediation: 'Rewrite Correction #1 to state only the verified fact: no SPEC-KITTY-LEDGER.md file exists
+    anywhere in this checkout (confirmed by `find` and by `grep -n "SPEC-KITTY-LEDGER" AGENTS.md CLAUDE.md`
+    returning no matches), and this checkout''s own CLAUDE.md/AGENTS.md does not reference that filename
+    at all — its onboarding instruction points to `.kittify/charter/charter.md` instead, which does exist
+    and was read. Remove the "drift between the project''s own onboarding instructions and this checkout''s
+    actual contents" framing entirely, since there is no such drift: the "Read SPEC-KITTY-LEDGER.md before
+    starting" instruction the orchestrator recalled belongs to a different document — the outer mission-orchestration
+    workspace''s own CLAUDE.md, one level above this checkout, outside the spec-kitty repo — not to this
+    repo''s own onboarding docs. If the SK-247 provenance point still needs making, state plainly that
+    SK-247''s content was supplied via the mission brief from the outer orchestration workspace''s ledger
+    rather than re-derived from any file inside this checkout, without asserting that this checkout''s
+    own onboarding instructions reference or drift from that file. Update the User Story 2 "Why this priority"
+    line (83) to drop or correct its pointer to Correction #1 once fixed.'
+- id: SPEC-ARCH-001
+  lens: Escalation suite-key dedup correctness claim vs. actual script behavior
+  severity: 4
+  title: Per-shard --suite-key uniqueness (User Story 3 / NFR-003) relies on a script whose find-then-create
+    dedup is not atomic, but the spec only requires manual inspection, never a machine-checked uniqueness
+    gate
+  evidence:
+  - artifact: spec.md § NFR-003 (Escalation dedup correctness across shards)
+  - artifact: 'spec.md § Clarifications, Correction #5'
+  - artifact: spec.md § FR-011, § Edge Cases (no entry addresses suite-key collision)
+  - code: 'scripts/ci/nightly_escalation.py:118-131 (run_escalation: find_open_issue_by_marker then create_issue,
+      no lock/CAS between the two calls)'
+  - code: 'scripts/ci/nightly_escalation.py:188-198 (GitHubIssueClient.find_open_issue_by_marker: GitHub
+      Search API, eventually consistent, matched by substring marker in body)'
+  - code: '.github/workflows/ci-nightly.yml:445-450 (current single-job escalate step: --suite-key "interpreter-${{
+      matrix.python-version }}")'
+  claim: 'Verified against the actual script: (a) --suite-key is confirmed genuinely free-form/unconstrained
+    (argparse string, no registry or allowlist coupling) -- the spec''s Correction #5 claim is TRUE on
+    this point. (b) The dedup mechanism (a marker string "<!-- nightly-escalation-key: {key} -->" embedded
+    in the issue body, located via a GitHub Search API query plus an exact-substring filter) correctly
+    keeps two DIFFERENT suite-keys from ever colliding onto the same issue, and correctly re-opens a fresh
+    issue (by design, not a defect) once a prior one for the same key was closed on recovery. So the spec''s
+    core dedup-mechanism claim also holds. (c) However, neither spec.md nor research.md calls out that
+    run_escalation''s policy is a classic check-then-act race: find_open_issue_by_marker() and create_issue()
+    are two separate, unlocked API calls, and the search index itself is eventually consistent. If two
+    invocations ever run concurrently for the SAME --suite-key -- e.g. a future maintainer copy-pastes
+    the escalation step across shards without varying the key (an easy mistake precisely because the existing
+    single-job step already hardcodes a key-shaped string, "interpreter-${{ matrix.python-version }}",
+    that a naive per-shard copy would leave unchanged) -- both processes can find "no existing open issue"
+    and both create one, silently opening duplicate P0 issues for a run where `fail-fast: false` guarantees
+    the shards execute concurrently. The spec''s own answer to this exact hazard (NFR-003) is "verifiable
+    by inspecting each shard''s escalation step for a --suite-key value unique across the shard set" --
+    i.e. manual code review, not an automated, falsifiable check. This is inconsistent with the mission''s
+    own stated rigor bar: User Story 2 explicitly frames this repo''s dominant failure mode as "a code
+    path that reports success while silently doing less than it claims" and requires FR-004''s coverage-completeness
+    to be machine-checked rather than "a manual review of directory lists" (NFR-002) -- yet the escalation-uniqueness
+    guarantee, which guards against the same class of silent-duplication hazard, is left exactly at the
+    level of rigor (human inspection) the spec elsewhere rejects as insufficient. No FR/AC in the spec
+    requires an automated test asserting that every shard''s --suite-key literal in the committed ci-nightly.yml
+    is pairwise distinct (and distinct from the existing "performance"/"e2e"/"stress" keys), so a copy-paste
+    key collision across shards could ship silently and only surface in production as duplicated P0 issues
+    on a future red night.'
+  remediation: 'Add a machine-checked, falsifiable assertion for suite-key uniqueness, most naturally
+    as an extension of the same guard file FR-009/FR-010 are already updating (tests/architectural/test_performance_marker_guard.py):
+    parse ci-nightly.yml''s job definitions, extract every literal `--suite-key "<value>"` argument passed
+    to nightly_escalation.py across all interpreter shards (string-render `${{ matrix.* }}`/similar expressions
+    where static, or require the value to be a static string per shard), and assert the resulting set
+    has no duplicates and no collision with the pre-existing "performance"/"e2e"/"stress" keys -- paired
+    with a mutation test (a deliberately duplicated key in a scratch copy) proving the new assertion can
+    fail, per this mission''s own Standing Order #5 non-vacuity bar. Fold this into FR-011/NFR-003 as
+    an explicit deliverable (a new FR or an NFR-003 amendment) rather than leaving NFR-003 satisfied by
+    inspection alone.'
+- id: SPEC-VERIFY-001
+  lens: mission-derived (coverage-completeness check is a real, buildable falsification target)
+  severity: 4
+  title: User Story 2's AC2 (empty shard) and AC3 (missing shard) produce the same node-id signature under
+    the check design described, and AC3 invents an undefined "coverage-completeness manifest" entity no
+    FR creates
+  evidence:
+  - artifact: spec.md § User Story 2, Acceptance Scenarios 2-3 (lines 100-105)
+  - artifact: spec.md § FR-004 (line 225), § NFR-002 (line 242)
+  - artifact: spec.md § Edge Cases (lines 178-181), § Key Entities (lines 259-272)
+  claim: 'AC2 says "a shard''s selector is deliberately mutated to collect 0 tests ... it fails loudly
+    naming the empty shard." AC3 says "a shard is deliberately removed from the job list while its test
+    files remain in the coverage-completeness manifest ... it fails loudly naming the missing shard."
+    FR-004/NFR-002 specify the check''s only inputs as three collected node-id counts (full selection,
+    sum of shards, dedup union) compared for gap/overlap -- pure set arithmetic over whatever shard selectors
+    currently exist in the job list. Under that design, "shard 3 is present in the job list but its selector
+    now collects 0 tests" (AC2) and "shard 3 was deleted from the job list entirely" (AC3) produce an
+    IDENTICAL signature: the full selection contains node-ids absent from the union, and the check has
+    no record of shard 3''s expected identity in either case (a deleted job leaves nothing in the workflow
+    file to read a shard name from). To "name the missing shard" distinctly from "name the empty shard"
+    (as the ACs both require) needs a separate, independently-maintained manifest of which shard identities
+    SHOULD exist -- exactly what AC3''s own text invokes ("coverage-completeness manifest") but which
+    is never defined: it is not in Key Entities (only "Nightly interpreter shard," "Coverage- completeness
+    check," "Shard-sizing capture" appear), no FR requires creating it, and the parallel Edge Cases bullet
+    (line 178-181) describes the same scenario without ever using the word "manifest," instead saying
+    only "its intended test files still exist on disk" -- a materially different data source (the general
+    test corpus, already visible to `pytest --collect-only`) than a shard-identity manifest. AC3 is therefore
+    untestable as literally written: the plan phase would have to invent an artifact the spec never specifies,
+    and even then the AC2/AC3 distinction the spec promises ("naming the empty shard" vs "naming the missing
+    shard") is not achievable from node-id sets alone.'
+  remediation: Add a Key Entity (and a supporting FR) for the shard-identity roster that the coverage-completeness
+    check reads independently of the job list -- e.g. a small in-repo declaration (shard name -> assigned
+    test paths) that both the job list and the check consume, so a shard's absence from the job list is
+    detectable by diffing the roster against `jobs:` keys, distinctly from a present-but-empty shard's
+    collected count being 0. Rewrite AC3 to name that roster artifact explicitly (not "manifest," used
+    nowhere else) and clarify that FR-004's node-id comparison alone only proves AC2 (a gap exists); a
+    second, roster-based comparison is needed to prove AC3 (which named shard produced it).
+- id: SPEC-VERIFY-002
+  lens: mission-derived (coverage-completeness check is a real, buildable falsification target)
+  severity: 4
+  title: Spec/research never evaluates the existing tests/architectural/_gate_coverage.py BaselineTarget/E3
+    mechanism -- built for exactly "does a shard split preserve coverage" -- as an implementation path
+    for FR-004/NFR-002, or flags the risk that a plan-invented parallel mechanism could silently diverge
+    from or break the pre-existing global oracle
+  evidence:
+  - code: tests/architectural/_gate_coverage.py:118-131 (WORKFLOW_FILES includes "ci-nightly.yml")
+  - code: tests/architectural/_gate_coverage.py:2606-2693 (BaselineTarget, collect_job_nodeids, collect_real_union_for_target)
+  - code: 'tests/architectural/_gate_coverage.py:2610-2617 (docstring: "a shard split alone (same total
+      coverage, more legs) cannot false-red GC-2b")'
+  - artifact: spec.md § FR-004, § NFR-002, § User Story 2 Independent Test (line 88-91, leaves check location
+      as "a pytest test OR a dedicated workflow step", undecided)
+  - artifact: research.md (no mention of _gate_coverage.py anywhere; Section 3 verifies capture_shard_timings.py
+      and SK-247 in comparable depth but this file is absent)
+  claim: '`_gate_coverage.py` already statically parses every pytest invocation in `ci-nightly.yml` (it
+    is a member of `WORKFLOW_FILES`) into `Gate` objects feeding a repo-wide orphan/duplicate coverage
+    oracle (`test_ci_collection_completeness.py`), and separately ships a purpose-built `BaselineTarget`
+    / `collect_real_union_for_target` substrate whose own docstring states its design goal verbatim: a
+    job matched by `(workflow, job)` "transparently covers however many shard legs the job has TODAY...
+    or GROWS to under [a later mission] (a matrix): collect_real_union_for_target unions every matching
+    leg''s real selection, so a shard split alone (same total coverage, more legs) cannot false-red GC-2b."
+    This is a real, tested, already- running mechanism for the exact falsification target User Story 2
+    / FR-004 / NFR-002 ask for (real `pytest --collect-only` node-id union across shard legs of one job,
+    compared against a frozen/full baseline) -- narrower in one sense (per-job baseline, not built for
+    a from-scratch "full 3.13 selection" comparison) but directly reusable as either the implementation
+    or the load-bearing precedent for FR-004. The mission''s own research.md performed comparably deep
+    first-hand verification of `capture_shard_timings.py` and the SK-247 registry mechanism (explicitly
+    to avoid reinventing a broken wheel) but never looked at this sibling, working wheel in the same directory.
+    Two concrete risks follow: (1) the plan phase may build a bespoke, less-battle-tested coverage script
+    from nothing, duplicating effort and diverging from the charter''s "single canonical authority / reconcile-don''t-duplicate"
+    Governing Principle and Standing Order #6 (canonical sources & unification); (2) because `_gate_coverage.py`''s
+    `Gate` parser already treats `interpreter-matrix`''s current single `pytest -m "fast or unit"` invocation
+    as one Gate feeding a GLOBAL coverage oracle that C-005 requires the plan to run in full, the new
+    shard steps'' exact invocation shape (how each shard''s `pytest` command is expressed in the workflow
+    YAML) must remain parseable by that existing AST/regex-based parser or the pre-existing global oracle
+    silently mis-models (or hard-fails) post-split -- a contradicts-existing-code hazard FR-001/FR-003
+    do not mention at all.'
+  remediation: Add a spec-level note (Clarifications or a new FR) requiring the plan phase to (a) read
+    `tests/architectural/_gate_coverage.py` and its `BaselineTarget` mechanism before designing FR-004's
+    implementation, explicitly deciding reuse vs. a documented rejection rationale (mirroring the SK-247
+    rejection write-up already done for Option B), and (b) confirm each new shard's `pytest` invocation
+    in `ci-nightly.yml` remains one of the invocation shapes `_gate_coverage.py`'s `parse_workflow` recognizes,
+    so the split does not silently break or mis-count the pre-existing repo-wide coverage oracle that
+    C-005's full `tests/architectural/` run will exercise.
+- id: SPEC-VERIFY-003
+  lens: baseline honesty
+  severity: 3
+  title: 'Spec/research never names issue #3284 (known-red main) despite SC-002/FR-014/User-Story-1 depending
+    on correctly interpreting a shard''s real pass/fail verdict during the Q2 measurement/validation dispatch
+    runs'
+  evidence:
+  - artifact: 'spec.md SC-001, SC-002 (lines 391-397): "every shard''s conclusion is success or failure
+      ... never cancelled"'
+  - artifact: 'spec.md FR-014 (line 235): dispatch runs "produce durable evidence" of each shard''s conclusion'
+  - artifact: 'spec.md Edge Cases (lines 200-204): generic charter Pre-existing Failure Reporting Rule
+      pointer only, no issue number named'
+  - artifact: 'research.md (no mention of #3284 or #3283 anywhere)'
+  claim: 'This mission''s dispatch mandate (CONCURRENCY NOTE) states main currently carries known-red
+    tests tracked by issue #3284. SC-001/ SC-002 require every post-split shard to reach a real success/failure
+    verdict, and FR-014/NFR-005 require recording each shard''s conclusion as durable evidence from the
+    Q2 baseline-capture and validation dispatch runs. When those real dispatch runs execute `pytest -m
+    "fast or unit"` on 3.13 across N shards, some shard(s) may legitimately report `failure` purely because
+    of #3284''s already-known-red tests -- not because of a shard-boundary defect this mission introduced.
+    The spec''s only defense against misclassifying that is the generic, unnamed charter Pre-existing
+    Failure Reporting Rule edge case (open a GitHub issue "before treating those failures as accepted
+    baseline") -- it never tells the plan/implementation phase that #3284 already exists and should be
+    checked first (to avoid filing a duplicate issue, and to avoid the opposite error of waving through
+    a real regression as "known baseline" without checking it actually matches #3284''s content). This
+    is exactly the kind of claim-depends-on-trustworthy-test-outcomes spot this lens targets: SC-002''s
+    "never cancelled" bar is satisfied regardless of red-vs-green (so it is not fully undermined), but
+    FR-014''s evidentiary record and the plan''s shard-boundary-correctness judgment calls at Q2 validation
+    time are not protected without naming the specific known-red tracker.'
+  remediation: 'Add one sentence to spec.md''s Edge Cases or Clarifications naming issue #3284 explicitly
+    and instructing the plan/implementation phase to diff any Q2 dispatch-run shard failure against #3284''s
+    tracked test list before filing a new Pre-existing Failure issue or accepting a shard as validated-green;
+    optionally note #3283 (shared pytest test-venv lock timeout) as a distinct risk for any LOCAL `tests/architectural/`
+    runs the plan/implementation phase performs (separate from the GitHub-hosted dispatch runs, which
+    use per-shard dedicated venvs and are not exposed to a local shared-lock).'

@@ -1,0 +1,26 @@
+schema: review-refute/v1
+complete: true
+phase: plan
+batch: 1
+verdicts:
+  - id: PLAN-GOV-001
+    verdict: confirmed
+    reason: "plan.md line 269 (run 1) and line 272 (the only explicit stop rule) verified verbatim -- the stop rule is anchored to run-2/run-3 failure language only and never states whether/how a failed run 1 consumes a slot against Q2's hard 3-run cap (spec.md line 322)."
+  - id: PLAN-GOV-002
+    verdict: confirmed
+    reason: "charter.md lines 85-87 (SO#7) verified verbatim to include the worktree-isolation clause, and `grep -n worktree` over plan.md and spec.md returns zero hits while plan.md's Charter Check (line 52 area) marks the whole standing order PASS on PR-only/never-push-main grounds alone."
+  - id: PLAN-ARCH-002
+    verdict: confirmed
+    reason: "direct read of _gate_coverage.py confirms the quoted sentence 'a shard split alone (same total coverage, more legs) cannot false-red' is BaselineTarget's class docstring (~line 2612), not collect_real_union_for_target's docstring (~line 2685, a different sentence), while plan.md line 165 attributes it to collect_real_union_for_target as 'its own docstring'."
+  - id: PLAN-GOV-003
+    verdict: confirmed
+    reason: "grep for collect-only/collect_only across plan.md shows the scaffolding introduced only in §B point 1/2 (lines 269-270) with no removal instruction anywhere in §I's phasing steps (lines 351-360), confirming no explicit cleanup step exists."
+  - id: PLAN-ARCH-001
+    verdict: confirmed
+    reason: "empirically re-derived by actually running parse_workflow(WORKFLOWS_DIR/'ci-nightly.yml') in this checkout: it returns exactly 5 gates (performance, e2e, stress, full-module-matrix, integration-next) and ZERO for interpreter-matrix; hand-tracing and then running strip_to_command on the literal ci-nightly.yml:416 string confirms _FLAG_TOKENS' bare --frozen swallows --python's flag name, leaving the quoted value stranded so parse_pytest_invocation returns None, and the identical failure was reproduced against the plan's proposed per-shard invocation shape while a plain --frozen pytest control string parsed fine."
+  - id: PLAN-VERIFY-001
+    verdict: confirmed
+    reason: "direct read of test_performance_marker_guard.py confirms _spec_kitty_run_performance_leaks (lines ~349-363) iterates a structured job.get('env') dict, not run text, while the file's real per-line run-text scan is test_nightly_fail_loud_step_treats_marker_empty_exit_5_as_non_failing (uses run.splitlines()), and grep confirms no `re` import exists anywhere in the file's imports (lines 25-32) -- plan.md's citation and 'AST-free string scan' framing are unpinned exactly as claimed."
+  - id: PLAN-VERIFY-002
+    verdict: confirmed
+    reason: "direct read of packs.yml confirms its header comment explicitly disclaims a top-level path filter (deliberate Gate-0 avoidance per #3008), its `on:` block has no `paths:` filter, and its terminal packs-gate job is `if: always() && !cancelled()` (always evaluates) -- while plan.md line 299 labels it 'path-filtered' and claims it 'should NOT fire', which is the mechanism backwards from what the workflow actually does (it always fires; only per-lane jobs skip)."

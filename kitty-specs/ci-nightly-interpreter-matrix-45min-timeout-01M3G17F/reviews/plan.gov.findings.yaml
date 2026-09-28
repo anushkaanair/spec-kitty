@@ -1,0 +1,123 @@
+# review-findings/v1 — canonical format for lens-session and fresh-sweep output.
+schema: review-findings/v1
+complete: true             # flip to true ONLY at the very end, after the yaml self-check passes
+phase: plan
+lens_group: gov
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PLAN-GOV-001
+    lens: Dispatch-run sequencing fidelity to operator Q2 (mission-derived lens)
+    severity: 2
+    title: >-
+      Stop-rule text is written around "run 2 fails" / "run 3 exhausted" and
+      does not explicitly say how a failed run 1 (baseline/timing-capture)
+      is accounted against the up-to-3 budget
+    evidence:
+      - artifact: "plan.md § B, point 4 (line 272), the 'Explicit stop rule' sentence"
+      - artifact: "plan.md § B, point 1 (line 269), run 1's own description"
+      - artifact: "spec.md § Clarifications, Q2 (lines 322-327)"
+    claim: >-
+      plan.md §B names three specific-purpose runs (1: baseline/timing-capture,
+      2: validation, 3: spare) and its only explicit stop rule (line 272) is
+      anchored to "if run 2 fails ..." / "if run 3 is also exhausted" / "if a
+      4th run would be needed for any reason." It never addresses the case
+      where run 1 itself fails to produce usable data before ever reaching
+      its measurement purpose — e.g. a YAML/workflow-syntax defect in the
+      initial candidate shard scaffolding described at line 269 ("the
+      candidate shard jobs already split per the roster's directory
+      boundaries ... plus an ADDITIONAL lightweight step per shard"), or a
+      GitHub Actions infrastructure failure that kills the dispatch before
+      any shard job starts. The catch-all "if a 4th run would be needed for
+      any reason — STOP" clause does still cap the total at 3 regardless of
+      which named run absorbs a retry, so this is not a Q2-limit violation,
+      but the plan gives the build/implement phase no explicit rule for
+      which run's "slot" (validation vs. spare) a run-1 redo consumes, or
+      whether the sequence is renumbered. This is exactly the kind of
+      sequencing ambiguity likely to cause a stalled or miscounted dispatch
+      budget mid-implementation, one level below what a stricter reading of
+      Q2's "baseline / validation / spare" framing anticipates.
+    remediation: >-
+      Add one sentence to §B (after point 4, or as a 4a) stating explicitly:
+      "If run 1 fails to produce usable per-shard timing/collection data for
+      any reason (workflow-syntax defect in the initial candidate shape, a
+      GitHub Actions infrastructure failure, or any other non-substantive
+      failure before a real measurement is produced), that dispatch still
+      counts against the up-to-3 total; its replacement consumes the next
+      run's slot (i.e. the sequence renumbers rather than adding a 4th
+      attempt), and the same escalate-to-operator stop rule in point 4
+      applies if that replacement also fails to produce a usable result."
+
+  - id: PLAN-GOV-002
+    lens: Directive — Standing Order #7 (git/workflow discipline, DIRECTIVE_045)
+    severity: 2
+    title: >-
+      Charter Check claims a blanket "PASS" for Standing Order #7 without
+      engaging its worktree-isolation clause
+    evidence:
+      - artifact: "plan.md § Charter Check (line 52)"
+      - artifact: ".kittify/charter/charter.md § Quality & Tech-Debt Standing Orders, item 7 (lines 85-87)"
+    claim: >-
+      Standing Order #7 in the charter reads in full: "PRs only, the
+      programme merge agent merges; read intent before any high-risk op;
+      isolate PR-touching agents in a worktree; no version numbers in
+      scope." → `DIRECTIVE_045`, `pr-agent-worktree-isolation`. plan.md's
+      Charter Check line 52 addresses "PRs only" and "never push main" and
+      "dispatches run on the mission's own named branch," then marks the
+      whole standing order PASS — but never mentions the worktree-isolation
+      clause at all, and neither plan.md nor spec.md contains the word
+      "worktree" anywhere (confirmed by grep, zero hits in both files). For
+      a mission whose build/implement phase pushes a named branch, runs
+      workflow_dispatch, and opens a PR — exactly the "PR-touching agent"
+      DIRECTIVE_045 is about — a self-check that claims full compliance with
+      the standing order while silently skipping one of its four named
+      requirements is an incomplete self-check, not a verified PASS.
+    remediation: >-
+      Either (a) add one sentence to the Charter Check's SO#7 line citing
+      that this mission's implement-phase execution will run through
+      spec-kitty's own resolved worktree (per CLAUDE.md's "Execution
+      Workspace Strategy" / `resolve_workspace_for_wp`), which already
+      satisfies the isolation clause for this mission's shape, and say so
+      explicitly rather than leaving it unaddressed; or (b), if this
+      mission's single-PR/no-WP-split shape means the push/dispatch/PR work
+      would NOT automatically go through that resolver, add an explicit line
+      to §I stating which isolated worktree the build/implement-phase agent
+      will operate from before pushing/dispatching.
+
+  - id: PLAN-GOV-003
+    lens: Campsite scope / dispatch-run sequencing (mission-derived lens)
+    severity: 3
+    title: >-
+      No explicit instruction to remove IC-03's temporary per-shard
+      `--collect-only` measurement scaffolding before the shape that ships
+      in the merged workflow
+    evidence:
+      - artifact: "plan.md § B, point 1 (line 269): 'an ADDITIONAL lightweight step per shard (or one extra always-run job) that runs pytest --collect-only ...'"
+      - artifact: "plan.md § I, step 4 (line 356): 'Finalize N and each shard's timeout-minutes from run 1's real numbers; update the workflow and roster accordingly'"
+      - artifact: "plan.md § A, 'nightly-summary update (FR-006)' (line 250): SC-006 requires zero dangling reference to the old job name"
+    claim: >-
+      §B point 1 describes adding, for run 1 only, "an ADDITIONAL lightweight
+      step per shard (or one extra always-run job)" that runs
+      `pytest --collect-only -q -m "fast or unit" <shard paths>` purely to
+      capture measurement data. §I step 4 ("Finalize N and each shard's
+      timeout-minutes ... update the workflow and roster accordingly")
+      is the only place the plan describes reconciling the workflow after
+      run 1, and it names updating N/timeout values but never explicitly
+      says the temporary collect-only measurement step(s) are removed (or
+      that their absence in the final shape is verified) before run 2 is
+      dispatched or before the PR is opened. SC-006's "zero dangling
+      reference to the prior single interpreter-matrix job name" check
+      (line 250) is explicit about old-name leftovers but does not cover
+      leftover throwaway measurement steps, which are a distinct hazard: a
+      merged `ci-nightly.yml` that permanently ships one-off collect-only
+      diagnostic steps that no longer serve any purpose once real
+      `timeout-minutes` values are finalized, adding noise and per-run cost
+      to every future nightly run indefinitely.
+    remediation: >-
+      Add an explicit instruction to §I step 4 (or a new step 4a): "Remove
+      IC-03's temporary per-shard `--collect-only` measurement step(s)
+      introduced for run 1 from the workflow before run 2 is dispatched;
+      confirm their absence with a final grep/diff of the merged shape
+      against `ci-nightly.yml` before the PR is opened." Optionally extend
+      the campsite/gate checklist (§E or §G) with a one-line assertion (or
+      manual-review note) that no `--collect-only`-only diagnostic step
+      remains in any shard job in the final committed workflow.

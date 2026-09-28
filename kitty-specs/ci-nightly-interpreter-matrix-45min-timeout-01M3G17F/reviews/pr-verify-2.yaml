@@ -1,0 +1,52 @@
+schema: review-verify/v1
+complete: true
+phase: pr
+results:
+  - id: PR-FRESH-001
+    status: unresolved
+    remaining_severity: 3
+    reason: >
+      Empirically drove the production `_shard_workflow_divergences` at aad3e78f8 via a
+      scratch-copied `Gate` list (never touching the tracked workflow): harmless reformats
+      ("unit or fast", "fast  or  unit", "(fast or unit)") now correctly report no
+      divergence, and the shipped positive controls (drop "unit" -> flagged; add
+      "and not slow" -> flagged) both pass under `pytest tests/architectural/test_interpreter_shard_coverage.py -q`
+      (15 passed). But changing "fast or unit" to "fast and unit" for the same shard --
+      a real, materially different selection (intersection vs. union of the two marker
+      sets) explicitly named in the verification brief -- produced `flagged_as_divergence=False`,
+      because `positive_marker_tokens`-based comparison only tracks WHICH marker names are
+      referenced and their NOT-sign, never the AND/OR combinator between them, so "fast or
+      unit" and "fast and unit" collapse to the identical (positive={fast,unit}, negative={})
+      signature; independently confirmed the same script's precedence check (comparing
+      `_pytest.mark.expression.Expression.evaluate` against Python's own not/and/or
+      precedence across all 8 boolean assignments for 7 expressions, including "fast or
+      unit and not slow") that the negative-token "not (...)" trick itself is sound and not
+      mangled -- the residual gap is purely the missing combinator axis, not the sign walk.
+      No other test in the suite (`test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap`
+      builds its shard gates from the roster's own constant marker, never the committed
+      workflow) would catch this either, so an `or`->`and` edit to the committed workflow
+      would silently pass CI.
+
+  - id: PR-FRESH-002
+    status: resolved
+    reason: >
+      `git diff b56c0cf1c..aad3e78f8 -- tests/upgrade/test_migration_robustness.py` shows
+      the hand-rolled `yaml.safe_load` replaced by `load_spliced_workflow` (imported from
+      `tests.architectural._gate_coverage`), the exact canonical loader the finding named,
+      whose own docstring requires every workflow reader to go through it. Empirically
+      emptied the roster with a temporary one-line edit of
+      `tests/architectural/_interpreter_shard_roster.py`
+      (`INTERPRETER_SHARD_JOB_KEYS: tuple[str, ...] = ()`) and re-ran
+      `pytest tests/upgrade/test_migration_robustness.py -k test_interpreter_shard_roster_is_non_vacuous`:
+      it FAILED loudly (`AssertionError: INTERPRETER_SHARD_JOB_KEYS must not be empty ...`).
+      Reverted the edit; `md5sum` of the file was identical before
+      (6c142e9294cef875b66d16d7ad0e8fd6) and after, and `git status --porcelain` is empty.
+
+  - id: PR-FRESH-003
+    status: resolved
+    reason: >
+      `git diff b56c0cf1c..aad3e78f8 -- .github/workflows/ci-nightly.yml` touches exactly
+      one line: the comment above `interpreter-matrix-shard-1:` changed from
+      "# Shard 1/3: tests/unit, tests/status, tests/cli." to
+      "# Shard 1/6: tests/unit, tests/status, tests/cli.", matching the other five shards'
+      "N/6" comments with no other diff in the workflow file.

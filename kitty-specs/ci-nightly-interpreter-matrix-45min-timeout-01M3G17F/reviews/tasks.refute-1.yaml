@@ -1,0 +1,20 @@
+schema: review-refute/v1
+complete: true
+phase: tasks
+batch: 1
+verdicts:
+  - id: TASKS-DECOMP-001
+    verdict: confirmed
+    reason: "WP01 frontmatter (line 57) literally contains `scripts/ci/*.py`, no T00X 'Files:' line in WP01 names any scripts/ci path, plan.md/spec.md both state nightly_escalation.py is unmodified, and every other mission's owned_files in kitty-specs/*/tasks/*.md names a specific scripts/ci/<file>.py rather than a directory glob (e.g. ci-coverage-honesty-01M3CZVN/WP03 owns scripts/ci/nightly_escalation.py specifically) — the glob is anomalous and risks real ownership-overlap collisions."
+  - id: TASKS-DECOMP-002
+    verdict: confirmed
+    reason: "Verified verbatim: T002 says 'checkpoint 0 of 3', T007 says 'checkpoint 1 of 3' (Purpose) and separately frames itself as 'the FIRST of two mandatory' checkpoints with T009 merely conditional (Notes), T009 says 'checkpoint 2 of 3', T010 says 'checkpoint 3 of 3' — four distinct self-labeled ordinals (0-3) all claiming a total of 3, and T002's grouping of T009/T010 as one item conflicts with T007's exclusion of T009 from its 'two mandatory' count."
+  - id: TASKS-DECOMP-003
+    verdict: confirmed
+    reason: "plan.md §I step 2 is confirmed to be a single numbered item bundling roster authoring, the coverage-completeness check, the guard update, and an embedded parseability-checkpoint clause (citing §A point 6); tasks.md maps this to T004 (part A), T005 (part B), T006 (part C), each explicitly labeled 'plan §I step 2', and T007 separately implements that same embedded checkpoint (matching '§A point 6 / IC-02 sequencing note' language step 2 itself uses) — a one-to-many mapping that makes tasks.md's 'kept 1:1 traceable to plan.md §I's own numbered phasing sequence' claim imprecise, exactly as the finding states."
+  - id: TASKS-SEQ-001
+    verdict: confirmed
+    reason: "Verified verbatim: tasks.md's Parallel Opportunities section states 'No subtask in this WP is parallel-safe with another', T001 is a read-only baseline-capture subtask ('Files: none changed... read-only measurement subtask') and T002 is a read-only static-parse subtask ('Files: read-only against ...never edited') with no cited data dependency between them (T002's own dependency note only points forward to T004-T006), so the blanket claim is technically inaccurate for this pair even though it has no practical effect under single-agent execution."
+  - id: TASKS-SEQ-002
+    verdict: confirmed
+    reason: "Live re-run of `gh pr list --repo spec-kitty/spec-kitty --state open --limit 100 --json number,files` today returned exactly 8 open PRs (#4995, #5009, #5028, #5137, #5161, #5163, #5164, #5165), matching the finding's cited numbers exactly and confirming drift from tasks.md's recorded snapshot of 7; full diffs (not just the paginated file lists) for all 8, including the two PRs with >100 changed files (5165: 119, 5164: 142), show zero overlap with this mission's owned files, so the substantive conclusion the finding reports is independently verified correct."

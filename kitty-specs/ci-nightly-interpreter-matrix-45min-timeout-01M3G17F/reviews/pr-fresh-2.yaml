@@ -1,0 +1,111 @@
+schema: review-findings/v1
+complete: true
+phase: pr
+lens_group: fresh
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PR-FRESH2-001
+    lens: test-truthfulness
+    severity: 4
+    title: "PR-FRESH-001's marker-divergence fix still accepts a genuinely narrower selection (\"or\" swapped for \"and\") as equal"
+    evidence:
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:165-182"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:211"
+    claim: >-
+      `_marker_expr_diverges_from_expected_shard_marker` compares only the
+      set of POSITIVELY-referenced and NEGATIVELY-referenced marker NAMES
+      (via `positive_marker_tokens`), never the boolean combinator joining
+      them. `"fast or unit"` (the expected marker) and `"fast and unit"`
+      (a real edit an author could make in `ci-nightly.yml`) both yield
+      identical positive={fast,unit} and identical negative=frozenset()
+      sets, so the function reports no divergence for either -- even though
+      "and" is a drastically narrower selection than "or" (a test must carry
+      BOTH markers instead of either one), which would silently shrink the
+      shard's real collected node-id set. Verified read-only against the
+      live module (no repo files edited): calling the test file's own
+      `_shard_workflow_divergences(_scratch_gates_with_marker(_real_workflow_gates(), INTERPRETER_SHARDS[0].job_key, "fast and unit"), INTERPRETER_SHARDS)`
+      returns `[]` (no mismatch reported) for the resulting scratch gates.
+      This is the exact class of bug PR-FRESH-001 was opened to close
+      ("Marker comparison logic ... unsound for pytest's and/or/not
+      precedence, or that could accept a genuinely different selection as
+      equal") and the fix's own new regression tests
+      (`test_shard_workflow_divergence_check_tolerates_a_harmless_marker_reorder`,
+      `..._fails_when_a_marker_name_is_dropped`,
+      `..._fails_when_a_marker_exclusion_is_added`) only cover
+      reorder/drop-name/add-exclusion, never a combinator swap, so nothing
+      in the round-2 test suite would catch this regression if it were
+      reintroduced. This also weakens PR-BOUNDARY-001 and FR-004's
+      coverage-completeness guarantee: a hand-edit that swaps the shard
+      marker's `or` for `and` in the committed workflow would pass
+      `test_every_roster_shard_paths_and_ignores_equal_the_committed_workflow`
+      silently, even though it changes what the shard actually collects.
+    remediation: >-
+      Extend the comparison to check boolean-formula equivalence, not just
+      referenced-name sets -- e.g. build the truth table over the small,
+      finite set of marker names appearing in either expression (there are
+      only a handful of real markers: fast/unit/slow/windows_ci/etc.) using
+      pytest's own `Expression.compile(...).evaluate(...)` against every
+      possible True/False assignment of those names, and assert the two
+      expressions agree on every assignment. Add a regression test that
+      mutates the marker to `"fast and unit"` and asserts it DOES surface as
+      a divergence, mirroring the existing drop-name/add-exclusion positive
+      controls.
+
+  - id: PR-FRESH2-002
+    lens: duplication
+    severity: 2
+    title: New `_scratch_gates_with_marker` re-implements manual Gate reconstruction instead of `dataclasses.replace`
+    evidence:
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:268-282"
+    claim: >-
+      `Gate` (tests/architectural/_gate_coverage.py:279) is a plain
+      `@dataclass` with no frozen/slots constraints. The new
+      `_scratch_gates_with_marker` helper (added in this round) manually
+      re-lists every one of Gate's five fields per list-comprehension
+      element, explicitly noting in its own docstring that it "mirrors the
+      existing path-mutation scratch-copy pattern above" rather than
+      factoring out a shared, less repetitive helper (or using
+      `dataclasses.replace(g, marker_expr=marker_expr if g.job == victim
+      else g.marker_expr)`, which would express the same mutation in one
+      line and survive a future Gate field addition without needing an
+      update). This is the second near-identical manual-reconstruction
+      block in the same file after the round-1 addition just above it.
+    remediation: >-
+      Replace both the pre-existing inline scratch-copy list comprehension
+      and the new `_scratch_gates_with_marker` with a single shared helper
+      built on `dataclasses.replace`, e.g. `_scratch_gates_with(real_gates,
+      victim, **overrides)`, so a future Gate field addition needs one
+      update site instead of two (and any future third scratch-mutation
+      test doesn't add a third copy).
+
+  - id: PR-FRESH2-003
+    lens: consistency
+    severity: 2
+    title: PR-FRESH-002 routed only one of two sibling workflow readers through `load_spliced_workflow`
+    evidence:
+      - code: "tests/upgrade/test_migration_robustness.py:440"
+      - code: "tests/upgrade/test_migration_robustness.py:464"
+    claim: >-
+      `load_spliced_workflow`'s own docstring (tests/architectural/_gate_coverage.py:1261-1274)
+      states "EVERY reader of a workflow that may contain reusable-workflow
+      delegation or composite-action steps must load through this -- not a
+      raw `yaml.safe_load`". PR-FRESH-002 (commit 6b3e0a014) routed
+      `test_interpreter_shard_roster_is_non_vacuous` (line 464) through
+      `load_spliced_workflow`, but left its sibling
+      `test_venv_corruption_hazard_fr003b`-family test two methods above it
+      (line 440) on the pre-existing raw `with workflow_path.open(...) as
+      handle: workflow = yaml.safe_load(handle)`, even though both parse the
+      identical `ci-nightly.yml` file for the identical purpose (reading
+      `workflow["jobs"][job_key]` for every `INTERPRETER_SHARD_JOB_KEYS`
+      entry) and the non-vacuity test exists specifically to guard the other
+      one. Functionally harmless today only because the interpreter shard
+      jobs are plain jobs with inline steps (no `uses:` delegation to
+      splice), but it leaves the module's own stated invariant violated in
+      the exact pair of tests this round's fix touched, and the two readers
+      can silently diverge if a shard job is ever restructured to delegate
+      via a composite action.
+    remediation: >-
+      Route the line-440 reader through `load_spliced_workflow` too (it is
+      already imported in this file after PR-FRESH-002), so both sibling
+      tests parse `ci-nightly.yml` through the same canonical path the
+      module's docstring mandates.

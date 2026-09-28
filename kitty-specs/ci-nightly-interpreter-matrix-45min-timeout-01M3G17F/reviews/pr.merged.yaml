@@ -1,0 +1,392 @@
+schema: review-findings/v1
+complete: true
+phase: pr
+lens_group: merged
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+merge_note: R2 mechanical merge of pr-boundary/contract/tests; no duplicates found (no two findings cite
+  the same file:line with substantially the same claim); ids kept.
+findings:
+- id: PR-BOUNDARY-001
+  lens: duplication-drift
+  severity: 4
+  title: Coverage-completeness proof (FR-004/NFR-002/User Story 2) never checks the roster's paths against
+    the shipped workflow YAML's actual pytest arguments
+  evidence:
+  - artifact: 'spec.md User Story 2 / FR-004 / NFR-002 ("Independent Test": "confirm it compares actual
+      collected node-id sets"; NFR-002: "never a manual review of directory lists or an assumption that
+      a partition looks complete")'
+  - code: tests/architectural/test_interpreter_shard_coverage.py:79-84 (_shard_gate builds its Gate from
+      shard.paths — the roster's OWN declared paths — not from anything parsed out of ci-nightly.yml)
+  - code: tests/architectural/test_interpreter_shard_coverage.py:143-171 (_coverage_completeness_violations
+      / test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap call collect_job_nodeids(_shard_gate(shard))
+      for every shard — i.e. it re-derives coverage from the ROSTER's claimed paths, never from the workflow
+      file's real `run:` pytest arguments)
+  - code: tests/architectural/test_interpreter_shard_coverage.py:86-134 (_real_workflow_gates()/parse_workflow(NIGHTLY_WORKFLOW)
+      DOES parse the real per-job `paths` out of ci-nightly.yml's `run:` text, but the two tests that
+      consume it — test_every_roster_shard_exists_in_the_workflow_job_list and test_no_dangling_job_key_outside_the_roster
+      — compare only `gate.job` / job-key sets, never `gate.paths` against `shard.paths`)
+  - code: .github/workflows/ci-nightly.yml (each shard's "Run fast/unit suite" step hand-types the same
+      test-path list _interpreter_shard_roster.py's INTERPRETER_SHARDS[i].paths declares, e.g. shard 1's
+      `pytest -m "fast or unit" tests/unit tests/status tests/cli ...` vs. InterpreterShard(job_key="interpreter-matrix-shard-1",
+      paths=("tests/unit", "tests/status", "tests/cli")) in tests/architectural/_interpreter_shard_roster.py)
+  claim: '_interpreter_shard_roster.py''s module docstring calls INTERPRETER_SHARDS "the SINGLE SOURCE
+    OF TRUTH for shard identity: which job keys exist, which test paths each one owns" — but the actually-shipped
+    artifact, ci-nightly.yml''s `run:` pytest invocation for each interpreter-matrix-shard-N job, restates
+    that same path list as a hand-typed string, completely independent of the roster. Every coverage-completeness
+    assertion (FR-004''s zero-gap/zero-overlap proof, FR-005''s zero-collection check) is computed by
+    running `pytest --collect-only` against the ROSTER''s `paths` field, not against whatever ci-nightly.yml''s
+    committed `run:` line actually says. The only place the real workflow''s parsed `paths` are used at
+    all (`_real_workflow_gates()`/`parse_workflow`) is to check job-KEY presence, never path equality.
+    Consequently a future edit that changes a shard''s test-path arguments directly in the YAML (rebalancing
+    a shard boundary inline, a copy-paste typo dropping a directory, "fixing" a slow shard by trimming
+    its `run:` line) without touching the roster produces NO test failure anywhere in this suite — the
+    coverage-completeness test would keep reporting the roster''s own (now-stale) claim as complete while
+    the shipped workflow silently runs a different, possibly incomplete, selection. This is exactly the
+    "silently shrinking nightly suite while every individual shard still goes green" hazard User Story
+    2 and NFR-002 exist to close, and it survives because the check was built against the roster''s self-consistency
+    rather than against the committed YAML. Contrast with the mission''s OWN suite-key check (test_nightly_suite_keys_are_pairwise_distinct,
+    lines 703-714), which correctly parses the real `--suite-key` literals straight out of the committed
+    YAML — proving the pattern needed here was already known and used elsewhere in the same file, just
+    not applied to path coverage.
+
+    '
+  remediation: 'Add an assertion (in test_interpreter_shard_coverage.py, alongside test_every_roster_shard_exists_in_the_workflow_job_list)
+    that, for every shard in INTERPRETER_SHARDS, the real per-job `paths` (and `ignores`) parsed from
+    ci-nightly.yml via parse_workflow(NIGHTLY_WORKFLOW) — already computed as `_real_workflow_gates()`
+    in this file — equal `set(shard.paths)` / `set(shard.ignores)` exactly, failing loudly and naming
+    the shard plus the specific mismatched paths on either side. Pair it with a Standing-Order-#5 mutation
+    test (a scratch Gate list with one shard''s real-parsed path deliberately altered) proving the new
+    assertion can fail. This closes the gap between "the roster''s declared paths union to the full selection"
+    (already proven) and "the roster''s declared paths are what ci-nightly.yml actually runs" (currently
+    unproven), which is the missing half of FR-004/NFR-002''s stated guarantee.
+
+    '
+  source_group: boundary
+- id: PR-BOUNDARY-002
+  lens: duplication-drift
+  severity: 3
+  title: 'nightly-summary''s needs: list restates the 6 shard job keys by hand with no test tying it to
+    the roster (FR-006 has no regression coverage)'
+  evidence:
+  - artifact: 'spec.md FR-006 ("the terminal nightly-summary job''s needs: list and result-echo step [must]
+      name every new shard job... so the full-mode summary never silently omits a shard''s result") and
+      Edge Cases ("a stale or partial needs: list is itself a silent-success hazard this mission must
+      not introduce")'
+  - code: '.github/workflows/ci-nightly.yml:967 (`needs: [performance, e2e, stress, interpreter-matrix-shard-1,
+      interpreter-matrix-shard-2, interpreter-matrix-shard-3, interpreter-matrix-shard-4, interpreter-matrix-shard-5,
+      interpreter-matrix-shard-6, integration-next, full-module-matrix]` — all 6 shard keys hand-typed,
+      not generated from INTERPRETER_SHARD_JOB_KEYS)'
+  - code: tests/architectural/test_module_shard_registry.py:363-364 (the ONLY existing test that inspects
+      nightly-summary.needs at all asserts `"integration-next" in summary_needs`; it does not assert anything
+      about the interpreter shard keys)
+  - code: 'tests/architectural/test_performance_marker_guard.py (grep for "nightly-summary"/"needs" across
+      this file and test_interpreter_shard_coverage.py returns no hits — no test in either new/updated
+      module checks nightly-summary''s needs: against INTERPRETER_SHARD_JOB_KEYS)'
+  claim: 'Same class of hazard as PR-BOUNDARY-001, on a different surface: the shard identity list is
+    hand-restated a THIRD time (roster -> per-shard `run:` paths -> nightly-summary''s `needs:`/echo block),
+    and this third copy has zero automated coverage. FR-006 explicitly names this exact hazard ("a stale
+    or partial needs: list is itself a silent-success hazard"), and the mission already has the working
+    pattern to guard it — test_module_shard_registry.py''s `"integration-next" in summary_needs` check,
+    and this mission''s own dynamic-discovery pattern (`for job_key in INTERPRETER_SHARD_JOB_KEYS` used
+    throughout test_performance_marker_guard.py and test_interpreter_matrix_env_pinning.py) — but neither
+    was applied here. Today''s committed `needs:` list is correct (all 6 shards present, verified by direct
+    read), so this is not a live defect; it is an unguarded FR that a future shard rebalance (adding/removing
+    a shard, exactly the kind of change this mission''s own roster is designed to make easy) can silently
+    violate without any test catching it.
+
+    '
+  remediation: 'Add a test (in test_interpreter_shard_coverage.py or test_performance_marker_guard.py)
+    that reads ci-nightly.yml''s real `jobs.nightly-summary.needs` list and asserts `set(INTERPRETER_SHARD_JOB_KEYS)
+    <= set(needs)`, failing loudly and naming the missing shard(s). Pair it with a mutation test (a scratch
+    `needs:` list with one shard key removed) proving the assertion can fail, mirroring test_guard_fails_when_a_shard_is_dropped_from_the_job_list''s
+    existing non-vacuity pattern.
+
+    '
+  source_group: boundary
+- id: PR-CONTRACT-001
+  lens: sizing-honesty (NFR-001)
+  severity: 4
+  title: Shards 2 and 5 ship with ~1.09-1.12x headroom, below the ~1.3-1.5x NFR-001 floor, and the validation
+    run that revealed this was never fed back into the committed timeout-minutes values
+  evidence:
+  - artifact: spec.md NFR-001 ("at least ... plus headroom comparable to the ~1.3-1.5x headroom the e2e/performance
+      jobs already use")
+  - code: '.github/workflows/ci-nightly.yml:460 (interpreter-matrix-shard-2, timeout-minutes: 20), :647
+      (interpreter-matrix-shard-5, timeout-minutes: 25)'
+  - code: 'tests/architectural/_interpreter_shard_roster.py:57-64 (module docstring: timeouts for shards
+      3-6 are EXTRAPOLATED from a re-bucketed count, not directly measured, and the docstring itself states
+      "run 2''s real per-shard wall-clock is the actual validation of this estimate")'
+  - run: 'gh run view 36300726806 --repo spec-kitty/spec-kitty --json jobs (validation run, mode=full,
+      2026-09-27): shard-2 job wall-clock 06:39:16Z->06:57:10Z = 1074s (17m54s) against a 1200s (20min)
+      cap = 1.117x headroom; shard-5 job wall-clock 06:39:16Z->07:02:10Z = 1374s (22m54s) against a 1500s
+      (25min) cap = 1.092x headroom'
+  - run: 'gh run view 36294808024 --repo spec-kitty/spec-kitty --json jobs (baseline run 1): shard-2''s
+      SAME unchanged boundaries measured only 747s (12m27s) total job wall-clock -- a 44% run-to-run increase
+      to run 2''s 1074s for the identical selector, demonstrating the real variance this leg is exposed
+      to'
+  claim: 'NFR-001 requires each shard''s timeout-minutes to be derived from a measured wall-clock plus
+    ~1.3-1.5x headroom, "never copied unchanged ... without re-derivation." The roster''s own docstring
+    documents that shards 3-6''s timeouts are an EXTRAPOLATION (a per-test-time constant scaled across
+    a redrawn boundary), not a direct per-shard measurement, and explicitly defers validation of that
+    estimate to run 2. Run 2 (36300726806, the mission''s own validation dispatch) is exactly the evidence
+    needed to confirm or correct that estimate -- and it shows two of six shards (shard-2, shard-5) land
+    at ~1.09-1.12x headroom, well under the promised floor, using the shards'' OWN total job wall-clock
+    (the metric that actually determines whether GitHub''s job-level timeout-minutes fires). No commit
+    after run 2 adjusts either shard''s timeout-minutes or boundaries in response to this data. Given
+    shard-2 already swung from 747s (run 1) to 1074s (run 2) for the identical selector -- a 44% increase
+    -- a further variance of only ~12% on run 2''s own number would put shard-2 back into a `cancelled`-by-timeout
+    state, reproducing the exact defect (#4951) this mission exists to fix, for exactly the two shards
+    with the thinnest margin.
+
+    '
+  remediation: 'Before merge, recompute shard-2''s and shard-5''s timeout-minutes from run 2''s real total
+    job wall-clock (1074s and 1374s respectively) at the same ~1.3-1.5x headroom the docstring already
+    promises for the other shards (yields ~23-27min for shard-2 and ~30-34min for shard-5), update both
+    `ci-nightly.yml` and the roster docstring''s "REAL boundaries" section to cite run 2''s numbers instead
+    of the run-1-derived extrapolation, and note the observed run-to-run variance (747s->1074s) as the
+    reason the headroom multiplier is applied to the larger, more recent measurement rather than the smaller
+    one.
+
+    '
+  source_group: contract
+- id: PR-CONTRACT-002
+  lens: silent success
+  severity: 2
+  title: A shard that is force-cancelled by its own timeout-minutes cap never triggers the FR-011 P0 escalation,
+    unlike a shard that fails outright
+  evidence:
+  - artifact: spec.md FR-011 ("no shard is silently dropped from escalation coverage")
+  - code: '.github/workflows/ci-nightly.yml:427-434 (escalation step, `if: always()`, reads $INTERPRETER_SHARD_1_EXIT
+      written by the prior step)'
+  - run: 'gh run view 36294808024: interpreter-matrix-shard-3''s job conclusion was `cancelled` (04:36:44Z->05:26:25Z,
+      hit the pre-redraw 45min cap); no corresponding escalation issue was opened for that run (compare:
+      the SAME shard''s later real `failure` conclusion in run 36300726806 auto-opened issue #5169)'
+  claim: 'When a shard''s job is killed by its own `timeout-minutes` cap, GitHub Actions cancels every
+    remaining step in that job, including the "Escalate ... red -> deduped P0" step -- so the exit code
+    is never captured, the escalation script never runs, and no `priority:P0` issue opens. This is visible
+    in run 1''s own data: shard-3 was `cancelled`, not `failure`, and produced no escalation issue (only
+    its later, redrawn-boundary `failure` conclusion in run 2 did). This gap is inherited unchanged from
+    the pre-existing performance/e2e/stress jobs (same `if: always()` pattern), not newly introduced by
+    this diff, but this mission newly extends the same blind spot to 6 more jobs, and PR-CONTRACT-001
+    shows two of them (shard-2, shard-5) currently have the thinnest timeout margin in the whole set --
+    exactly the jobs most likely to exercise this gap first.
+
+    '
+  remediation: 'Either (a) document this known limitation explicitly in the PR body / NFR-005 evidence
+    section ("a shard that times out produces no P0 escalation, only a `cancelled` conclusion visible
+    in the Actions UI"), so a future silent-timeout regression is not mistaken for "no escalation means
+    nothing was wrong," or (b) file a follow-up issue (mirroring this mission''s own #5201-style pre-existing-failure
+    disclosure) proposing a repo-wide fix: a periodic/scheduled sweep (or a `nightly-summary`-driven step)
+    that opens a P0 for any `needs.*.result == ''cancelled''` entry, since the existing per-job escalation
+    step structurally cannot run once its own job has been killed.
+
+    '
+  source_group: contract
+- id: PR-CONTRACT-003
+  lens: suite-key/escalation contract (mission-derived 1)
+  severity: 1
+  title: The old single-job suite key `interpreter-3.13` is retired by this split with no mechanism to
+    close a standing escalation issue keyed to it, though none currently exists to be orphaned
+  evidence:
+  - artifact: 'spec.md FR-015 / Corrections #2 ("the current single-job step''s key literal `interpreter-${{
+      matrix.python-version }}`")'
+  - code: 'scripts/ci/nightly_escalation.py:100-141 (`run_escalation`: an issue only closes when a LATER
+      call passes the SAME `--suite-key` with `--conclusion success`; a key that is never called again
+      has no closing path)'
+  - run: 'gh issue list --repo spec-kitty/spec-kitty --search "Nightly suite red: interpreter" --state
+      all: only `interpreter-3.13-shard-3` (#5169) and `interpreter-3.13-shard-4` (#5172) exist, both
+      OPEN, both under the NEW per-shard keys; no issue titled exactly "Nightly suite red: interpreter-3.13"
+      (the old single-job key) exists in open or closed state'
+  claim: 'Renaming the escalation suite-key from `interpreter-3.13` to `interpreter-3.13-shard-<N>` means
+    any standing open issue under the old key would never auto-close post-split, because `nightly_escalation.py`''s
+    close-on-green path only fires for a `--suite-key` value a later run actually passes again. Verified
+    live: no such old-key issue exists today (open or closed) -- consistent with spec.md''s own premise
+    that the single job never produced a completed verdict on a GitHub-hosted runner, so it never had
+    the chance to escalate under the old key. This is a factual disclosure, not a live defect: nothing
+    is orphaned in practice by this PR.
+
+    '
+  remediation: 'State this fact explicitly in the PR body''s "Dispatch evidence" / escalation section
+    (per NFR-005''s durability requirement), so a future reader does not have to re-derive it: "the old
+    `interpreter-3.13` suite key is retired by this split; verified via `gh issue list --search \"Nightly
+    suite red: interpreter\"` that no open or closed issue exists under that exact key, so nothing is
+    orphaned." No code change required.
+
+    '
+  source_group: contract
+- id: PR-TESTS-001
+  lens: revert-test (FR-012 fail-fast/independence)
+  severity: 3
+  title: No static/unit-test regression guard for shard job-graph independence (FR-012)
+  evidence:
+  - artifact: 'plan.md § G, row ''fail-fast: false / independent-shard isolation (FR-012)'' -- explicitly
+      states ''a unit test alone cannot prove cross-job scheduling independence; this is proven at run
+      2'''
+  - code: .github/workflows/ci-nightly.yml (interpreter-matrix-shard-2 job block, ~line 457) -- no `needs:`
+      key on any interpreter-matrix-shard-<N> job today, which is correct
+  - code: 'tests/architectural/test_module_tests_matrix.py:179 -- a PRECEDENT static guard already exists
+      in this same repo for the sibling module-tests.yml shards: `assert "needs" not in job, f"module-tests.yml
+      job {name!r} must not needs: another shard job"` -- proving the team already knows how to guard
+      this property cheaply and statically, but no analogous test was authored for ci-nightly.yml''s interpreter
+      shards'
+  claim: 'FR-012 ("fail-fast: false / independent-shard isolation") has zero static or unit-test coverage
+    anywhere in this diff or the pre-existing suite. I added `needs: [interpreter-matrix-shard-1]` to
+    interpreter-matrix-shard-2 in the live workflow file (a real, structural regression of FR-012: GitHub
+    Actions would now serialize shard-2 behind shard-1 and, without `if: always()` on shard-2, skip it
+    entirely if shard-1 fails -- exactly the coupling FR-012 forbids) and ran the full relevant test surface:
+    `.venv/bin/python -m pytest tests/architectural/test_performance_marker_guard.py tests/architectural/test_interpreter_shard_coverage.py
+    tests/ci/test_interpreter_matrix_env_pinning.py tests/ci/test_nightly_exit_code_honesty.py tests/upgrade/test_migration_robustness.py
+    -q`. Result: all tests still PASSED ("75 passed" / "8 passed" across the two runs) -- nothing in the
+    diff''s test surface notices or names the coupling. The property is real today (the shipped YAML has
+    no `needs:` edges among shards) and was empirically validated once by the dispatch-run evidence (run
+    2: "all 6 shards success/failure, zero cancelled" per wp01.review-2.yaml), but that is a one-time,
+    expensive (real GitHub-hosted-runner) proof, not a regression gate: a future PR that accidentally
+    introduces a `needs:` edge between two interpreter shards (e.g. during a later shard-count rebalance)
+    will pass every local/CI test in this diff''s surface and only be caught, if at all, by the next real
+    nightly dispatch run -- silently reintroducing the exact single-point-of-failure coupling this mission
+    exists to break. I reverted the `needs:` addition immediately after the negative-result run; `git
+    status --porcelain` was empty and `md5sum .github/workflows/ci-nightly.yml` matched the pre-edit baseline
+    (86c952b3e5b7575f0cc09aee36f09d23) both before and after.
+
+    '
+  remediation: 'Add a cheap, static test mirroring tests/architectural/test_module_tests_matrix.py''s
+    precedent: for every job key in `INTERPRETER_SHARD_JOB_KEYS`, assert `"needs" not in jobs[job_key]`
+    (or, if a `needs:` is ever legitimately required for a shared setup job, assert no shard''s `needs:`
+    value contains another shard''s job key). This closes the FR-012 regression gap by construction instead
+    of relying solely on nightly dispatch evidence.
+
+    '
+  source_group: tests
+- id: PR-TESTS-002
+  lens: vacuity-by-empty-set
+  severity: 3
+  title: Three of the four consumer test files silently lose all shard coverage on an emptied roster
+  evidence:
+  - artifact: tests/ci/test_interpreter_matrix_env_pinning.py (parametrized `@pytest.mark.parametrize("job_key",
+      INTERPRETER_SHARD_JOB_KEYS)`), tests/upgrade/test_migration_robustness.py:437 (`for job_key in INTERPRETER_SHARD_JOB_KEYS:`),
+      tests/ci/test_nightly_exit_code_honesty.py:69 (dict-comprehension over INTERPRETER_SHARD_JOB_KEYS
+      feeding `_MARKER_LANES`)
+  - code: 'tests/architectural/test_interpreter_shard_coverage.py:943 test_roster_is_non_empty() and tests/architectural/test_performance_marker_guard.py:1244
+      `assert INTERPRETER_SHARD_JOB_KEYS, "T068: no interpreter-matrix shards declared in the roster"`
+      -- the ONLY two non-emptiness guards in the whole diff, both living in tests/architectural/'
+  claim: 'I temporarily replaced `INTERPRETER_SHARDS` with an empty tuple in `tests/architectural/_interpreter_shard_roster.py`
+    (one added line, `INTERPRETER_SHARDS = ()  # TEMP-EXPERIMENT`, immediately before the `INTERPRETER_SHARD_JOB_KEYS`
+    derivation) and ran the three non-architectural consumer files in isolation: `.venv/bin/python -m
+    pytest tests/ci/test_interpreter_matrix_env_pinning.py tests/ci/test_nightly_exit_code_honesty.py
+    tests/upgrade/test_migration_robustness.py -q -rs`. Result: "15 passed, 6 skipped" -- a fully GREEN
+    summary despite the roster being completely empty. Specifically: (1) test_interpreter_matrix_env_pinning.py''s
+    6 parametrized tests report SKIPPED ("got empty parameter set for (job_key)"), not failed; (2) test_migration_robustness.py::test_interpreter_matrix_job_pins_a_dedicated_project_environment
+    reports a bare "1 passed" with NO skip marker at all (its `for job_key in INTERPRETER_SHARD_JOB_KEYS:`
+    loop body simply never executes); (3) all 4 tests in test_nightly_exit_code_honesty.py report PASSED
+    (its dict-comprehension silently contributes zero interpreter entries to `_MARKER_LANES`/`_ALL_EXIT_VARS`,
+    with no skip/warning at all). None of these three files independently guards against a roster-emptying
+    regression -- they rely entirely on `tests/architectural/test_interpreter_shard_coverage.py::test_roster_is_non_empty`
+    and `test_performance_marker_guard.py`''s own assertion, in DIFFERENT files, to surface the defect.
+    Per this repo''s own documented test policy (CLAUDE.md "Test policy -- what you must run for a change"),
+    `make test-fast` runs only `tests/unit tests/status tests/cli tests/specify_cli/runtime` and never
+    touches tests/architectural, tests/ci, or tests/upgrade at all; and CLAUDE.md''s blast-radius rule
+    3 only mandates running tests/architectural for changes to "pytest.ini, pyproject.toml, conftest,
+    markers, packaging" -- a future edit confined to `_interpreter_shard_roster.py` itself does not obviously
+    fall under that rule to a contributor following the documented policy literally, so the two files
+    that DO guard non-emptiness could plausibly be skipped in a manual "run the tests I touched" pass.
+    I reverted the one-line edit immediately after the run; `git status --porcelain` was empty and `md5sum
+    tests/architectural/_interpreter_shard_roster.py` matched the pre-edit baseline (6c142e9294cef875b66d16d7ad0e8fd6)
+    both before and after.
+
+    '
+  remediation: 'Add a cheap `assert INTERPRETER_SHARD_JOB_KEYS` (or equivalent non-empty guard) at module
+    import time in each of the three consumer files (test_interpreter_matrix_env_pinning.py, test_nightly_exit_code_honesty.py,
+    test_migration_robustness.py), or centralize it once in `_interpreter_shard_roster.py` itself (e.g.
+    an assertion at module load time that `INTERPRETER_SHARDS` is non-empty) so an emptied roster fails
+    loudly wherever it is imported, not only in the two files that happen to already check it.
+
+    '
+  source_group: tests
+- id: PR-TESTS-003
+  lens: determinism-and-cost
+  severity: 2
+  title: Coverage-completeness test redundantly re-collects the same shard node-ids twice, with no caching
+  evidence:
+  - artifact: 'wp01.review-2.yaml gates.tests_interpreter_shard_coverage_and_perf_marker_guard: ''32 passed
+      in 93.32s'' (reviewer''s own combined-file timing, already establishing this is non-trivial)'
+  - code: tests/architectural/test_interpreter_shard_coverage.py:990-1017 `_coverage_completeness_violations()`
+      (called once, from the main coverage test, collecting the full selection + all 6 shards via `collect_job_nodeids`)
+      and tests/architectural/test_interpreter_shard_coverage.py:979-987 `test_no_shard_collects_zero_tests()`
+      (calls `collect_job_nodeids(_shard_gate(shard))` again, per shard, independently) -- no `functools.lru_cache`,
+      module-scoped fixture, or other memoization shares results between the two
+  - code: 'tests/architectural/_gate_coverage.py:1846 collect_job_nodeids -- confirmed via direct read:
+      every call shells out a fresh `subprocess.run([sys.executable, ''-m'', ''pytest'', ''--collect-only'',
+      ...])`, i.e. a real, uncached process spawn + full pytest collection each time'
+  claim: 'I ran `.venv/bin/python -m pytest tests/architectural/test_interpreter_shard_coverage.py -q`
+    directly (a read-only measurement, no file edited) and observed "8 passed in 82.21s", with the slowest-durations
+    report showing `test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap` at 51.04s and
+    `test_no_shard_collects_zero_tests` at 30.81s. The first test''s 51s already performs one full-tree
+    collect-only subprocess call plus 6 per-shard collect-only subprocess calls (7 real pytest collections).
+    The second test then REPEATS the same 6 per-shard collect-only subprocess calls a second time (30s),
+    producing identical node-id sets to the first test''s per-shard collections, purely because neither
+    test shares its `collect_job_nodeids` results with the other (no caching layer exists in this module).
+    This ~30s is avoidable, redundant CI cost added to the always-on `architectural-heavy` job (ci-router.yml,
+    30-minute budget) on every code-touching PR -- ironic given this mission''s own charter is relieving
+    a job-timeout problem, while its own new per-PR test adds a smaller-scale but structurally similar
+    redundant-recollection cost to a different job. It is bounded (900s subprocess timeout per call, 30-minute
+    job budget, so not release-blocking), and it is not marked to run under `pytest-xdist`/`--dist loadfile`
+    cross-worker sharing since `ci-router.yml`''s architectural-heavy job groups all of one file''s tests
+    onto a single worker (`--dist loadfile`), so there is no cross-worker race -- only the intra-file
+    redundancy documented above.
+
+    '
+  remediation: 'Cache each shard''s (and the full selection''s) collected node-id set in a module-scoped
+    pytest fixture (or a simple `functools.lru_cache`-wrapped wrapper keyed by `Gate`) shared between
+    `test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap` and `test_no_shard_collects_zero_tests`,
+    so each shard''s real `collect_job_nodeids` subprocess call runs exactly once per test session instead
+    of twice.
+
+    '
+  source_group: tests
+- id: PR-TESTS-004
+  lens: stability-over-time (mission-derived 1)
+  severity: 3
+  title: A new, unrelated top-level tests/ directory reds the always-on architectural-heavy job on every
+    future PR, with no contributor-facing documentation and a not-fully-actionable failure message
+  evidence:
+  - artifact: 'tests/architectural/_interpreter_shard_roster.py module docstring (lines ~578-583): ''even
+      if the suite''s directories drift after this roster is written, a real gap or overlap is caught
+      immediately rather than silently trusted'' -- confirms this behaviour is a KNOWN, INTENDED design
+      tradeoff, but only documented inside this one support module'
+  - code: 'tests/architectural/test_interpreter_shard_coverage.py:1033 `assert not missing_ids, f"{len(missing_ids)}
+      node id(s) collected by the full selection but by NO shard: {sorted(missing_ids)[:10]}"` -- names
+      only the missing pytest node-id(s), never the fix location (`_interpreter_shard_roster.py`)'
+  - artifact: grep across AGENTS.md, CLAUDE.md, docs/, CONTRIBUTING.md for 'interpreter_shard_roster'/'interpreter-matrix-shard'
+      returned zero hits outside kitty-specs/ -- no contributor-facing doc mentions this new per-shard-roster
+      maintenance obligation
+  claim: 'I created a temporary new top-level test directory, `tests/zzz_temp_experiment_dir/test_temp_new_dir.py`,
+    containing one trivial `@pytest.mark.unit` test (`assert True`) -- simulating an ordinary, completely
+    unrelated future PR that adds a new test area. Running `.venv/bin/python -m pytest tests/architectural/test_interpreter_shard_coverage.py
+    -q -k test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap` FAILED: "1 node id(s)
+    collected by the full selection but by NO shard: [''tests/zzz_temp_experiment_dir/test_temp_new_dir.py::test_temp_placeholder'']".
+    Because `architectural-heavy` in ci-router.yml is `always_on: true` and code-scoped (triggers on almost
+    any `src/**` change, per its `if:` condition), this means ANY future PR that adds a new top-level
+    `tests/<newdir>/` directory -- with no relationship whatsoever to this mission or to `ci-nightly.yml`
+    -- will red this always-on job, purely because the new directory is not enumerated in any `InterpreterShard.paths`
+    tuple. This is a real, intentional design tradeoff (confirmed by the module''s own docstring), but:
+    (1) it is surfaced nowhere a contributor adding a new top-level tests/ directory would see it in advance
+    (no hit in AGENTS.md/CLAUDE.md/docs/ CONTRIBUTING.md); (2) the failure message names only the missing
+    pytest node-id, not which file to edit (`tests/architectural/_interpreter_shard_roster.py`) or what
+    change to make (add the new directory to an existing shard''s `paths`, or add a new shard) -- a contributor
+    unfamiliar with this mission would need to read the test module''s source to discover the fix location.
+    I deleted the temporary directory and file immediately after the experiment (one stray `__pycache__`
+    subdirectory was also removed); `git status --porcelain` was empty afterward, matching the pre-experiment
+    state (this was a new untracked file/dir, not a tracked-file edit, so no md5sum comparison applies,
+    but no tracked file was touched).
+
+    '
+  remediation: '(a) Improve the assertion message in `test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap`
+    to explicitly name the fix location, e.g. append "-- if this is a newly-added test directory, add
+    it to a shard''s `paths` in tests/architectural/_interpreter_shard_roster.py"; (b) add a short note
+    to AGENTS.md or CLAUDE.md''s Project Structure section (or a CONTRIBUTING-style test-authoring doc)
+    stating that a new top-level `tests/<dir>/` addition must be registered in `_interpreter_shard_roster.py`''s
+    `INTERPRETER_SHARDS`, mirroring how other roster/registry files (e.g. `.github/ci-module-registry.yml`''s
+    `out_of_matrix_test_dirs`) are documented as needing a corresponding entry.
+
+    '
+  source_group: tests

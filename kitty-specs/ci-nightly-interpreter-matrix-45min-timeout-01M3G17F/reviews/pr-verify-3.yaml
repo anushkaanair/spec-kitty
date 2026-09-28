@@ -1,0 +1,76 @@
+schema: review-verify/v1
+complete: true
+phase: pr
+acceptance_bar_note: "PR-FRESH-001/FRESH2-001 judged against the operator's truth-table-equivalence ruling (2026-09-27), which replaces the original remedy text."
+results:
+  - id: PR-FRESH-001
+    status: resolved
+    reason: >-
+      Same defect as PR-FRESH2-001, closed by the same c14967a6f fix; see that entry.
+  - id: PR-FRESH2-001
+    status: resolved
+    reason: >-
+      At c14967a6f, `_marker_exprs_are_boolean_equivalent` builds the truth table over
+      `sorted(_marker_names_referenced(expr_a) | _marker_names_referenced(expr_b))` (the
+      UNION of names from both sides) and evaluates both expressions via pytest's own
+      `_pytest.mark.expression.Expression.compile(...).evaluate(...)` for every
+      True/False assignment; `_marker_expr_diverges_from_expected_shard_marker` is the
+      SOLE call site feeding `_shard_workflow_divergences`'s `bad_markers` set -- no
+      `positive_marker_tokens`-based comparison remains in this path (that function is
+      still used elsewhere in `_gate_coverage.py` for the unrelated "architectural marker
+      routing" concern, not for shard-divergence). Drove the production function directly
+      (no tracked file edited; `git status --porcelain` empty throughout) with cases
+      beyond the shipped table: `diverges("unit or fast or fast")` = False (equivalent,
+      correct), `diverges("(fast and unit) or fast or unit")` = False (equivalent,
+      correct), `diverges("fast or not unit")` = True (correct), `diverges("unit")` =
+      True (correct), and `diverges("fastish or unit")` = True -- this last case proves
+      the union-of-names claim empirically, since "fastish" appears only in the
+      workflow-side expression and must be varied for the check to catch it. The exact
+      PR-FRESH2-001 regression, `"fast and unit"`, is now flagged
+      (`diverges("fast and unit")` = True), reversing the false negative the finding
+      reported at aad3e78f8. Malformed-expression behavior fails loudly rather than
+      silently passing: an unclosed-paren expression raises `SyntaxError` and a
+      kwarg-style selector raises `TypeError`, both surfaced during
+      `_marker_names_referenced`'s `ast.parse`/matcher-call step before any comparison
+      result could be returned -- neither is a silent pass, so no severity-4 regression
+      was introduced (the error messages are plain Python tracebacks rather than a
+      purpose-authored message, a minor UX gap outside this finding's scope, not a
+      correctness or silent-failure defect). The shipped permanent test
+      `test_shard_workflow_divergence_check_boolean_equivalence_truth_table` proves both
+      directions (reorders/reformats/double-negation pass; combinator swap/dropped
+      name/added exclusion/widened alternative/full negation fail) against the
+      PRODUCTION `_shard_workflow_divergences`, not inline logic. Full regression:
+      `tests/architectural/test_interpreter_shard_coverage.py`,
+      `tests/architectural/test_performance_marker_guard.py`, `tests/ci/`, and
+      `tests/upgrade/test_migration_robustness.py` together ran 613 passed, 0 failed,
+      0 errors in 168.08s.
+  - id: PR-FRESH2-002
+    status: resolved
+    reason: >-
+      `git diff aad3e78f8..c14967a6f` adds one shared helper,
+      `_scratch_gates_with(real_gates, victim, transform)`, built on
+      `dataclasses.replace(g, **transform(g))`. Confirmed by grep that BOTH the
+      pre-existing path-mutation test (`test_shard_workflow_divergence_check_fails_when_a_real_path_is_altered`,
+      now calling `_scratch_gates_with(...)` directly) and every marker-mutation test
+      (`_scratch_gates_with_marker`, now a one-line wrapper over
+      `_scratch_gates_with(real_gates, victim, lambda _g: {"marker_expr": marker_expr})`,
+      consumed by 5 call sites including the new truth-table test) route through this
+      single helper -- no manual five-field `Gate(...)` reconstruction remains anywhere
+      in the file. The mutation tests exercise the production
+      `_shard_workflow_divergences` path (verified above for PR-FRESH2-001), so the
+      dataclasses.replace refactor is exercised by real assertions, not decorative.
+  - id: PR-FRESH2-003
+    status: resolved
+    reason: >-
+      `git diff aad3e78f8..c14967a6f -- tests/upgrade/test_migration_robustness.py`
+      shows the line-440 `TestVenvCorruptionHazardFR003b` reader's raw
+      `with workflow_path.open(...) as handle: workflow = yaml.safe_load(handle)`
+      replaced by `workflow = load_spliced_workflow(workflow_path)` (the unused `import
+      yaml` was also removed), so both sibling readers of `ci-nightly.yml` now go
+      through the canonical loader the module's own docstring mandates. Behaviour is
+      unchanged: `tests/upgrade/test_migration_robustness.py` ran green in the full
+      613-passed regression above, including
+      `TestVenvCorruptionHazardFR003b::test_a_well_pinned_nested_uv_run_leaves_a_dedicated_venv_untouched`
+      and its sibling `test_interpreter_shard_roster_is_non_vacuous`, and both still
+      assert what they did before (job lookups by `INTERPRETER_SHARD_JOB_KEYS` over
+      `workflow["jobs"][job_key]`).

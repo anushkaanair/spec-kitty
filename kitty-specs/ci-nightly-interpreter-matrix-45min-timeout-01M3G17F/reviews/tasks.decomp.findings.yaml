@@ -1,0 +1,123 @@
+# review-findings/v1 — canonical format for lens-session and fresh-sweep output.
+schema: review-findings/v1
+complete: true
+phase: tasks
+lens_group: decomp
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: TASKS-DECOMP-001
+    lens: "Bounded-diff / one-PR-reviewable-in-one-sitting"
+    severity: 4
+    title: "WP01's owned_files grants a directory-wide scripts/ci/*.py glob that contradicts the mission's own 'no code change to nightly_escalation.py' claim and the 'bounded diff' claim"
+    evidence:
+      - code: "kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/tasks/WP01-interpreter-matrix-shard-split.md:52-57 (owned_files: .github/workflows/ci-nightly.yml, tests/architectural/test_performance_marker_guard.py, tests/architectural/test_interpreter_shard_coverage.py, tests/architectural/_interpreter_shard_roster.py, scripts/ci/*.py)"
+      - artifact: "tasks.md §ʼWP granularity: ONE work package (WP01)ʼ, lines 58-60: \"The mission's own diff is bounded (one workflow file, one extended test file, two new small files) and remains reviewable in one sitting\" — this enumerates exactly 4 files, none under scripts/ci/."
+      - artifact: "kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/plan.md:32 — \"Primary Dependencies\": \"scripts/ci/nightly_escalation.py (unmodified, --suite-key already free-form ...)\""
+      - artifact: "kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/spec.md:410 — \"scripts/ci/nightly_escalation.py requires no code change for this [mission]\""
+      - code: "No T00X subtask in WP01-interpreter-matrix-shard-split.md names any scripts/ci/ file in its 'Files:' line (verified: T001-T013 'Files:' entries touch only .github/workflows/ci-nightly.yml, the two new tests/architectural/ files, test_performance_marker_guard.py, and the pre-authorized tracer-approach.md out-of-map edit)."
+    claim: >
+      WP01's frontmatter `owned_files` includes the glob `scripts/ci/*.py`,
+      granting this WP write ownership of every Python script under
+      `scripts/ci/` — a directory containing multiple files owned by other,
+      unrelated missions in this same repo's history (e.g.
+      `scripts/ci/nightly_escalation.py` in WP03 of
+      `ci-coverage-honesty-01M3CZVN`, `scripts/ci/stale_running_sweep.py` in
+      `ci-terminal-cancel-verdict-01M2NC7Z`, `scripts/ci/router_gate.py` in
+      `ci-honesty-actionable-fixes-01M2JAXX`, `scripts/ci/aggregate_source.py`
+      in `ci-prose-only-downroute-01M31T5S`, etc.). This is inconsistent both
+      with this mission's own explicit statements ("nightly_escalation.py ...
+      unmodified" / "requires no code change") and with tasks.md's own
+      "bounded diff" claim (one workflow file + one extended test file + two
+      new small files — no scripts/ci/ file at all). No subtask ever touches
+      any file under scripts/ci/, so the grant is both unused and undocumented.
+      Grepping every other WP file in kitty-specs/ shows every other mission
+      names a specific script file (never a directory-wide glob) in
+      owned_files — this WP is the sole outlier. A directory-wide glob
+      ownership claim is exactly the kind of silent scope-boundary expansion
+      a decomposition review exists to catch: it inflates this WP's real
+      ownership footprint far beyond the diff a human is told to expect, and
+      risks spurious `finalize-tasks --validate-only` ownership-overlap
+      collisions against any other concurrent mission that legitimately edits
+      one specific scripts/ci/*.py file — directly undermining tasks.md's own
+      argument (WP-granularity note, point 2) that a single WP "naturally
+      owns the whole touched-file set with no overlap to adjudicate": WP01
+      does not actually touch any scripts/ci/ file, so it should not claim to
+      own the whole directory.
+    remediation: >
+      Remove `scripts/ci/*.py` from WP01's `owned_files` entirely (no subtask
+      touches that directory, and plan.md/spec.md both explicitly state
+      `nightly_escalation.py` requires no code change). If a future subtask
+      is genuinely expected to touch a specific script, name that one file
+      explicitly (matching every other WP file's convention in this repo,
+      e.g. `scripts/ci/nightly_escalation.py`), never a directory-wide glob.
+  - id: TASKS-DECOMP-002
+    lens: "Single-concern / no vacuous or ambiguous subtask boundaries"
+    severity: 3
+    title: "Parseability-checkpoint count is self-inconsistent across T002/T007/T009/T010's own cross-references"
+    evidence:
+      - artifact: "tasks/WP01-interpreter-matrix-shard-split.md:268-269 — T002 Notes: \"checkpoint 0 of 3 (the other two checkpoints are T007 and T009/T010 below)\" — groups T009+T010 together as ONE combined second checkpoint, implying 3 total checkpoints."
+      - artifact: "tasks/WP01-interpreter-matrix-shard-split.md:496-499 — T007 Purpose cites itself as \"checkpoint 1 of 3\"."
+      - artifact: "tasks/WP01-interpreter-matrix-shard-split.md:522-524 — T007 Notes: \"the FIRST of two mandatory post-authoring parseability checkpoints (the second, unconditional one is T010; a conditional one may also occur in T009 below)\" — here T009 is explicitly NOT one of the \"two mandatory\" checkpoints, contradicting T002's grouping of T009+T010 as a single second item."
+      - artifact: "tasks/WP01-interpreter-matrix-shard-split.md:586-588 — T009 step 4 self-labels as \"checkpoint 2 of 3\"."
+      - artifact: "tasks/WP01-interpreter-matrix-shard-split.md:608-613 — T010 step 3 self-labels as \"checkpoint 3 of 3\", explicitly distinct from and not conditioned on T009: \"this is ALWAYS required, regardless of whether T009 redrew boundaries\"."
+    claim: >
+      Four different subtask sections each describe the required
+      `_gate_coverage.parse_workflow` re-verification checkpoints, but their
+      own cross-references disagree on how many checkpoints exist and how
+      they are numbered. T002 says there are 3 total, with T009 and T010
+      sharing the "other" slot. T007 says there are 2 mandatory
+      post-authoring checkpoints (itself and T010), with T009's check being a
+      separate, merely-conditional extra — not one of the "two." T009 and
+      T010 each independently self-label as distinct checkpoints "2 of 3" and
+      "3 of 3" respectively, implying 4 total (0,1,2,3), not 3. An
+      implementer relying on any single subtask's framing to track "have I
+      done all the required checkpoints" could plausibly conclude there are
+      only 3 total and skip verifying which two of {T007, T009, T010} count,
+      or double back confused about whether T009's check is optional
+      given T002 groups it with T010 as if interchangeable. This is exactly
+      the kind of internal cross-reference drift a decomposition review
+      should catch before it causes rework mid-implementation.
+    remediation: >
+      Settle on one consistent count and numbering scheme across all four
+      notes: there are 4 distinct checkpoints total — checkpoint 0 (T002,
+      pre-split, against the CURRENT workflow), checkpoint 1 (T007, against
+      the freshly-AUTHORED shard shape, mandatory), checkpoint 2 (T009,
+      against a REDRAWN boundary, conditional — only fires if T009 actually
+      redraws), checkpoint 3 (T010, after scaffolding removal, mandatory and
+      unconditional). Rewrite T002's Notes to say "the other three
+      checkpoints are T007, T009 (conditional), and T010" instead of grouping
+      T009/T010 together, and rewrite T007's Notes to stop calling itself one
+      of "two mandatory" checkpoints in a way that implicitly excludes T009
+      from the numbered sequence.
+  - id: TASKS-DECOMP-003
+    lens: "Reviewable-in-one-sitting / phasing-step-to-subtask traceability"
+    severity: 2
+    title: "tasks.md's '1:1 traceable' claim overstates the mapping: plan.md §I step 2 alone expands into four subtasks (T004-T007), not one"
+    evidence:
+      - artifact: "tasks.md, WP-granularity note, lines 50-56: \"the subtasks are deliberately kept 1:1 traceable to plan.md §I's own numbered phasing sequence (steps 1, 2, 3, 4, 4a, 5, 6, 7, 8) plus the explicit baseline-capture and initial-parseability-check steps §F and §A point 6\" — 9 numbered phasing items + 2 pre-steps = 11 named anchors for 13 subtasks."
+      - artifact: "kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/plan.md:365 — §I step 2 is a single numbered phasing item covering roster authoring, the coverage-completeness check, AND the guard update together, plus an embedded parseability-checkpoint clause."
+      - artifact: "tasks.md:115-118 — T004 (\"plan §I step 2, part A\"), T005 (\"plan §I step 2, part B\"), T006 (\"plan §I step 2, part C\") — three separate subtasks all tracing to the single step 2."
+      - artifact: "tasks.md:118 — T007 (\"checkpoint 1 of 3\") also traces to step 2's own embedded checkpoint clause, making FOUR subtasks (T004, T005, T006, T007) trace to the ONE phasing item \"step 2\"."
+    claim: >
+      Every subtask does trace back to an identifiable plan.md concern (no
+      invented subtask was found) and no phasing step is silently dropped —
+      the underlying decomposition is sound. However, the tasks.md claim that
+      subtasks are kept "1:1 traceable" to the numbered phasing sequence is
+      not literally accurate: plan.md §I's single step 2 alone is split
+      across four subtasks (T004/T005/T006 explicitly labeled "part A/B/C",
+      plus T007 tracing to step 2's embedded checkpoint clause), a
+      one-to-many mapping rather than one-to-one. This is disclosed
+      transparently within the subtask labels themselves, so it does not
+      mislead an implementer working from the WP file directly, but the
+      "1:1" framing in tasks.md's own justification for the 13-subtask
+      deviation from the 3-7 guideline is imprecise and could give a reviewer
+      auditing that specific claim (as this lens was asked to do) false
+      confidence that the mapping is strictly one-step-one-subtask.
+    remediation: >
+      Reword tasks.md's WP-granularity note to say each subtask "traces back
+      to exactly one specific plan.md §I concern" (accurate) rather than "1:1
+      traceable to plan.md §I's own numbered phasing sequence" (implies a
+      stricter one-step-to-one-subtask correspondence than actually exists),
+      and explicitly note that step 2 alone was deliberately split into four
+      subtasks (T004-T007) for reviewability, mirroring how 4a/step
+      3/4/5/6/7/8 already map one-to-one.

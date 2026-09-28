@@ -1,0 +1,21 @@
+# review-refute/v1 — canonical format for refuter-batch verdicts.
+schema: review-refute/v1
+complete: true
+phase: spec
+batch: 1
+verdicts:
+  - id: SPEC-GOV-001
+    verdict: confirmed
+    reason: 'grep -n "SPEC-KITTY-LEDGER" AGENTS.md CLAUDE.md returns zero matches and AGENTS.md:9 actually instructs reading .kittify/charter/charter.md, so Correction #1''s claim that this checkout''s own CLAUDE.md/AGENTS.md instructs reading SPEC-KITTY-LEDGER.md is verified false.'
+  - id: SPEC-ARCH-001
+    verdict: confirmed
+    reason: 'nightly_escalation.py:118-131 confirms an unlocked find_open_issue_by_marker()-then-create_issue() sequence, FR-011 (spec.md) requires a distinct per-shard suite-key but NFR-003''s only verification method is manual inspection, and no automated pairwise-uniqueness assertion exists anywhere in tests/architectural/test_performance_marker_guard.py (grep for suite_key/suite-key returns nothing).'
+  - id: SPEC-VERIFY-001
+    verdict: confirmed
+    reason: 'spec.md lines 100-105 confirm AC2/AC3 as written, FR-004/NFR-002 (lines 225,242) define the check purely as full-vs-union node-id set arithmetic with no shard-identity input, and Key Entities (lines 259-272) defines no roster/manifest entity even though "manifest" appears only in AC3 (line 104) and FR-005 (line 226) with no supporting FR to create it — so AC3''s "name the missing shard" is unbuildable from the defined design as written.'
+  - id: SPEC-VERIFY-002
+    verdict: confirmed
+    reason: 'tests/architectural/_gate_coverage.py confirms ci-nightly.yml is a WORKFLOW_FILES member (line ~123) and BaselineTarget/collect_real_union_for_target (lines 2606-2693) is a real, already-running mechanism whose docstring verbatim matches the quoted "a shard split alone ... cannot false-red GC-2b" language, while research.md (214 lines) never mentions _gate_coverage.py despite covering capture_shard_timings.py and SK-247 in comparable depth.'
+  - id: SPEC-VERIFY-003
+    verdict: confirmed
+    reason: 'spec.md and research.md never name issue #3284 anywhere (grep confirms zero hits), only a generic Pre-existing Failure Reporting Rule pointer (spec.md lines 200-203), while repo docs (docs/reports/test-sanitation/.../issue-matrix.md, tracer-friction-recon 2026-09-26) confirm #3284 is a real, still-OPEN, extensively-tracked pre-existing-failure issue as of one day before this spec was authored.'

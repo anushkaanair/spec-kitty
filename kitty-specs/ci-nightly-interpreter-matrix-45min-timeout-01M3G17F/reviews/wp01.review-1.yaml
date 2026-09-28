@@ -1,0 +1,116 @@
+schema: wp-verdict/v1
+wp: WP01
+reviewer: reviewer-renata
+round: 1
+verdict: rejected
+diff_range: ee7494599..51f0d6dc3
+findings:
+  - id: WP01-R1-001
+    severity: 3
+    lens: mutation-non-vacuity
+    file: "tests/architectural/test_interpreter_shard_coverage.py:170-201"
+    claim: >
+      SC-003 and WP01/T004 explicitly and non-optionally require a
+      "deliberately-mutated fixture ... proving the check can fail" for the
+      FR-004 coverage-completeness guard (Standing Order #5, "a gate-unmask
+      cannot self-validate"). The two delivered tests,
+      test_coverage_completeness_check_fails_on_a_dropped_test_file and
+      test_coverage_completeness_check_fails_on_a_duplicated_test_file, do
+      not exercise the shipped guard at all: they build fabricated dummy
+      node-id sets (e.g. "tests/unit/test_a.py::test_one") and re-run
+      hand-inlined set-arithmetic that never calls collect_job_nodeids,
+      _shard_gate, INTERPRETER_SHARDS, or the real
+      test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap
+      function. If that production test's logic were broken (inverted
+      comparison, dropped assert, wrong operator), these "positive
+      controls" would still pass, because they touch none of the code they
+      claim to validate. This is exactly the "restates the guard instead of
+      exercising it" anti-pattern this review's lens 3 and directive
+      #041/tactic delete-the-assertion-not-the-test name.
+    evidence: >
+      Read tests/architectural/test_interpreter_shard_coverage.py:170-201
+      (quoted in review transcript). Contrast with the guard-file mutation
+      tests in the same diff (test_guard_fails_when_a_shard_is_dropped_from_the_job_list,
+      test_suite_key_uniqueness_guard_is_non_vacuous, etc.), which DO factor
+      out and call the real production predicate (_shard_job_presence_ok,
+      _all_suite_keys) against mutated data -- proving the pattern was known
+      and applied correctly elsewhere in this same diff, just not here.
+      Independent revert-discipline check (see gates below): I mutated the
+      REAL tests/architectural/_interpreter_shard_roster.py (dropped
+      "tests/cli" from shard-1's paths, in-memory edit, reverted after),
+      re-ran test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap,
+      and it genuinely failed naming "513 node id(s) collected by the full
+      selection but by NO shard" -- so the underlying production guard is
+      NOT actually vacuous today; only WP01's own required non-vacuity
+      *proof artifact* is fake. Tree confirmed clean after revert (`git
+      status --porcelain` empty, byte-diff against pre-edit copy empty).
+    remedy: >
+      Replace the two toy tests with real mutation tests against production
+      inputs: e.g. monkeypatch/parametrize INTERPRETER_SHARDS (or extract the
+      union/overlap arithmetic from
+      test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap
+      into a small pure helper both the real test and the mutation tests
+      call) so the "dropped test file" / "duplicated test file" scenarios
+      are proven against the actual shard Gate/collect_job_nodeids pipeline,
+      not a hand-rolled set-arithmetic replica with fabricated ids.
+  - id: WP01-R1-002
+    severity: 1
+    lens: process-hygiene
+    file: "kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/tasks/WP01-interpreter-matrix-shard-split.md:889-891"
+    claim: >
+      The WP's Activity Log contains only the initial "Prompt created" system
+      entry -- none of T001-T013's required progress entries were appended,
+      despite the prompt's explicit chronological-logging instruction.
+    evidence: "Read the file's Activity Log section; only the seed entry from 2026-09-27T01:46:46Z is present."
+    remedy: "Backfill Activity Log entries summarizing each subtask's completion before this WP is considered done, for future auditability."
+  - id: WP01-R1-003
+    severity: 1
+    lens: escalation
+    file: "kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/tracer-design-decisions.md:144-157"
+    claim: >
+      FR-011/FR-015's per-shard suite keys correctly stayed distinct (verified
+      live: run 1 auto-opened #5169 for shard-3 alone; run 2 auto-opened #5172
+      for shard-4 alone -- confirmed via `gh issue view`). This escalation
+      behavior on non-main dispatch runs is PRE-EXISTING (scripts/ci/nightly_escalation.py
+      has zero diff in this WP -- confirmed by `git diff ee7494599..51f0d6dc3 --stat -- scripts/`
+      returning nothing), not something this WP changed -- stated factually,
+      no action needed on that point. Separately: the newly-discovered
+      Python-3.13-only pre-existing test failures in shards 3/4 (documented in
+      this tracer file) are recorded as "the discovery, not yet the
+      disposition" -- the charter's Pre-existing Failure Reporting Rule
+      (a filed issue with failure summary and why-judged-pre-existing) does
+      not appear to have been completed as of this diff; only the two
+      auto-opened nightly-red escalation issues (#5169, #5172, which merely
+      link a run URL) exist so far.
+    evidence: "gh issue view 5169/5172 --repo spec-kitty/spec-kitty; tracer-design-decisions.md and tracer-approach.md's own text ('for the orchestrator to post to #3189 ... rather than being posted by this WP session itself')."
+    remedy: >
+      Not a WP01 defect -- the WP session was explicitly instructed not to
+      comment on GitHub issues, and correctly deferred the actual filing to
+      the orchestrator/PR-prep stage. Flagging so the orchestrator confirms
+      this is closed out (a Pre-existing Failure issue filed, or an existing
+      one found and linked) before the PR is marked ready-for-squad, per
+      SC-007/NFR-005.
+gates:
+  ruff_check: "All checks passed! (0 issues)"
+  ruff_format_check: "2378 files already formatted (0 diffs)"
+  tests_architectural_full: "2893 passed, 4 skipped, 2 xfailed, 0 failed (1276.57s)"
+  tests_ci_full: "555 passed, 0 failed (34.16s)"
+  tests_upgrade_test_migration_robustness: "11 passed, 0 failed (59.08s)"
+  revert_discipline_FR004_roster_mutation: "PASS (real): dropped tests/cli from shard-1 roster paths -> test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap failed naming 513 missing node ids; reverted, tree clean"
+  revert_discipline_FR016_shard_deletion: "PASS (real): deleted interpreter-matrix-shard-6 job block from ci-nightly.yml -> both test_nightly_workflow_houses_performance_and_interpreter_shards and test_every_roster_shard_exists_in_the_workflow_job_list failed naming shard-6; reverted (restored from byte-exact backup), tree clean"
+  revert_discipline_FR015_suitekey_collision: "PASS (real): duplicated shard-2's --suite-key to shard-1's value in ci-nightly.yml -> test_nightly_suite_keys_are_pairwise_distinct failed naming the exact collision; reverted, tree clean, byte-diff against pre-edit copy empty"
+  dispatch_evidence_verification: "gh run view 36294808024 and 36300726806 confirm the tracer's claimed run 1 (shard-3 cancelled at 45min cap after real measurement) and run 2 (all 6 shards success/failure, zero cancelled) conclusions exactly"
+  scope_widening_files: "pyproject.toml (ruff-format exclude removal, behavior-neutral, confirmed by ruff format --check passing), tests/ci/test_nightly_exit_code_honesty.py, tests/ci/test_interpreter_matrix_env_pinning.py, tests/upgrade/test_migration_robustness.py all verified: base versions hardcoded jobs['interpreter-matrix'] (would KeyError post-split, confirmed by git show ee7494599:<file>); updates are minimal, dynamic (import INTERPRETER_SHARD_JOB_KEYS, no second hardcoded list), and do not weaken guarded properties (env-pinning test's dropped --python-on-uv-run-line check is explicitly justified by two independent surviving pins: setup-python + per-shard UV_PROJECT_ENVIRONMENT; --all-extras still asserted); repo-wide grep confirms only two intentional residual 'interpreter-matrix' literals remain (FORBIDDEN_PR_PATH_TOKENS entry and the reverted-shape mutation test), no stray references"
+  boundary_check: "No diff to .github/workflows/module-tests.yml, .github/ci-module-registry.yml, or tests/architectural/_gate_coverage.py (confirmed via diff --stat); no generated file hand-edited"
+  git_history_leak_lens9: "git log -p origin/main..51f0d6dc3 | grep -cE '/home/[A-Za-z0-9_.-]+/|$(whoami)' = 0"
+  cross_tree_import: "tests.architectural._interpreter_shard_roster imported into tests/ci and tests/upgrade -- acceptable: pure data module, no import-linter/layer-rule violation (full architectural suite green, 0 failures)"
+  profile_note_lens8: "No discrepancy found -- WP01 frontmatter and tracer-tooling-friction.md both consistently record implementer-ivan as the profile actually used (python-pedro explicitly rejected in both places); no defect"
+directives_applied:
+  - "030 Test and Typecheck Quality Gate (verified ruff/architectural/ci/upgrade gates green with real counts)"
+  - "041 Tests as Scaffold, Not Friction (drove WP01-R1-001 -- rejected a self-validating, defect-masking test pair)"
+  - "024 Locality of Change (evaluated the 4-file scope-widening as justified, minimal, non-weakening)"
+  - "032 Conceptual Alignment (checked shard-identity/job-key terminology consistency across roster, workflow, and both guard files)"
+  - "001 Architectural Integrity Standard (confirmed module-tests.yml/ci-module-registry.yml/_gate_coverage.py boundary untouched)"
+  - "tactic: reverse-speccing / test-readability-clarity-check (reconstructed guard behavior from tests, then verified against spec.md/plan.md)"
+  - "tactic: delete-the-assertion-not-the-test (remedy for WP01-R1-001 preserves the real test's setup, replaces only the fake mutation pair)"
+complete: true

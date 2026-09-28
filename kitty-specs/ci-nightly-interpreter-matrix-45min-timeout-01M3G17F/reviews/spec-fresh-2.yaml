@@ -1,0 +1,58 @@
+schema: review-findings/v1
+complete: true
+phase: spec
+lens_group: fresh
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: SPEC-FRESH2-001
+    lens: reuse-mechanism shape-fit (conceptual alignment / architectural integrity)
+    severity: 3
+    title: FR-017's round-2 widening pushes gates_for_target as a reuse candidate for FR-016 without flagging that BaselineTarget carries no independently-declared selector, only a live (workflow, job) identity
+    evidence:
+      - artifact: "spec.md § FR-016 (line 262): roster defined as \"(shard name -> its assigned test paths/selector)\", read \"independently of ci-nightly.yml's job list\""
+      - artifact: "spec.md § FR-017 (line 263, round-2 text): \"gates_for_target's raise-loudly-on-zero-gates behavior is directly relevant to\" FR-016's roster"
+      - artifact: "research.md § 7, new paragraph \"Relevance to FR-016, not only FR-004/NFR-002\" (round-2 addition)"
+      - code: "tests/architectural/_gate_coverage.py:2605-2621 (BaselineTarget dataclass fields: slug, workflow, job only — no selector/test-paths field)"
+      - code: "tests/architectural/_gate_coverage.py:2628-2645 (gates_for_target matches gates purely by g.workflow == target.workflow and g.job == target.job against the LIVE parsed Gate list — the \"selector\" it uses is whatever parse_workflow currently reads out of the SAME workflow file being validated, not an independently stored value)"
+    claim: >-
+      BaselineTarget/gates_for_target's identity is exactly (slug, workflow, job); the pytest
+      selector it operates on is derived live by parsing the current ci-nightly.yml step, not
+      stored independently anywhere. Reusing it, as FR-017's now-widened text encourages, would
+      satisfy only the identity/name-existence half of FR-016 (a deleted job resolves to 0 gates
+      -> RuntimeError naming the target) — it gives no independent record of each shard's
+      INTENDED test paths/selector, which is the other half of FR-016's own definition
+      ("shard name -> its assigned test paths/selector") and is what a genuinely independent
+      roster needs to catch a shard whose job key still exists in jobs: but whose selector was
+      silently reassigned/corrupted to the wrong subset of tests — a hazard distinct from AC3's
+      "shard deleted entirely" and not caught by gates_for_target at all (it only checks that
+      SOME gate matches the job key, never that the gate's selector matches an intended
+      assignment). Neither FR-017's widened text nor research.md's new paragraph names this shape
+      gap; framing gates_for_target's raise behavior as "directly relevant to" FR-016 risks a
+      plan-phase reader concluding the existing mechanism can serve as (most of) FR-016's roster
+      with minimal adaptation, when structurally it cannot without adding the independently
+      declared selector data FR-016 itself requires.
+    remediation: >-
+      Add one sentence to FR-017 (or to research.md §7's new paragraph) stating explicitly that
+      BaselineTarget carries no independently-declared selector — only a (workflow, job) identity
+      resolved against the live-parsed workflow — so any reuse-vs-rejection decision for FR-016
+      must still separately declare/store each shard's intended test-paths/selector to satisfy
+      FR-016's own "shard name -> its assigned test paths/selector" wording, rather than treating
+      gates_for_target's raise-on-zero-gates behavior as a complete substitute for the roster.
+  - id: SPEC-FRESH2-002
+    lens: table well-formedness / scanability
+    severity: 1
+    title: FR-017's Title cell grew to a full sentence-plus-clause this round, breaking the FR table's short-title convention
+    evidence:
+      - artifact: "spec.md line 263, FR-017 Title cell: \"Plan phase must evaluate reusing `tests/architectural/_gate_coverage.py`'s existing coverage-oracle substrate before building a new one — for BOTH the coverage-completeness check and the shard-identity roster\""
+      - artifact: "spec.md lines 247-262, FR-001..FR-016 Title cells: each a single short phrase, none carrying an em-dash clause"
+    claim: >-
+      The round-2 edit appended "— for BOTH the coverage-completeness check and the
+      shard-identity roster" to FR-017's already-long Title cell, making it the only Title in the
+      FR table that reads as two clauses. The added information (that FR-017 now also covers
+      FR-016) is already fully stated in the User Story cell and in SC-010, so the Title-cell
+      growth adds no new information while reducing the table's scannability. No effect on
+      implementation.
+    remediation: >-
+      Shorten FR-017's Title cell to something like "Plan phase must evaluate reusing
+      _gate_coverage.py's coverage-oracle substrate for both checks" and leave the full
+      gates_for_target/FR-016 rationale in the User Story cell, where it already lives in full.

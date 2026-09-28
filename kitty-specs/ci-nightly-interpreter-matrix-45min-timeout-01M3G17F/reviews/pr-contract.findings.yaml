@@ -1,0 +1,116 @@
+schema: review-findings/v1
+complete: true
+phase: pr
+lens_group: contract
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PR-CONTRACT-001
+    lens: sizing-honesty (NFR-001)
+    severity: 4
+    title: >-
+      Shards 2 and 5 ship with ~1.09-1.12x headroom, below the ~1.3-1.5x
+      NFR-001 floor, and the validation run that revealed this was never
+      fed back into the committed timeout-minutes values
+    evidence:
+      - artifact: "spec.md NFR-001 (\"at least ... plus headroom comparable to the ~1.3-1.5x headroom the e2e/performance jobs already use\")"
+      - code: ".github/workflows/ci-nightly.yml:460 (interpreter-matrix-shard-2, timeout-minutes: 20), :647 (interpreter-matrix-shard-5, timeout-minutes: 25)"
+      - code: "tests/architectural/_interpreter_shard_roster.py:57-64 (module docstring: timeouts for shards 3-6 are EXTRAPOLATED from a re-bucketed count, not directly measured, and the docstring itself states \"run 2's real per-shard wall-clock is the actual validation of this estimate\")"
+      - run: "gh run view 36300726806 --repo spec-kitty/spec-kitty --json jobs (validation run, mode=full, 2026-09-27): shard-2 job wall-clock 06:39:16Z->06:57:10Z = 1074s (17m54s) against a 1200s (20min) cap = 1.117x headroom; shard-5 job wall-clock 06:39:16Z->07:02:10Z = 1374s (22m54s) against a 1500s (25min) cap = 1.092x headroom"
+      - run: "gh run view 36294808024 --repo spec-kitty/spec-kitty --json jobs (baseline run 1): shard-2's SAME unchanged boundaries measured only 747s (12m27s) total job wall-clock -- a 44% run-to-run increase to run 2's 1074s for the identical selector, demonstrating the real variance this leg is exposed to"
+    claim: >
+      NFR-001 requires each shard's timeout-minutes to be derived from a
+      measured wall-clock plus ~1.3-1.5x headroom, "never copied unchanged
+      ... without re-derivation." The roster's own docstring documents that
+      shards 3-6's timeouts are an EXTRAPOLATION (a per-test-time constant
+      scaled across a redrawn boundary), not a direct per-shard
+      measurement, and explicitly defers validation of that estimate to
+      run 2. Run 2 (36300726806, the mission's own validation dispatch)
+      is exactly the evidence needed to confirm or correct that estimate --
+      and it shows two of six shards (shard-2, shard-5) land at ~1.09-1.12x
+      headroom, well under the promised floor, using the shards' OWN total
+      job wall-clock (the metric that actually determines whether GitHub's
+      job-level timeout-minutes fires). No commit after run 2 adjusts either
+      shard's timeout-minutes or boundaries in response to this data. Given
+      shard-2 already swung from 747s (run 1) to 1074s (run 2) for the
+      identical selector -- a 44% increase -- a further variance of only
+      ~12% on run 2's own number would put shard-2 back into a
+      `cancelled`-by-timeout state, reproducing the exact defect (#4951)
+      this mission exists to fix, for exactly the two shards with the
+      thinnest margin.
+    remediation: >
+      Before merge, recompute shard-2's and shard-5's timeout-minutes from
+      run 2's real total job wall-clock (1074s and 1374s respectively) at
+      the same ~1.3-1.5x headroom the docstring already promises for the
+      other shards (yields ~23-27min for shard-2 and ~30-34min for shard-5),
+      update both `ci-nightly.yml` and the roster docstring's
+      "REAL boundaries" section to cite run 2's numbers instead of the
+      run-1-derived extrapolation, and note the observed run-to-run variance
+      (747s->1074s) as the reason the headroom multiplier is applied to the
+      larger, more recent measurement rather than the smaller one.
+
+  - id: PR-CONTRACT-002
+    lens: silent success
+    severity: 2
+    title: >-
+      A shard that is force-cancelled by its own timeout-minutes cap never
+      triggers the FR-011 P0 escalation, unlike a shard that fails outright
+    evidence:
+      - artifact: "spec.md FR-011 (\"no shard is silently dropped from escalation coverage\")"
+      - code: ".github/workflows/ci-nightly.yml:427-434 (escalation step, `if: always()`, reads $INTERPRETER_SHARD_1_EXIT written by the prior step)"
+      - run: "gh run view 36294808024: interpreter-matrix-shard-3's job conclusion was `cancelled` (04:36:44Z->05:26:25Z, hit the pre-redraw 45min cap); no corresponding escalation issue was opened for that run (compare: the SAME shard's later real `failure` conclusion in run 36300726806 auto-opened issue #5169)"
+    claim: >
+      When a shard's job is killed by its own `timeout-minutes` cap,
+      GitHub Actions cancels every remaining step in that job, including
+      the "Escalate ... red -> deduped P0" step -- so the exit code is
+      never captured, the escalation script never runs, and no
+      `priority:P0` issue opens. This is visible in run 1's own data:
+      shard-3 was `cancelled`, not `failure`, and produced no escalation
+      issue (only its later, redrawn-boundary `failure` conclusion in run 2
+      did). This gap is inherited unchanged from the pre-existing
+      performance/e2e/stress jobs (same `if: always()` pattern), not
+      newly introduced by this diff, but this mission newly extends the
+      same blind spot to 6 more jobs, and PR-CONTRACT-001 shows two of them
+      (shard-2, shard-5) currently have the thinnest timeout margin in the
+      whole set -- exactly the jobs most likely to exercise this gap first.
+    remediation: >
+      Either (a) document this known limitation explicitly in the PR body
+      / NFR-005 evidence section ("a shard that times out produces no P0
+      escalation, only a `cancelled` conclusion visible in the Actions UI"),
+      so a future silent-timeout regression is not mistaken for
+      "no escalation means nothing was wrong," or (b) file a follow-up
+      issue (mirroring this mission's own #5201-style pre-existing-failure
+      disclosure) proposing a repo-wide fix: a periodic/scheduled sweep (or
+      a `nightly-summary`-driven step) that opens a P0 for any `needs.*.result
+      == 'cancelled'` entry, since the existing per-job escalation step
+      structurally cannot run once its own job has been killed.
+
+  - id: PR-CONTRACT-003
+    lens: suite-key/escalation contract (mission-derived 1)
+    severity: 1
+    title: >-
+      The old single-job suite key `interpreter-3.13` is retired by this
+      split with no mechanism to close a standing escalation issue keyed to
+      it, though none currently exists to be orphaned
+    evidence:
+      - artifact: "spec.md FR-015 / Corrections #2 (\"the current single-job step's key literal `interpreter-${{ matrix.python-version }}`\")"
+      - code: "scripts/ci/nightly_escalation.py:100-141 (`run_escalation`: an issue only closes when a LATER call passes the SAME `--suite-key` with `--conclusion success`; a key that is never called again has no closing path)"
+      - run: "gh issue list --repo spec-kitty/spec-kitty --search \"Nightly suite red: interpreter\" --state all: only `interpreter-3.13-shard-3` (#5169) and `interpreter-3.13-shard-4` (#5172) exist, both OPEN, both under the NEW per-shard keys; no issue titled exactly \"Nightly suite red: interpreter-3.13\" (the old single-job key) exists in open or closed state"
+    claim: >
+      Renaming the escalation suite-key from `interpreter-3.13` to
+      `interpreter-3.13-shard-<N>` means any standing open issue under the
+      old key would never auto-close post-split, because
+      `nightly_escalation.py`'s close-on-green path only fires for a
+      `--suite-key` value a later run actually passes again. Verified live:
+      no such old-key issue exists today (open or closed) -- consistent
+      with spec.md's own premise that the single job never produced a
+      completed verdict on a GitHub-hosted runner, so it never had the
+      chance to escalate under the old key. This is a factual disclosure,
+      not a live defect: nothing is orphaned in practice by this PR.
+    remediation: >
+      State this fact explicitly in the PR body's "Dispatch evidence" /
+      escalation section (per NFR-005's durability requirement), so a
+      future reader does not have to re-derive it: "the old `interpreter-3.13`
+      suite key is retired by this split; verified via `gh issue list
+      --search \"Nightly suite red: interpreter\"` that no open or closed
+      issue exists under that exact key, so nothing is orphaned." No code
+      change required.

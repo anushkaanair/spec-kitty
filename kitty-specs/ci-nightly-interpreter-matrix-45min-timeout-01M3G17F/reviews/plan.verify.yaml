@@ -1,0 +1,72 @@
+schema: review-verify/v1
+complete: true
+phase: plan
+results:
+  - id: PLAN-GOV-001
+    status: resolved
+    reason: >-
+      plan.md §B adds explicit point 4a stating a failed run 1 still counts
+      against the up-to-3 total, its replacement consumes the next run's
+      slot (renumbering rather than an unbudgeted 4th attempt), and the same
+      escalate-to-operator stop rule applies to that replacement.
+  - id: PLAN-GOV-002
+    status: resolved
+    reason: >-
+      Charter Check's SO#7 line (plan.md line 52) and §I's new "Worktree
+      isolation" paragraph both now name the concrete mechanism
+      (resolve_workspace_for_wp into .worktrees/<feature>-lane-<id> via
+      lanes.json, no -WP## fallback) instead of the prior blanket PASS that
+      never engaged the worktree-isolation clause.
+  - id: PLAN-GOV-003
+    status: resolved
+    reason: >-
+      §I step 4a explicitly instructs removing IC-03's temporary per-shard
+      --collect-only measurement scaffolding before run 2 is dispatched and
+      confirming its absence via a named grep before proceeding, closing the
+      prior silent gap.
+  - id: PLAN-ARCH-001
+    status: resolved
+    reason: >-
+      Independently re-verified by executing tests/architectural/_gate_coverage.py
+      directly against this checkout: parse_pytest_invocation on the CURRENT
+      broken shape (uv run --frozen --python "<value>" --all-extras pytest ...)
+      returns None, while the corrected shape plan.md now specifies (uv run
+      --frozen --all-extras pytest ... with the --python flag dropped) returns
+      a real (paths, ignores, marker) tuple; parse_workflow/gates_for_target
+      run against a synthetic workflow YAML built from plan.md's exact
+      corrected "Per-shard job shape" template resolves a non-empty Gate list
+      for the shard's BaselineTarget with no exception. plan.md §A point 6 no
+      longer claims parseability was already true — it states the current job
+      does NOT parse and gives the correct root cause. IC-02's sequencing note
+      (plan.md line 110) and §I steps 2 and 4a (lines 359, 362) each carry an
+      explicit instruction (not a promise) to empirically re-run
+      parse_workflow/gates_for_target against the actual shard YAML before
+      authoring/trusting the coverage test module, and again after any later
+      edit to the run: line.
+  - id: PLAN-ARCH-002
+    status: resolved
+    reason: >-
+      Verified against tests/architectural/_gate_coverage.py directly — the
+      "a shard split alone ... cannot false-red" sentence is indeed in
+      BaselineTarget's class docstring (~line 2605), not
+      collect_real_union_for_target's own docstring (~line 2678, different
+      text) — and plan.md line 165 now cites the correct docstring with both
+      line ranges named.
+  - id: PLAN-VERIFY-001
+    status: resolved
+    reason: >-
+      plan.md §A "Suite-key-uniqueness assertion" now commits to one concrete
+      method (structured yaml.safe_load traversal of jobs:/steps[].run,
+      matched against the FULL run: string rather than a per-line scan,
+      handling both quote styles), corrects the precedent citation (explicitly
+      disclaiming _spec_kitty_run_performance_leaks and naming the real
+      per-line-scan precedent), and adds a second mutation-test variant that
+      collides two --suite-key values with different quote styles.
+  - id: PLAN-VERIFY-002
+    status: resolved
+    reason: >-
+      plan.md §E's ENFORCED list now states packs.yml fires on every PR
+      unconditionally (no top-level path filter, #3008) and that only its
+      per-lane verification jobs skip via if: false for this diff — the
+      corrected mechanism — replacing the prior backwards "should NOT fire"
+      claim; net practical conclusion is preserved.

@@ -1,0 +1,119 @@
+schema: review-findings/v1
+complete: true
+phase: plan
+lens_group: fresh
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PLAN-FRESH-001
+    lens: suite-key-uniqueness extraction method vs. actual workflow content
+    severity: 4
+    title: "New suite-key uniqueness test's described extraction only matches quoted literals, but 4 of the 5 real --suite-key values in ci-nightly.yml are unquoted"
+    evidence:
+      - artifact: "plan.md:265 (Suite-key-uniqueness assertion (FR-015))"
+      - code: "plan.md:265 — \"it extracts every `--suite-key <literal>` value, matching both single- and double-quoted forms (`--suite-key \\\"...\\\"` and `--suite-key '...'`)\""
+      - code: ".github/workflows/ci-nightly.yml:165,252,347,629 — \"--suite-key performance\", \"--suite-key e2e\", \"--suite-key stress\", \"--suite-key integration\" (all bare/unquoted tokens, no surrounding quotes at all)"
+      - artifact: "plan.md:265 — \"Keys are collected across ALL nightly jobs (performance, e2e, stress, every interpreter-matrix-shard-<N>, integration-next)\""
+    claim: >
+      The revised suite-key-uniqueness section commits to one concrete extraction
+      method (an improvement over the pre-revision vague "regex over run: blocks"
+      language) and explicitly restricts it to matching only single- and
+      double-quoted `--suite-key` values. But the plan does not touch the
+      `performance`, `e2e`, `stress`, or `integration-next` jobs, and those jobs'
+      real `--suite-key` arguments in `ci-nightly.yml` today (`performance`,
+      `e2e`, `stress`, `integration`) are bare, unquoted tokens with no quotes at
+      all. A regex that "matches both single- and double-quoted forms" and
+      nothing else will extract zero keys for these four jobs, silently dropping
+      them out of the `keys` list the test builds — even though the very same
+      sentence claims the check runs "across ALL nightly jobs". The resulting
+      `test_nightly_suite_keys_are_pairwise_distinct` would only ever compare the
+      shard keys against each other (since only shard keys are quoted by
+      construction), never against the four pre-existing jobs' keys, which is a
+      real, silent gap in SC-008's coverage claim, not merely a style nit — a
+      collision between a new shard's `--suite-key` and one of the four unquoted
+      literals (e.g. an accidental `--suite-key integration` typo on a shard)
+      would go undetected by the very guard whose purpose is to prevent that
+      class of collision.
+    remediation: >
+      Either (a) broaden the extraction regex to also capture a bare/unquoted
+      `--suite-key <token>` form (token = a shell-word with no embedded
+      whitespace, up to the next flag or end of string), and add that shape as a
+      third case in the mutation-test's quote-style matrix, or (b) if the
+      unquoted form is judged out of scope, explicitly narrow the claim from
+      "across ALL nightly jobs" to "across all quoted `--suite-key` jobs (every
+      interpreter-matrix-shard-<N>)" and add a companion assertion (or a TODO
+      tracked as a gap) that separately proves the four unquoted keys are
+      distinct from the shard keys and from each other.
+  - id: PLAN-FRESH-002
+    lens: broken/inconsistent cross-reference introduced by the revision (parseability re-verification timing)
+    severity: 3
+    title: "IC-02's re-verification pointer ('§I step 4') and §I's own new step 4a disagree about which step re-runs the empirical parseability check"
+    evidence:
+      - artifact: "plan.md:110 (IC-02 sequencing note, added this revision)"
+      - code: "plan.md:110 — \"Re-run this same empirical check again once N/timeout are finalized (§I step 4), since a later edit to the `run:` line could reintroduce an unparseable shape.\""
+      - artifact: "plan.md:361-362 (§I steps 4 and 4a, step 4a added this revision)"
+      - code: "plan.md:361 (step 4) — \"Finalize N and each shard's `timeout-minutes` from run 1's real numbers; update the workflow and roster accordingly; re-run the full local gate set (§E/§F) against the finalized shape.\" (no mention of the parseability check)"
+      - code: "plan.md:362 (step 4a) — \"Re-run the empirical parseability check from step 2 one more time here too, since this step edits the workflow again.\""
+    claim: >
+      Both the IC-02 cross-reference and the new §I step 4a were introduced in
+      this same revision (a0b9ba0a0), but they name different anchor points for
+      what they both call "the same empirical check": IC-02 says the re-run
+      happens "once N/timeout are finalized (§I step 4)", while step 4's own
+      text (finalizing N/timeout, redrawing boundaries, re-running the local
+      gate set) never mentions the parseability check at all — it is step 4a
+      (a distinct, newly-inserted step for removing IC-03's measurement
+      scaffolding) that actually restates the instruction, and step 4a's own
+      wording ("from step 2 ... one more time") treats step 2 as the only prior
+      checkpoint, with no acknowledgment of IC-02's separate claim that step 4
+      is also a checkpoint. An implementer following IC-02's citation alone
+      would look at step 4, find no re-verification instruction there, and
+      could reasonably conclude the check was dropped or already satisfied by
+      "re-run the full local gate set" — when the actual place it is restated
+      is one step further down. This is exactly the kind of "assumed instead of
+      verified" gap the correction elsewhere in this same plan (§A point 6) was
+      written to prevent.
+    remediation: >
+      Point IC-02's cross-reference at "§I step 4a" (the step that actually
+      edits the `run:`-line-adjacent workflow content a second time) instead of
+      "§I step 4", or add the explicit parseability re-check instruction to
+      step 4's own text if a check after boundary/timeout finalization is also
+      intended independently of step 4a's scaffolding removal.
+  - id: PLAN-FRESH-003
+    lens: scope creep from the worktree-isolation fix vs. §I's "one PR" phasing decision
+    severity: 3
+    title: "Newly-added worktree-isolation language introduces WP/lanes.json vocabulary without stating how many WPs this single-PR, single_branch mission will actually have"
+    evidence:
+      - artifact: "plan.md:52 (Charter Check §7, added this revision)"
+      - code: "plan.md:52 — \"...so this mission's single-PR/no-WP-split shape does not exempt it from that resolver.\""
+      - artifact: "plan.md:354 (§I, added this revision)"
+      - code: "plan.md:354 — \"...never the primary checkout, even though this mission is a single PR with no WP split...\""
+      - artifact: "meta.json — \"topology\": \"single_branch\""
+      - artifact: "plan.md:97-127 (Implementation Concern Map: IC-01..IC-04, unchanged by this revision)"
+    claim: >
+      The revision's fix for the worktree-isolation gap correctly establishes
+      THAT `spec-kitty implement` requires a `lanes.json`-resolved workspace
+      even for a flat/`SINGLE_BRANCH` mission (per CLAUDE.md, a missing manifest
+      fails closed with `MissingLanesError`), but it asserts "no WP split" as
+      settled fact in two places without ever stating what the tasks phase
+      (`/spec-kitty.tasks`, not yet run) will actually produce: a single WP01
+      covering all of IC-01..IC-04 and the entire §I 8-step sequence, or
+      multiple WPs (e.g. one per Implementation Concern) sharing the same
+      lane/branch under `single_branch` topology. `single_branch` topology
+      governs branch/lane count, not WP count — CLAUDE.md's own dependency-
+      gating section describes WPs as independently claimable/reviewable units
+      regardless of topology. If the tasks phase splits the four Implementation
+      Concerns into separate WPs (a natural reading of the Implementation
+      Concern Map, and consistent with the charter's reviewer≠implementer /
+      per-WP review discipline), the plan's own "no WP split" framing would be
+      wrong, and nothing in the plan tells the tasks-authoring step which shape
+      to pick. Conversely, if the plan really intends exactly one WP for the
+      whole mission, that concentrates all four ICs (roster + coverage-check +
+      guard-update + dispatch-orchestration) into a single WP review, which is a
+      real, undiscussed choice about review granularity that Charter Check §7
+      does not flag as a decision at all — it states it as if already decided.
+    remediation: >
+      Add one explicit sentence to §I (or the Implementation Concern Map's
+      header) stating the intended WP count/shape for the tasks phase to
+      produce — e.g. "this mission's tasks phase materializes ONE WP (WP01)
+      covering IC-01..IC-04, consistent with the single-PR decision" — so the
+      "no WP split" claim in Charter Check §7 and §I is a decision the plan
+      makes, not an assumption the worktree-isolation fix is leaning on.

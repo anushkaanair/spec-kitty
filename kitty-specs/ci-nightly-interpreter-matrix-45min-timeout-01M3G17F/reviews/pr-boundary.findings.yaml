@@ -1,0 +1,95 @@
+schema: review-findings/v1
+complete: true
+phase: pr
+lens_group: boundary
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PR-BOUNDARY-001
+    lens: duplication-drift
+    severity: 4
+    title: "Coverage-completeness proof (FR-004/NFR-002/User Story 2) never checks the roster's paths against the shipped workflow YAML's actual pytest arguments"
+    evidence:
+      - artifact: "spec.md User Story 2 / FR-004 / NFR-002 (\"Independent Test\": \"confirm it compares actual collected node-id sets\"; NFR-002: \"never a manual review of directory lists or an assumption that a partition looks complete\")"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:79-84 (_shard_gate builds its Gate from shard.paths — the roster's OWN declared paths — not from anything parsed out of ci-nightly.yml)"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:143-171 (_coverage_completeness_violations / test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap call collect_job_nodeids(_shard_gate(shard)) for every shard — i.e. it re-derives coverage from the ROSTER's claimed paths, never from the workflow file's real `run:` pytest arguments)"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:86-134 (_real_workflow_gates()/parse_workflow(NIGHTLY_WORKFLOW) DOES parse the real per-job `paths` out of ci-nightly.yml's `run:` text, but the two tests that consume it — test_every_roster_shard_exists_in_the_workflow_job_list and test_no_dangling_job_key_outside_the_roster — compare only `gate.job` / job-key sets, never `gate.paths` against `shard.paths`)"
+      - code: ".github/workflows/ci-nightly.yml (each shard's \"Run fast/unit suite\" step hand-types the same test-path list _interpreter_shard_roster.py's INTERPRETER_SHARDS[i].paths declares, e.g. shard 1's `pytest -m \"fast or unit\" tests/unit tests/status tests/cli ...` vs. InterpreterShard(job_key=\"interpreter-matrix-shard-1\", paths=(\"tests/unit\", \"tests/status\", \"tests/cli\")) in tests/architectural/_interpreter_shard_roster.py)"
+    claim: >
+      _interpreter_shard_roster.py's module docstring calls INTERPRETER_SHARDS
+      "the SINGLE SOURCE OF TRUTH for shard identity: which job keys exist,
+      which test paths each one owns" — but the actually-shipped artifact,
+      ci-nightly.yml's `run:` pytest invocation for each
+      interpreter-matrix-shard-N job, restates that same path list as a
+      hand-typed string, completely independent of the roster. Every
+      coverage-completeness assertion (FR-004's zero-gap/zero-overlap proof,
+      FR-005's zero-collection check) is computed by running
+      `pytest --collect-only` against the ROSTER's `paths` field, not against
+      whatever ci-nightly.yml's committed `run:` line actually says. The only
+      place the real workflow's parsed `paths` are used at all
+      (`_real_workflow_gates()`/`parse_workflow`) is to check job-KEY presence,
+      never path equality. Consequently a future edit that changes a shard's
+      test-path arguments directly in the YAML (rebalancing a shard boundary
+      inline, a copy-paste typo dropping a directory, "fixing" a slow shard by
+      trimming its `run:` line) without touching the roster produces NO test
+      failure anywhere in this suite — the coverage-completeness test would
+      keep reporting the roster's own (now-stale) claim as complete while the
+      shipped workflow silently runs a different, possibly incomplete,
+      selection. This is exactly the "silently shrinking nightly suite while
+      every individual shard still goes green" hazard User Story 2 and
+      NFR-002 exist to close, and it survives because the check was built
+      against the roster's self-consistency rather than against the
+      committed YAML. Contrast with the mission's OWN suite-key check
+      (test_nightly_suite_keys_are_pairwise_distinct, lines 703-714), which
+      correctly parses the real `--suite-key` literals straight out of the
+      committed YAML — proving the pattern needed here was already known and
+      used elsewhere in the same file, just not applied to path coverage.
+    remediation: >
+      Add an assertion (in test_interpreter_shard_coverage.py, alongside
+      test_every_roster_shard_exists_in_the_workflow_job_list) that, for every
+      shard in INTERPRETER_SHARDS, the real per-job `paths` (and `ignores`)
+      parsed from ci-nightly.yml via parse_workflow(NIGHTLY_WORKFLOW) — already
+      computed as `_real_workflow_gates()` in this file — equal
+      `set(shard.paths)` / `set(shard.ignores)` exactly, failing loudly and
+      naming the shard plus the specific mismatched paths on either side. Pair
+      it with a Standing-Order-#5 mutation test (a scratch Gate list with one
+      shard's real-parsed path deliberately altered) proving the new assertion
+      can fail. This closes the gap between "the roster's declared paths union
+      to the full selection" (already proven) and "the roster's declared paths
+      are what ci-nightly.yml actually runs" (currently unproven), which is
+      the missing half of FR-004/NFR-002's stated guarantee.
+
+  - id: PR-BOUNDARY-002
+    lens: duplication-drift
+    severity: 3
+    title: "nightly-summary's needs: list restates the 6 shard job keys by hand with no test tying it to the roster (FR-006 has no regression coverage)"
+    evidence:
+      - artifact: "spec.md FR-006 (\"the terminal nightly-summary job's needs: list and result-echo step [must] name every new shard job... so the full-mode summary never silently omits a shard's result\") and Edge Cases (\"a stale or partial needs: list is itself a silent-success hazard this mission must not introduce\")"
+      - code: ".github/workflows/ci-nightly.yml:967 (`needs: [performance, e2e, stress, interpreter-matrix-shard-1, interpreter-matrix-shard-2, interpreter-matrix-shard-3, interpreter-matrix-shard-4, interpreter-matrix-shard-5, interpreter-matrix-shard-6, integration-next, full-module-matrix]` — all 6 shard keys hand-typed, not generated from INTERPRETER_SHARD_JOB_KEYS)"
+      - code: "tests/architectural/test_module_shard_registry.py:363-364 (the ONLY existing test that inspects nightly-summary.needs at all asserts `\"integration-next\" in summary_needs`; it does not assert anything about the interpreter shard keys)"
+      - code: "tests/architectural/test_performance_marker_guard.py (grep for \"nightly-summary\"/\"needs\" across this file and test_interpreter_shard_coverage.py returns no hits — no test in either new/updated module checks nightly-summary's needs: against INTERPRETER_SHARD_JOB_KEYS)"
+    claim: >
+      Same class of hazard as PR-BOUNDARY-001, on a different surface: the
+      shard identity list is hand-restated a THIRD time (roster ->
+      per-shard `run:` paths -> nightly-summary's `needs:`/echo block), and
+      this third copy has zero automated coverage. FR-006 explicitly names
+      this exact hazard ("a stale or partial needs: list is itself a
+      silent-success hazard"), and the mission already has the working
+      pattern to guard it — test_module_shard_registry.py's
+      `"integration-next" in summary_needs` check, and this mission's own
+      dynamic-discovery pattern (`for job_key in INTERPRETER_SHARD_JOB_KEYS`
+      used throughout test_performance_marker_guard.py and
+      test_interpreter_matrix_env_pinning.py) — but neither was applied here.
+      Today's committed `needs:` list is correct (all 6 shards present,
+      verified by direct read), so this is not a live defect; it is an
+      unguarded FR that a future shard rebalance (adding/removing a shard,
+      exactly the kind of change this mission's own roster is designed to
+      make easy) can silently violate without any test catching it.
+    remediation: >
+      Add a test (in test_interpreter_shard_coverage.py or
+      test_performance_marker_guard.py) that reads ci-nightly.yml's real
+      `jobs.nightly-summary.needs` list and asserts
+      `set(INTERPRETER_SHARD_JOB_KEYS) <= set(needs)`, failing loudly and
+      naming the missing shard(s). Pair it with a mutation test (a scratch
+      `needs:` list with one shard key removed) proving the assertion can
+      fail, mirroring test_guard_fails_when_a_shard_is_dropped_from_the_job_list's
+      existing non-vacuity pattern.

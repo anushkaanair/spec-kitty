@@ -1,0 +1,40 @@
+schema: review-verify/v1
+complete: true
+phase: spec
+results:
+  - id: SPEC-FRESH-001
+    status: resolved
+    reason: >-
+      FR-005 (spec.md line 251) now reads "the shard-identity roster
+      (FR-016)" instead of "the coverage manifest"; a repo-wide grep for
+      "manifest" (case-insensitive) across spec.md and research.md returns
+      zero hits, so no leftover undefined-artifact reference remains.
+  - id: SPEC-FRESH-002
+    status: resolved
+    reason: >-
+      New SC-010 (spec.md lines 476-486) gives FR-017 a concrete, checkable
+      condition — plan.md or a tracer file must contain an explicit, citable
+      record naming the specific _gate_coverage.py mechanism symbols it
+      evaluated for both FR-004/NFR-002 and FR-016 — mirroring the FR-015 to
+      SC-008 and FR-016 to SC-009 pattern rather than restating FR-017's
+      prose.
+  - id: SPEC-FRESH-003
+    status: resolved
+    reason: >-
+      User Story 2's Independent Test (spec.md lines 87-97) now explicitly
+      names both the FR-004 node-id coverage-completeness check (mapped to
+      AC1-AC2) and the FR-016 shard-identity roster diff (mapped to AC3),
+      so the stated test procedure covers the full AC1-AC3 range the story
+      requires.
+  - id: SPEC-FRESH-004
+    status: resolved
+    reason: >-
+      FR-017 (spec.md line 263) is widened to require a reuse-vs-rejection
+      decision covering BOTH FR-004/NFR-002 AND FR-016 against
+      gates_for_target's raise-loudly-on-zero-gates behavior; direct read of
+      tests/architectural/_gate_coverage.py confirms gates_for_target
+      (lines 2628-2645) raises a RuntimeError naming the stale target's
+      slug/workflow/job when a BaselineTarget's (workflow, job) resolves to
+      0 gates, exactly as the FR and research.md §7 now claim, and
+      ci-nightly.yml is confirmed present in WORKFLOW_FILES with
+      BASELINE_TARGETS confirmed empty (()).

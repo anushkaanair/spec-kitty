@@ -1,0 +1,201 @@
+schema: review-findings/v1
+complete: false
+phase: pr
+lens_group: tests
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PR-TESTS-001
+    lens: revert-test (FR-012 fail-fast/independence)
+    severity: 3
+    title: No static/unit-test regression guard for shard job-graph independence (FR-012)
+    evidence:
+      - artifact: "plan.md § G, row 'fail-fast: false / independent-shard isolation (FR-012)' -- explicitly states 'a unit test alone cannot prove cross-job scheduling independence; this is proven at run 2'"
+      - code: ".github/workflows/ci-nightly.yml (interpreter-matrix-shard-2 job block, ~line 457) -- no `needs:` key on any interpreter-matrix-shard-<N> job today, which is correct"
+      - code: "tests/architectural/test_module_tests_matrix.py:179 -- a PRECEDENT static guard already exists in this same repo for the sibling module-tests.yml shards: `assert \"needs\" not in job, f\"module-tests.yml job {name!r} must not needs: another shard job\"` -- proving the team already knows how to guard this property cheaply and statically, but no analogous test was authored for ci-nightly.yml's interpreter shards"
+    claim: >
+      FR-012 ("fail-fast: false / independent-shard isolation") has zero
+      static or unit-test coverage anywhere in this diff or the pre-existing
+      suite. I added `needs: [interpreter-matrix-shard-1]` to
+      interpreter-matrix-shard-2 in the live workflow file (a real,
+      structural regression of FR-012: GitHub Actions would now serialize
+      shard-2 behind shard-1 and, without `if: always()` on shard-2, skip it
+      entirely if shard-1 fails -- exactly the coupling FR-012 forbids) and
+      ran the full relevant test surface: `.venv/bin/python -m pytest
+      tests/architectural/test_performance_marker_guard.py
+      tests/architectural/test_interpreter_shard_coverage.py
+      tests/ci/test_interpreter_matrix_env_pinning.py
+      tests/ci/test_nightly_exit_code_honesty.py
+      tests/upgrade/test_migration_robustness.py -q`. Result: all tests
+      still PASSED ("75 passed" / "8 passed" across the two runs) -- nothing
+      in the diff's test surface notices or names the coupling. The property
+      is real today (the shipped YAML has no `needs:` edges among shards)
+      and was empirically validated once by the dispatch-run evidence
+      (run 2: "all 6 shards success/failure, zero cancelled" per
+      wp01.review-2.yaml), but that is a one-time, expensive (real
+      GitHub-hosted-runner) proof, not a regression gate: a future PR that
+      accidentally introduces a `needs:` edge between two interpreter
+      shards (e.g. during a later shard-count rebalance) will pass every
+      local/CI test in this diff's surface and only be caught, if at all,
+      by the next real nightly dispatch run -- silently reintroducing the
+      exact single-point-of-failure coupling this mission exists to break.
+      I reverted the `needs:` addition immediately after the negative-result
+      run; `git status --porcelain` was empty and
+      `md5sum .github/workflows/ci-nightly.yml` matched the pre-edit
+      baseline (86c952b3e5b7575f0cc09aee36f09d23) both before and after.
+    remediation: >
+      Add a cheap, static test mirroring
+      tests/architectural/test_module_tests_matrix.py's precedent: for every
+      job key in `INTERPRETER_SHARD_JOB_KEYS`, assert `"needs" not in
+      jobs[job_key]` (or, if a `needs:` is ever legitimately required for a
+      shared setup job, assert no shard's `needs:` value contains another
+      shard's job key). This closes the FR-012 regression gap by
+      construction instead of relying solely on nightly dispatch evidence.
+  - id: PR-TESTS-002
+    lens: vacuity-by-empty-set
+    severity: 3
+    title: Three of the four consumer test files silently lose all shard coverage on an emptied roster
+    evidence:
+      - artifact: "tests/ci/test_interpreter_matrix_env_pinning.py (parametrized `@pytest.mark.parametrize(\"job_key\", INTERPRETER_SHARD_JOB_KEYS)`), tests/upgrade/test_migration_robustness.py:437 (`for job_key in INTERPRETER_SHARD_JOB_KEYS:`), tests/ci/test_nightly_exit_code_honesty.py:69 (dict-comprehension over INTERPRETER_SHARD_JOB_KEYS feeding `_MARKER_LANES`)"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:943 test_roster_is_non_empty() and tests/architectural/test_performance_marker_guard.py:1244 `assert INTERPRETER_SHARD_JOB_KEYS, \"T068: no interpreter-matrix shards declared in the roster\"` -- the ONLY two non-emptiness guards in the whole diff, both living in tests/architectural/"
+    claim: >
+      I temporarily replaced `INTERPRETER_SHARDS` with an empty tuple in
+      `tests/architectural/_interpreter_shard_roster.py` (one added line,
+      `INTERPRETER_SHARDS = ()  # TEMP-EXPERIMENT`, immediately before the
+      `INTERPRETER_SHARD_JOB_KEYS` derivation) and ran the three
+      non-architectural consumer files in isolation:
+      `.venv/bin/python -m pytest tests/ci/test_interpreter_matrix_env_pinning.py
+      tests/ci/test_nightly_exit_code_honesty.py
+      tests/upgrade/test_migration_robustness.py -q -rs`. Result: "15
+      passed, 6 skipped" -- a fully GREEN summary despite the roster being
+      completely empty. Specifically: (1)
+      test_interpreter_matrix_env_pinning.py's 6 parametrized tests report
+      SKIPPED ("got empty parameter set for (job_key)"), not failed; (2)
+      test_migration_robustness.py::test_interpreter_matrix_job_pins_a_dedicated_project_environment
+      reports a bare "1 passed" with NO skip marker at all (its `for job_key
+      in INTERPRETER_SHARD_JOB_KEYS:` loop body simply never executes); (3)
+      all 4 tests in test_nightly_exit_code_honesty.py report PASSED (its
+      dict-comprehension silently contributes zero interpreter entries to
+      `_MARKER_LANES`/`_ALL_EXIT_VARS`, with no skip/warning at all). None of
+      these three files independently guards against a roster-emptying
+      regression -- they rely entirely on
+      `tests/architectural/test_interpreter_shard_coverage.py::test_roster_is_non_empty`
+      and `test_performance_marker_guard.py`'s own assertion, in DIFFERENT
+      files, to surface the defect. Per this repo's own documented test
+      policy (CLAUDE.md "Test policy -- what you must run for a change"),
+      `make test-fast` runs only
+      `tests/unit tests/status tests/cli tests/specify_cli/runtime` and
+      never touches tests/architectural, tests/ci, or tests/upgrade at all;
+      and CLAUDE.md's blast-radius rule 3 only mandates running
+      tests/architectural for changes to "pytest.ini, pyproject.toml,
+      conftest, markers, packaging" -- a future edit confined to
+      `_interpreter_shard_roster.py` itself does not obviously fall under
+      that rule to a contributor following the documented policy literally,
+      so the two files that DO guard non-emptiness could plausibly be
+      skipped in a manual "run the tests I touched" pass. I reverted the
+      one-line edit immediately after the run; `git status --porcelain` was
+      empty and `md5sum tests/architectural/_interpreter_shard_roster.py`
+      matched the pre-edit baseline (6c142e9294cef875b66d16d7ad0e8fd6) both
+      before and after.
+    remediation: >
+      Add a cheap `assert INTERPRETER_SHARD_JOB_KEYS` (or equivalent
+      non-empty guard) at module import time in each of the three consumer
+      files (test_interpreter_matrix_env_pinning.py,
+      test_nightly_exit_code_honesty.py, test_migration_robustness.py), or
+      centralize it once in `_interpreter_shard_roster.py` itself (e.g. an
+      assertion at module load time that `INTERPRETER_SHARDS` is non-empty)
+      so an emptied roster fails loudly wherever it is imported, not only in
+      the two files that happen to already check it.
+  - id: PR-TESTS-003
+    lens: determinism-and-cost
+    severity: 2
+    title: Coverage-completeness test redundantly re-collects the same shard node-ids twice, with no caching
+    evidence:
+      - artifact: "wp01.review-2.yaml gates.tests_interpreter_shard_coverage_and_perf_marker_guard: '32 passed in 93.32s' (reviewer's own combined-file timing, already establishing this is non-trivial)"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:990-1017 `_coverage_completeness_violations()` (called once, from the main coverage test, collecting the full selection + all 6 shards via `collect_job_nodeids`) and tests/architectural/test_interpreter_shard_coverage.py:979-987 `test_no_shard_collects_zero_tests()` (calls `collect_job_nodeids(_shard_gate(shard))` again, per shard, independently) -- no `functools.lru_cache`, module-scoped fixture, or other memoization shares results between the two"
+      - code: "tests/architectural/_gate_coverage.py:1846 collect_job_nodeids -- confirmed via direct read: every call shells out a fresh `subprocess.run([sys.executable, '-m', 'pytest', '--collect-only', ...])`, i.e. a real, uncached process spawn + full pytest collection each time"
+    claim: >
+      I ran `.venv/bin/python -m pytest
+      tests/architectural/test_interpreter_shard_coverage.py -q` directly
+      (a read-only measurement, no file edited) and observed "8 passed in
+      82.21s", with the slowest-durations report showing
+      `test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap`
+      at 51.04s and `test_no_shard_collects_zero_tests` at 30.81s. The first
+      test's 51s already performs one full-tree collect-only subprocess call
+      plus 6 per-shard collect-only subprocess calls (7 real pytest
+      collections). The second test then REPEATS the same 6 per-shard
+      collect-only subprocess calls a second time (30s), producing identical
+      node-id sets to the first test's per-shard collections, purely because
+      neither test shares its `collect_job_nodeids` results with the other
+      (no caching layer exists in this module). This ~30s is avoidable,
+      redundant CI cost added to the always-on `architectural-heavy` job
+      (ci-router.yml, 30-minute budget) on every code-touching PR --
+      ironic given this mission's own charter is relieving a job-timeout
+      problem, while its own new per-PR test adds a smaller-scale but
+      structurally similar redundant-recollection cost to a different job.
+      It is bounded (900s subprocess timeout per call, 30-minute job budget,
+      so not release-blocking), and it is not marked to run under
+      `pytest-xdist`/`--dist loadfile` cross-worker sharing since
+      `ci-router.yml`'s architectural-heavy job groups all of one file's
+      tests onto a single worker (`--dist loadfile`), so there is no
+      cross-worker race -- only the intra-file redundancy documented above.
+    remediation: >
+      Cache each shard's (and the full selection's) collected node-id set in
+      a module-scoped pytest fixture (or a simple
+      `functools.lru_cache`-wrapped wrapper keyed by `Gate`) shared between
+      `test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap`
+      and `test_no_shard_collects_zero_tests`, so each shard's real
+      `collect_job_nodeids` subprocess call runs exactly once per test
+      session instead of twice.
+  - id: PR-TESTS-004
+    lens: stability-over-time (mission-derived 1)
+    severity: 3
+    title: A new, unrelated top-level tests/ directory reds the always-on architectural-heavy job on every future PR, with no contributor-facing documentation and a not-fully-actionable failure message
+    evidence:
+      - artifact: "tests/architectural/_interpreter_shard_roster.py module docstring (lines ~578-583): 'even if the suite's directories drift after this roster is written, a real gap or overlap is caught immediately rather than silently trusted' -- confirms this behaviour is a KNOWN, INTENDED design tradeoff, but only documented inside this one support module"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:1033 `assert not missing_ids, f\"{len(missing_ids)} node id(s) collected by the full selection but by NO shard: {sorted(missing_ids)[:10]}\"` -- names only the missing pytest node-id(s), never the fix location (`_interpreter_shard_roster.py`)"
+      - artifact: "grep across AGENTS.md, CLAUDE.md, docs/, CONTRIBUTING.md for 'interpreter_shard_roster'/'interpreter-matrix-shard' returned zero hits outside kitty-specs/ -- no contributor-facing doc mentions this new per-shard-roster maintenance obligation"
+    claim: >
+      I created a temporary new top-level test directory,
+      `tests/zzz_temp_experiment_dir/test_temp_new_dir.py`, containing one
+      trivial `@pytest.mark.unit` test (`assert True`) -- simulating an
+      ordinary, completely unrelated future PR that adds a new test area.
+      Running `.venv/bin/python -m pytest
+      tests/architectural/test_interpreter_shard_coverage.py -q -k
+      test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap`
+      FAILED: "1 node id(s) collected by the full selection but by NO shard:
+      ['tests/zzz_temp_experiment_dir/test_temp_new_dir.py::test_temp_placeholder']".
+      Because `architectural-heavy` in ci-router.yml is `always_on: true`
+      and code-scoped (triggers on almost any `src/**` change, per its
+      `if:` condition), this means ANY future PR that adds a new top-level
+      `tests/<newdir>/` directory -- with no relationship whatsoever to this
+      mission or to `ci-nightly.yml` -- will red this always-on job, purely
+      because the new directory is not enumerated in any
+      `InterpreterShard.paths` tuple. This is a real, intentional design
+      tradeoff (confirmed by the module's own docstring), but: (1) it is
+      surfaced nowhere a contributor adding a new top-level tests/ directory
+      would see it in advance (no hit in AGENTS.md/CLAUDE.md/docs/
+      CONTRIBUTING.md); (2) the failure message names only the missing
+      pytest node-id, not which file to edit
+      (`tests/architectural/_interpreter_shard_roster.py`) or what change to
+      make (add the new directory to an existing shard's `paths`, or add a
+      new shard) -- a contributor unfamiliar with this mission would need to
+      read the test module's source to discover the fix location. I deleted
+      the temporary directory and file immediately after the experiment (one
+      stray `__pycache__` subdirectory was also removed); `git status
+      --porcelain` was empty afterward, matching the pre-experiment state
+      (this was a new untracked file/dir, not a tracked-file edit, so no
+      md5sum comparison applies, but no tracked file was touched).
+    remediation: >
+      (a) Improve the assertion message in
+      `test_shard_union_equals_full_selection_with_zero_gap_and_zero_overlap`
+      to explicitly name the fix location, e.g. append "-- if this is a
+      newly-added test directory, add it to a shard's `paths` in
+      tests/architectural/_interpreter_shard_roster.py"; (b) add a short
+      note to AGENTS.md or CLAUDE.md's Project Structure section (or a
+      CONTRIBUTING-style test-authoring doc) stating that a new top-level
+      `tests/<dir>/` addition must be registered in
+      `_interpreter_shard_roster.py`'s `INTERPRETER_SHARDS`, mirroring how
+      other roster/registry files (e.g. `.github/ci-module-registry.yml`'s
+      `out_of_matrix_test_dirs`) are documented as needing a corresponding
+      entry.
+complete: true

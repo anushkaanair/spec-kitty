@@ -1,0 +1,143 @@
+schema: review-findings/v1
+complete: true
+phase: tasks
+lens_group: verify
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: TASKS-VERIFY-001
+    lens: absolute-path leak hygiene (independent git-history verification)
+    severity: 4
+    title: >-
+      The mission's own tasks-phase git history still contains a leaked
+      absolute local path right now; tasks.md/WP01 wording asserts it "was
+      fixed" when only the file CONTENT was redacted, not the history
+    evidence:
+      - code: >-
+          Live command run in this checkout:
+          `git log -p main..HEAD | grep -cE '/home/|/tmp/'` -> `10`
+          (verified independently, not taken on faith from the mission brief).
+      - code: >-
+          `git show afcf3bcd6 | grep -nE '/home/|/tmp/'` -> 3 hits, all in
+          `kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/tracer-tooling-friction.md`,
+          e.g. line 50: `+   ~/.kittify/cache/agent-commands-freshness.lock; ...",`
+          and line 56: `+   ~/.agent/workflows/spec-kitty.analyze.md; ...",`.
+          This is the commit that INTRODUCES the second leak (docs(tasks):
+          record SK-237 confirmation and tasks-phase StartupAssetError
+          occurrences).
+      - code: >-
+          `git show 13dc5d966 | grep -nE '/home/|/tmp/'` -> the SAME 3 lines,
+          now as `-` (removed) lines, replaced with `~/...` equivalents. This
+          is the follow-up commit "fix(tasks): redact leaked absolute local
+          paths from tracer-tooling-friction.md" — it fixes the file's
+          CURRENT content but is an additive commit, not a history rewrite,
+          so afcf3bcd6's own diff (and blob) permanently retains the raw
+          paths in `git log -p`, `git show afcf3bcd6`, and any clone/fetch of
+          this branch's history.
+      - code: >-
+          `grep -rE '/home/|/tmp/' kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/`
+          against the CURRENT working tree -> only 4 hits, all inside
+          `tasks/WP01-interpreter-matrix-shard-split.md`, and all of them are
+          the literal grep PATTERN `'/home/|/tmp/'` quoted as documentation
+          of the binding pre-push check itself (T008/T011/T013 + Review
+          Guidance) — not real leaked paths. `grep -rl <user>` over the
+          same directory returns zero files. So current file content across
+          the mission dir is genuinely clean; only the git history is dirty.
+      - code: >-
+          `git ls-remote --heads origin` shows no
+          `issue-4951-ci-nightly-interpreter-matrix-timeout` ref — this
+          branch has NOT yet reached `origin`, so the remediation window is
+          still open.
+      - artifact: >-
+          tasks.md lines 158-161 ("An absolute local path leaks into a
+          pushed commit -> mitigated by the binding pre-push leak check
+          embedded in T008, T011, and T013 ... a leak already happened once
+          in this mission's own artifacts and was fixed — see the mission
+          brief") and tasks/WP01-interpreter-matrix-shard-split.md T008 step
+          1 ("an absolute local path already leaked into a mission artifact
+          once in this mission and was fixed") both assert the earlier leak
+          "was fixed" in a way that reads as fully resolved. It is only
+          resolved at the file-content level; the binding grep gate these
+          same subtasks embed will read `10`, not `0`, the very first time
+          T008 runs it — before the WP01 implementer has touched anything.
+    claim: >-
+      This is a present-tense, already-committed defect in this mission's own
+      git history on a PUBLIC repo, not a future risk the WP text merely
+      needs to guard against. Commit afcf3bcd6 leaked
+      `~/...` paths into `tracer-tooling-friction.md`;
+      commit 13dc5d966 cleaned the file content but left the leak permanently
+      visible in history. `git log -p main..HEAD | grep -cE '/home/|/tmp/'`
+      is 10 right now, not 0, so the branch as currently committed already
+      violates this mission's own binding rule stated in the tasks-phase
+      brief.
+    remediation: >-
+      This tasks-phase session is explicitly forbidden from rebase/amend/reset
+      and so cannot self-remediate; the honest fix is NOT something this
+      reviewer or the tasks-authoring agent can prescribe to itself as a git
+      operation. Required: an operator-authorized history rewrite of the
+      local mission branch `issue-4951-ci-nightly-interpreter-matrix-timeout`
+      (e.g. an interactive rebase dropping or squashing the leak lines out of
+      afcf3bcd6, or an equivalent filter on just this commit range) BEFORE
+      the branch is ever pushed to `origin` — confirmed still feasible right
+      now since `git ls-remote --heads origin` shows this branch has not yet
+      been pushed. If no such rewrite is authorized, the branch must not be
+      pushed with this history intact (pushing it would put the leaked OS
+      username permanently into the public repo's history). Separately,
+      correct the "and was fixed" wording in tasks.md (lines 158-161) and
+      WP01 T008 step 1 to state precisely that only the file content was
+      redacted, not the git history, so a future reader (or the WP01
+      implementer) is not misled into thinking the mitigation already fully
+      closed the hazard.
+
+  - id: TASKS-VERIFY-002
+    lens: absolute-path leak hygiene (forward-looking gate robustness)
+    severity: 4
+    title: >-
+      T008's binding pre-push leak check will trip non-zero on its very
+      first run for a reason the WP text has no instruction for, risking a
+      stuck implementer or an improvised forbidden git operation
+    evidence:
+      - artifact: >-
+          tasks/WP01-interpreter-matrix-shard-split.md T008 step 1: "run
+          `git log -p main..HEAD | grep -cE '/home/|/tmp/'` and confirm it
+          prints `0`. If it prints anything other than 0, STOP. Do not push.
+          Find and fix the leaking content ... Only proceed once the count is
+          0." The same phrasing (minus 'find and fix') repeats verbatim in
+          T011 step 1 and T013 step 1, and the Review Guidance section
+          re-asserts the count "still prints `0`" at review time.
+      - code: >-
+          As established in TASKS-VERIFY-001, the count is already `10` on
+          this branch BEFORE WP01 implementation starts (confirmed via
+          `git log -p main..HEAD | grep -cE '/home/|/tmp/'` run independently
+          in this checkout). T008 is the FIRST subtask that pushes anything,
+          so its binding check is guaranteed to fail on the very first
+          invocation, for a leak that predates WP01 entirely and that no
+          edit to CURRENT file content can zero out (13dc5d966 already tried
+          exactly that and the count stayed nonzero, because the leak lives
+          in an earlier commit's diff, not in any file HEAD currently
+          contains).
+    claim: >-
+      T008/T011/T013's instruction — "Find and fix the leaking content ...
+      Only proceed once the count is 0" — presumes every nonzero reading is a
+      fresh, fixable-by-editing-a-file leak. That premise is already false for
+      this exact branch: the count is nonzero because of prior-phase history
+      that a content-only fix cannot repair, and this WP is explicitly
+      forbidden from the git operations (rebase/amend/reset) that could. As
+      written, an implementer following T008 literally either (a) loops
+      forever trying to "find and fix" content that is already clean, (b)
+      never realizes the gate can never pass without a history rewrite and
+      silently stalls the mission, or (c) self-authorizes a forbidden
+      rebase/reset to force the count to 0 — exactly the kind of
+      self-authorized exception the mission's own worktree-isolation and
+      git-discipline rules are meant to prevent.
+    remediation: >-
+      Add an explicit fallback clause to T008 (and mirror it in T011/T013):
+      "If the count is nonzero and no uncommitted or newly-pushed change of
+      yours introduced it, do NOT assume a further file edit will resolve it
+      — check whether the match traces to an earlier, already-committed
+      commit (`git show <sha> | grep -nE '/home/|/tmp/'` for each commit in
+      `main..HEAD`). If so, STOP and escalate to the operator for a
+      history-rewrite decision; do not attempt rebase/amend/reset yourself
+      under any circumstance." This turns an unhandled dead-end into a
+      correctly-routed escalation, consistent with the mission's existing
+      stop-and-escalate pattern already used for the 4th-dispatch-run rule
+      (T011 step 8).

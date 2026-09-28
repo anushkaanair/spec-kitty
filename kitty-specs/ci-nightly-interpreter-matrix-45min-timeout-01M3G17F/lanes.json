@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "mission_slug": "ci-nightly-interpreter-matrix-45min-timeout-01M3G17F",
+  "mission_id": "01M3G17FZQRCXEG7BBJ8692VQF",
+  "mission_branch": "kitty/mission-ci-nightly-interpreter-matrix-45min-timeout-01M3G17F",
+  "target_branch": "issue-4951-ci-nightly-interpreter-matrix-timeout",
+  "lanes": [
+    {
+      "lane_id": "lane-a",
+      "wp_ids": [
+        "WP01"
+      ],
+      "write_scope": [
+        ".github/workflows/ci-nightly.yml",
+        "tests/architectural/_interpreter_shard_roster.py",
+        "tests/architectural/test_interpreter_shard_coverage.py",
+        "tests/architectural/test_performance_marker_guard.py"
+      ],
+      "predicted_surfaces": [
+        "api",
+        "artifact-rendering",
+        "legacy-cleanup",
+        "tracker-integration",
+        "workspace"
+      ],
+      "depends_on_lanes": [],
+      "parallel_group": 0
+    }
+  ],
+  "computed_at": "2026-09-27T03:14:40.048796+00:00",
+  "computed_from": "dependency_graph+ownership",
+  "planning_artifact_wps": [],
+  "planning_commit_sha": "6a30fce569471ccccbdbe3b0d58d2b7bdf058e60"
+}

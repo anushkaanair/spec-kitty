@@ -1,0 +1,100 @@
+schema: review-findings/v1
+complete: true
+phase: tasks
+lens_group: fresh
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: TASKS-FRESH-001
+    lens: "structural-root-cause (debugger-debbie: hypothesis-driven + bisection)"
+    severity: 4
+    title: >-
+      Fix round's own "Known Issue" clarification leaves the binding pre-push
+      leak-check's pass/fail criteria stale and its "known commits" list
+      incomplete, at HEAD, in the very commit that was supposed to fix this
+    evidence:
+      - artifact: "tasks.md § 'Known Issue — tasks-phase git-history leak' (lines ~200-212 vs ~239-244)"
+      - artifact: "tasks/WP01-interpreter-matrix-shard-split.md, T008/T011/T013 fallback blockquotes (identical, verified byte-for-byte across all three)"
+      - code: "Ran `git log -p main..HEAD | grep -cE '/home/|/tmp/'` in this checkout right now: returns 25, not 10."
+      - code: "Per-commit breakdown (`git show <sha> | grep -cE '/home/|/tmp/'`): 99084be4b=5, 5e1cd7b1d=1, c1736bfa5=9, 13dc5d966=3, afcf3bcd6=3, 8b0f56ee8=4, all others=0. Sum before the fix round's own 3 commits (afcf3bcd6+8b0f56ee8+13dc5d966+c9ab2c1bd=10) matches tasks.md's stated pre-fix-round '10'. Sum of the fix round's own 3 commits (c1736bfa5+5e1cd7b1d+99084be4b=15) is new, and none of it is a real path — verified by inspecting each hit's context, all are prose quotations of the literal check pattern (e.g. `grep -cE '/home/|/tmp/'` in backticks), not real `/home/<user>` or `/tmp/...` paths."
+      - code: "`git show 13dc5d966 | grep -nE '/home/|/tmp/'` confirms the 3 real leaked lines are all `-` (removed) lines showing the pre-redaction raw paths under `~/...` — matches the Known Issue section's factual claim about afcf3bcd6/13dc5d966 being the only real leak."
+    claim: >-
+      The fix round's commit 99084be4b ("clarify that quoting the leak-check
+      pattern in prose self-inflates the raw count") correctly diagnoses that
+      quoting the check's own regex in prose is a self-inflating textual match,
+      and correctly updates one paragraph of tasks.md's Known Issue section to
+      say the count is "expected to drift upward again as a side effect of
+      this very document." But it does not propagate that fix to two other
+      places written in the SAME fix round that depend on the stale "10" and
+      the two-commit list: (1) tasks.md's own very next subsection ("What this
+      means for T008") still says the check "is EXPECTED to read nonzero
+      (currently 10)" — contradicting the paragraph immediately above it,
+      which just explained the count would NOT stay near 10; and (2) the
+      identical fallback blockquote embedded in T008/T011/T013 in
+      WP01-interpreter-matrix-shard-split.md tells the implementer to check
+      whether a nonzero count is "EXPLAINED by ... commits `afcf3bcd6`/
+      `13dc5d966`" and, if a fix is needed, to treat success as "the count
+      ...return[ing] to the known baseline (currently 10)". At HEAD the real
+      count is 25, and 15 of those 25 hits (60%) are in c1736bfa5, 5e1cd7b1d,
+      and 99084be4b — the fix round's own commits — none of which are named in
+      the "known commits" list the implementer is told to check against.
+      Following T008/T011/T013 literally, an implementer who reruns the check
+      during implementation will get a number nowhere near 10, trace some
+      hits to commits outside the named afcf3bcd6/13dc5d966 pair (the fix
+      round's own quoted-pattern text), and by the fallback clause's own
+      binary logic ("if it doesn't trace to the known commits, that is a
+      genuinely new leak") will misclassify harmless prose quotations as new
+      leaks — then be told to "fix the file content" (there is nothing to
+      fix) and, when the count predictably fails to "return to the known
+      baseline (currently 10)" (a number that is now permanently unreachable
+      regardless of what they do, since the fix round's own commits already
+      in history contribute ~15 to any future count), escalate to the
+      operator over a false alarm. This is exactly the confusion the
+      clarification commit set out to prevent, reintroduced by its own
+      incompleteness — a real fix to the underlying diagnosis, but an
+      incomplete propagation of that fix across the fix round's own edits.
+    remediation: >-
+      In the same "Known Issue" section, replace the "currently 10" in "What
+      this means for T008" with language matching the corrected paragraph
+      above it (e.g. "is EXPECTED to read nonzero — the baseline is no longer
+      a fixed number and will keep growing as this very document is edited;
+      trace every hit to its commit rather than comparing to a fixed count").
+      In T008/T011/T013's shared fallback blockquote, replace the two-commit
+      list ("commits `afcf3bcd6`/`13dc5d966`") with an instruction to trace
+      EVERY hit to its introducing commit and classify each as either (a) a
+      real leaked path (only ever seen so far in `afcf3bcd6`'s diff and its
+      mirrored appearance in `13dc5d966`'s redaction diff) or (b) a
+      self-referential quotation of the check's own regex pattern in prose
+      (seen in `afcf3bcd6`, `c1736bfa5`, `5e1cd7b1d`, `99084be4b`, and
+      potentially any future commit that quotes the pattern) — and drop the
+      "return to the known baseline (currently 10)" success criterion
+      entirely in favor of "every hit traces to a real leak already covered
+      by the Known Issue section, or is a quoted-pattern hit, with zero hits
+      of either kind newly introduced by this implementation session's own
+      commits."
+  - id: TASKS-FRESH-002
+    lens: "divergence-matrix (debugger-debbie: dual-system-divergence-mapping)"
+    severity: 2
+    title: >-
+      "Exact commits responsible" bullet in the Known Issue section omits the
+      fix round's own commits as contributors to the count, despite the very
+      next paragraph relying on readers already knowing that omission exists
+    evidence:
+      - artifact: "tasks.md § 'Known Issue', bullet 'Exact commits responsible:' (names only afcf3bcd6 and 13dc5d966)"
+      - artifact: "tasks.md § 'Known Issue', first bullet ('Current count...') which separately warns that this file and WP01.md's own quoting inflates the count — but never updates the 'Exact commits responsible' bullet to name which commits do that quoting"
+    claim: >-
+      The "Exact commits responsible" bullet is titled and phrased as if it
+      is the complete list a reader should trace hits against, but it only
+      covers the ONE real leak (afcf3bcd6/13dc5d966), not the separate,
+      now-larger class of harmless self-referential quotation hits the fix
+      round's own commits introduce (c1736bfa5, 5e1cd7b1d, 99084be4b — see
+      TASKS-FRESH-001's evidence for the count breakdown). A reader who reads
+      only this bullet (as its title invites) rather than piecing together
+      the more diffuse warning in the adjacent "Current count" bullet would
+      not realize the fix round's own commits are also expected contributors.
+    remediation: >-
+      Extend the "Exact commits responsible" bullet to explicitly list BOTH
+      categories: the one real-leak commit pair (afcf3bcd6/13dc5d966) AND the
+      separate, growing list of quoted-pattern-only commits (currently
+      c1736bfa5, 5e1cd7b1d, 99084be4b), so the bullet a reader is pointed to
+      by its own title is actually complete instead of requiring the reader
+      to reconstruct the second category from a different bullet's prose.

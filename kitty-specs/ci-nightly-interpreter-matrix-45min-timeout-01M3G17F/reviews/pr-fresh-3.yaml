@@ -1,0 +1,82 @@
+schema: review-findings/v1
+complete: true
+phase: pr
+lens_group: fresh
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PR-FRESH3-001
+    lens: architectural-integrity
+    severity: 2
+    title: Truth-table equivalence check has no guard against exponential blow-up as the marker name set grows
+    evidence:
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:179"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:213"
+    claim: >
+      `_marker_exprs_are_boolean_equivalent` enumerates `itertools.product((False,
+      True), repeat=len(names))` over the union of every marker name referenced by
+      either expression -- 2^N assignments, each requiring an `Expression.evaluate`
+      call. Verified in the lane's own venv: 20 marker names already cost ~1.8s
+      wall-clock for one comparison (`itertools.product` + `Expression.evaluate`
+      loop, measured directly against `_pytest.mark.expression.Expression`), and the
+      cost doubles per additional name. Today the call site is safe -- the only
+      expressions compared are the fixed `"fast or unit"` constant against real
+      shard markers, currently 2 names -- but the function is general-purpose, has
+      no assertion or comment capping `len(names)`, and nothing in the module
+      documents the assumption that the marker taxonomy stays small. The repo's own
+      `pyproject.toml` mutmut config (line ~2920) already carries a real 10-name `-m`
+      expression, showing marker expressions with double-digit name counts are not
+      hypothetical in this codebase; if a future edit widens `_EXPECTED_SHARD_MARKER_EXPR`
+      or a shard's marker to reference that many names, this specific test would go
+      from instant to minutes-to-hours with no warning, in a repo whose current
+      mission is explicitly about CI jobs silently blowing their time budget.
+    remediation: >
+      Add an explicit guard (e.g. `assert len(names) <= 8, f"boolean-equivalence
+      truth table is exponential in the marker count ({len(names)} names); refactor
+      to a SAT-style check or shrink the compared expressions"`) inside
+      `_marker_exprs_are_boolean_equivalent`, or at minimum a comment recording the
+      bound the current call sites rely on, so a future widening fails loudly at the
+      cheap end instead of silently degrading CI wall-clock.
+
+  - id: PR-FRESH3-002
+    lens: conceptual-alignment
+    severity: 2
+    title: Three docstrings/comments still describe the retired token-based comparison as "current", after this fix replaced it with the boolean truth-table check
+    evidence:
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:336"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:358"
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:375"
+    claim: >
+      This commit's own module-level framing (the `_marker_exprs_are_boolean_equivalent`
+      docstring, ~line 185) explicitly states the truth-table check "supersed[es] the
+      `positive_marker_tokens` remedy PR-FRESH-001 shipped" and that the token/name-set
+      comparison is now "the retired helper". But three nearby, untouched docstrings in
+      the same file still describe `_marker_expr_diverges_from_expected_shard_marker`
+      (the function whose body this commit rewrote) as "the current token-based
+      ... comparison" (line 336) and refer to "token-based comparison" (line 358) and
+      "the token comparison's negative-token half" (line 375). A reader of these three
+      tests, without cross-referencing the function definition, would conclude the
+      production algorithm is still name-set/token based -- directly contradicting the
+      truth-table docstring 60-190 lines above it in the same file. This is exactly the
+      terminology-drift Directive 032 (Conceptual Alignment) flags: language drift here
+      signals which description to trust is now ambiguous within a single module.
+    remediation: >
+      Update the three stale docstrings to describe the boolean-equivalence
+      truth-table check (or simply say "the production comparison" without naming
+      an algorithm, to avoid re-drifting on the next refactor).
+
+  - id: PR-FRESH3-003
+    lens: code-review-incremental
+    severity: 1
+    title: "_scratch_gates_with docstring miscounts Gate's fields as five; it actually has seven"
+    evidence:
+      - code: "tests/architectural/test_interpreter_shard_coverage.py:292"
+      - code: "tests/architectural/_gate_coverage.py:290"
+    claim: >
+      The new `_scratch_gates_with` docstring justifies the DRY refactor by saying
+      the two retired call sites "each hand-listed all five `Gate` fields". Confirmed
+      via `dataclasses.fields(Gate)` in the lane's venv: `Gate` has seven fields
+      (`workflow`, `job`, `shard`, `paths`, `ignores`, `marker_expr`, `via`), and the
+      pre-existing scratch-copy code being replaced did list all seven, not five. The
+      behavior of `dataclasses.replace(g, **transform(g))` is correct regardless of
+      the miscount, so this has no functional effect.
+    remediation: "Change \"all five `Gate` fields\" to \"all seven `Gate` fields\" (or drop the number and just say \"every `Gate` field\") in the `_scratch_gates_with` docstring."

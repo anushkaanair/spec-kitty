@@ -1,0 +1,192 @@
+# review-findings/v1 — confirmed set (R3 result). All 10 merged findings were
+# CONFIRMED across two refutation batches (reviews/tasks.refute-1.yaml,
+# reviews/tasks.refute-2.yaml) — zero refuted. Entries reproduced verbatim from
+# reviews/tasks.merged.yaml; see that file for the dedup note on
+# TASKS-SEQ-004/TASKS-VERIFY-001/TASKS-VERIFY-002.
+schema: review-findings/v1
+complete: true
+phase: tasks
+lens_group: confirmed
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: TASKS-DECOMP-001
+    lens: "Bounded-diff / one-PR-reviewable-in-one-sitting"
+    severity: 4
+    title: "WP01's owned_files grants a directory-wide scripts/ci/*.py glob that contradicts the mission's own 'no code change to nightly_escalation.py' claim and the 'bounded diff' claim"
+    evidence:
+      - code: "kitty-specs/ci-nightly-interpreter-matrix-45min-timeout-01M3G17F/tasks/WP01-interpreter-matrix-shard-split.md:52-57 (owned_files includes scripts/ci/*.py)"
+      - artifact: "tasks.md §'WP granularity', lines 58-60: bounded-diff claim enumerates exactly 4 files, none under scripts/ci/."
+      - artifact: "plan.md:32 and spec.md:410 — scripts/ci/nightly_escalation.py is explicitly unmodified/no-code-change for this mission."
+      - code: "No T00X subtask names any scripts/ci/ file in its 'Files:' line; every other WP file in kitty-specs/ names one specific script file, never a directory glob (confirmed by refuter, e.g. ci-coverage-honesty-01M3CZVN/WP03 owns nightly_escalation.py by exact name)."
+    claim: >
+      WP01's owned_files grants ownership of every file under scripts/ci/ via
+      a directory-wide glob, unused by any subtask and inconsistent with the
+      mission's own "no code change" statements — risking spurious ownership
+      collisions against concurrent missions.
+    remediation: >
+      Remove `scripts/ci/*.py` from WP01's `owned_files` entirely.
+    verdict: confirmed
+
+  - id: TASKS-DECOMP-002
+    lens: "Single-concern / no vacuous or ambiguous subtask boundaries"
+    severity: 3
+    title: "Parseability-checkpoint count is self-inconsistent across T002/T007/T009/T010's own cross-references"
+    evidence:
+      - artifact: "T002 Notes (~line 268): 'checkpoint 0 of 3' groups T009+T010 as one item."
+      - artifact: "T007 Purpose/Notes (~lines 496-524): self-labels 'checkpoint 1 of 3' and 'one of two mandatory checkpoints', explicitly excluding T009."
+      - artifact: "T009 step 4 (~line 586): self-labels 'checkpoint 2 of 3'."
+      - artifact: "T010 step 3 (~line 608): self-labels 'checkpoint 3 of 3'."
+    claim: >
+      Four subtask sections disagree on how many parseability checkpoints
+      exist and how they are numbered — an implementer could plausibly
+      miscount which checkpoints are required.
+    remediation: >
+      Settle on 4 distinct checkpoints (0=T002, 1=T007 mandatory, 2=T009
+      conditional, 3=T010 mandatory/unconditional) and make all four notes
+      consistent.
+    verdict: confirmed
+
+  - id: TASKS-DECOMP-003
+    lens: "Reviewable-in-one-sitting / phasing-step-to-subtask traceability"
+    severity: 2
+    title: "tasks.md's '1:1 traceable' claim overstates the mapping: plan.md §I step 2 alone expands into four subtasks (T004-T007), not one"
+    evidence:
+      - artifact: "tasks.md WP-granularity note, lines 50-56: claims '1:1 traceable' to plan.md §I's numbered steps."
+      - artifact: "plan.md:365 — §I step 2 is a single numbered item bundling roster+coverage-check+guard-update+embedded checkpoint clause."
+      - artifact: "tasks.md:115-118 — T004/T005/T006/T007 all trace to the single step 2."
+    claim: >
+      The decomposition is sound (no dropped step, no invented subtask) but
+      the "1:1 traceable" framing is imprecise — it is one-to-many for step 2.
+    remediation: >
+      Reword to "traces back to exactly one specific plan.md §I concern" and
+      note step 2's deliberate 4-way split.
+    verdict: confirmed
+
+  - id: TASKS-SEQ-001
+    lens: phasing
+    severity: 1
+    title: "T001/T002 are documented as strictly serial but are independent read-only checks"
+    evidence:
+      - artifact: "tasks.md § Parallel Opportunities: 'No subtask in this WP is parallel-safe with another.'"
+      - artifact: "WP01 T001/T002 'Parallel?: No' entries."
+    claim: >
+      T001 and T002 are both read-only with no data dependency between them;
+      the blanket "no subtask is parallel-safe" statement is not quite
+      accurate, though moot under single-agent execution.
+    remediation: >
+      Note T001/T002 as "independently orderable, both must precede T003" or
+      acknowledge the single-agent execution model makes it moot.
+    verdict: confirmed
+
+  - id: TASKS-SEQ-002
+    lens: write scopes
+    severity: 2
+    title: "tasks.md's open-PR snapshot (7 PRs) is already stale at review time (8 PRs); overlap conclusion still holds"
+    evidence:
+      - artifact: "tasks.md § Write-scope / open-PR overlap: cites 7 open PRs."
+      - code: "Re-run at review time: 8 open PRs (#4995, #5009, #5028, #5137, #5161, #5163, #5164, #5165); zero overlap confirmed against all 8."
+    claim: >
+      The open-PR count has already drifted once within this mission's own
+      authoring window, confirming the "short shelf life" caveat is not
+      hypothetical. Substantive conclusion (no overlap) unchanged.
+    remediation: >
+      No action beyond what T008/T011/T013 already mandate (re-run before
+      each push); optionally note in tasks.md that the count already drifted
+      once.
+    verdict: confirmed
+
+  - id: TASKS-SEQ-003
+    lens: chokepoints
+    severity: 2
+    title: "tasks.md's Chokepoint section names only ci-nightly.yml, omitting the shared architectural guard file this WP also edits"
+    evidence:
+      - artifact: "tasks.md § Chokepoint: names only ci-nightly.yml."
+      - artifact: "lanes.json write_scope and plan.md's Guard-update plan: test_performance_marker_guard.py guards performance/e2e/stress/every interpreter shard job."
+    claim: >
+      test_performance_marker_guard.py meets the shared-CI-gate chokepoint
+      criterion as squarely as ci-nightly.yml; the dedicated Chokepoint
+      section omits it (operationally mitigated elsewhere, but a documentation
+      completeness gap in the dedicated call-out).
+    remediation: >
+      Add test_performance_marker_guard.py to the Chokepoint section alongside
+      ci-nightly.yml.
+    verdict: confirmed
+
+  - id: TASKS-SEQ-004
+    lens: "mission-derived — dispatch-run mapping fidelity"
+    severity: 3
+    title: "The binding pre-push leak check (T008/T011/T013) is diff-history-based and is already non-zero for reasons unrelated to any live leak"
+    evidence:
+      - artifact: "WP01 T008/T011/T013 step 1: binding check text using `git log -p main..HEAD | grep -cE '/home/|/tmp/'`."
+      - code: "Re-run: count is 10, not 0, before WP01's own first commit — confirmed independently by both this lens and the refuter."
+    claim: >
+      `git log -p` re-shows already-fixed history forever, so this mission's
+      own leak-then-redact commit pair (afcf3bcd6/13dc5d966) permanently
+      trips the check even though current tree content is clean.
+    remediation: >
+      Proposed: switch the check to a diff-scoped scan immune to already-fixed
+      history. NOTE FOR THE FIXER: this proposed remediation directly conflicts
+      with the mission brief's explicit, orchestrator-mandated binding-check
+      text (`git log -p main..HEAD | grep -cE ...`) — see the Fix Round
+      instructions for how this tension is resolved (a "known baseline +
+      operator escalation" callout is added instead of changing the check's
+      command).
+    verdict: confirmed
+
+  - id: TASKS-SEQ-005
+    lens: "mission-derived — dispatch-run mapping fidelity"
+    severity: 2
+    title: "WP01 never explicitly self-attests that the tasks-authoring session performed no push/dispatch, unlike plan.md's precedent"
+    evidence:
+      - artifact: "plan.md § B: first-person self-attestation of no push/dispatch, citing its own tool history."
+      - artifact: "tasks.md/WP01: only implicit via phase labeling, no equivalent first-person statement."
+      - code: "Independently verified the underlying fact holds: git log --oneline a63e103f7..HEAD shows only doc/task-authoring commits."
+    claim: >
+      A documentation/self-attestation gap, not a live violation — the mission
+      brief calls for parity with plan.md's precedent.
+    remediation: >
+      Add one sentence to tasks.md mirroring plan.md §B's phrasing.
+    verdict: confirmed
+
+  - id: TASKS-VERIFY-001
+    lens: "absolute-path leak hygiene (independent git-history verification)"
+    severity: 4
+    title: >-
+      The mission's own tasks-phase git history still contains a leaked
+      absolute local path right now; tasks.md/WP01 wording asserts it "was
+      fixed" when only the file CONTENT was redacted, not the history
+    evidence:
+      - code: "git log -p main..HEAD | grep -cE '/home/|/tmp/' -> 10, confirmed independently by both this lens and the refuter."
+      - code: "git show afcf3bcd6 introduces the leak; git show 13dc5d966 redacts file content via an additive commit, not a rewrite — afcf3bcd6's own diff permanently retains the raw path."
+      - code: "Current working tree is genuinely clean (verified); git ls-remote --heads origin confirms the branch has not yet been pushed — remediation window still open."
+    claim: >
+      A present-tense, already-committed public-repo path leak exists in this
+      mission's own git history right now, not merely a future risk.
+    remediation: >
+      Requires operator-authorized history rewrite before this branch is ever
+      pushed — this session (and any fix-round session) is explicitly
+      forbidden from rebase/amend/reset and cannot self-remediate the history.
+      The fixer corrects the misleading "was fixed" wording and adds a
+      prominent, explicit KNOWN ISSUE callout naming the exact commits and the
+      required operator action.
+    verdict: confirmed
+
+  - id: TASKS-VERIFY-002
+    lens: "absolute-path leak hygiene (forward-looking gate robustness)"
+    severity: 4
+    title: >-
+      T008's binding pre-push leak check will trip non-zero on its very
+      first run for a reason the WP text has no instruction for, risking a
+      stuck implementer or an improvised forbidden git operation
+    evidence:
+      - artifact: "WP01 T008/T011/T013: 'find and fix the leaking content... proceed once count is 0' presumes every nonzero reading is fresh/fixable."
+      - code: "Count is already 10 before WP01 starts, for a reason no content edit can fix (the leak lives in a prior commit's diff, not current content)."
+    claim: >
+      As written, an implementer either loops forever, silently stalls, or
+      self-authorizes a forbidden rebase to force the count to zero.
+    remediation: >
+      Add an explicit escalation-fallback clause to T008/T011/T013: if nonzero
+      and not caused by the implementer's own uncommitted/new change, trace to
+      the specific already-committed commit and STOP + escalate to the
+      operator; never attempt rebase/amend/reset.
+    verdict: confirmed

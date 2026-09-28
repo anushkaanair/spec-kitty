@@ -1,0 +1,58 @@
+schema: review-refute/v1
+complete: true
+phase: tasks
+batch: 2
+verdicts:
+  - id: TASKS-SEQ-003
+    verdict: confirmed
+    reason: >-
+      Verified tasks.md's Chokepoint section (lines 67-74) names only
+      ci-nightly.yml; test_performance_marker_guard.py appears only in the
+      separate Write-scope/open-PR section (line 81), lanes.json write_scope
+      includes both files, and the guard file itself statically asserts over
+      "performance", "e2e", "stress", and "interpreter-matrix" job names
+      (test_performance_marker_guard.py lines 405, 478, 511, 543-563),
+      confirming it is a shared cross-job gate the Chokepoint section omits.
+  - id: TASKS-SEQ-004
+    verdict: confirmed
+    reason: >-
+      Independently ran `git log -p main..HEAD | grep -cE '/home/|/tmp/'` and
+      got 10 (not 0) before any WP01 implementation; broke it down per-commit
+      (8b0f56ee8=4, afcf3bcd6=3, 13dc5d966=3) confirming afcf3bcd6 adds and
+      13dc5d966 removes the same 3 lines via a new commit (not an amend), so
+      the diff-history scan is already tripped by already-fixed history plus
+      self-matching documentation text, exactly as claimed; the check text is
+      verified verbatim and identical across T008/T011/T013.
+  - id: TASKS-SEQ-005
+    verdict: confirmed
+    reason: >-
+      plan.md §B (line 269) contains an explicit first-person self-attestation
+      ("The PLAN phase... performs none of this dispatching... confirmed by
+      this session's own tool history"); grepping tasks.md and WP01 for
+      equivalent phrasing found none — T008's note (line 530) only says "This
+      is a BUILD/IMPLEMENT-phase action" with no first-person tool-history
+      claim, confirming the asymmetry as described.
+  - id: TASKS-VERIFY-001
+    verdict: confirmed
+    reason: >-
+      Reproduced every cited command myself: `git log -p main..HEAD | grep -cE
+      '/home/|/tmp/'` = 10; `git show afcf3bcd6` has 3 added leak lines with
+      real ~/ paths; `git show 13dc5d966` removes the same 3
+      lines as a new commit (history still retains the raw paths in
+      afcf3bcd6's blob); current-tree grep of the mission dir shows only 4
+      hits, all the literal grep pattern quoted as documentation (no real
+      leak); `git ls-remote --heads origin` shows no ref for this mission
+      branch, confirming it has not been pushed — the remediation window is
+      genuinely still open.
+  - id: TASKS-VERIFY-002
+    verdict: confirmed
+    reason: >-
+      Confirmed T008's purpose text literally states "Push the mission branch
+      for the FIRST time... nothing before this subtask pushes or dispatches
+      anything" (line 528-530), and the count is already 10 before T008 runs;
+      confirmed Review Guidance (line 750) re-asserts "still prints `0`
+      at review time" verbatim; read all of T008/T011/T013's check text and
+      found no fallback clause distinguishing already-committed history from
+      fixable working-tree content — only "STOP and fix if nonzero" — so the
+      gap and its consequence (stall or forbidden history rewrite) are real
+      and unaddressed anywhere else in the WP.

@@ -1,0 +1,93 @@
+schema: review-findings/v1
+complete: true
+phase: plan
+lens_group: verify
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: PLAN-VERIFY-001
+    lens: "Escalation suite-key distinctness and mutation-testability (FR-011/FR-015/NFR-003)"
+    severity: 3
+    title: "Suite-key-uniqueness scan method is under-specified and cites a precedent that does not do what plan.md says it does"
+    evidence:
+      - artifact: "plan.md §A 'Suite-key-uniqueness assertion' (lines 261-263)"
+      - code: "tests/architectural/test_performance_marker_guard.py:349-363 (_spec_kitty_run_performance_leaks)"
+      - code: "tests/architectural/test_performance_marker_guard.py:516-529 (test_nightly_fail_loud_step_treats_marker_empty_exit_5_as_non_failing, the file's actual run-text-scanning precedent)"
+      - code: "tests/architectural/test_performance_marker_guard.py:25-32 (module imports — no `re` import exists anywhere in this file today)"
+    claim: >
+      Plan.md's proposed `test_nightly_suite_keys_are_pairwise_distinct` is described as
+      "a regex over `run:` blocks, or an AST-free string scan ... reusing the same
+      'scan `run:` script text' style the file's existing helpers already use, e.g.
+      `_spec_kitty_run_performance_leaks`". Verified by direct read: `_spec_kitty_run_performance_leaks`
+      (lines 349-363) does not scan `run:` text at all — it inspects each parsed job's
+      structured `env:` dict for a key name. It is not a precedent for text-scanning a
+      shell command line. The file's actual closest precedent for scanning `run:` text is
+      `test_nightly_fail_loud_step_treats_marker_empty_exit_5_as_non_failing` (lines 516-529),
+      which operates via `run.splitlines()` — a per-physical-line scan over the parsed YAML
+      `run:` string, not a regex, and `import re` does not appear anywhere in this file today.
+      Plan.md leaves the actual extraction method as an open choice between two undecided
+      techniques ("a regex ... or an AST-free string scan") without pinning down (a) which
+      quote style(s) the pattern must recognize (the current single job's key is
+      `--suite-key "interpreter-${{ matrix.python-version }}"`, double-quoted; nothing rules
+      out a future single-quoted or unquoted variant) or (b) whether the scan is line-scoped
+      (mirroring the file's own real precedent at lines 516-529, which iterates
+      `run.splitlines()`) or applied to the full multi-line `run:` string as one blob. If the
+      implementer follows the file's own established per-line-scan style, a `--suite-key`
+      flag and its value split across a continued physical line (a plausible future
+      reformatting of a `run:` block, e.g. a backslash line continuation between the flag and
+      its quoted value) would not be captured by either line, so a real future collision could
+      slip past the guard silently — the exact non-vacuity failure mode Standing Order #5
+      requires this guard to close. The described mutation test itself
+      (`test_suite_key_uniqueness_guard_is_non_vacuous`) only proves the guard catches a
+      collision expressed in the same single-line, double-quoted shape the illustrative
+      per-shard template already uses (§A "Per-shard job shape") — it does not exercise or
+      prove robustness against quote-style or line-continuation variance, so SC-008's
+      non-vacuity proof is narrower than what FR-015/NFR-003 actually ask the guard to
+      guarantee ("a copy-paste suite-key collision ... is caught by CI instead of relying on
+      human inspection" — stated without a formatting caveat).
+    remediation: >
+      In plan.md §A, replace the two-option, wrongly-precedented description with one
+      concrete, committed extraction method: state explicitly whether the new test parses
+      the already-loaded YAML `jobs:` mapping and iterates each job's `steps[].run` string
+      (structured, like `_spec_kitty_run_performance_leaks`'s job/env traversal, but applied
+      to `run:` instead of `env:`), and whether the pattern matches both single- and
+      double-quoted `--suite-key` values (e.g. `--suite-key\s+(?:"([^"]+)"|'([^']+)')`) applied
+      to the FULL `run:` string with `re.DOTALL`/no `splitlines()` (so a continued line cannot
+      hide an occurrence) rather than line-by-line. Correct the citation: name
+      `test_nightly_fail_loud_step_treats_marker_empty_exit_5_as_non_failing`'s
+      `run.splitlines()` approach as the actual (and, per this remediation, superseded) prior
+      art, not `_spec_kitty_run_performance_leaks`. Add a second mutation-test variant (or a
+      parametrized case) that collides two suite-keys expressed with different quote styles,
+      to prove the chosen implementation's robustness rather than only the happy-path shape.
+
+  - id: PLAN-VERIFY-002
+    lens: "Gates — §E gate-set verification against live workflow files"
+    severity: 2
+    title: "plan.md's packs.yml claim ('should NOT fire') describes the wrong mechanism — the workflow always triggers; only its lane jobs skip"
+    evidence:
+      - artifact: "plan.md §E 'NOT ENFORCED' list: 'Doctrine packs gate (`packs.yml`, path-filtered) — should NOT fire; this mission touches no `packs/` sources'"
+      - code: ".github/workflows/packs.yml:12-19 ('Deliberately no top-level on.*.paths (Gate-0): #3008 ... warns that a hand-maintained Gate-0 path list can silently drift out of lockstep with Gate-1 and no-op the whole workflow ... A src-only PR still spins up this workflow's `changes` job, but every lane job below reports `if: false` (skipped)')"
+      - code: ".github/workflows/packs.yml:39-44 (top-level `on:` has `pull_request`/`push`/`workflow_dispatch` with no `paths:` filter at all)"
+      - code: ".github/workflows/packs.yml:245-258 (packs-gate terminal job: `if: always() && !cancelled()`, always runs)"
+    claim: >
+      Verified by direct read: `packs.yml` deliberately carries NO top-level `on.*.paths`
+      filter (its own header comment names this as an intentional Gate-0 avoidance, citing
+      #3008's warning that a hand-maintained top-level path list can silently no-op the
+      whole workflow). The workflow — including its `changes` job and its terminal
+      `packs-gate` aggregator (`if: always() && !cancelled()`) — fires on every PR
+      unconditionally; what does NOT run for a non-`packs/`-touching diff is the per-lane
+      verification work inside it (`built-in-*`/`internal-*` jobs report `if: false`
+      individually). Plan.md's phrasing "packs.yml ... should NOT fire" describes the
+      opposite mechanism from the one this exact workflow file's own comments were written
+      to guarantee. The net practical conclusion (no packs-specific verification work blocks
+      this mission's diff) is still correct, but the mechanism cited is factually backwards,
+      and this is one of the specific claims the review brief calls load-bearing for §E.
+    remediation: >
+      In plan.md §E, change "Doctrine packs gate (`packs.yml`, path-filtered) — should NOT
+      fire" to something like: "packs.yml triggers on every PR (deliberately no top-level
+      path filter, #3008) but its `changes` job's dorny filter does not match
+      `.github/workflows/**` or `tests/architectural/**`, so every built-in/internal lane job
+      reports `if: false` (skipped) and the terminal `packs-gate` resolves green with no
+      packs-specific work performed for this mission's diff." This keeps the correct
+      practical conclusion while not misdescribing a workflow whose own design intent is
+      explicitly to always fire.
+

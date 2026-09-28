@@ -1,0 +1,75 @@
+# review-findings/v1 — canonical format for lens-session and fresh-sweep output.
+schema: review-findings/v1
+complete: true
+phase: spec
+lens_group: gov
+mission: ci-nightly-interpreter-matrix-45min-timeout-01M3G17F
+findings:
+  - id: SPEC-GOV-001
+    lens: Ledger/CLAUDE.md drift-claim accuracy
+    severity: 3
+    title: >-
+      Spec's "Correction #1" falsely claims this checkout's CLAUDE.md/AGENTS.md
+      instructs reading a nonexistent SPEC-KITTY-LEDGER.md, framing a
+      misattribution as onboarding "drift"
+    evidence:
+      - artifact: "spec.md § Clarifications → Corrections, item 1 (lines 333-344)"
+      - code: "AGENTS.md:1-20 (this checkout's actual onboarding text)"
+      - artifact: "spec.md § User Story 2 → Why this priority (line 83), which cites Correction #1"
+    claim: >-
+      spec.md's Correction #1 states: "CLAUDE.md (a symlink to AGENTS.md in
+      this checkout) instructs reading it [SPEC-KITTY-LEDGER.md] before
+      starting; a repo-wide search ... found no such file at any path. ...
+      This is drift between the project's own onboarding instructions and
+      this checkout's actual contents." This is verified false. Direct
+      inspection of this checkout's AGENTS.md (CLAUDE.md is a symlink to it,
+      confirmed via `ls -la CLAUDE.md`) shows it does NOT instruct reading any
+      file called SPEC-KITTY-LEDGER.md anywhere — `grep -n "SPEC-KITTY-LEDGER"
+      AGENTS.md CLAUDE.md` returns zero matches. This checkout's own onboarding
+      instruction is instead "Every LLM agent working in this repository MUST
+      read the project charter at .kittify/charter/charter.md at the start of
+      a session" — an entirely different file. The half of the claim that "no
+      SPEC-KITTY-LEDGER.md file exists in this checkout" is true (confirmed by
+      `find . -iname 'SPEC-KITTY-LEDGER.md'`, no hits), but the other half —
+      that this checkout's own CLAUDE.md/AGENTS.md instructs reading it — is
+      not. The actual "Read SPEC-KITTY-LEDGER.md before starting" instruction
+      lives in a different document entirely: the outer mission-orchestration
+      workspace's own CLAUDE.md, one directory level up from this checkout
+      (SK-missions/CLAUDE.md), which is not part of the spec-kitty repo under
+      review and was never meant to be found by grepping this checkout. The
+      spec conflates the orchestrator's own outer-workspace project
+      instructions with this checkout's onboarding doc, then publishes the
+      conflation as a permanent, factual "drift between the project's own
+      onboarding instructions and this checkout's actual contents" — there is
+      no such drift; the two CLAUDE.md files are unrelated documents at
+      different levels, and this checkout's own onboarding text is internally
+      consistent (it points to charter.md, which does exist and was read).
+      This citation also feeds User Story 2's "Why this priority" rationale
+      (line 83: "this repo's dominant failure mode is a code path that
+      reports success while silently doing less than it claims (see
+      SPEC-KITTY-LEDGER.md's pattern, referenced but not present as a file in
+      this checkout...)"), so the false framing propagates beyond the
+      Clarifications section into a User Story's stated rationale, and is
+      explicitly flagged by the spec itself for "the mission's closing
+      review" — meaning, uncorrected, it will consume a future reviewer's
+      time chasing nonexistent onboarding drift in a public repo.
+    remediation: >-
+      Rewrite Correction #1 to state only the verified fact: no
+      SPEC-KITTY-LEDGER.md file exists anywhere in this checkout (confirmed by
+      `find` and by `grep -n "SPEC-KITTY-LEDGER" AGENTS.md CLAUDE.md` returning
+      no matches), and this checkout's own CLAUDE.md/AGENTS.md does not
+      reference that filename at all — its onboarding instruction points to
+      `.kittify/charter/charter.md` instead, which does exist and was read.
+      Remove the "drift between the project's own onboarding instructions and
+      this checkout's actual contents" framing entirely, since there is no
+      such drift: the "Read SPEC-KITTY-LEDGER.md before starting" instruction
+      the orchestrator recalled belongs to a different document — the outer
+      mission-orchestration workspace's own CLAUDE.md, one level above this
+      checkout, outside the spec-kitty repo — not to this repo's own
+      onboarding docs. If the SK-247 provenance point still needs making,
+      state plainly that SK-247's content was supplied via the mission brief
+      from the outer orchestration workspace's ledger rather than re-derived
+      from any file inside this checkout, without asserting that this
+      checkout's own onboarding instructions reference or drift from that
+      file. Update the User Story 2 "Why this priority" line (83) to drop or
+      correct its pointer to Correction #1 once fixed.
