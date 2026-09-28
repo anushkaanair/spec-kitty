@@ -579,15 +579,11 @@ def _resolve_planning_branch_for_lane_guard(feature_dir: Path) -> str | None:
     ``None`` for legacy missions without meta.json so callers fall back to the
     lane base ref.
 
-    #3271: this ref is now the guard's DELTA base, not just the error-message
-    hint. In coord topology a lane legitimately inherits prior missions' committed
-    ``kitty-specs/**`` from the base and — via the recorded planning-commit merge
-    (ADR 2026-07-29-1 / #2993) — this mission's own planning artifacts. Both are
-    ancestors of the planning branch, so diffing the lane against it yields an
-    empty delta for that inherited content while still flagging genuine lane-
-    authored ``kitty-specs`` edits. The lane's coordination/mission base ref
-    (``check_branch``), by contrast, predates the inherited content and produced a
-    false positive on every transition.
+    The planning ref is only the content-comparison base. Candidate paths are
+    measured separately against the lane's persisted workspace base: in coord
+    topology this is the coordination ref from which the lane was forked. Using
+    the planning ref for both roles falsely treats coordination-owned mission
+    history as lane-authored whenever the planning target is stale.
     """
     try:
         # FR-007 route: this site was INVISIBLE to the WP07 census, whose raw
@@ -619,21 +615,31 @@ def _check_kitty_specs_contamination(
     feature_dir: Path,
     wp_id: str,
     target_lane: str,
-    list_wp_branch_specs_changes_for_guard: Callable[..., list[str]],
+    list_wp_branch_specs_changes_for_guard: Callable[..., list[str] | None],
 ) -> list[str] | None:
-    """Block when kitty-specs/ files were committed on the lane branch."""
-    # #3271: measure the lane-hygiene delta against the PLANNING branch, not the
-    # lane's coordination/mission base ref (``check_branch``). See
-    # ``_resolve_planning_branch_for_lane_guard`` for why — inherited base content
-    # and the #2993-merged planning artifacts are ancestors of the planning
-    # branch, so they no longer false-positive. Legacy missions without meta.json
-    # fall back to ``check_branch`` (unchanged behaviour for the flat/legacy case).
+    """Block lane planning edits and refuse handoff when their provenance is unknown.
+
+    Candidate paths are measured from the lane's persisted workspace base
+    (``check_branch``); their content is then compared with the planning ref.
+    These are intentionally separate refs in coordination topology: the
+    coordination base owns inherited status/events/prompts while the planning
+    target may be stale. Legacy missions use ``check_branch`` for both.
+    """
     _planning_branch = _resolve_planning_branch_for_lane_guard(feature_dir)
-    _guard_base = _planning_branch or check_branch
+    _planning_ref = _planning_branch or check_branch
     contamination_files = list_wp_branch_specs_changes_for_guard(
         worktree_path=worktree_path,
-        base_branch=_guard_base,
+        base_branch=check_branch,
+        planning_base_branch=_planning_ref,
     )
+    if contamination_files is None:
+        verification_guidance = [
+            "Could not verify kitty-specs/ lane hygiene because a required git ref or diff could not be resolved.",
+            f"Coordination/workspace base: {check_branch}",
+            f"Planning content base: {_planning_ref}",
+            "No handoff was made. Restore the missing refs or repair the workspace metadata, then retry.",
+        ]
+        return verification_guidance
     if not contamination_files:
         return None
 
@@ -643,23 +649,22 @@ def _check_kitty_specs_contamination(
         guidance.append(f"  {path}")
     if len(contamination_files) > 5:
         guidance.append(f"  ... and {len(contamination_files) - 5} more")
-    guidance.append("")
     if _planning_branch:
-        _first_planning_path = contamination_files[0] if contamination_files else f"{KITTY_SPECS_DIR}/<path-to-file>"
         guidance.append(
             f"{KITTY_SPECS_DIR}/ changes are not allowed on lane branches.\n"
             f"Planning artifacts must live on: {_planning_branch}\n\n"
-            f"To verify a file exists on the planning branch:\n"
-            f"  git show {_planning_branch}:{_first_planning_path}"
+            f"To verify a file exists on the planning branch, inspect only the listed path(s) with:\n"
+            f"  git show {_planning_branch}:<listed-path>"
         )
     else:
         guidance.append(f"{KITTY_SPECS_DIR}/ changes are not allowed on lane branches (planning branch unknown — check {KITTY_SPECS_DIR}/ on the base branch).")
     guidance.append("")
-    guidance.append(f"Clean the branch before moving to {target_lane}:")
-    guidance.append(f"  cd {worktree_path}")
-    guidance.append(f"  git restore --source {_guard_base} --staged --worktree -- {KITTY_SPECS_DIR}/")
-    guidance.append('  git commit -m "chore: remove planning artifacts from lane branch"')
+    guidance.append(
+        "Inspect the listed paths and remove only lane-authored planning changes. "
+        "Do not restore the entire kitty-specs/ tree; it may contain coordination-owned state."
+    )
     guidance.append("")
+    guidance.append(f"Worktree: {worktree_path}")
     guidance.append(f"Then retry: spec-kitty agent tasks move-task {wp_id} --to {target_lane}")
     return guidance
 
@@ -677,7 +682,7 @@ def _validate_worktree_state(
     review_currency_check_branch: Callable[..., str],
     behind_commits_touch_only_planning_artifacts: Callable[[Path, str, str], bool],
     filter_runtime_state_paths: Callable[[str], str],
-    list_wp_branch_specs_changes_for_guard: Callable[..., list[str]],
+    list_wp_branch_specs_changes_for_guard: Callable[..., list[str] | None],
     workspace_override: ResolvedWorkspace | None = None,
     review_base_ref: str | None = None,
     check_kitty_specs: bool = True,
@@ -792,7 +797,7 @@ def _validate_ready_for_review(
     review_currency_check_branch: Callable[..., str],
     behind_commits_touch_only_planning_artifacts: Callable[[Path, str, str], bool],
     filter_runtime_state_paths: Callable[[str], str],
-    list_wp_branch_specs_changes_for_guard: Callable[..., list[str]],
+    list_wp_branch_specs_changes_for_guard: Callable[..., list[str] | None],
     console: _ConsoleLike,
 ) -> tuple[bool, list[str]]:
     """Validate that WP is ready for review by checking for uncommitted changes.

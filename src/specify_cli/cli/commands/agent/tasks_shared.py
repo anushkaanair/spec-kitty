@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 import typer
 
@@ -47,9 +47,8 @@ from specify_cli.cli.commands.agent.tasks_parsing_validation import (
     _validate_ready_for_review as _seam_validate_ready_for_review,
 )
 from specify_cli.cli.selector_resolution import resolve_mission_handle
-from specify_cli.coordination.coherence import is_coord_residue_churn
 from specify_cli.core.constants import KITTY_SPECS_DIR, is_occurrence_map_path
-from specify_cli.core.vcs.git import git_diff_names_checked, merge_base_changed_files
+from specify_cli.core.vcs.git import git_diff_names_checked, git_merge_base
 from specify_cli.mission_metadata import resolve_mission_identity
 from specify_cli.missions._read_path_resolver import MissionSelectorAmbiguous
 from specify_cli.status import is_dossier_snapshot as _is_dossier_snapshot
@@ -678,7 +677,7 @@ def _wp_branch_merged_into_target(
 
 def _filter_by_planning_tip_content(
     worktree_path: Path, candidates: list[str], base_branch: str
-) -> list[str]:
+) -> list[str] | None:
     """Drop candidates byte-identical to the planning-branch tip (FR-007 / #2274).
 
     Compares the candidates against the planning tip through the canonical
@@ -688,37 +687,55 @@ def _filter_by_planning_tip_content(
     to the planning tip (e.g. after a planning-branch rebase that brought no
     content change) and must not be flagged as a lane-hygiene violation. On any
     git failure — including an unresolvable ``base_branch`` —
-    ``git_diff_names_checked`` returns ``None`` and every candidate is kept
-    conservatively so the guard never silently loses signal.
+    ``git_diff_names_checked`` returns ``None`` so the caller can refuse the
+    handoff instead of treating an unknown comparison as clean.
     """
     diverged = git_diff_names_checked(
         worktree_path, base_branch, "HEAD", pathspec=f"{KITTY_SPECS_DIR}/"
     )
     if diverged is None:
-        # git failure or unresolvable base ref → keep conservatively.
-        return candidates
+        return None
     diverged_set = set(diverged)
     return [path for path in candidates if path in diverged_set]
 
 
-def _list_wp_branch_mission_specs_changes(worktree_path: Path, base_branch: str) -> list[str]:
-    """Return kitty-specs/ files genuinely diverged from the planning-branch tip.
+def _list_wp_branch_mission_specs_changes(
+    worktree_path: Path,
+    base_branch: str,
+    *,
+    planning_base_branch: str | None = None,
+) -> list[str] | None:
+    """Return lane-authored ``kitty-specs/`` changes, or ``None`` if unknown.
 
-    Uses a two-pass strategy (FR-007 / #2274):
+    ``base_branch`` is the persisted workspace base (the lane's coordination
+    fork point in coord topology); ``planning_base_branch`` is the primary
+    planning ref whose current contents are authoritative for planning files.
+    Legacy callers that provide one ref retain the flat-topology behavior.
 
-    1. Merge-base history diff: ``merge_base_changed_files(worktree_path,
-       base_branch, pathspec="kitty-specs/")`` (mission merge-base-diff-ssot-01KX44SD
-       / FR-003) identifies candidate paths touched on the lane branch since
-       the merge-base with ``base_branch``.
-    2. Content re-check: ``git diff <planning_tip> HEAD -- <path>`` filters out
-       any candidate whose content is byte-identical to the planning-branch tip.
+    The first pass finds paths introduced on the lane side after its merge-base
+    with the persisted workspace base. The second compares those candidates
+    with the planning tip. This provenance split avoids both failure modes of
+    a single-ref comparison: stale planning refs do not make coordination-
+    inherited files look lane-authored, and genuine lane edits to coordination
+    matrices/status remain visible instead of being exempted by filename kind.
 
-    This prevents false positives after a planning-branch rebase where the lane
-    branch shares only an ancient merge-base but the file content matches.
+    An unknown base, missing merge-base, or failed content diff is not evidence
+    of a clean lane and returns ``None`` so the caller can fail closed.
     """
     from specify_cli.cli.commands.agent import tasks as _tasks
 
-    changed = merge_base_changed_files(worktree_path, base_branch, pathspec=f"{KITTY_SPECS_DIR}/")
+    planning_ref = planning_base_branch or base_branch
+    merge_base = git_merge_base(worktree_path, "HEAD", base_branch)
+    if merge_base is None:
+        return None
+    changed = git_diff_names_checked(
+        worktree_path,
+        merge_base,
+        "HEAD",
+        pathspec=f"{KITTY_SPECS_DIR}/",
+    )
+    if changed is None:
+        return None
 
     seen: set[str] = set()
     candidates: list[str] = []
@@ -734,39 +751,35 @@ def _list_wp_branch_mission_specs_changes(worktree_path: Path, base_branch: str)
         # the two kitty-specs guards agree instead of warn-here / block-there.
         if is_occurrence_map_path(path):
             continue
-        # FIX-M2-04: a coord-topology lane branch is PARENTED on the
-        # coordination branch (worktree_allocator.py module docstring, #1348
-        # WP04) and then FR-009-merges the recorded planning commit on top
-        # (PlanningCommitMergeConflictError's docstring, #2993) — so the
-        # lane branch's own history legitimately contains the coordination
-        # branch's COORD-partition commits (status.events.jsonl / status.json
-        # / acceptance-matrix.json / issue-matrix.md / decisions.events.jsonl
-        # / tracer files / review-cycle artifacts). Those files can never be
-        # byte-identical to the planning branch's tip — the coordination
-        # branch writes them from its own independent history, never mirrors
-        # the planning branch — so ``_filter_by_planning_tip_content`` cannot
-        # exempt them and every coord-topology mission tripped this guard
-        # structurally (not from anything an implementer committed). Classify
-        # by declared MissionArtifactKind, the same coord-residue authority
-        # ``implement.py``/``implement_cores.py`` already use to drop these
-        # SAME kinds from the sibling primary-root claim commit, so both
-        # guards agree on what "lane contamination" means.
-        if is_coord_residue_churn(path):
-            continue
         seen.add(path)
         candidates.append(path)
 
     if not candidates:
-        return []
+        # Even an empty candidate set does not make an unresolvable planning
+        # ref trustworthy. Validate it before returning a clean result.
+        planning_diff = git_diff_names_checked(
+            worktree_path,
+            planning_ref,
+            "HEAD",
+            pathspec=f"{KITTY_SPECS_DIR}/",
+        )
+        return [] if planning_diff is not None else None
 
     # Pass 2 diffs against the planning *tip* while pass 1 diffs against the
-    # *merge-base* — the asymmetry IS the #2274 content-vs-history fix, not
-    # duplication to simplify away; collapsing both passes onto one base
-    # reintroduces #2274.
-    return _tasks._filter_by_planning_tip_content(worktree_path, candidates, base_branch)
+    # *merge-base*. Keep the content-vs-history check, but use the planning ref
+    # rather than the coordination fork ref.
+    return cast(
+        list[str] | None,
+        _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_ref),
+    )
 
 
-def _list_wp_branch_specs_changes_for_guard(worktree_path: Path, base_branch: str) -> list[str]:
+def _list_wp_branch_specs_changes_for_guard(
+    worktree_path: Path,
+    base_branch: str,
+    *,
+    planning_base_branch: str | None = None,
+) -> list[str] | None:
     # The dynamically-named ``_list_wp_branch_<KITTY_SPECS_DIR>_changes`` alias
     # lives in the ``tasks`` namespace (assigned there next to the seam
     # re-imports) — reading it through ``_tasks`` at call time preserves the
@@ -774,7 +787,13 @@ def _list_wp_branch_specs_changes_for_guard(worktree_path: Path, base_branch: st
     from specify_cli.cli.commands.agent import tasks as _tasks
 
     patched_or_alias = getattr(_tasks, "_list_wp_branch_" + KITTY_SPECS_DIR.replace("-", "_") + "_changes")
-    changes: list[str] = patched_or_alias(worktree_path=worktree_path, base_branch=base_branch)
+    kwargs: dict[str, object] = {
+        "worktree_path": worktree_path,
+        "base_branch": base_branch,
+    }
+    if planning_base_branch is not None:
+        kwargs["planning_base_branch"] = planning_base_branch
+    changes: list[str] | None = patched_or_alias(**kwargs)
     return changes
 
 
