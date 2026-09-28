@@ -32,7 +32,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
+
+from tests.architectural._gate_coverage import load_spliced_workflow
+from tests.architectural._interpreter_shard_roster import INTERPRETER_SHARD_JOB_KEYS, shard_roster_non_vacuity_violation
 
 from specify_cli.upgrade.metadata import ProjectMetadata
 from specify_cli.upgrade.migrations.base import BaseMigration, MigrationResult
@@ -238,11 +240,7 @@ class TestConcurrentMigration:
         successes = [success for success, _errors in results]
         assert successes.count(True) == 1
         assert successes.count(False) == 1
-        assert any(
-            any("Cannot apply" in err or "Upgrade lock" in err for err in errors)
-            for success, errors in results
-            if not success
-        )
+        assert any(any("Cannot apply" in err or "Upgrade lock" in err for err in errors) for success, errors in results if not success)
 
 
 def _extract_uv_run_argv_prefix(source_path: Path, function_name: str) -> list[str]:
@@ -400,44 +398,73 @@ class TestVenvCorruptionHazardFR003b:
     (measured ~2s/test with interpreters already cached -- the risk is an
     unguarded network fetch turning an ostensibly fast/unit run red). Keeping
     those two tests out of `fast`/`unit` is therefore load-bearing.
-    ``test_interpreter_matrix_job_pins_a_dedicated_project_environment``
-    below is the exception: it is a pure static YAML-parse assertion with no
-    subprocess, no venv build, and no network access, so it carries its own
-    ``@pytest.mark.fast`` to keep it selected by both ``make test-fast`` and
-    the nightly leg. Verify with ``pytest
-    tests/upgrade/test_migration_robustness.py -m "fast or unit" -k
-    TestVenvCorruptionHazardFR003b --collect-only`` (expect exactly 1
-    collected -- the static test only) vs. running the class directly, or
-    under ``make test-full`` (which selects ``-m "not stress and not
+    ``test_interpreter_matrix_job_pins_a_dedicated_project_environment`` and
+    ``test_interpreter_shard_roster_is_non_vacuous`` (PR-TESTS-002's
+    non-vacuity guard for it) are the exception: both are pure static
+    YAML-parse assertions with no subprocess, no venv build, and no network
+    access, so they each carry their own ``@pytest.mark.fast`` to keep them
+    selected by both ``make test-fast`` and the nightly leg. Verify with
+    ``pytest tests/upgrade/test_migration_robustness.py -m "fast or unit" -k
+    TestVenvCorruptionHazardFR003b --collect-only`` (expect exactly 2
+    collected -- the two static tests only) vs. running the class directly,
+    or under ``make test-full`` (which selects ``-m "not stress and not
     timing"`` and therefore still runs it), which must still collect and run
-    all 4 tests.
+    all 5 tests.
     """
 
     pytestmark = [pytest.mark.adversarial]
 
     @pytest.mark.fast
     def test_interpreter_matrix_job_pins_a_dedicated_project_environment(self) -> None:
-        """FR-003(b): the interpreter-matrix job must pin
+        """FR-003(b): every interpreter-matrix shard job must pin
         `UV_PROJECT_ENVIRONMENT` so a nested unpinned `uv run` call can, at
         worst, corrupt only that leg's own dedicated venv -- never a default
         `.venv` a concurrent process elsewhere might share.
+
+        #4951 update: the single `interpreter-matrix` job (a
+        `strategy.matrix.python-version` leg per interpreter) was split into
+        N independent `interpreter-matrix-shard-<N>` jobs, all pinned to the
+        SAME single Python 3.13 (see `_interpreter_shard_roster.py`) -- there
+        is no more `matrix.python-version` to substitute into the pin.
+        Distinctness across DIFFERENT interpreter versions is therefore no
+        longer the property to check (there is only one version now); the
+        containment property this test guards -- a nested `uv run` targets a
+        NON-default, named venv rather than the bare shared `.venv` -- still
+        applies identically to every shard and is what this test now
+        verifies, dynamically, over every roster-declared shard job (never a
+        second hardcoded job list).
         """
         workflow_path = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci-nightly.yml"
-        with workflow_path.open(encoding="utf-8") as handle:
-            workflow = yaml.safe_load(handle)
-        job = workflow["jobs"]["interpreter-matrix"]
+        workflow = load_spliced_workflow(workflow_path)
 
-        job_env = job.get("env") or {}
-        assert "UV_PROJECT_ENVIRONMENT" in job_env, (
-            "the interpreter-matrix job must pin UV_PROJECT_ENVIRONMENT "
-            "(#4866 WP04) so a nested `uv run` call inside any test cannot "
-            "silently rebuild a SHARED default `.venv` path; job env keys "
-            f"found: {sorted(job_env)}"
-        )
-        pinned_value = job_env["UV_PROJECT_ENVIRONMENT"]
-        assert "${{ matrix.python-version }}" in pinned_value, (
-            f"the pin must be scoped per interpreter (contain `${{{{ matrix.python-version }}}}`) so distinct legs never share a path; got: {pinned_value!r}"
-        )
+        for job_key in INTERPRETER_SHARD_JOB_KEYS:
+            job = workflow["jobs"][job_key]
+            job_env = job.get("env") or {}
+            assert "UV_PROJECT_ENVIRONMENT" in job_env, (
+                f"{job_key}: must pin UV_PROJECT_ENVIRONMENT (#4866 WP04) so "
+                "a nested `uv run` call inside any test cannot silently "
+                "rebuild a SHARED default `.venv` path; job env keys found: "
+                f"{sorted(job_env)}"
+            )
+            pinned_value = job_env["UV_PROJECT_ENVIRONMENT"]
+            assert pinned_value != ".venv", f"{job_key}: UV_PROJECT_ENVIRONMENT must not be the bare default `.venv` path -- got: {pinned_value!r}"
+
+    @pytest.mark.fast
+    def test_interpreter_shard_roster_is_non_vacuous(self) -> None:
+        """PR-TESTS-002 (pre-merge squad, severity 3): the test above's
+        ``for job_key in INTERPRETER_SHARD_JOB_KEYS:`` loop reports a bare
+        "1 passed" with NO skip marker at all when the roster is emptied --
+        the loop body simply never executes, and nothing here notices. This
+        is a pure static YAML-parse assertion (no subprocess, no venv build,
+        no network access), so it carries its own ``@pytest.mark.fast``
+        alongside the test it guards. Landing pass #5244 (LAND-PAT-006): the
+        comparison itself is now the roster's shared
+        ``shard_roster_non_vacuity_violation`` helper, not a local copy."""
+        workflow_path = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "ci-nightly.yml"
+        workflow = load_spliced_workflow(workflow_path)
+
+        violation = shard_roster_non_vacuity_violation(INTERPRETER_SHARD_JOB_KEYS, workflow["jobs"])
+        assert violation is None, violation
 
     @pytest.mark.slow
     def test_a_well_pinned_nested_uv_run_leaves_a_dedicated_venv_untouched(self, tmp_path: Path) -> None:
