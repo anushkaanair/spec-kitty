@@ -159,10 +159,15 @@ independent (plan.md item (a2)).
     `GITHUB_TOKEN`, as the git remote credential for `origin`. Use the same SHA-pinned
     `actions/checkout` ref already vetted in this repo, per DIR-051's SHA-pinning convention,
     visible in `.github/workflows/ci-stale-running-sweep.yml`.)
-  - **Setup + invocation step**: install any needed dependency (PyYAML, already a
-    `capture_shard_timings.py` dependency) and invoke the script from WP02 with the secret wired as
-    an env var, e.g.:
+  - **Setup + invocation step**: sync this repository's own `uv`-managed environment (the script
+    runs `pytest.main()` against `tests/charter`/`tests/doctrine` and imports this repo's own
+    `kernel` package, so it needs the full `uv sync --frozen --all-extras` environment, not a single
+    added dependency) and invoke the script from WP02 with the secret wired as an env var, e.g.:
     ```yaml
+    - name: Install uv
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+    - name: Set up environment
+      run: uv sync --frozen --all-extras
     - name: Recapture charter shard timings if drifted
       env:
         CHARTER_SHARD_RECAPTURE_TOKEN: ${{ secrets.CHARTER_SHARD_RECAPTURE_TOKEN }}
@@ -171,7 +176,7 @@ independent (plan.md item (a2)).
         GITHUB_RUN_ID: ${{ github.run_id }}
         GITHUB_STEP_SUMMARY: ${{ github.step_summary }}
       run: |
-        python3 scripts/ci/recapture_charter_shard_timings.py
+        uv run --frozen python scripts/ci/recapture_charter_shard_timings.py
     ```
     (Adjust env-var names to whatever WP02's `main()` actually reads — cross-check against WP02's
     final implementation; the fixed **names of the plan-pinned identifiers themselves**

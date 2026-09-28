@@ -60,3 +60,27 @@ rule's own terms and goes to the operator without a further self-granted round.
 This ruling REPLACES the acceptance bar for TASKS-FRESH2-001 and TASKS-FRESH2-002: a verifier
 judges each resolved iff the fix implements the point above (a superseding note for -001, an
 own-file line count for -002) — not some independently-invented remedy.
+
+---
+
+# Orchestrator ruling (operator standing rule, `plan.ruling.md`) — 2026-09-28
+
+**Finding:** AMENDMENT-FRESH-001 (severity 4), raised by the design-amendment fresh sweep and
+carried out of that phase as out of its delta-only scope. WP03 Subtask T016's recapture job
+invokes bare `python3 scripts/ci/recapture_charter_shard_timings.py` with no uv install or
+environment sync; `capture_shard_timings.py` needs pytest and this repository's own installed
+packages, so the scheduled job would fail with `ModuleNotFoundError` on its first run. Orchestrator
+verified the T016 text directly.
+
+**Classification:** (a) one concrete remedy — yes; (b) touches an operator decision or ruling —
+no. The operator's standing rule therefore applies: one bounded fix + verify round, recorded here.
+This ruling is issued by the orchestrator, not by a phase agent.
+
+**Ruling:** T016's job gains the same environment steps the repository's existing jobs use and
+that T020 already specifies — `actions/checkout`, `astral-sh/setup-uv` at the SHA-pinned ref
+`ci-nightly.yml` uses, `uv sync --frozen --all-extras` — and the invocation becomes
+`uv run --frozen python scripts/ci/recapture_charter_shard_timings.py` (or the equivalent the
+plan's secret/checkout ordering requires; the secret check still runs before any recapture work,
+per plan ruling 2). Any other bare-interpreter invocation in WP03 is fixed the same way. Nothing
+else changes. A verifier judges the finding resolved iff every Python invocation in WP03 runs in
+the synced environment and the job's step order still honours the fail-early secret check.
