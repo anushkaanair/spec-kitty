@@ -35,7 +35,13 @@ from typing import Any, NoReturn, cast
 
 import typer
 
-from mission_runtime import MissionArtifactKind, MissionTopology, placement_seam
+from mission_runtime import (
+    MissionArtifactKind,
+    MissionTopology,
+    kind_for_mission_file,
+    kind_is_coordination_residue,
+    placement_seam,
+)
 from specify_cli.agent_tasks_ports import Render
 from specify_cli.coordination.surface_authority import (
     Refuse,
@@ -675,10 +681,8 @@ def _wp_branch_merged_into_target(
     )
 
 
-def _filter_by_planning_tip_content(
-    worktree_path: Path, candidates: list[str], base_branch: str
-) -> list[str] | None:
-    """Drop candidates byte-identical to the planning-branch tip (FR-007 / #2274).
+def _filter_by_planning_tip_content(worktree_path: Path, candidates: list[str], base_branch: str) -> list[str] | None:
+    """Keep candidates that differ from a trusted snapshot (FR-007 / #2274).
 
     Compares the candidates against the planning tip through the canonical
     ``vcs.git`` seam — the same seam pass 1 uses (``merge_base_changed_files``)
@@ -690,13 +694,70 @@ def _filter_by_planning_tip_content(
     ``git_diff_names_checked`` returns ``None`` so the caller can refuse the
     handoff instead of treating an unknown comparison as clean.
     """
-    diverged = git_diff_names_checked(
-        worktree_path, base_branch, "HEAD", pathspec=f"{KITTY_SPECS_DIR}/"
-    )
+    diverged = git_diff_names_checked(worktree_path, base_branch, "HEAD", pathspec=f"{KITTY_SPECS_DIR}/")
     if diverged is None:
+        return None
+    # ``git diff --name-only`` quotes paths containing tabs, quotes, or other
+    # unusual characters. The caller cannot safely associate those entries
+    # with a candidate path, so an unexpected prefix is unverifiable, not clean.
+    if any(not path.startswith(f"{KITTY_SPECS_DIR}/") for path in diverged):
         return None
     diverged_set = set(diverged)
     return [path for path in candidates if path in diverged_set]
+
+
+def _lane_hygiene_fork_point(worktree_path: Path, base_branch: str, workspace_base_commit: str | None) -> str | None:
+    """Resolve the immutable lane fork commit, refusing a stale pin."""
+    if workspace_base_commit is None:
+        return cast(str | None, git_merge_base(worktree_path, "HEAD", base_branch))
+    if git_merge_base(worktree_path, "HEAD", workspace_base_commit) != workspace_base_commit:
+        return None
+    return workspace_base_commit
+
+
+def _lane_hygiene_candidates(changed: tuple[str, ...]) -> list[str] | None:
+    """Validate diff path encoding and keep non-exempt kitty-specs candidates."""
+    seen: set[str] = set()
+    candidates: list[str] = []
+    for path in changed:
+        if not path.startswith(f"{KITTY_SPECS_DIR}/"):
+            return None
+        if path in seen or is_occurrence_map_path(path):
+            continue
+        seen.add(path)
+        candidates.append(path)
+    return candidates
+
+
+def _coordination_hygiene_candidates(candidates: list[str], mission_slug: str | None, topology: MissionTopology | None) -> set[str]:
+    """Identify coordination-partition candidates that planning equality cannot clear."""
+    if topology is None:
+        return set()
+    return {
+        path for path in candidates if (kind := kind_for_mission_file(path, mission_slug=mission_slug)) is not None and kind_is_coordination_residue(kind, topology)
+    }
+
+
+def _planning_candidate_violations(
+    worktree_path: Path,
+    candidates: list[str],
+    planning_ref: str,
+    planning_commit_sha: str | None,
+) -> set[str] | None:
+    """Keep planning paths that differ from both recorded P1 and current P2."""
+    from specify_cli.cli.commands.agent import tasks as _tasks
+
+    current = _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_ref)
+    if current is None:
+        return None
+    if planning_commit_sha is None:
+        return set(current)
+    if not planning_commit_sha or git_merge_base(worktree_path, "HEAD", planning_commit_sha) != planning_commit_sha:
+        return None
+    recorded = _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_commit_sha)
+    if recorded is None:
+        return None
+    return set(current) & set(recorded)
 
 
 def _list_wp_branch_mission_specs_changes(
@@ -704,28 +765,29 @@ def _list_wp_branch_mission_specs_changes(
     base_branch: str,
     *,
     planning_base_branch: str | None = None,
+    workspace_base_commit: str | None = None,
+    planning_commit_sha: str | None = None,
+    mission_slug: str | None = None,
+    topology: MissionTopology | None = None,
 ) -> list[str] | None:
     """Return lane-authored ``kitty-specs/`` changes, or ``None`` if unknown.
 
-    ``base_branch`` is the persisted workspace base (the lane's coordination
-    fork point in coord topology); ``planning_base_branch`` is the primary
-    planning ref whose current contents are authoritative for planning files.
-    Legacy callers that provide one ref retain the flat-topology behavior.
+    ``workspace_base_commit`` is the immutable claim-time fork snapshot;
+    ``base_branch`` is the fallback for legacy workspaces. ``planning_base_branch``
+    is the moving primary planning ref and ``planning_commit_sha`` is the
+    claim-time planning snapshot frozen in the primary ``lanes.json``.
 
-    The first pass finds paths introduced on the lane side after its merge-base
-    with the persisted workspace base. The second compares those candidates
-    with the planning tip. This provenance split avoids both failure modes of
-    a single-ref comparison: stale planning refs do not make coordination-
-    inherited files look lane-authored, and genuine lane edits to coordination
-    matrices/status remain visible instead of being exempted by filename kind.
+    Candidate paths are measured after the immutable lane fork snapshot. A
+    planning candidate is clean when it matches either claim-time P1 or current
+    P2. Coordination-partition candidates remain violations regardless of
+    planning equality, so a lane edit cannot be hidden by recreating planning
+    bytes.
 
     An unknown base, missing merge-base, or failed content diff is not evidence
     of a clean lane and returns ``None`` so the caller can fail closed.
     """
-    from specify_cli.cli.commands.agent import tasks as _tasks
-
     planning_ref = planning_base_branch or base_branch
-    merge_base = git_merge_base(worktree_path, "HEAD", base_branch)
+    merge_base = _lane_hygiene_fork_point(worktree_path, base_branch, workspace_base_commit)
     if merge_base is None:
         return None
     changed = git_diff_names_checked(
@@ -737,41 +799,17 @@ def _list_wp_branch_mission_specs_changes(
     if changed is None:
         return None
 
-    seen: set[str] = set()
-    candidates: list[str] = []
-    for raw in changed:
-        path = raw.strip()
-        if not path or not path.startswith(f"{KITTY_SPECS_DIR}/"):
-            continue
-        if path in seen:
-            continue
-        # #2980: a bulk-edit mission's own occurrence map is the single permitted
-        # kitty-specs/ lane write (DIRECTIVE_035). Honor the same exception the
-        # pre-commit guard applies, expressed once in is_occurrence_map_path, so
-        # the two kitty-specs guards agree instead of warn-here / block-there.
-        if is_occurrence_map_path(path):
-            continue
-        seen.add(path)
-        candidates.append(path)
+    candidates = _lane_hygiene_candidates(changed)
+    if candidates is None:
+        return None
 
-    if not candidates:
-        # Even an empty candidate set does not make an unresolvable planning
-        # ref trustworthy. Validate it before returning a clean result.
-        planning_diff = git_diff_names_checked(
-            worktree_path,
-            planning_ref,
-            "HEAD",
-            pathspec=f"{KITTY_SPECS_DIR}/",
-        )
-        return [] if planning_diff is not None else None
+    coordination_candidates = _coordination_hygiene_candidates(candidates, mission_slug, topology)
 
-    # Pass 2 diffs against the planning *tip* while pass 1 diffs against the
-    # *merge-base*. Keep the content-vs-history check, but use the planning ref
-    # rather than the coordination fork ref.
-    return cast(
-        list[str] | None,
-        _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_ref),
-    )
+    planning_candidates = [path for path in candidates if path not in coordination_candidates]
+    planning_violations = _planning_candidate_violations(worktree_path, planning_candidates, planning_ref, planning_commit_sha)
+    if planning_violations is None:
+        return None
+    return [path for path in candidates if path in coordination_candidates or path in planning_violations]
 
 
 def _list_wp_branch_specs_changes_for_guard(
@@ -779,6 +817,10 @@ def _list_wp_branch_specs_changes_for_guard(
     base_branch: str,
     *,
     planning_base_branch: str | None = None,
+    workspace_base_commit: str | None = None,
+    planning_commit_sha: str | None = None,
+    mission_slug: str | None = None,
+    topology: MissionTopology | None = None,
 ) -> list[str] | None:
     # The dynamically-named ``_list_wp_branch_<KITTY_SPECS_DIR>_changes`` alias
     # lives in the ``tasks`` namespace (assigned there next to the seam
@@ -793,6 +835,14 @@ def _list_wp_branch_specs_changes_for_guard(
     }
     if planning_base_branch is not None:
         kwargs["planning_base_branch"] = planning_base_branch
+    if workspace_base_commit is not None:
+        kwargs["workspace_base_commit"] = workspace_base_commit
+    if planning_commit_sha is not None:
+        kwargs["planning_commit_sha"] = planning_commit_sha
+    if mission_slug is not None:
+        kwargs["mission_slug"] = mission_slug
+    if topology is not None:
+        kwargs["topology"] = topology
     changes: list[str] | None = patched_or_alias(**kwargs)
     return changes
 

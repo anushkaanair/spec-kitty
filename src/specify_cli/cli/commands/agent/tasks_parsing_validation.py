@@ -616,26 +616,57 @@ def _check_kitty_specs_contamination(
     wp_id: str,
     target_lane: str,
     list_wp_branch_specs_changes_for_guard: Callable[..., list[str] | None],
+    mission_slug: str | None = None,
+    workspace_base_commit: str | None = None,
 ) -> list[str] | None:
     """Block lane planning edits and refuse handoff when their provenance is unknown.
 
-    Candidate paths are measured from the lane's persisted workspace base
-    (``check_branch``); their content is then compared with the planning ref.
-    These are intentionally separate refs in coordination topology: the
-    coordination base owns inherited status/events/prompts while the planning
-    target may be stale. Legacy missions use ``check_branch`` for both.
+    Candidate paths are measured from the immutable workspace fork snapshot
+    when available; their content is compared with both the recorded planning
+    commit and current planning ref. This prevents later planning movement from
+    making claim-time P1 content look lane-authored. Coordination-partition
+    paths changed since the trusted fork remain violations.
     """
     _planning_branch = _resolve_planning_branch_for_lane_guard(feature_dir)
     _planning_ref = _planning_branch or check_branch
+    if mission_slug is not None and workspace_base_commit is None:
+        return [
+            "Could not verify kitty-specs/ lane hygiene because the claim-time workspace snapshot is missing.",
+            f"Coordination/workspace base: {check_branch}",
+            f"Planning content base: {_planning_ref}",
+            "No handoff was made. Repair the workspace context to record its immutable base commit, then retry.",
+        ]
+    try:
+        from mission_runtime import resolve_topology
+        from specify_cli.lanes.persistence import read_lanes_json
+
+        _mission_slug = mission_slug or feature_dir.name
+        _topology = resolve_topology(feature_dir.parent.parent, _mission_slug)
+        _lanes_manifest = read_lanes_json(feature_dir)
+    except Exception as exc:  # noqa: BLE001 -- unverifiable provenance must not pass handoff
+        logger.warning("Could not resolve handoff guard provenance: %s", exc)
+        return [
+            "Could not verify kitty-specs/ lane hygiene because mission provenance could not be resolved.",
+            f"Coordination/workspace base: {check_branch}",
+            f"Planning content base: {_planning_ref}",
+            "No handoff was made. Repair the mission metadata or lanes.json, then retry.",
+        ]
+
+    _planning_commit_sha = _lanes_manifest.planning_commit_sha if _lanes_manifest else None
     contamination_files = list_wp_branch_specs_changes_for_guard(
         worktree_path=worktree_path,
         base_branch=check_branch,
         planning_base_branch=_planning_ref,
+        workspace_base_commit=workspace_base_commit,
+        planning_commit_sha=_planning_commit_sha,
+        mission_slug=_mission_slug,
+        topology=_topology,
     )
     if contamination_files is None:
         verification_guidance = [
             "Could not verify kitty-specs/ lane hygiene because a required git ref or diff could not be resolved.",
             f"Coordination/workspace base: {check_branch}",
+            f"Claim-time workspace snapshot: {workspace_base_commit or 'not recorded'}",
             f"Planning content base: {_planning_ref}",
             "No handoff was made. Restore the missing refs or repair the workspace metadata, then retry.",
         ]
@@ -772,6 +803,8 @@ def _validate_worktree_state(
             wp_id=wp_id,
             target_lane=target_lane,
             list_wp_branch_specs_changes_for_guard=list_wp_branch_specs_changes_for_guard,
+            mission_slug=mission_slug,
+            workspace_base_commit=(workspace.context.base_commit if workspace is not None and workspace.context is not None else None),
         )
         if contamination is not None:
             return False, contamination

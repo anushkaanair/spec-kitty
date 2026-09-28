@@ -16,6 +16,7 @@ import pytest
 from typer.testing import CliRunner
 
 from specify_cli.cli.commands.agent.tasks import (
+    _filter_by_planning_tip_content,
     _list_wp_branch_mission_specs_changes,
     app as tasks_app,
 )
@@ -281,6 +282,7 @@ def test_quoted_kitty_specs_path_fails_closed(tmp_path: Path) -> None:
     flagged = _list_wp_branch_mission_specs_changes(repo, "main")
 
     assert flagged is None
+    assert _filter_by_planning_tip_content(repo, [], "main") is None
 
 
 def test_lane_authored_coordination_matrix_change_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
