@@ -743,8 +743,19 @@ def _trusted_handoff_snapshots(
     recorded_pin = planning_commit_sha
     if recorded_pin is None:
         recorded_pin = git_merge_base(worktree_path, "HEAD", planning_tip)
-    if recorded_pin is None or not _commit_is_post_fork_lane_ancestor(worktree_path, recorded_pin, workspace_base_commit):
-        return None
+        if recorded_pin is None or not _commit_is_post_fork_lane_ancestor(worktree_path, recorded_pin, workspace_base_commit):
+            return None
+    else:
+        # A fresh lane may start at its immutable claim-time planning pin (or a
+        # later commit that already contains it). The explicit workspace pin
+        # remains trustworthy in that topology even though no post-fork merge
+        # is needed; legacy contexts without a pin still require post-fork
+        # lane-history proof above.
+        fork_contains_pin = git_merge_base(worktree_path, workspace_base_commit, recorded_pin) == recorded_pin
+        if not fork_contains_pin and not _commit_is_post_fork_lane_ancestor(worktree_path, recorded_pin, workspace_base_commit):
+            return None
+        if git_merge_base(worktree_path, "HEAD", recorded_pin) != recorded_pin:
+            return None
 
     merged_planning_tip = planning_tip if _commit_is_post_fork_lane_ancestor(worktree_path, planning_tip, workspace_base_commit) else None
     coordination_snapshot = None
