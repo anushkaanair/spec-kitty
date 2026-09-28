@@ -36,7 +36,9 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
+
+from tests.architectural._gate_coverage import load_spliced_workflow
+from tests.architectural._interpreter_shard_roster import INTERPRETER_SHARD_JOB_KEYS, INTERPRETER_SHARDS
 
 pytestmark = pytest.mark.fast
 
@@ -44,11 +46,20 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _WORKFLOW_PATH = _REPO_ROOT / ".github" / "workflows" / "ci-nightly.yml"
 
 # suite key -> ($GITHUB_ENV exit variable, job name)
+#
+# #4951: the single `interpreter-matrix` job (one INTERPRETER_EXIT var) was
+# split into N independent `interpreter-matrix-shard-<N>` jobs, each with its
+# own `INTERPRETER_SHARD_<N>_EXIT` var -- so this dict now carries one entry
+# PER SHARD. Landing pass #5244 (LAND-PAT-002): both the lane label and the
+# exit var are now read straight off each roster `InterpreterShard`
+# (`lane_label`/`exit_var`) instead of being independently re-derived here
+# via a `job_key.rsplit('-')` + a local regex helper -- the roster is the one
+# place either name is computed from `job_key`, never a second time here.
 _MARKER_LANES = {
     "performance": ("PERF_EXIT", "performance"),
     "e2e": ("E2E_EXIT", "e2e"),
     "stress": ("STRESS_EXIT", "stress"),
-    "interpreter": ("INTERPRETER_EXIT", "interpreter-matrix"),
+    **{shard.lane_label: (shard.exit_var, shard.job_key) for shard in INTERPRETER_SHARDS},
 }
 # directory-lane job name -> $GITHUB_ENV exit variable. #5201 added the
 # specify_cli out-of-matrix lane alongside integration-next.
@@ -61,8 +72,12 @@ _ALL_EXIT_VARS = [var for var, _job in _MARKER_LANES.values()] + list(_DIRECTORY
 
 
 def _load_workflow() -> dict[str, Any]:
-    with _WORKFLOW_PATH.open(encoding="utf-8") as handle:
-        loaded = yaml.safe_load(handle)
+    # Landing pass #5244 (LAND-PAT-003): route through the canonical
+    # splicing loader, never a raw `yaml.safe_load` -- see
+    # `_gate_coverage.load_spliced_workflow`'s docstring for why every
+    # workflow reader must use it (a local `uses:` caller job, such as
+    # ci-nightly.yml's own `full-module-matrix`, is mis-modeled otherwise).
+    loaded = load_spliced_workflow(_WORKFLOW_PATH)
     assert isinstance(loaded, dict), f"expected a YAML mapping at the file root, got {type(loaded)!r}"
     return loaded
 
@@ -70,6 +85,66 @@ def _load_workflow() -> dict[str, Any]:
 def _run_text_for_job(workflow: dict[str, Any], job_name: str) -> str:
     job = workflow["jobs"][job_name]
     return "\n".join(step["run"] for step in job["steps"] if isinstance(step.get("run"), str))
+
+
+# ---------------------------------------------------------------------------
+# PR-TESTS-002 (pre-merge squad, severity 3): ``_MARKER_LANES`` merges the
+# interpreter-shard entries in via a dict comprehension over
+# ``INTERPRETER_SHARD_JOB_KEYS``. If the roster is ever emptied, that
+# comprehension silently contributes ZERO interpreter entries -- every test
+# below keeps passing over the surviving performance/e2e/stress lanes, with
+# no skip or warning at all. This guard fails loudly instead, and also
+# catches a SHRUNKEN (non-empty) roster.
+# ---------------------------------------------------------------------------
+
+
+def _interpreter_lane_non_vacuity_violation(roster_job_keys: tuple[str, ...], marker_lanes: dict[str, tuple[str, str]]) -> str | None:
+    """PRODUCTION comparison for PR-TESTS-002: the roster must be non-empty,
+    and ``_MARKER_LANES`` must carry exactly one interpreter-shard entry per
+    roster job key. Returns a message describing the violation, or ``None``
+    when they agree. Both the guard test below (the REAL roster, the REAL
+    ``_MARKER_LANES``) and its required mutation test (a scratch, emptied
+    roster paired with a scratch ``marker_lanes`` built the same way
+    production does) call this SAME function."""
+    if not roster_job_keys:
+        return "INTERPRETER_SHARD_JOB_KEYS must not be empty -- _MARKER_LANES silently drops all interpreter-shard coverage otherwise"
+    interpreter_lane_keys = {suite_key for suite_key in marker_lanes if suite_key.startswith("interpreter-")}
+    if len(interpreter_lane_keys) != len(roster_job_keys):
+        return (
+            f"_MARKER_LANES carries {len(interpreter_lane_keys)} interpreter-shard lane(s) {sorted(interpreter_lane_keys)} "
+            f"but the roster declares {len(roster_job_keys)} shard(s) {sorted(roster_job_keys)}"
+        )
+    return None
+
+
+def test_interpreter_shard_lanes_are_present_and_match_the_roster() -> None:
+    """PR-TESTS-002: fails loudly on an emptied or shrunken roster instead
+    of letting FIND-1/FIND-2's marker-lane checks silently lose all
+    interpreter-shard coverage."""
+    violation = _interpreter_lane_non_vacuity_violation(INTERPRETER_SHARD_JOB_KEYS, _MARKER_LANES)
+    assert violation is None, violation
+
+
+def test_interpreter_shard_lane_check_fails_on_an_emptied_roster() -> None:
+    """Standing Order #5 positive control: proves
+    ``_interpreter_lane_non_vacuity_violation`` -- the SAME function the
+    guard above calls -- actually fails when the roster is empty but
+    ``_MARKER_LANES`` still carries the non-interpreter lanes (mirroring the
+    real dict-comprehension's behavior on an emptied roster), without
+    touching ``_interpreter_shard_roster.py`` on disk."""
+    scratch_lanes = {"performance": ("PERF_EXIT", "performance"), "e2e": ("E2E_EXIT", "e2e"), "stress": ("STRESS_EXIT", "stress")}
+    violation = _interpreter_lane_non_vacuity_violation((), scratch_lanes)
+    assert violation is not None and "must not be empty" in violation, f"expected an empty-roster violation, got: {violation!r}"
+
+
+def test_interpreter_shard_lane_check_fails_on_a_shrunken_roster() -> None:
+    """Standing Order #5 positive control: a SHRUNKEN scratch roster (one
+    shard dropped) paired with the unchanged, still-full ``_MARKER_LANES``
+    -- modeling a lane dict that was not regenerated in lockstep with a
+    roster shrink -- must also surface as a violation."""
+    shrunken = INTERPRETER_SHARD_JOB_KEYS[:-1]
+    violation = _interpreter_lane_non_vacuity_violation(shrunken, _MARKER_LANES)
+    assert violation is not None and "carries" in violation, f"expected a count-mismatch violation, got: {violation!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -166,3 +241,73 @@ class TestSpecifyCliOutOfMatrixLane:
     def test_lane_escalates_under_its_own_suite_key(self) -> None:
         run_text = _run_text_for_job(_load_workflow(), self._JOB)
         assert f"--suite-key {self._JOB}" in run_text, run_text
+
+
+# ---------------------------------------------------------------------------
+# LAND-ARCH-003 (landing pass #5244): no guard previously pinned EVERY
+# escalating nightly job into nightly-summary.needs -- only the shards
+# (test_interpreter_shard_coverage.py) and integration-next
+# (test_module_shard_registry.py) were individually pinned, and
+# TestSpecifyCliOutOfMatrixLane above pins specify-cli-out-of-matrix alone.
+# A future merge conflict on that `needs:` line could silently drop ANY
+# escalating job (not just the ones already named) from the aggregator --
+# exactly the hazard the merge that produced this landing pass exercised.
+# This closes the class: derived from the workflow itself, general over
+# every job with a `nightly_escalation.py` step, not a per-job enumeration.
+# ---------------------------------------------------------------------------
+
+
+def _job_run_text(job: dict[str, object]) -> str:
+    """All raw ``run:`` script text of one job dict, joined."""
+    steps = job.get("steps") or []
+    return "\n".join(str(step.get("run")) for step in steps if isinstance(step, dict) and isinstance(step.get("run"), str))
+
+
+def _jobs_with_an_escalation_step(jobs: dict[str, object]) -> set[str]:
+    """Every job name (excluding ``nightly-summary`` itself) whose ``run:``
+    text invokes ``nightly_escalation.py`` anywhere."""
+    escalating: set[str] = set()
+    for job_name, job in jobs.items():
+        if job_name == "nightly-summary" or not isinstance(job, dict):
+            continue
+        if "nightly_escalation.py" in _job_run_text(job):
+            escalating.add(job_name)
+    return escalating
+
+
+def _escalating_jobs_missing_from_summary_needs(jobs: dict[str, object]) -> set[str]:
+    """PRODUCTION comparison for LAND-ARCH-003: every job that escalates via
+    ``nightly_escalation.py`` must appear in ``nightly-summary``'s ``needs``,
+    or its red verdict never surfaces in the aggregator. Returns the set of
+    violating job names, or the empty set when every escalating job is
+    aggregated. Both the guard test below (the REAL workflow) and its
+    required mutation control (a scratch ``needs`` list with one job
+    dropped) call this SAME function."""
+    escalating = _jobs_with_an_escalation_step(jobs)
+    summary_job = jobs.get("nightly-summary")
+    summary_needs = set((summary_job or {}).get("needs") or []) if isinstance(summary_job, dict) else set()
+    return escalating - summary_needs
+
+
+def test_every_escalating_nightly_job_is_aggregated_by_nightly_summary() -> None:
+    """LAND-ARCH-003: every job in the REAL ci-nightly.yml with a
+    ``nightly_escalation.py`` step must appear in ``nightly-summary.needs``."""
+    jobs = _load_workflow()["jobs"]
+    missing = _escalating_jobs_missing_from_summary_needs(jobs)
+    assert not missing, f"job(s) escalate via nightly_escalation.py but are missing from nightly-summary.needs (their red never surfaces): {sorted(missing)}"
+
+
+def test_escalating_job_aggregation_check_fails_when_a_job_is_dropped_from_needs() -> None:
+    """Standing Order #5 positive control: a scratch parse of the REAL
+    workflow with ``specify-cli-out-of-matrix`` dropped from
+    ``nightly-summary.needs`` (its own escalation step left untouched) must
+    be caught by ``_escalating_jobs_missing_from_summary_needs`` -- the SAME
+    function the guard above calls. The tracked workflow itself is never
+    edited."""
+    jobs = dict(_load_workflow()["jobs"])
+    real_summary = jobs["nightly-summary"]
+    scratch_needs = [job_name for job_name in real_summary["needs"] if job_name != "specify-cli-out-of-matrix"]
+    jobs["nightly-summary"] = {**real_summary, "needs": scratch_needs}
+
+    missing = _escalating_jobs_missing_from_summary_needs(jobs)
+    assert missing == {"specify-cli-out-of-matrix"}, f"dropping specify-cli-out-of-matrix from needs must surface it as missing, got: {missing}"
