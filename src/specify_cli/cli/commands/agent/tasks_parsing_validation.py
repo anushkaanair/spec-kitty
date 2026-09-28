@@ -618,14 +618,17 @@ def _check_kitty_specs_contamination(
     list_wp_branch_specs_changes_for_guard: Callable[..., list[str] | None],
     mission_slug: str | None = None,
     workspace_base_commit: str | None = None,
+    workspace_planning_commit_sha: str | None = None,
 ) -> list[str] | None:
     """Block lane planning edits and refuse handoff when their provenance is unknown.
 
     Candidate paths are measured from the immutable workspace fork snapshot
-    when available; their content is compared with both the recorded planning
-    commit and current planning ref. This prevents later planning movement from
-    making claim-time P1 content look lane-authored. Coordination-partition
-    paths changed since the trusted fork remain violations.
+    when available; their content is compared with the immutable workspace
+    planning pin, verified planning history, and (for coordination topologies)
+    the exact coordination snapshot already merged into the lane. This prevents
+    later planning movement from making claim-time P1 content look lane-authored
+    without trusting bytes from an unmerged ref. Coordination-partition paths
+    changed since the trusted fork remain violations.
     """
     _planning_branch = _resolve_planning_branch_for_lane_guard(feature_dir)
     _planning_ref = _planning_branch or check_branch
@@ -637,12 +640,14 @@ def _check_kitty_specs_contamination(
             "No handoff was made. Repair the workspace context to record its immutable base commit, then retry.",
         ]
     try:
-        from mission_runtime import resolve_topology
-        from specify_cli.lanes.persistence import read_lanes_json
+        from mission_runtime import MissionArtifactKind, placement_seam, resolve_topology, routes_through_coordination
 
         _mission_slug = mission_slug or feature_dir.name
-        _topology = resolve_topology(feature_dir.parent.parent, _mission_slug)
-        _lanes_manifest = read_lanes_json(feature_dir)
+        _repo_root = feature_dir.parent.parent
+        _topology = resolve_topology(_repo_root, _mission_slug)
+        _coordination_ref = None
+        if routes_through_coordination(_topology):
+            _coordination_ref = placement_seam(_repo_root, _mission_slug).write_target(MissionArtifactKind.STATUS_STATE).ref
     except Exception as exc:  # noqa: BLE001 -- unverifiable provenance must not pass handoff
         logger.warning("Could not resolve handoff guard provenance: %s", exc)
         return [
@@ -652,19 +657,19 @@ def _check_kitty_specs_contamination(
             "No handoff was made. Repair the mission metadata or lanes.json, then retry.",
         ]
 
-    _planning_commit_sha = _lanes_manifest.planning_commit_sha if _lanes_manifest else None
     contamination_files = list_wp_branch_specs_changes_for_guard(
         worktree_path=worktree_path,
         base_branch=check_branch,
         planning_base_branch=_planning_ref,
         workspace_base_commit=workspace_base_commit,
-        planning_commit_sha=_planning_commit_sha,
+        planning_commit_sha=workspace_planning_commit_sha,
+        coordination_ref=_coordination_ref,
         mission_slug=_mission_slug,
         topology=_topology,
     )
     if contamination_files is None:
         verification_guidance = [
-            "Could not verify kitty-specs/ lane hygiene because a required git ref or diff could not be resolved.",
+            "Could not verify kitty-specs/ lane hygiene because a required ref, historical planning pin, or diff could not be resolved.",
             f"Coordination/workspace base: {check_branch}",
             f"Claim-time workspace snapshot: {workspace_base_commit or 'not recorded'}",
             f"Planning content base: {_planning_ref}",
@@ -805,6 +810,7 @@ def _validate_worktree_state(
             list_wp_branch_specs_changes_for_guard=list_wp_branch_specs_changes_for_guard,
             mission_slug=mission_slug,
             workspace_base_commit=(workspace.context.base_commit if workspace is not None and workspace.context is not None else None),
+            workspace_planning_commit_sha=(workspace.context.planning_commit_sha if workspace is not None and workspace.context is not None else None),
         )
         if contamination is not None:
             return False, contamination

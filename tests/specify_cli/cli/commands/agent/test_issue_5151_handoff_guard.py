@@ -49,6 +49,40 @@ def _commit_all(cwd: Path, message: str) -> None:
     _git(cwd, "commit", "-q", "-m", message)
 
 
+def _apply_lane_edit(lane_worktree: Path, primary_dir: Path, mission_slug: str, lane_edit: str | None) -> list[str]:
+    """Apply one deliberate kitty-specs edit and return its exact path."""
+    changed_paths: list[str] = []
+    if lane_edit == "primary":
+        spec_path = lane_worktree / "kitty-specs" / mission_slug / "spec.md"
+        spec_path.write_text(spec_path.read_text(encoding="utf-8") + "\nLane-authored planning change.\n", encoding="utf-8")
+        changed_paths.append(f"kitty-specs/{mission_slug}/spec.md")
+    elif lane_edit == "plan":
+        plan_path = lane_worktree / "kitty-specs" / mission_slug / "plan.md"
+        plan_path.write_text(plan_path.read_text(encoding="utf-8") + "\nLane-authored plan edit.\n", encoding="utf-8")
+        changed_paths.append(f"kitty-specs/{mission_slug}/plan.md")
+    elif lane_edit == "plan-match-p2":
+        plan_path = lane_worktree / "kitty-specs" / mission_slug / "plan.md"
+        plan_path.write_bytes((primary_dir / "plan.md").read_bytes())
+        changed_paths.append(f"kitty-specs/{mission_slug}/plan.md")
+    elif lane_edit == "coord":
+        matrix_path = lane_worktree / "kitty-specs" / mission_slug / "acceptance-matrix.json"
+        matrix_path.write_text(matrix_path.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        changed_paths.append(f"kitty-specs/{mission_slug}/acceptance-matrix.json")
+    elif lane_edit == "coord-match-planning":
+        matrix_path = lane_worktree / "kitty-specs" / mission_slug / "acceptance-matrix.json"
+        matrix_path.write_bytes((primary_dir / "acceptance-matrix.json").read_bytes())
+        changed_paths.append(f"kitty-specs/{mission_slug}/acceptance-matrix.json")
+    elif lane_edit == "mission-events":
+        events_path = lane_worktree / "kitty-specs" / mission_slug / "mission-events.jsonl"
+        events_path.write_text(events_path.read_text(encoding="utf-8") + '{"event":"lane-edit"}\n', encoding="utf-8")
+        changed_paths.append(f"kitty-specs/{mission_slug}/mission-events.jsonl")
+    elif lane_edit == "wp-prompt":
+        prompt_path = lane_worktree / "kitty-specs" / mission_slug / "tasks" / "WP01.md"
+        prompt_path.write_text(prompt_path.read_text(encoding="utf-8") + "\nLane-authored prompt edit.\n", encoding="utf-8")
+        changed_paths.append(f"kitty-specs/{mission_slug}/tasks/WP01.md")
+    return changed_paths
+
+
 def _build_handoff_repo(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -61,6 +95,7 @@ def _build_handoff_repo(
     coordination_updates_after_lane_base: bool = False,
     d07_noncoord_inherited_paths: bool = False,
     include_claim_time_planning_pin: bool = True,
+    merge_claim_time_planning_commit: bool = True,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -151,7 +186,8 @@ def _build_handoff_repo(
     _git(repo_root, "worktree", "add", "-b", lane_branch, str(lane_worktree), lane_base_commit)
     if coordination_updates_after_lane_base:
         _git(lane_worktree, "merge", "--no-edit", coord_tip)
-    _git(lane_worktree, "merge", "--no-edit", recorded_planning_commit)
+    if merge_claim_time_planning_commit:
+        _git(lane_worktree, "merge", "--no-edit", recorded_planning_commit)
 
     if planning_drift_after_lane_merge:
         plan_path.write_text(
@@ -172,37 +208,7 @@ def _build_handoff_repo(
     # A real source commit satisfies move-task's implementation-commit guard.
     (lane_worktree / "src").mkdir(parents=True, exist_ok=True)
     (lane_worktree / "src" / "handoff_impl.py").write_text("def ready() -> bool:\n    return True\n", encoding="utf-8")
-    changed_paths: list[str] = []
-    if lane_edit == "primary":
-        spec_path = lane_worktree / "kitty-specs" / mission_slug / "spec.md"
-        spec_path.write_text(
-            spec_path.read_text(encoding="utf-8") + "\nLane-authored planning change.\n",
-            encoding="utf-8",
-        )
-        changed_paths.append(f"kitty-specs/{mission_slug}/spec.md")
-    elif lane_edit == "plan":
-        plan_path = lane_worktree / "kitty-specs" / mission_slug / "plan.md"
-        plan_path.write_text(
-            plan_path.read_text(encoding="utf-8") + "\nLane-authored plan edit.\n",
-            encoding="utf-8",
-        )
-        changed_paths.append(f"kitty-specs/{mission_slug}/plan.md")
-    elif lane_edit == "plan-match-p2":
-        plan_path = lane_worktree / "kitty-specs" / mission_slug / "plan.md"
-        plan_path.write_bytes((primary_dir / "plan.md").read_bytes())
-        changed_paths.append(f"kitty-specs/{mission_slug}/plan.md")
-    elif lane_edit == "coord":
-        matrix_path = lane_worktree / "kitty-specs" / mission_slug / "acceptance-matrix.json"
-        matrix_path.write_text(
-            matrix_path.read_text(encoding="utf-8") + "\n",
-            encoding="utf-8",
-        )
-        changed_paths.append(f"kitty-specs/{mission_slug}/acceptance-matrix.json")
-    elif lane_edit == "coord-match-planning":
-        matrix_path = lane_worktree / "kitty-specs" / mission_slug / "acceptance-matrix.json"
-        planning_matrix = primary_dir / "acceptance-matrix.json"
-        matrix_path.write_bytes(planning_matrix.read_bytes())
-        changed_paths.append(f"kitty-specs/{mission_slug}/acceptance-matrix.json")
+    changed_paths = _apply_lane_edit(lane_worktree, primary_dir, mission_slug, lane_edit)
     _commit_all(lane_worktree, "lane: implement WP01")
 
     context_path = save_context(
@@ -221,14 +227,13 @@ def _build_handoff_repo(
             lane_id="lane-a",
             lane_wp_ids=["WP01"],
             current_wp="WP01",
+            planning_commit_sha=recorded_planning_commit if include_claim_time_planning_pin else None,
         ),
     )
-    if include_claim_time_planning_pin:
-        # The claim-time planning pin is persisted in workspace context. Write
-        # it into raw JSON until the context model consumes it as provenance.
-        context_data = json.loads(context_path.read_text(encoding="utf-8"))
-        context_data["planning_commit_sha"] = recorded_planning_commit
-        context_path.write_text(json.dumps(context_data, indent=2) + "\n", encoding="utf-8")
+    context_data = json.loads(context_path.read_text(encoding="utf-8"))
+    if not include_claim_time_planning_pin:
+        context_data.pop("planning_commit_sha", None)
+    context_path.write_text(json.dumps(context_data, indent=2) + "\n", encoding="utf-8")
     return repo_root, mission_slug, lane_worktree, changed_paths
 
 
@@ -323,6 +328,7 @@ def test_existing_lane_history_proves_p1_and_d07_coordination_content(tmp_path: 
         tmp_path,
         monkeypatch,
         planning_drift_after_lane_merge=True,
+        refresh_planning_commit_after_lane_merge=True,
         coordination_updates_after_lane_base=True,
         d07_noncoord_inherited_paths=True,
         include_claim_time_planning_pin=False,
@@ -332,6 +338,48 @@ def test_existing_lane_history_proves_p1_and_d07_coordination_content(tmp_path: 
     result = _move_for_review(repo_root, mission_slug)
 
     assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize("lane_edit", ["mission-events", "wp-prompt"])
+def test_lane_authored_d07_coordination_content_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lane_edit: str,
+) -> None:
+    repo_root, mission_slug, _lane_worktree, changed_paths = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        lane_edit=lane_edit,
+        planning_drift_after_lane_merge=True,
+        coordination_updates_after_lane_base=True,
+        d07_noncoord_inherited_paths=True,
+        include_claim_time_planning_pin=False,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "kitty-specs/ changes are not allowed on lane branches" in result.output
+    assert changed_paths[0] in result.output
+
+
+def test_legacy_context_without_post_fork_planning_pin_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        lane_edit="plan",
+        planning_drift_after_lane_merge=True,
+        include_claim_time_planning_pin=False,
+        merge_claim_time_planning_commit=False,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "could not verify" in result.output.lower()
+    assert "No handoff was made" in result.output
 
 
 def test_quoted_kitty_specs_path_fails_closed(tmp_path: Path) -> None:

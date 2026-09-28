@@ -54,7 +54,7 @@ from specify_cli.cli.commands.agent.tasks_parsing_validation import (
 )
 from specify_cli.cli.selector_resolution import resolve_mission_handle
 from specify_cli.core.constants import KITTY_SPECS_DIR, is_occurrence_map_path
-from specify_cli.core.vcs.git import git_diff_names_checked, git_merge_base
+from specify_cli.core.vcs.git import capture_branch_tip, git_diff_names_checked, git_merge_base
 from specify_cli.mission_metadata import resolve_mission_identity
 from specify_cli.missions._read_path_resolver import MissionSelectorAmbiguous
 from specify_cli.status import is_dossier_snapshot as _is_dossier_snapshot
@@ -743,21 +743,81 @@ def _planning_candidate_violations(
     candidates: list[str],
     planning_ref: str,
     planning_commit_sha: str | None,
+    workspace_base_commit: str | None,
+    coordination_ref: str | None,
 ) -> set[str] | None:
-    """Keep planning paths that differ from both recorded P1 and current P2."""
+    """Keep candidates not explained by a verified inherited snapshot.
+
+    P1 is the immutable claim-time planning pin from workspace context. Legacy
+    contexts recover it from the lane/planning merge-base only when that commit
+    entered lane history after the immutable workspace fork. Current P2 and
+    coordination content are trusted only when their exact commits are likewise
+    proven in post-fork lane history; matching a moving ref's bytes alone cannot
+    erase a lane-authored edit.
+    """
     from specify_cli.cli.commands.agent import tasks as _tasks
 
-    current = _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_ref)
-    if current is None:
+    if not candidates:
+        return set()
+    if workspace_base_commit is None:
+        # Preserve the historical direct-helper contract for legacy callers.
+        # The move-task guard always supplies the immutable workspace base
+        # (or refuses before reaching this seam), so production handoff never
+        # treats this moving-ref-only fallback as claim-time provenance.
+        current = _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_ref)
+        return None if current is None else set(current)
+
+    planning_tip = capture_branch_tip(worktree_path, planning_ref)
+    if planning_tip is None:
         return None
-    if planning_commit_sha is None:
-        return set(current)
-    if not planning_commit_sha or git_merge_base(worktree_path, "HEAD", planning_commit_sha) != planning_commit_sha:
+
+    recorded_pin = planning_commit_sha
+    if recorded_pin is None:
+        recorded_pin = git_merge_base(worktree_path, "HEAD", planning_tip)
+    if recorded_pin is None or not _commit_is_post_fork_lane_ancestor(worktree_path, recorded_pin, workspace_base_commit):
         return None
-    recorded = _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_commit_sha)
-    if recorded is None:
+
+    recorded_divergence = _tasks._filter_by_planning_tip_content(worktree_path, candidates, recorded_pin)
+    if recorded_divergence is None:
         return None
-    return set(current) & set(recorded)
+    violations = set(recorded_divergence)
+
+    # P2 can explain a changed candidate only when that exact primary tip is
+    # present after the lane's fork. Otherwise its bytes are not lane history.
+    if _commit_is_post_fork_lane_ancestor(worktree_path, planning_tip, workspace_base_commit):
+        current_divergence = _tasks._filter_by_planning_tip_content(worktree_path, candidates, planning_tip)
+        if current_divergence is None:
+            return None
+        violations.intersection_update(current_divergence)
+
+    # Unclassified coordination-owned artifacts (for example mission-events
+    # and an existing WP prompt) can be inherited after lane birth. Compare
+    # against the exact coordination snapshot already merged into this lane,
+    # never a basename exemption or a newer unmerged coordinator tip.
+    if coordination_ref is not None:
+        coordination_tip = capture_branch_tip(worktree_path, coordination_ref)
+        if coordination_tip is None:
+            return None
+        coordination_snapshot = git_merge_base(worktree_path, "HEAD", coordination_tip)
+        if coordination_snapshot is None:
+            return None
+        if _commit_is_post_fork_lane_ancestor(worktree_path, coordination_snapshot, workspace_base_commit):
+            coordination_divergence = _tasks._filter_by_planning_tip_content(worktree_path, candidates, coordination_snapshot)
+            if coordination_divergence is None:
+                return None
+            violations.intersection_update(coordination_divergence)
+
+    return violations
+
+
+def _commit_is_post_fork_lane_ancestor(worktree_path: Path, commit: str, workspace_base_commit: str) -> bool:
+    """Return whether ``commit`` entered lane history after its recorded fork."""
+    if git_merge_base(worktree_path, "HEAD", workspace_base_commit) != workspace_base_commit:
+        return False
+    if git_merge_base(worktree_path, "HEAD", commit) != commit:
+        return False
+    fork_candidate_base = git_merge_base(worktree_path, workspace_base_commit, commit)
+    return fork_candidate_base is not None and fork_candidate_base != commit
 
 
 def _list_wp_branch_mission_specs_changes(
@@ -767,6 +827,7 @@ def _list_wp_branch_mission_specs_changes(
     planning_base_branch: str | None = None,
     workspace_base_commit: str | None = None,
     planning_commit_sha: str | None = None,
+    coordination_ref: str | None = None,
     mission_slug: str | None = None,
     topology: MissionTopology | None = None,
 ) -> list[str] | None:
@@ -775,13 +836,16 @@ def _list_wp_branch_mission_specs_changes(
     ``workspace_base_commit`` is the immutable claim-time fork snapshot;
     ``base_branch`` is the fallback for legacy workspaces. ``planning_base_branch``
     is the moving primary planning ref and ``planning_commit_sha`` is the
-    claim-time planning snapshot frozen in the primary ``lanes.json``.
+    immutable claim-time planning snapshot from workspace context. Legacy
+    contexts need a planning pin provable from post-fork lane history.
+    ``coordination_ref`` is the canonical status-placement ref for a
+    coordination topology.
 
     Candidate paths are measured after the immutable lane fork snapshot. A
-    planning candidate is clean when it matches either claim-time P1 or current
-    P2. Coordination-partition candidates remain violations regardless of
-    planning equality, so a lane edit cannot be hidden by recreating planning
-    bytes.
+    planning candidate is clean only when it matches a claim-time planning
+    snapshot, a current planning tip actually merged after the fork, or a
+    coordination snapshot actually merged after the fork. Coordination-kind
+    candidates remain violations regardless of snapshot equality.
 
     An unknown base, missing merge-base, or failed content diff is not evidence
     of a clean lane and returns ``None`` so the caller can fail closed.
@@ -806,7 +870,14 @@ def _list_wp_branch_mission_specs_changes(
     coordination_candidates = _coordination_hygiene_candidates(candidates, mission_slug, topology)
 
     planning_candidates = [path for path in candidates if path not in coordination_candidates]
-    planning_violations = _planning_candidate_violations(worktree_path, planning_candidates, planning_ref, planning_commit_sha)
+    planning_violations = _planning_candidate_violations(
+        worktree_path,
+        planning_candidates,
+        planning_ref,
+        planning_commit_sha,
+        workspace_base_commit,
+        coordination_ref,
+    )
     if planning_violations is None:
         return None
     return [path for path in candidates if path in coordination_candidates or path in planning_violations]
@@ -819,6 +890,7 @@ def _list_wp_branch_specs_changes_for_guard(
     planning_base_branch: str | None = None,
     workspace_base_commit: str | None = None,
     planning_commit_sha: str | None = None,
+    coordination_ref: str | None = None,
     mission_slug: str | None = None,
     topology: MissionTopology | None = None,
 ) -> list[str] | None:
@@ -839,6 +911,8 @@ def _list_wp_branch_specs_changes_for_guard(
         kwargs["workspace_base_commit"] = workspace_base_commit
     if planning_commit_sha is not None:
         kwargs["planning_commit_sha"] = planning_commit_sha
+    if coordination_ref is not None:
+        kwargs["coordination_ref"] = coordination_ref
     if mission_slug is not None:
         kwargs["mission_slug"] = mission_slug
     if topology is not None:
