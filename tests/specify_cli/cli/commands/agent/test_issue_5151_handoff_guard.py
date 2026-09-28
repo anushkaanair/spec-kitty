@@ -44,12 +44,25 @@ def _git(cwd: Path, *args: str) -> str:
     return result.stdout.strip()
 
 
+def _git_bytes(cwd: Path, *args: str) -> bytes:
+    result = subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
+    return result.stdout
+
+
 def _commit_all(cwd: Path, message: str) -> None:
     _git(cwd, "add", "-A")
     _git(cwd, "commit", "-q", "-m", message)
 
 
-def _apply_lane_edit(lane_worktree: Path, primary_dir: Path, mission_slug: str, lane_edit: str | None) -> list[str]:
+def _apply_lane_edit(
+    lane_worktree: Path,
+    primary_dir: Path,
+    mission_slug: str,
+    lane_edit: str | None,
+    *,
+    fork_commit: str,
+    planning_commit: str,
+) -> list[str]:
     """Apply one deliberate kitty-specs edit and return its exact path."""
     changed_paths: list[str] = []
     if lane_edit == "primary":
@@ -76,6 +89,25 @@ def _apply_lane_edit(lane_worktree: Path, primary_dir: Path, mission_slug: str, 
         events_path = lane_worktree / "kitty-specs" / mission_slug / "mission-events.jsonl"
         events_path.write_text(events_path.read_text(encoding="utf-8") + '{"event":"lane-edit"}\n', encoding="utf-8")
         changed_paths.append(f"kitty-specs/{mission_slug}/mission-events.jsonl")
+    elif lane_edit in {
+        "coord-revert",
+        "wp-prompt-revert",
+        "wp-prompt-match-p1",
+        "mission-events-delete",
+    }:
+        rel_path = {
+            "coord-revert": f"kitty-specs/{mission_slug}/acceptance-matrix.json",
+            "wp-prompt-revert": f"kitty-specs/{mission_slug}/tasks/WP01.md",
+            "wp-prompt-match-p1": f"kitty-specs/{mission_slug}/tasks/WP01.md",
+            "mission-events-delete": f"kitty-specs/{mission_slug}/mission-events.jsonl",
+        }[lane_edit]
+        target_path = lane_worktree / rel_path
+        if lane_edit.endswith("-delete"):
+            target_path.unlink()
+        else:
+            source_commit = planning_commit if lane_edit == "wp-prompt-match-p1" else fork_commit
+            target_path.write_bytes(_git_bytes(lane_worktree, "show", f"{source_commit}:{rel_path}"))
+        changed_paths.append(rel_path)
     elif lane_edit == "wp-prompt":
         prompt_path = lane_worktree / "kitty-specs" / mission_slug / "tasks" / "WP01.md"
         prompt_path.write_text(prompt_path.read_text(encoding="utf-8") + "\nLane-authored prompt edit.\n", encoding="utf-8")
@@ -94,6 +126,8 @@ def _build_handoff_repo(
     refresh_planning_commit_after_lane_merge: bool = False,
     coordination_updates_after_lane_base: bool = False,
     d07_noncoord_inherited_paths: bool = False,
+    include_status_artifacts_after_lane_base: bool = True,
+    include_issue_matrix_after_coord_update: bool = True,
     include_claim_time_planning_pin: bool = True,
     merge_claim_time_planning_commit: bool = True,
 ) -> tuple[Path, str, Path, list[str]]:
@@ -120,7 +154,7 @@ def _build_handoff_repo(
     coord_dir = coord_worktree / "kitty-specs" / mission_slug
     coord_base_commit = _git(coord_worktree, "rev-parse", "HEAD")
 
-    if not d07_noncoord_inherited_paths:
+    if include_status_artifacts_after_lane_base:
         append_event(
             coord_dir,
             StatusEvent(
@@ -139,16 +173,18 @@ def _build_handoff_repo(
         )
         materialize(coord_dir)
 
+    if not d07_noncoord_inherited_paths:
         # These updates are owned by the live coordination branch. Two of them
         # are classified as COORD artifacts; the event log and WP prompt are not.
         (coord_dir / "acceptance-matrix.json").write_text(
             (coord_dir / "acceptance-matrix.json").read_text(encoding="utf-8") + "\n",
             encoding="utf-8",
         )
-        (coord_dir / "issue-matrix.md").write_text(
-            "# Issue Matrix\n\nCoordination-owned fixture row.\n",
-            encoding="utf-8",
-        )
+        if include_issue_matrix_after_coord_update:
+            (coord_dir / "issue-matrix.md").write_text(
+                "# Issue Matrix\n\nCoordination-owned fixture row.\n",
+                encoding="utf-8",
+            )
     (coord_dir / "mission-events.jsonl").write_text('{"event":"coordination-update"}\n', encoding="utf-8")
     wp_prompt = coord_dir / "tasks" / "WP01.md"
     wp_prompt.write_text(
@@ -208,7 +244,14 @@ def _build_handoff_repo(
     # A real source commit satisfies move-task's implementation-commit guard.
     (lane_worktree / "src").mkdir(parents=True, exist_ok=True)
     (lane_worktree / "src" / "handoff_impl.py").write_text("def ready() -> bool:\n    return True\n", encoding="utf-8")
-    changed_paths = _apply_lane_edit(lane_worktree, primary_dir, mission_slug, lane_edit)
+    changed_paths = _apply_lane_edit(
+        lane_worktree,
+        primary_dir,
+        mission_slug,
+        lane_edit,
+        fork_commit=lane_base_commit,
+        planning_commit=recorded_planning_commit,
+    )
     _commit_all(lane_worktree, "lane: implement WP01")
 
     context_path = save_context(
@@ -354,6 +397,40 @@ def test_lane_authored_d07_coordination_content_is_rejected(
         coordination_updates_after_lane_base=True,
         d07_noncoord_inherited_paths=True,
         include_claim_time_planning_pin=False,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "kitty-specs/ changes are not allowed on lane branches" in result.output
+    assert changed_paths[0] in result.output
+
+
+@pytest.mark.parametrize(
+    ("lane_edit", "d07_paths"),
+    [
+        ("coord-revert", False),
+        ("wp-prompt-revert", True),
+        ("wp-prompt-match-p1", True),
+        ("mission-events-delete", True),
+    ],
+)
+def test_lane_authored_reversal_of_post_fork_coord_content_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lane_edit: str,
+    d07_paths: bool,
+) -> None:
+    repo_root, mission_slug, _lane_worktree, changed_paths = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        lane_edit=lane_edit,
+        planning_drift_after_lane_merge=True,
+        coordination_updates_after_lane_base=True,
+        d07_noncoord_inherited_paths=d07_paths,
+        include_status_artifacts_after_lane_base=False,
+        include_issue_matrix_after_coord_update=lane_edit != "coord-revert",
     )
     monkeypatch.chdir(repo_root)
 
