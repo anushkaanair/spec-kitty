@@ -73,32 +73,3 @@ No spec-kitty CLI bug blocked spec authoring itself.
    to target branch") as the finalize entry point — never `tasks-outline`, `tasks-packages`, or the
    bare top-level `spec-kitty tasks` command. No workaround was needed; the dispatch's own
    fallback instruction (prefer `agent mission finalize-tasks`) was followed exactly.
-
-## WP02: recapture decision-logic script
-
-6. **`spec-kitty agent action implement WP02` hit the known "Global asset inventory changed"
-   race (ledger SK-243) five times in a row before succeeding.** Each failure named a
-   *different* global asset directory (`<home>/.kiro/prompts`, `<home>/.agent/workflows`,
-   `<home>/.agent/workflows/spec-kitty.analyze.md`, `<home>/.config/llxprt-code/commands`),
-   consistent with a concurrent WP01 agent's own `implement`/`upgrade` invocation racing this
-   process's asset-inventory snapshot at the same moment (the dispatch explicitly warned WP01
-   would start at the same time). The dispatch's "re-run, up to 3 attempts" guidance undersold
-   the actual retry count needed under real concurrent-lane load; two more retries (5 total)
-   were needed before the command succeeded and resolved the lane-b worktree.
-7. **mypy strict flagged three real gaps the WP prompt's verbatim code snippets did not
-   anticipate.** The T011 snippet's literal `list[dict]` signature (no type args) fails
-   `mypy --strict`'s `type-arg` check; fixed by typing it `list[dict[str, object]]` (behavior
-   unchanged). The narrowed dict type then made `pr.get("number")` return `object | None`,
-   requiring an explicit `isinstance(number, int)` narrow before returning it as `int | None`.
-   Separately, `mypy --strict` refuses `module.private_attr` access across a module boundary
-   (`recapture.subprocess`) as "not explicitly exported" — the test file's spy setup had to
-   `import subprocess` directly and monkeypatch that shared module object instead of reaching
-   through `recapture_charter_shard_timings`'s own imported reference. None of this surfaced
-   under plain `ruff check` — mypy is CLAUDE.md-required but not a CI gate, so these would have
-   shipped unnoticed without running it locally as instructed.
-8. **`mypy scripts/<file>.py tests/ci/test_<file>.py` (both files in one invocation) fails
-   with "Source file found twice under different module names" (`recapture_charter_shard_timings`
-   vs `scripts.ci.recapture_charter_shard_timings`)** — a namespace-package ambiguity from
-   passing a bare script path alongside a path that resolves through the `scripts.ci` package.
-   Running mypy on each file separately avoided it; not investigated further since mypy is not a
-   CI gate here.
