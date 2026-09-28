@@ -20,7 +20,7 @@ from specify_cli.cli.commands.agent.tasks import (
     _list_wp_branch_mission_specs_changes,
     app as tasks_app,
 )
-from specify_cli.cli.commands.agent.tasks_shared import _lane_authored_kitty_specs_paths
+from specify_cli.cli.commands.agent.tasks_shared import _lane_authored_kitty_specs_paths, _trusted_handoff_snapshots
 from specify_cli.coordination.workspace import CoordinationWorkspace
 from specify_cli.status.models import Lane, StatusEvent
 from specify_cli.status.reducer import materialize
@@ -728,6 +728,27 @@ def test_lane_authorship_history_timeout_fails_closed(
     monkeypatch.setattr("specify_cli.cli.commands.agent.tasks.subprocess.run", _timed_out)
 
     result = _lane_authored_kitty_specs_paths(tmp_path, "fork", ("planning", "coordination"))
+
+    assert result is None
+
+
+def test_unrelated_explicit_planning_pin_fails_closed(tmp_path: Path) -> None:
+    repo = tmp_path / "unrelated-planning-pin-repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    _git(repo, "config", "user.name", "Test Runner")
+    _git(repo, "config", "commit.gpgsign", "false")
+    (repo / "README.md").write_text("fork\n", encoding="utf-8")
+    _commit_all(repo, "fork")
+    fork_commit = _git(repo, "rev-parse", "HEAD")
+
+    _git(repo, "switch", "-q", "--orphan", "unrelated-pin")
+    _git(repo, "commit", "--allow-empty", "-q", "-m", "unrelated planning pin")
+    planning_pin = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "switch", "-q", "main")
+
+    result = _trusted_handoff_snapshots(repo, "main", planning_pin, fork_commit, None)
 
     assert result is None
 
