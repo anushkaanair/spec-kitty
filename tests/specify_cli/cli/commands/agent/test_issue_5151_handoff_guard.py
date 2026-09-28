@@ -55,6 +55,7 @@ def _build_handoff_repo(
     lane_edit: str | None = None,
     missing_planning_ref: bool = False,
     planning_drift_after_lane_merge: bool = False,
+    missing_workspace_base_commit: bool = False,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -189,7 +190,7 @@ def _build_handoff_repo(
             worktree_path=lane_worktree.relative_to(repo_root).as_posix(),
             branch_name=lane_branch,
             base_branch=coord_branch,
-            base_commit=coord_tip,
+            base_commit=None if missing_workspace_base_commit else coord_tip,
             dependencies=[],
             created_at="2026-09-28T12:01:00+00:00",
             created_by="test-fixture",
@@ -325,3 +326,18 @@ def test_unresolvable_planning_ref_fails_closed(tmp_path: Path, monkeypatch: pyt
     assert result.exit_code != 0
     assert "could not verify" in result.output.lower()
     assert "kitty-specs/" in result.output
+
+
+def test_missing_claim_time_workspace_snapshot_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        missing_workspace_base_commit=True,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "could not verify" in result.output.lower()
+    assert "claim-time workspace snapshot" in result.output.lower()
