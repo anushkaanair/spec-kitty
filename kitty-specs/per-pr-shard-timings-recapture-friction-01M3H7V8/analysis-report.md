@@ -31,6 +31,14 @@ findings: []
 
 ## Specification Analysis Report
 
+> **Superseded note (2026-09-28):** this report records the `/spec-kitty.analyze` run from before
+> PR #5240 was discovered and before the 2026-09-28 design amendment. Two specific claims below —
+> "the four untouched tests" and "the visible-xfail-not-silent-pass design" (Charter Alignment
+> Issues paragraph) — are now false of the amended spec.md/plan.md: there are **three** untouched
+> tests, and the demotion mechanism is `ShardTimingsDriftWarning`, never `xfail`. See
+> `tracer-design-decisions.md`'s "Design amendment (2026-09-28)" entry for the corrected text. A
+> fresh `analyze` run is expected to regenerate this report against the amended artifacts.
+
 No findings. All detection passes (duplication, ambiguity, underspecification, charter
 alignment, coverage gaps, inconsistency/terminology drift) returned clean across
 `spec.md`, `plan.md`, and `tasks.md`.

@@ -17,12 +17,16 @@ given its own WP — see "IC-04 disposition" below.
 
 **ONE PR for the whole mission.** Per plan.md's own file list (one edited test file, one new
 script + its unit-test file, one new workflow file, plus a one-line docs addendum), the total diff
-is small (~15-line behavioural edit + 4 new tests in one existing file; one new ~150-250-line
-script; one matching ~280-320-line unit-test file — 11 fixtures, estimated from WP02's own
-fixture list, see WP02's section below for the derivation; one new ~60-80-line workflow YAML; a
-1-2 line docs edit) and is reviewable in one sitting on `main`. This matches spec-kitty's own
-default (one PR per mission); nothing here argues for a split. This is an explicit judgment call,
-stated per the dispatch's instruction, not a silent default.
+is small (**amended 2026-09-28**: a purely additive test-only edit — no behavioural change, since
+PR #5240 already merged the demotion mechanism ahead of this mission — adding ~8 new tests plus
+one verification subtask in one existing file (fix round 2 restored FR-004's agreeing-case fixture
+pair, T003b/T004b); one new ~150-250-line script; one matching
+~280-320-line unit-test file — 11 fixtures, estimated from WP02's own fixture list, see WP02's
+section below for the derivation; one new ~70-100-line workflow YAML — now two jobs, the recapture
+job plus the new strict-mode job (T020); a 1-2 line docs edit) and is reviewable in one sitting on
+`main`. This matches spec-kitty's own default (one PR per mission); nothing here argues for a
+split. This is an explicit judgment call, stated per the dispatch's instruction, not a silent
+default.
 
 ---
 
@@ -118,21 +122,21 @@ from this table rather than missing coverage.
 
 | Requirement / ruling point | WP | Task(s) | How it is verified |
 |---|---|---|---|
-| FR-001 (demote to non-blocking) | WP01 | T004, T007 | `test_charter_disposition_flags_length_disagreement`, `test_charter_is_not_allowlisted_and_agrees_xfails_on_disagreement` |
-| FR-002 (charter stays out of `_MISMATCH_ALLOWLIST`) | WP01 | T003, T008 | unchanged hard `assert "charter" not in _MISMATCH_ALLOWLIST` kept in the test body; diff review in T008 |
-| FR-003 (4 untouched tests + 19-entry allowlist byte-identical) | WP01 | T008 | diff review confirms no edit to `test_allowlist_does_not_exceed_baseline` / `test_allowlisted_modules_still_genuinely_mismatch` / `test_allowlist_entries_are_real_registry_modules` / `test_non_allowlisted_modules_agree_with_live_collection` bodies (SC-006) |
-| FR-004 (visible drift + infra-break still fails) | WP01 | T004, T005, T006 | `test_charter_disposition_flags_length_disagreement` (disagree), `test_charter_disposition_is_none_on_agreement` (agree), `test_load_timings_fails_loudly_when_artefact_missing` (infra-break) |
+| FR-001 (demote to non-blocking; amended: already merged by #5240, WP01 verifies + adds red-first tests) | WP01 | T002 (verify), T003, T005 | T002 confirms `_report_drift`/`_strict_mode` merged behavior; `test_charter_disagreement_emits_shard_timings_drift_warning` (T003) and its strict-mode counterpart (T005) exercise the production function directly |
+| FR-002 (charter stays out of `_MISMATCH_ALLOWLIST`) | WP01 | T002, T008 | T002 confirms the unchanged hard `assert "charter" not in _MISMATCH_ALLOWLIST` in the merged test body; diff review in T008 confirms it stays unedited |
+| FR-003 (amended: 3 untouched allowlist-ratchet tests + 19-entry allowlist byte-identical; demotion covers both live-collection gates) | WP01 | T004 (cross-module gate), T008 (diff review) | `test_non_allowlisted_disagreement_emits_shard_timings_drift_warning` (T004) exercises the cross-module gate directly; T008's diff review confirms the three allowlist-ratchet tests and the allowlist itself are byte-identical |
+| FR-004 (visible drift + infra-break still fails; amended: extended to both gates; fix round 2 restored the agreeing-case fixture) | WP01 | T002, T003, T003b, T004, T004b, T005, T006 | T002 confirms the merged warn/strict-fail mechanism; T003/T004 prove the disagree-warns case for each gate; T003b/T004b (`test_charter_agreement_emits_no_shard_timings_drift_warning`, `test_non_allowlisted_agreement_emits_no_shard_timings_drift_warning`) prove FR-004's third mandatory fixture — the AGREEING case emits zero `ShardTimingsDriftWarning` (via `recwarn`) and each production gate function returns normally; T005 proves the strict-fail case for each gate; T006 (`test_load_timings_fails_loudly_when_artefact_missing`, `test_load_registry_fails_loudly_when_artefact_missing`) proves infra-break |
 | FR-005 (named secret, truthy check, fail-loud before anything else) | WP02 | T012, T014 (fixture 5) | `main()`'s first action is the truthy secret check; fixture 5's two sub-cases (empty-string, fully-unset) both assert the capture-wrapper AND the open-PR-check callables are never invoked |
 | FR-006 (no PR when no drift) | WP02 | T010, T014 (fixtures 3, 6) | `has_drift(N, N)` is `False`; `has_drift(N, M)` is `True` and triggers the push callable |
 | FR-007 (skip if a recapture PR is already open) | WP02 | T011, T013, T014 (fixtures 1, 2), T015 (fixture 7) | open-PR matcher returns the PR number only for the fixed head branch; fixture 2 proves an unrelated PR on a different head is never matched; fixture 7 (TOCTOU re-check) proves a PR appearing between the initial check and the push still aborts the push |
 | FR-008 (mechanism failure aborts; ordinary test failure does not) | WP02 | T009, T014 (fixture 4), T015 (fixtures 8, 9, 10) | `run_capture_or_die` catches `(Exception, SystemExit)`, re-raises `KeyboardInterrupt`; fixtures 4/8/9 prove mechanism-crash aborts before commit/push/PR-open; fixture 10 proves an ordinary non-zero `pytest_exit_code` (no exception) proceeds to the drift check |
 | FR-009 (charter-only scope, no `--module` flag) | WP02 | T009, T013 | `MODULE = "charter"` module-level constant; script exposes no `--module` CLI flag at all |
 | FR-010 (bot identity + fixed PR body/commit text) | WP02 | T013 | fixed commit author `spec-kitty-ci-bot <ci-bot@users.noreply.github.com>`, fixed commit message `chore(ci): automated charter shard-timings recapture`, fixed PR title/body template (verbatim in plan.md item (d)) |
-| NFR-001 (gate protects shard balance, not correctness) | WP01, WP03 | T003 (code shape), T019 (PR-body statement) | `module-tests.yml`'s uniform-weight fallback verified by inspection (plan.md item (d)); WP03's PR-body note states this explicitly |
-| NFR-002 (30-minute timeout budget; measured runtime recorded post-dispatch) | WP03 | T016, T019 | workflow `timeout-minutes: 30`; T019 flags the budget for revisit in the PR body after the first real dispatch |
+| NFR-001 (gate protects shard balance, not correctness) | WP01, WP03 | T002 (code shape, read-and-confirm), T019 (PR-body statement) | `module-tests.yml`'s uniform-weight fallback verified by inspection (plan.md item (d)); WP03's PR-body note states this explicitly |
+| NFR-002 (recapture job: 30-minute timeout budget, measured runtime recorded post-dispatch; amended: strict-mode job T020 gets its own 10-minute budget) | WP03 | T016, T019, T020 | recapture job `timeout-minutes: 30` (T019 flags for revisit post-dispatch); strict-mode job `timeout-minutes: 10` (T020, evidence: ~36s measured live-collection of all 21 modules) |
 | NFR-003 (no credential leakage) | WP02 | T012, T013 | secret value never interpolated into commit/PR/log text; only the secret's **name** appears in error paths |
-| C-001 (charter-only scope) | WP01, WP02 | T003, T009 | WP01's demotion touches only the `charter` assertion; WP02 hardcodes `MODULE = "charter"` |
-| C-002 (no allowlist-mutation feature) | WP01 | T003 | the demotion only touches the one test function's body; no code is added anywhere that edits `_MISMATCH_ALLOWLIST` / `_BASELINE_ALLOWLIST_COUNT` |
+| C-001 (charter-only *recapture* scope; the demotion's own scope is broader — see FR-003) | WP01, WP02 | T004 (synthetic-only, never a real non-charter module), T009 | WP01's T004 fixture uses only synthetic in-memory data, never a real registry module; WP02 hardcodes `MODULE = "charter"` for the recapture script |
+| C-002 (no allowlist-mutation feature) | WP01 | T002, T008 | no code is added anywhere that edits `_MISMATCH_ALLOWLIST` / `_BASELINE_ALLOWLIST_COUNT`; T002/T008 confirm this by reading and diff review |
 | C-003 (`main` is PR-only) | WP02, WP03 | T013, T016 | the script never pushes to `main`; the workflow's checkout token is the dedicated PAT, never `GITHUB_TOKEN`, and the push target is always the fixed recapture branch |
 | C-004 (no silent `GITHUB_TOKEN` fallback) | WP02 | T012, T014 (fixture 5) | the truthy check never falls back to `GH_TOKEN`/`GITHUB_TOKEN`; fixture 5 proves the loud-failure path |
 | C-005 (no absolute local paths / credentials in committed artifacts) | WP01, WP02, WP03 | (all) | reviewer/self-check: `grep -rn "/home/" <touched files>` before each WP is marked done |
@@ -144,6 +148,10 @@ from this table rather than missing coverage.
 | Plan ruling: TOCTOU re-check fixture (fixture 7) | WP02 | T015 | `test_toctou_recheck_aborts_push` |
 | Plan ruling: truthy secret check, both empty-string and fully-unset sub-cases (PLAN-FRESH4-001) | WP02 | T014 (fixture 5) | both sub-cases fail loudly before any recapture/open-PR call |
 | Plan ruling: NFR-002 satisfied by post-dispatch PR-body update (PLAN-FRESH4-002) | WP03 | T019 | stated explicitly as a PR-body note (T019 step 2) — WP03 has no separate "Definition of Done" section; the note lives in T019's own Subtasks & Detailed Guidance text |
+| Amendment ruling point 2 (absorb #5240 rather than reimplement) | WP01 | T002 | documented read-and-confirm verification pass, recorded in the Activity Log, before any new test is written |
+| Amendment ruling point 4 (strict-mode home for the exact-count invariant, in WP03's own workflow) | WP03 | T020 | new, independent job in `ci-charter-shard-recapture.yml`, no `needs:` to the recapture job, `SPEC_KITTY_STRICT_SHARD_TIMINGS=1`, `timeout-minutes: 10` |
+| Amendment ruling point 5 (allowlist-ratchet interplay: charter-only recapture can never trip `test_allowlisted_modules_still_genuinely_mismatch`) | WP01 | T002 | stated in plan.md item (a2)'s allowlist-ratchet paragraph and WP01's Objectives section; verified by the unconditional `assert "charter" not in _MISMATCH_ALLOWLIST"` T002 confirms is unchanged |
+| Amendment ruling point 6 (optional `mypy` `no-any-return` fix, admissible campsite debt) | WP01 | T007 | explicitly optional, non-gating subtask; a distinct, behaviour-preserving commit if the implementer chooses to do it |
 
 ---
 
@@ -152,12 +160,14 @@ from this table rather than missing coverage.
 | ID | Description | WP | Parallel |
 |----|---|----|----|
 | T001 | Capture RED-FIRST baseline: `.venv/bin/python -m pytest tests/architectural/test_module_length_agreement.py -q` on current HEAD, before any edit | WP01 | [P] |
-| T002 | Add `_charter_disposition(committed: int, collected: int) -> str \| None` helper | WP01 | [P] |
-| T003 | Demote `test_charter_is_not_allowlisted_and_agrees` to use the helper + `pytest.xfail` | WP01 | [P] |
-| T004 | Add `test_charter_disposition_flags_length_disagreement` | WP01 | [P] |
-| T005 | Add `test_charter_disposition_is_none_on_agreement` | WP01 | [P] |
-| T006 | Add `test_load_timings_fails_loudly_when_artefact_missing` | WP01 | [P] |
-| T007 | Add `test_charter_is_not_allowlisted_and_agrees_xfails_on_disagreement` | WP01 | [P] |
+| T002 | Verify #5240's merged `ShardTimingsDriftWarning`/`_report_drift`/`_strict_mode` mechanism satisfies FR-001/FR-002/FR-004 for `charter` (read-and-confirm, no code edit) | WP01 | [P] |
+| T003 | Add `test_charter_disagreement_emits_shard_timings_drift_warning` | WP01 | [P] |
+| T003b | Add `test_charter_agreement_emits_no_shard_timings_drift_warning` (FR-004's agreeing-case fixture; fix round 2) | WP01 | [P] |
+| T004 | Add `test_non_allowlisted_disagreement_emits_shard_timings_drift_warning` | WP01 | [P] |
+| T004b | Add `test_non_allowlisted_agreement_emits_no_shard_timings_drift_warning` (cross-module agreeing-case fixture; fix round 2) | WP01 | [P] |
+| T005 | Add strict-mode tests (`SPEC_KITTY_STRICT_SHARD_TIMINGS=1`) for both production gate functions | WP01 | [P] |
+| T006 | Add `test_load_timings_fails_loudly_when_artefact_missing` + `test_load_registry_fails_loudly_when_artefact_missing` | WP01 | [P] |
+| T007 | (Optional, non-gating) Fix `mypy` `no-any-return` in `_resolve_test_dirs` | WP01 | [P] |
 | T008 | Post-edit targeted test run + diff review confirming FR-002/FR-003/SC-006 untouched | WP01 | [P] |
 | T009 | Implement `CaptureOutcome` dataclass + `run_capture_or_die()` | WP02 | [P] |
 | T010 | Implement `has_drift(before_length, after_length) -> bool` | WP02 | [P] |
@@ -170,6 +180,7 @@ from this table rather than missing coverage.
 | T017 | Verify workflow shape against plan.md item (b)'s verbatim decisions (checklist, no code) | WP03 | |
 | T018 | Add docs supersession note to `docs/development/reference/known-friction-points.md` (IC-04) | WP03 | |
 | T019 | `make ci-parity` check + PR-body notes (gate-selection prediction, NFR-002 budget-revisit flag) | WP03 | |
+| T020 | Add the strict-mode job (`SPEC_KITTY_STRICT_SHARD_TIMINGS=1`) to `ci-charter-shard-recapture.yml`, independent of the recapture job (amendment ruling point 4) | WP03 | [P] |
 
 ---
 
@@ -177,35 +188,60 @@ from this table rather than missing coverage.
 
 **File**: `tasks/WP01-demote-charter-length-assertion.md`
 **Priority**: P1 (User Stories 1, 3) | **Dependencies**: none | **Parallel with**: WP02
-**Requirements**: FR-001, FR-002, FR-003, FR-004; C-001, C-002; NFR-001 (code-shape half)
+**Requirements**: FR-001, FR-002, FR-003, FR-004; C-001, C-002, C-005; NFR-001 (code-shape half)
 
-Subtasks: T001, T002, T003, T004, T005, T006, T007, T008 (8 subtasks, ~350-450 estimated lines).
+Subtasks: T001, T002, T003, T003b, T004, T004b, T005, T006, T007, T008 (10 subtasks; T007 is
+optional/non-gating).
+
+**Amended 2026-09-28 (operator ruling, `reviews/amendment.ruling.md`)**: after this design's
+original `ready` verdict, `main` was found to already carry PR #5240, which merged the demotion
+mechanism this WP originally specified as a `_charter_disposition`/`pytest.xfail` design — that
+design is dead. WP01's job is now "absorb #5240": verify the merged
+`ShardTimingsDriftWarning`/`_report_drift`/`_strict_mode` mechanism (T002), and add the red-first
+tests #5240 itself leaves unmet (T003-T006), with an optional, non-gating campsite-debt fix (T007).
+The subtask count was originally kept at 8 (same IDs, new content) by this amendment pass.
+
+**Further amended 2026-09-28 (fix round 2, fresh-sweep finding AMENDMENT-FRESH-002)**: a fresh-eyes
+sweep found that T003-T006 covered only the disagreeing, strict-mode, and infra-break dispositions
+— FR-004's third mandatory fixture (the agreeing case) and User Story 3 Acceptance Scenario 2 had
+no test, dropped when the pre-amendment `_charter_disposition` design (which had
+`test_charter_disposition_is_none_on_agreement`) was replaced. Added T003b and T004b, one per
+production gate function, each constructing an agreeing (`committed == collected`) fixture and
+asserting via `recwarn` that zero `ShardTimingsDriftWarning` instances are recorded and the
+function returns normally. WP01's subtask count is now **10** (T001, T002, T003, T003b, T004, T004b,
+T005, T006, T007, T008); `dependencies`, `owned_files`, and `create_intent` remain unchanged — only
+the `subtasks` frontmatter list grew.
 
 This is reconciled against
 `packs/built-in/missions/mission-steps/software-dev/tasks/guidelines.md`'s subtask-granularity
 guidance: "Aim for 3–7 subtasks per WP and 200–500 lines per WP prompt. Prefer splitting an
 oversized WP over padding a small one." (Note on denominator, mirroring WP02's own clarification
 below: that guideline's "lines per WP prompt" wording literally means the `tasks/WPnn-*.md` prompt
-document's own length — WP01's actual committed prompt file is 369 lines (`wc -l`, freshly
-re-measured), within the 200-500 range as literally written — but tasks.md's "estimated lines"
-figures for all three WPs have consistently tracked the underlying *implementation* diff size
-instead, so that is the reading reconciled here, matching WP02's denominator clarification.)
-WP01's subtask count (8) is one over the 3-7 guideline as literally written; its line estimate
-(~350-450, the implementation-size reading) sits within the 200-500 range. WP01 is kept at 8
-subtasks — not merged down to 7, not split into two WPs — because T004 and T005 each pin one of
-`_charter_disposition`'s two distinct dispositions as an independently-checkable red-first
-fixture: T004 the disagreement case, T005 the agreement case. Merging them into one subtask
-covering "the two `_charter_disposition` unit tests" would satisfy the count guideline but blur
-the pass/fail signal — a reviewer could confirm only that the merged subtask as a whole passed,
-not that each disposition independently landed and stays correct. Splitting into two WPs is
-rejected too: every one of the 8 subtasks operates on the single file
-`tests/architectural/test_module_length_agreement.py` through one shared pure helper
-(`_charter_disposition`), so a second WP would either duplicate ownership of that file or carve an
-artificial boundary with no real design seam behind it. One subtask over the guideline's aim-for
-ceiling, spent on keeping two dispositions independently falsifiable, is judged the smaller cost.
+document's own length — WP01's actual committed prompt file is 565 lines (`wc -l`, re-measured after
+fix round 2's T003b/T004b addition), now above the 200-500 range as literally written — but
+tasks.md's "estimated lines" figures for all three WPs have consistently tracked the underlying
+*implementation* diff size instead, so that is the reading reconciled here, matching WP02's
+denominator clarification.) WP01's subtask count (10) is three over the 3-7 guideline as literally
+written. WP01 is kept at 10 subtasks — not merged down to 7, not split into two WPs — because T003
+and T004 each pin one of the two now-demoted production gate functions' DISAGREEING-case fixture
+(T003: `test_charter_is_not_allowlisted_and_agrees`; T004: the cross-module
+`test_non_allowlisted_modules_agree_with_live_collection`), T003b and T004b each pin the same two
+functions' complementary AGREEING-case fixture (FR-004's third mandatory fixture, restored in fix
+round 2 after a fresh-sweep review found it dropped), and T005/T006 each cover a further distinct
+disposition (strict-mode hard-fail; infra-break). Merging any of these into one subtask would
+satisfy the count guideline but blur the pass/fail signal — a reviewer could confirm only that a
+merged subtask as a whole passed, not that each disposition independently landed and stays correct.
+Splitting into two WPs is rejected too: every one of the 10 subtasks operates on the single file
+`tests/architectural/test_module_length_agreement.py` against the same already-merged mechanism, so
+a second WP would either duplicate ownership of that file or carve an artificial boundary with no
+real design seam behind it. Three subtasks over the guideline's aim-for ceiling, spent on keeping
+each disposition (disagree/agree for both gates, strict-fail, infra-break) independently
+falsifiable, is judged the smaller cost than either blurring the pass/fail signal or fragmenting
+review across an artificial second WP.
 
 Owns `tests/architectural/test_module_length_agreement.py` only. This is the **first and only** WP
-to touch this file, so it carries the mandatory RED-FIRST baseline (T001) before its own edit.
+to touch this file, so it carries the mandatory RED-FIRST baseline (T001) before its own edit — that
+baseline now captures the post-#5240 state (see T001's amended Notes).
 
 ---
 
@@ -213,8 +249,8 @@ to touch this file, so it carries the mandatory RED-FIRST baseline (T001) before
 
 **File**: `tasks/WP02-recapture-decision-script.md`
 **Priority**: P1 (User Story 2) | **Dependencies**: none | **Parallel with**: WP01
-**Requirements**: FR-005, FR-006, FR-007, FR-008, FR-009, FR-010; C-001, C-003, C-004, C-006;
-NFR-003
+**Requirements**: FR-005, FR-006, FR-007, FR-008, FR-009, FR-010; C-001, C-003, C-004, C-005,
+C-006; NFR-003
 
 Subtasks: T009, T010, T011, T012, T013, T014, T015 (7 subtasks). Revised line estimate, derived
 from the actual artifacts rather than an assumed round number: the script itself is ~150-250 lines
@@ -263,7 +299,14 @@ covers both.
 **Priority**: P1 (User Story 2, workflow half) / P2 (docs note) | **Dependencies**: WP02
 **Requirements**: NFR-002, C-003, C-005, C-006 (workflow-file half); IC-04 (docs note)
 
-Subtasks: T016, T017, T018, T019 (4 subtasks, ~200-280 estimated lines).
+Subtasks: T016, T017, T018, T019, T020 (5 subtasks, ~200-280 estimated lines for T016-T019; T020
+adds one small, independent job to the same workflow file — see plan.md item (a2)).
+
+**Amended 2026-09-28 (operator ruling, `reviews/amendment.ruling.md`, point 4)**: added T020, a
+second, independent job in the SAME `ci-charter-shard-recapture.yml` file running the architectural
+length-agreement gates under `SPEC_KITTY_STRICT_SHARD_TIMINGS=1` — the exact-count invariant's real,
+scheduled, hard-failing home. This does **not** change `create_intent`/`owned_files` below (still
+one workflow file plus the docs file) — only the `subtasks` list grew by one entry.
 
 Owns `.github/workflows/ci-charter-shard-recapture.yml` (new) and
 `docs/development/reference/known-friction-points.md` (edit, existing file — no `create_intent`
@@ -286,6 +329,21 @@ red is explicitly an ORCHESTRATOR action per plan.md item (f), never a WP task.
 ---
 
 ## Next steps
+
+**Amendment note (2026-09-28)**: this design was amended per operator ruling
+(`reviews/amendment.ruling.md`) to absorb PR #5240 (already merged to `main`, ahead of this
+mission) and add a strict-mode CI job (WP03's new T020). WP01's and WP03's `subtasks` lists changed
+(WP01: same 8 IDs, new content; WP03: grew from 4 to 5 IDs), but every WP's `dependencies`,
+`owned_files`, and `create_intent` are **unchanged** from before this amendment — the
+dependency/ownership graph `finalize-tasks` computes `lanes.json` from has not moved. This
+amendment therefore does not, by itself, require a `finalize-tasks` re-run; the orchestrator should
+still make that call explicitly rather than inferring it silently from this note.
+
+**Fix round 2 note (2026-09-28, AMENDMENT-FRESH-002)**: WP01's `subtasks` list grew further, from 8
+IDs to 10 (added T003b, T004b — the FR-004 agreeing-case fixtures), to close a fresh-sweep finding.
+As with the amendment note above, `dependencies`, `owned_files`, and `create_intent` are still
+unchanged, so this does not by itself require a `finalize-tasks` re-run — the orchestrator should
+still make that call explicitly, and this note names it explicitly rather than leaving it implicit.
 
 **Status as of this commit**: `finalize-tasks` has already run successfully — the committed
 `lanes.json` (`computed_at: '2026-09-27T22:06:42+00:00'`, `computed_from:

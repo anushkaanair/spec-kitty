@@ -7,8 +7,21 @@
 
 ## Summary
 
-Demote `test_charter_is_not_allowlisted_and_agrees` (`tests/architectural/test_module_length_agreement.py`)
-from a hard per-PR failure to a visible-but-non-blocking `pytest.xfail`, and add one new dedicated,
+**Amendment note (2026-09-28):** after this plan's original `ready` verdict, `main` was found to
+carry PR #5240, which already merged a demotion mechanism for this same file ahead of this mission.
+The paragraph below and item (d) are amended to absorb it — see the "Design amendment" entry in
+`tracer-design-decisions.md` and `reviews/amendment.ruling.md` for the full ruling.
+
+WP01 **absorbs** PR #5240 (`5469c4d77`, merged to `main` 2026-09-27, "ci(tests): make shard-timings
+count drift non-blocking per PR (#5189 interim)"): the demotion of
+`test_charter_is_not_allowlisted_and_agrees` **and** the cross-module
+`test_non_allowlisted_modules_agree_with_live_collection` (both in
+`tests/architectural/test_module_length_agreement.py`) from a hard per-PR failure to a visible
+`ShardTimingsDriftWarning`, hard-failing again under `SPEC_KITTY_STRICT_SHARD_TIMINGS=1`, is
+already-merged code by the time this amendment is written. WP01 verifies that mechanism against the
+merged code and adds the red-first tests #5240 itself leaves unmet, rather than reimplementing the
+`_charter_disposition`/`pytest.xfail` design this plan originally specified (see item (d) for the
+full replacement). Separately, add one new dedicated,
 `schedule`+`workflow_dispatch`-only GitHub Actions workflow
 (`.github/workflows/ci-charter-shard-recapture.yml`) that recaptures `charter`'s shard timings on a
 cadence and opens a PR only when the recapture shows genuine length drift, skipping entirely
@@ -19,7 +32,10 @@ branch or create it fresh. All decision logic (open-PR detection,
 drift comparison, the mechanism-crash/ordinary-failure distinction, the missing-secret check) lives
 in one new, unit-tested script, `scripts/ci/recapture_charter_shard_timings.py`, never inline YAML.
 `capture_shard_timings.py` is not modified — it already propagates a genuine mechanism exception
-uncaught out of `main()`, which is exactly the signal the new wrapper needs.
+uncaught out of `main()`, which is exactly the signal the new wrapper needs. That same workflow
+additionally runs the architectural length-agreement gates under
+`SPEC_KITTY_STRICT_SHARD_TIMINGS=1` as a second, independent job — giving the exact-count invariant
+a real, scheduled, hard-failing home (see item (a2)).
 
 ## Technical Context
 
@@ -35,15 +51,20 @@ mission touches/adds, never a full-directory or whole-repo sweep. See "Baseline"
 workflow in this repo).
 **Project Type**: Single project — this is a CI-infrastructure + architectural-test-suite change
 inside the existing spec-kitty monorepo, not a new component.
-**Performance Goals**: The new scheduled job completes within its stated timeout budget (30
-minutes — see item (a)); the demoted assertion itself adds no new subprocess calls (it reuses the
-existing session-scoped `_collected_counts`/`_live_timings_state` fixtures).
+**Performance Goals**: The recapture job completes within its stated timeout budget (30 minutes —
+see item (a)); the new, independent strict-mode job (amended 2026-09-28, item (a2)) completes
+within its own 10-minute budget; the already-merged demotion mechanism (#5240) adds no new
+subprocess calls beyond what it already reuses (the existing session-scoped
+`_collected_counts`/`_live_timings_state` fixtures).
 **Constraints**: `charter`-only scope (C-001/CL-003); never fall back to `GITHUB_TOKEN` (C-004);
 `main` is PR-only (C-003); the scheduled job must be concurrency-guarded (C-006); public-repo
 hygiene — no literal `/home/<user>` paths or credential values in any committed artifact (C-005).
-**Scale/Scope**: One new workflow file, one new script + its unit test file, and a ~15-line,
-behaviour-scoped edit to one existing test function plus 4 new fast unit tests in the same file.
-**No new runtime dependency, no new package, no touched `pyproject.toml`.**
+**Scale/Scope**: One new workflow file (now two jobs — the recapture job and, per the 2026-09-28
+amendment, an independent strict-mode job), one new script + its unit test file, and (amended
+2026-09-28) a purely additive test-only change to one existing file — no behavioural edit, since
+PR #5240 already merged the demotion mechanism ahead of this mission — adding one verification
+subtask and ~5-6 new fast unit tests. **No new runtime dependency, no new package, no touched
+`pyproject.toml`.**
 
 ## Charter Check
 
@@ -51,16 +72,26 @@ behaviour-scoped edit to one existing test function plus 4 new fast unit tests i
 
 - **ATDD-first**: every FR below is red-first — the new script's decision functions are pure and
   unit-tested with injected fakes (no real `gh`/`git`/`pytest.main()` calls needed to prove the
-  logic), and the demoted test's three dispositions get 4 new fast, synthetic tests before/with the
-  behavioural edit (two covering the extracted helper's own two dispositions — agree/disagree —
-  directly, one covering the third disposition — infra-break — via the pre-existing
-  `_load_timings()` function, and one exercising the consuming test function itself against a
-  disagreeing pair — see item (d)). PASS.
+  logic). **Amended (2026-09-28):** the demotion mechanism itself is already merged (#5240,
+  `ShardTimingsDriftWarning`/`_report_drift`/`_strict_mode`) — WP01 verifies it rather than
+  reimplementing it, and closes the one red-first gap #5240 leaves: its own 3 new unit tests exercise
+  `_report_drift`/`_strict_mode` in isolation only, never the two production gate functions
+  (`test_charter_is_not_allowlisted_and_agrees` and
+  `test_non_allowlisted_modules_agree_with_live_collection`) themselves, so a revert of either
+  function's body to a bare hard `assert` would not be caught today. WP01 adds tests exercising both
+  functions directly against a constructed disagreement (`pytest.warns(ShardTimingsDriftWarning)`), a
+  strict-mode variant of each (hard `pytest.fail` under `SPEC_KITTY_STRICT_SHARD_TIMINGS=1`), and a
+  missing-artefact fixture pinning `_load_timings`/`_load_registry`'s existing `pytest.fail`
+  behavior — see item (d). PASS.
 - **Standing Order #5 (architectural gate discipline)**: this mission *is* the operationalization of
-  spec.md's "Charter Tension" section — the exact-count invariant is relocated (scheduled workflow),
-  `charter` never enters `_MISMATCH_ALLOWLIST` (unconditional assertion kept), the other three
-  ratchet tests plus the cross-module gate are untouched, and drift stays visible via `xfail` (never
-  a silent pass). PASS — see items (d) and Charter Tension cross-reference below.
+  spec.md's "Charter Tension" section — the exact-count invariant is relocated (scheduled workflow;
+  **amended (2026-09-28)**: WP03's own scheduled workflow now also runs the gate under
+  `SPEC_KITTY_STRICT_SHARD_TIMINGS=1` in a new, independent job, giving it a real, hard-failing
+  scheduled home — item (a2)), `charter` never enters `_MISMATCH_ALLOWLIST` (unconditional assertion
+  kept), the three allowlist-ratchet tests are untouched, and drift stays visible via a
+  `ShardTimingsDriftWarning` (never a silent pass) on **both** live-collection gates — charter's own
+  and the cross-module gate — per #5240, absorbed rather than reimplemented by WP01. PASS — see
+  items (d) and Charter Tension cross-reference below.
 - **Standing Order #2 (campsite cleaning)**: the one file this mission edits
   (`test_module_length_agreement.py`) plus the one unmodified file its design depends on
   (`capture_shard_timings.py`) were both read in full; no debt was found in either that is in-scope
@@ -178,6 +209,112 @@ real scheduled or manually-dispatched run.
 **Cadence**: daily, `cron: '41 4 * * *'` — off a round hour/minute, distinct from `ci-nightly.yml`'s
 `17 3 * * *` and `ci-stale-running-sweep.yml`'s `23 */4 * * *`, so the three scheduled workflows do
 not contend for the same runner-availability window.
+
+### (a2) Strict-mode home for the exact-count invariant — a new job in WP03's own scheduled workflow (operator ruling point 4, amended 2026-09-28)
+
+**Decision**: `.github/workflows/ci-charter-shard-recapture.yml` (the same workflow WP03 already
+owns and creates — no new file) gets a **second, independent job** that runs the architectural
+length-agreement gates under `SPEC_KITTY_STRICT_SHARD_TIMINGS=1`, e.g.:
+
+```yaml
+strict-shard-timings-check:
+  runs-on: ubuntu-24.04
+  timeout-minutes: 10
+  steps:
+    - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+    - name: Install uv
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+    - name: Set up environment
+      run: uv sync --frozen --all-extras
+    - name: Run architectural length-agreement gates under strict mode
+      env:
+        SPEC_KITTY_STRICT_SHARD_TIMINGS: "1"
+      run: uv run --frozen pytest tests/architectural/test_module_length_agreement.py -q
+```
+
+The checkout and `Install uv`/`Set up environment` steps mirror this repo's existing
+`astral-sh/setup-uv` pattern — the same pinned ref every job in `ci-nightly.yml` that runs
+`uv sync`/`uv run` already uses (do not invent a different setup sequence). The job name,
+`timeout-minutes: 10`, the `SPEC_KITTY_STRICT_SHARD_TIMINGS: "1"` env var, and the pytest
+invocation line are the fixed, non-negotiable pieces WP03's T020 must not deviate from.
+
+**Independence from the recapture job**: no `needs:` between this job and the existing recapture
+job — the same pattern `ci-nightly.yml` itself uses for its independent `performance`/`e2e`/
+`stress`/`interpreter-matrix`/`integration-next`/`specify-cli-out-of-matrix` jobs (verified directly
+against that file: none of those carry a `needs:` on one another; only `full-module-matrix` needs
+its own `generate-full-matrix` job, and the terminal `nightly-summary` job aggregates all of them
+with `needs: [...]` + `if: always()`). Because there is no `needs:` edge, the recapture job still
+runs, and can still open a fix-PR for charter drift, regardless of whether the strict-check job goes
+red.
+
+**What a red run means, and why this workflow is the right home**: this workflow already runs on
+`schedule` + `workflow_dispatch` only (no `pull_request`/`push` trigger), so a failure in this new
+job is a genuinely visible, hard red Actions run — the real, scheduled, hard-failing home Standing
+Order #5 requires and that maintainer note 2 says is currently missing. Verified directly (not taken
+on faith): nothing in `ci-nightly.yml` runs `tests/architectural` today — its `full-module-matrix`
+job only expands `.github/ci-module-registry.yml`'s `modules[]` rows, and that registry's own
+`out_of_matrix_test_dirs` block explicitly excludes `tests/architectural` and
+`tests/architectural/tool_artifact_enrolment`, with the stated reason that their per-PR home is
+`ci-router.yml`'s "architectural battery" job — a module row (or a nightly row) would only
+double-run it.
+
+**Relation to the recapture PR** (this is what "relation to the recapture PR" in the ruling asks
+for, stated explicitly): if `charter` is what drifted, the strict-check job goes red **and** —
+independently, in the same scheduled run — the recapture job detects the same drift and
+opens/updates its fix PR: the red job is the visible alarm, the PR is the fix, and the next
+scheduled run after that PR merges goes green again. If a **different** non-allowlisted module
+drifts (today the only other one is `agent` — see below), the strict-check job goes red (a genuine
+signal — nothing else catches this today) but the recapture job, hardcoded to `charter` only
+(FR-009/C-001), does nothing about it. That is intentional — out of scope for auto-fix per CL-003 —
+but now at least **visible** instead of silently unblocked.
+
+**A red run must be triaged by test name first.** The job's `run:` step invokes the whole file
+unfiltered (no `-k`/`-m`), so it also collects the three always-hard-failing allowlist-ratchet
+tests (`test_allowlist_does_not_exceed_baseline`, `test_allowlisted_modules_still_genuinely_mismatch`,
+`test_allowlist_entries_are_real_registry_modules`), which are unrelated to shard-timings drift. A
+red run can therefore mean an unrelated pre-existing allowlist-hygiene defect instead of the two
+outcomes above — whoever triages it checks which test(s) failed before assuming a drift signal.
+This is a deliberate trade-off, not an oversight: the full-file run also catches a
+`.github/ci-module-registry.yml`-only edit, which no per-PR job selects today (per the file's own
+docstring), so scoping the invocation down to just the two demoted gate functions would close that
+ambiguity at the cost of losing this coverage.
+
+**Which modules this covers**: verified directly (not taken on the dispatch's summary on faith)
+against `.github/ci-module-registry.yml` (21 `- module:` rows) and `_MISMATCH_ALLOWLIST` in
+`tests/architectural/test_module_length_agreement.py` (19 entries, `_BASELINE_ALLOWLIST_COUNT = 20`)
+— `charter` and `agent` are the only two registry modules NOT present in `_MISMATCH_ALLOWLIST`.
+Under strict mode, both hard-fail on drift: `agent` via
+`test_non_allowlisted_modules_agree_with_live_collection`'s per-module loop, `charter` via both that
+same loop and its own dedicated `test_charter_is_not_allowlisted_and_agrees`. The 19 allowlisted
+modules keep their existing allowlist semantics unchanged: `_find_mismatches` skips any module
+present in `_MISMATCH_ALLOWLIST` regardless of the strict flag — allowlist membership and strict
+mode are orthogonal axes, never coupled.
+
+**Timeout budget**: the file's own docstring records live collection of all 21 registry modules at
+~36 seconds measured locally (2026-09-22, via `.venv/bin/python`). Mirroring the same
+"evidence + headroom costs nothing unless the job hangs" convention item (a)'s own 30-minute
+recapture-job budget uses (and that `ci-nightly.yml`'s own cheaper jobs use, e.g. `stress`'s
+10-minute budget for a ~4m44s measured run), **10 minutes** (`timeout-minutes: 10`) is chosen for
+this job: ~36s measured, plus checkout/`uv sync`/environment overhead, leaves headroom well over an
+order of magnitude above the measured collection time, without being large enough to mask a
+genuinely hung job.
+
+**Scope of this change — no frontmatter impact**: this is a new job inside the SAME workflow file
+WP03 already owns and creates. WP03's `create_intent` (`.github/workflows/ci-charter-shard-recapture.yml`)
+and `owned_files` (that file plus `docs/development/reference/known-friction-points.md`) are
+**unchanged** by this addition — confirmed explicitly, since a frontmatter change would require
+re-running `finalize-tasks`.
+
+**Allowlist-ratchet interplay (operator ruling point 5, amended 2026-09-28).** A charter-only
+recapture (WP02/WP03's existing mechanism) can never trip
+`test_allowlisted_modules_still_genuinely_mismatch`, because that test iterates only over
+`_MISMATCH_ALLOWLIST`'s own keys and `charter` is never a member of that dict —
+`test_charter_is_not_allowlisted_and_agrees`'s own unconditional
+`assert "charter" not in _MISMATCH_ALLOWLIST` pins that absence, unchanged by #5240. Forward-looking,
+out of scope for this mission, noted for future readers per the ruling: if a future recapture ever
+needs to cover an allowlisted module, that PR would need to prune
+`_MISMATCH_ALLOWLIST`/`_BASELINE_ALLOWLIST_COUNT` in the same PR — a charter-only recapture never
+needs to, and does not, do this.
 
 ### (b) Names — secret, branch, concurrency group, permissions, open-PR check (verbatim)
 
@@ -305,12 +442,14 @@ not contend for the same runner-availability window.
   with injected fakes, mirroring `tests/ci/test_stale_running_sweep.py`'s `Candidate`-style pattern.
   Every required fixture (item (c) sub-bullets below) is one of these unit tests — no real `gh`,
   `git`, or `pytest.main()` call is needed to prove any of them.
-- The demoted assertion's three dispositions (agree / disagree-visibly / infra-break) are proven by
-  4 new **fast** unit tests (two against the small pure helper extracted from the test body itself,
-  covering its own two dispositions — agree/disagree-visibly; one against the pre-existing
-  `_load_timings()` function, covering the third — infra-break; one exercising the consuming test
-  function directly — see item (d)) — no subprocess, no `slow` marker, no live collection needed for
-  these four.
+- **Amended 2026-09-28**: the demotion mechanism itself is already merged (#5240) — WP01 verifies it
+  and adds the red-first tests #5240 leaves unmet: two tests exercising the two production gate
+  functions directly against a constructed disagreement (asserting `pytest.warns(ShardTimingsDriftWarning)`),
+  a strict-mode variant proving `SPEC_KITTY_STRICT_SHARD_TIMINGS=1` restores the hard failure at the
+  integration level (not just the already-tested `_report_drift` helper), and one against the
+  pre-existing `_load_timings()`/`_load_registry()` functions proving a genuine infra break still
+  fails loudly — see item (d) for the full, current fixture list. No subprocess, no `slow` marker, no
+  live collection needed for any of these.
 - A **manual `workflow_dispatch`** against a deliberately-staled checkout (per spec.md's own
   "Independent Test" language, User Story 2) is achievable pre-merge from a topic branch once the
   workflow file and secret exist on that branch's PR — GitHub permits `workflow_dispatch` from a
@@ -544,62 +683,64 @@ injection alone.
 
 ### (d) Red-first fixtures per changed behaviour
 
-**FR-001/FR-004 (demotion + visible drift + infra-crash-still-fails)** — extract a pure helper in
-`tests/architectural/test_module_length_agreement.py`:
+**FR-001/FR-002/FR-004 (demotion + visible drift + infra-crash-still-fails) — amended 2026-09-28:
+already implemented by #5240, absorbed rather than reimplemented.**
 
-```python
-_CHARTER_AGREE = None  # sentinel: lengths agree, no xfail needed
+PR #5240 (`5469c4d77`, merged to `main` 2026-09-27, "ci(tests): make shard-timings count drift
+non-blocking per PR (#5189 interim)") landed ahead of this mission and already implements what this
+section originally specified as a `_charter_disposition`/`pytest.xfail` design. That design is now
+dead. The merged mechanism (`tests/architectural/test_module_length_agreement.py`) is a
+`ShardTimingsDriftWarning(UserWarning)` class plus a `_report_drift(message, *, strict)` helper:
+`warnings.warn(...)` by default, `pytest.fail(message)` when `_strict_mode()` reads
+`SPEC_KITTY_STRICT_SHARD_TIMINGS == "1"`. **Both** `test_charter_is_not_allowlisted_and_agrees`
+**and** the cross-module `test_non_allowlisted_modules_agree_with_live_collection` now call
+`_report_drift(..., strict=_strict_mode())` on a mismatch — the demotion covers both live-collection
+gates, not charter alone (operator ruling point 3; spec.md's FR-003 is corrected accordingly). This
+is actually a closer match to spec.md's original CL-001 wording ("non-blocking warning") than the
+`xfail` approach this plan originally specified ever was.
 
-def _charter_disposition(committed: int, collected: int) -> str | None:
-    """None => lengths agree (clean pass). Otherwise: the xfail reason string."""
-    if committed == collected:
-        return _CHARTER_AGREE
-    return f"charter length disagreement: committed={committed} collected={collected} (see FR-001, scheduled recapture workflow)"
-```
+#5240 ships its own 3 new fast unit tests — `test_report_drift_warns_by_default`,
+`test_report_drift_fails_in_strict_mode`, `test_strict_mode_reads_env_var` — but these exercise only
+the `_report_drift`/`_strict_mode` **helper functions in isolation**, never the two production gate
+functions themselves. A revert of either gate function's body back to a bare hard `assert` (leaving
+`_report_drift`/`_strict_mode` and #5240's 3 tests untouched and still green) would **not** be caught
+by #5240's own tests. There is also still no test proving a genuine infra break (a missing
+`.github/ci-shard-timings.json` or `.github/ci-module-registry.yml`) still fails loudly via
+`_load_timings()`/`_load_registry()` — both already call `pytest.fail(...)` on a missing file (old,
+unchanged behavior), but nothing pins it today.
 
-`test_charter_is_not_allowlisted_and_agrees` becomes:
+**WP01's job is exactly this residue**, per operator ruling point 2:
 
-```python
-assert "charter" not in _MISMATCH_ALLOWLIST, "..."
-disposition = _charter_disposition(committed, collected)
-if disposition is not _CHARTER_AGREE:
-    pytest.xfail(disposition)
-```
+1. **Verify, don't re-implement**, that the merged code satisfies FR-001/FR-002/FR-004 for
+   `charter`: read the merged file, confirm `_report_drift`'s warn/strict-fail behavior, confirm
+   `assert "charter" not in _MISMATCH_ALLOWLIST` is still present and unconditional inside
+   `test_charter_is_not_allowlisted_and_agrees`. Record this as a WP01 subtask — a documented
+   read-and-confirm step, not a fixture.
+2. Add the red-first tests #5240 leaves unmet, in the file's existing idiom (`pytest.mark.fast`, no
+   subprocess, matching the bottom-section self-mutation-test style):
+   a. A test calling `test_charter_is_not_allowlisted_and_agrees(...)` directly with constructed
+      disagreeing `_live_timings_state`/`_collected_counts`-shaped arguments, asserting it emits
+      `ShardTimingsDriftWarning` via `pytest.warns(...)` and never raises — catches a revert of that
+      function's body to a bare hard `assert`, which #5240's own tests do not.
+   b. The equivalent test for `test_non_allowlisted_modules_agree_with_live_collection`, using
+      constructed fake `_live_registry_state`/`_live_timings_state`/`_collected_counts` values with
+      one synthetic non-allowlisted module mismatching — same purpose, extended to the second gate
+      the ruling brings into scope.
+   c. A test that, with `SPEC_KITTY_STRICT_SHARD_TIMINGS` set to `"1"` (via `monkeypatch.setenv`),
+      the same production function(s) from (a)/(b) raise pytest's fail outcome instead of warning,
+      given a disagreement — proving strict mode restores the hard failure at the integration level,
+      not just at the `_report_drift` helper level (#5240's own `test_report_drift_fails_in_strict_mode`
+      already covers the helper in isolation, but not this integration point).
+   d. A test that a missing `.github/ci-shard-timings.json` (or `.github/ci-module-registry.yml`)
+      still fails loudly via `_load_timings()`/`_load_registry()` — monkeypatch the path constant to
+      a nonexistent file, assert `pytest.fail`'s exception class is raised. This is FR-004's
+      still-unmet "infra break, not silence" fixture.
+3. **Optional, not gating** (operator ruling point 6): a distinct, behaviour-preserving commit
+   fixing the `mypy` `no-any-return` finding in `_resolve_test_dirs` (same file) — admissible,
+   domain-matched campsite debt, left to implementer judgment.
 
-Four new **fast**, synthetic tests (mirroring the existing
-`test_mismatch_detection_fires_on_synthetic_length_disagreement` pattern at the bottom of the same
-file — no subprocess, no fixtures):
-
-1. `test_charter_disposition_flags_length_disagreement` — `_charter_disposition(10, 11)` returns a
-   non-`None` string carrying both counts. **This test fails if the demotion is ever reverted**
-   back to a bare hard `assert` with no disposition helper (the helper would no longer exist / no
-   longer be called), catching exactly the regression the dispatch asks for.
-2. `test_charter_disposition_is_none_on_agreement` — `_charter_disposition(10, 10)` returns `None`
-   — proves the agreeing case never enters the `xfail` path (still surfaces as a plain, clean
-   `PASSED`), independently confirming FR-004's "drift stays visible, not silent" claim is
-   *falsifiable by this test*, not merely asserted in prose — this is the second, distinct fixture
-   the dispatch requires alongside the reversion-catching one above.
-3. `test_load_timings_fails_loudly_when_artefact_missing` (new, targets the pre-existing, untouched
-   `_load_timings()`) — monkeypatch `_TIMINGS_PATH` to a nonexistent file and assert
-   `_load_timings()` raises `pytest.fail`'s exception class (`_load_timings` already calls
-   `pytest.fail(...)` today; this test is new, proving that a genuine infra break — missing
-   artefact — still fails/errors, is never silently folded into the `xfail` path, since it is a
-   session-scoped-fixture-level failure that happens before `test_charter_is_not_allowlisted_and_agrees`'s
-   own body (and its new `_charter_disposition` call) ever runs).
-4. `test_charter_is_not_allowlisted_and_agrees_xfails_on_disagreement` (new; exercises the
-   **consuming test body itself**, not only `_charter_disposition`) — items 1–2 above only pin the
-   extracted helper's own correctness: a revert that restores
-   `test_charter_is_not_allowlisted_and_agrees`'s body to a bare hard `assert` (leaving the
-   now-orphaned `_charter_disposition` helper and its two unit tests untouched and still passing)
-   would leave both of those tests green, because neither exercises the production test body. This
-   fixture closes that "test-the-helper-not-the-integration-point" gap: monkeypatch the module's
-   session-scoped `committed`/`collected`-count fixtures (or call
-   `test_charter_is_not_allowlisted_and_agrees` directly against a constructed disagreeing pair) so
-   the production test body itself observes `committed != collected`, and assert it raises pytest's
-   `xfail` outcome — `_pytest.outcomes.XFailed`, the exception `pytest.xfail()` raises — never a
-   bare `AssertionError`. A revert of the consuming `if disposition is not _CHARTER_AGREE:
-   pytest.xfail(...)` wiring back to a hard `assert` is caught here independent of the helper's own
-   survival.
+WP01 stays scoped to `tests/architectural/test_module_length_agreement.py` only — its
+`owned_files`/`authoritative_surface` are **unchanged** by this amendment.
 
 **FR-005 through FR-008** — the 11 fixtures listed in item (c) above (fixture-tested; spec.md marks
 all four "no-op passable: no").
@@ -608,11 +749,13 @@ all four "no-op passable: no").
 "no-op passable: yes" — verifiable by inspection, no fixture required); see "FR-009, FR-010,
 NFR-003 — concrete text" below.
 
-**FR-002/FR-003 (unchanged invariants)** — no new test needed beyond the existing
-`test_allowlist_entries_are_real_registry_modules` /
-`test_allowlist_does_not_exceed_baseline` / `test_allowlisted_modules_still_genuinely_mismatch` /
-`test_non_allowlisted_modules_agree_with_live_collection`, which are asserted (diff review, SC-006)
-to be byte-identical before/after — confirmed by not touching any of their bodies.
+**FR-002/FR-003 (unchanged invariants) — amended 2026-09-28: three tests, not four.** No new test
+needed beyond the existing `test_allowlist_entries_are_real_registry_modules` /
+`test_allowlist_does_not_exceed_baseline` / `test_allowlisted_modules_still_genuinely_mismatch`,
+which are asserted (diff review, SC-006) to be byte-identical before/after — confirmed by not
+touching any of their bodies. **`test_non_allowlisted_modules_agree_with_live_collection` is NOT one
+of the unchanged tests** — #5240 demotes it too, via the same `_report_drift` mechanism as charter;
+see WP01's red-first fixture 2b above, which exercises exactly that function.
 
 ### FR-009, FR-010, NFR-001, NFR-003 — concrete text (not left to the implementer)
 
@@ -721,9 +864,12 @@ plan's job; the implementer runs it red-first before making any edit.)
 - **Downstream consumers of this repo** (every project that installs `spec-kitty-cli` / runs its
   own copy of these workflows via `spec-kitty upgrade`) are blast radius for anything touching
   `.github/workflows/**` or `tests/architectural/**` in general — but concretely, this mission adds
-  a **new, additive** workflow file (no existing workflow is edited) and edits **one assertion**
-  inside **one existing** architectural test (behaviour: hard-fail → visible-xfail, strictly a
-  relaxation, never a new failure mode for anyone previously passing). No consumer-facing template
+  a **new, additive** workflow file (no existing workflow is edited) and (**amended 2026-09-28**)
+  adds red-first tests to **one existing** architectural test file, whose two live-collection gates'
+  hard-fail → visible-`ShardTimingsDriftWarning` demotion (hard-fail restorable via
+  `SPEC_KITTY_STRICT_SHARD_TIMINGS=1`) already landed via #5240 ahead of this mission — this
+  mission's own diff to that file is purely additive test coverage over an already-merged
+  relaxation, never a new failure mode for anyone previously passing. No consumer-facing template
   under `packs/built-in/` is touched, so this has no `spec-kitty upgrade`-propagated effect on
   downstream projects at all — this repo's own CI is the only blast radius.
 
@@ -772,8 +918,10 @@ data model, API contract, or user-facing quickstart flow.
 
 ```
 tests/architectural/
-└── test_module_length_agreement.py   # edited: test_charter_is_not_allowlisted_and_agrees demoted
-                                       # via a new _charter_disposition() helper; 4 new fast tests
+└── test_module_length_agreement.py   # edited: WP01 verifies #5240's already-merged
+                                       # ShardTimingsDriftWarning/_report_drift demotion (both
+                                       # live-collection gates) and adds the red-first tests #5240
+                                       # leaves unmet (see item (d))
 
 scripts/ci/
 ├── capture_shard_timings.py          # UNCHANGED (see item e)
@@ -783,7 +931,10 @@ tests/ci/
 └── test_recapture_charter_shard_timings.py  # NEW: unit tests for the 11 fixtures in item (c)
 
 .github/workflows/
-└── ci-charter-shard-recapture.yml    # NEW: schedule + workflow_dispatch, calls the script above
+└── ci-charter-shard-recapture.yml    # NEW: schedule + workflow_dispatch; recapture job calls the
+                                       # script above; a second, independent job runs the
+                                       # architectural gates under SPEC_KITTY_STRICT_SHARD_TIMINGS=1
+                                       # (see item (a2))
 ```
 
 **Structure Decision**: Single project, additive-only. No existing workflow file is edited; no
@@ -804,8 +955,9 @@ None. No charter violation was introduced by this design (see Charter Check abov
 - **Relevant requirements**: FR-001, FR-002, FR-003, FR-004; User Stories 1 and 3.
 - **Affected surfaces**: `tests/architectural/test_module_length_agreement.py` only.
 - **Sequencing/depends-on**: none — independent of IC-02/IC-03.
-- **Risks**: none identified; the change is a two-line behavioural edit plus 4 new fast tests in an
-  already-clean file (item e).
+- **Risks**: none identified. **Amended 2026-09-28**: the behavioural edit itself is no longer
+  this WP's job — #5240 already merged it. The remaining work is a verification subtask plus ~4 new
+  fast red-first tests in an already-clean file (item e); see item (d) for the full replacement.
 
 ### IC-02 — Recapture decision-logic script
 
@@ -825,10 +977,15 @@ None. No charter violation was introduced by this design (see Charter Check abov
 ### IC-03 — Scheduled workflow wiring
 
 - **Purpose**: Wire IC-02's script into a `schedule`+`workflow_dispatch`-only workflow with its own
-  concurrency group and least-privilege permissions.
+  concurrency group and least-privilege permissions. **Amended 2026-09-28**: this workflow also
+  carries a second, independent job running the architectural length-agreement gates under
+  `SPEC_KITTY_STRICT_SHARD_TIMINGS=1` (item (a2)) — the exact-count invariant's real, scheduled,
+  hard-failing home.
 - **Relevant requirements**: FR-005, FR-007, FR-009; C-003, C-004, C-006; NFR-002.
-- **Affected surfaces**: new `.github/workflows/ci-charter-shard-recapture.yml`.
-- **Sequencing/depends-on**: IC-02.
+- **Affected surfaces**: new `.github/workflows/ci-charter-shard-recapture.yml` (still the one file
+  — the new strict-mode job does not change `create_intent`/`owned_files`).
+- **Sequencing/depends-on**: IC-02 (for the recapture job only; the new strict-mode job has no
+  dependency on IC-02's script).
 - **Risks**: cron-firing and the real-`main` PR-open path are only confirmable post-merge (item c)
   — the PR body should say so explicitly rather than implying full pre-merge proof.
 

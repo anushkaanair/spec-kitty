@@ -161,6 +161,89 @@ points 1, 3, 4, 5 stand.** The replacement mechanism, applied throughout `spec.m
    agrees` check is now a warning only (FR-001), never a merge blocker, and closing a stale PR lets
    the next scheduled run open a fresh one against current `main`.
 
+## Design amendment (2026-09-28): absorb #5240, correct demotion scope, add strict-mode home
+
+**Trigger.** After `/spec-kitty.analyze` recorded `verdict: ready` for this design (analyze run
+`423463a10`), the operator discovered that `main` already carried PR #5240
+("ci(tests): make shard-timings count drift non-blocking per PR (#5189 interim)", commit
+`5469c4d777833e8010115ed7048c53ae2bb642b6`, merged 2026-09-27) — an independently-authored,
+already-merged change to the exact file this mission's WP01 was designed to edit
+(`tests/architectural/test_module_length_agreement.py`). #5240's author explicitly scoped it as
+"interim relief that your mission can delete or absorb" and left review notes on issue #5189 for
+this mission. The mission branch was then merged with `origin/main` (per the operator's own ruling
+instruction, point 1), so #5240's code is now what is actually on disk in this checkout — meaning
+this design's `ready` verdict was reached against a code state that no longer matches reality by
+the time implementation would start. The operator issued a binding ruling
+(`reviews/amendment.ruling.md`) rather than letting the design silently drift from the merged code,
+or letting an implementer discover and improvise around the collision mid-WP.
+
+**The ruling's 6 substantive points, and what changed as a result:**
+
+1. *(Housekeeping — not itself a design point.)* The mission branch was merged with `origin/main`
+   before this amendment was written, so every file this amendment describes (spec.md, plan.md,
+   tasks.md, WP01, WP03) is written against the actual merged code, not a stale pre-merge state.
+2. **WP01 becomes "absorb #5240."** The `_charter_disposition`/`pytest.xfail` mechanism WP01
+   originally specified is dead — #5240 pre-empted it with a `ShardTimingsDriftWarning`/
+   `_report_drift`/`_strict_mode` mechanism that is, if anything, a closer match to spec.md's
+   original CL-001 wording ("non-blocking warning") than `xfail` ever was. `tasks/WP01-*.md`'s
+   T002-T008 were rewritten: T002 is now a documented verification pass (confirm the merged
+   mechanism actually satisfies FR-001/FR-002/FR-004 for `charter`), and T003-T006 are new red-first
+   tests closing the exact gap #5240's own 3 unit tests leave open — those 3 tests exercise
+   `_report_drift`/`_strict_mode` in isolation, never the two production gate functions themselves,
+   so a revert of either function's mismatch branch back to a bare hard `assert` would not be
+   caught today. T007 (an optional, non-gating `mypy` `no-any-return` fix in `_resolve_test_dirs`,
+   ruling point 6) was added. WP01's frontmatter (`dependencies`, `owned_files`, `create_intent`,
+   `authoritative_surface`, `requirement_refs`) is unchanged; only the `subtasks` content changed
+   (same 8 IDs).
+3. **Spec.md's scope statement was corrected.** FR-003, SC-006, and Charter Tension point 3 all
+   previously claimed "the other four untouched tests" (naming `test_non_allowlisted_modules_
+   agree_with_live_collection` as one of the four). This was true of the original
+   `_charter_disposition` design (which touched only `test_charter_is_not_allowlisted_and_agrees`)
+   but is false of the merged #5240 code, which demotes BOTH live-collection gates via the same
+   `_report_drift` mechanism. All three spec.md locations were rewritten to state precisely: the
+   **demotion** covers both live-collection gates (new, from #5240); the **recapture** (WP02/WP03's
+   mechanism) stays charter-only (CL-003/C-001, genuinely unaffected by this amendment). Only three
+   tests are now correctly described as untouched:
+   `test_allowlist_does_not_exceed_baseline`, `test_allowlisted_modules_still_genuinely_mismatch`,
+   `test_allowlist_entries_are_real_registry_modules`.
+   **Correction (fix round, 2026-09-28):** the first amendment pass swept FR-003, SC-006, and
+   Charter Tension point 3 but missed two further spec.md locations making the same now-false
+   "charter-only demotion"/"workflow scoped to charter" claim — C-001's own constraint text and
+   the Ledger Cross-Reference section's "it stays `charter`-only" sentence. Both were rewritten in
+   the fix round to state the same recapture/demotion distinction FR-003 already states; CL-003
+   itself was not touched (operator ruling point 3: that decision is unchanged).
+4. **A strict-mode home for the exact-count invariant was added to WP03's own workflow.** Plan.md
+   gained a new subsection, item (a2), and `tasks/WP03-*.md` gained Subtask T020: a second,
+   independent job (no `needs:` to the recapture job) in the SAME `ci-charter-shard-recapture.yml`
+   file, running `tests/architectural/test_module_length_agreement.py` under
+   `SPEC_KITTY_STRICT_SHARD_TIMINGS=1`, `timeout-minutes: 10` (justified against the file's own
+   ~36s-measured-locally docstring figure). This gives the exact-count invariant a real, scheduled,
+   hard-failing home — verified directly that nothing in `ci-nightly.yml` runs
+   `tests/architectural` today (its `full-module-matrix` job only expands the module registry's
+   `modules[]` rows, and that registry's own `out_of_matrix_test_dirs` block explicitly excludes
+   `tests/architectural`). Plan.md and WP03 both state the job's relation to the recapture job
+   explicitly (charter-drift double-signal; other-module-drift visible-but-unfixed) and confirm this
+   addition changes neither WP03's `create_intent` nor `owned_files` (still the one workflow file).
+5. **Allowlist-ratchet interplay was stated explicitly.** Plan.md item (a2) and WP01's Objectives
+   section now state: a charter-only recapture can never trip
+   `test_allowlisted_modules_still_genuinely_mismatch`, because that test iterates only
+   `_MISMATCH_ALLOWLIST`'s own keys and `charter` is never a member — pinned by the unconditional
+   `assert "charter" not in _MISMATCH_ALLOWLIST"`, unchanged by #5240. The forward-looking,
+   out-of-scope case (a future allowlisted-module recapture would need to prune
+   `_MISMATCH_ALLOWLIST`/`_BASELINE_ALLOWLIST_COUNT` in the same PR) is recorded for future readers,
+   verbatim from the ruling.
+6. **The `mypy` `no-any-return` finding in `_resolve_test_dirs`** is recorded as admissible,
+   domain-matched, optional campsite debt (WP01's T007) — a distinct, behaviour-preserving commit if
+   the implementer chooses to do it, never gating.
+
+**What did NOT change**: spec.md's CL-001/CL-002/CL-003, User Story 1/2 text, FR-005 through
+FR-010, and plan.md's recapture-mechanism design (items (b), (c), the mechanism-vs-ordinary-failure
+resolution) — all confirmed unaffected by this amendment and left untouched. `tasks/WP02-*.md` was
+checked for any reference to the retired xfail mechanism and found to have none (its one mention of
+`test_charter_is_not_allowlisted_and_agrees` is a comparison-semantics reference for `has_drift`,
+unrelated to the demotion mechanism) — left untouched, per ruling point 7 ("every prior operator
+decision and ruling stands, except where points 2-4 supersede them").
+
 Every remaining cross-reference was swept: FR-007's table row and its Key Entities description,
 User Story 2 Acceptance Scenario 3, C-003 ("opens or force-updates a PR" → "opens a PR, or ...
 skips entirely"), C-006's race description (recast as "both observe 'no PR is open' and both
@@ -170,6 +253,86 @@ FR-012, restated as skip-if-open + the accepted staleness cost). Charter Tension
 (`FR-005–FR-009`) already excluded FR-011/FR-012 and needed no change. Ordinary-English uses of
 "forces"/"forced" (the issue title, User Story 1's prose, FR-001's rationale) describe the ~18-
 minute local recapture burden, not the FR-007 mechanism, and were left untouched.
+
+## Fix round 2 (2026-09-28): FR-004's dropped agreeing-case fixture restored; Non-Goals' stale "one test" claim corrected
+
+A fresh-eyes sweep run after the amendment's first fix round (`reviews/amendment.confirmed-2.yaml`,
+findings AMENDMENT-FRESH-002 and AMENDMENT-FRESH-003) found two further real, in-scope defects in
+the amendment's own delta.
+
+**AMENDMENT-FRESH-002 (severity 4).** FR-004 requires three mandatory fixtures ("no-op passable:
+no") — disagreeing, agreeing, and infra-break — and User Story 3 Acceptance Scenario 2 is its own
+falsifiable criterion about the agreeing case ("Given charter's lengths agree ... it reports a
+clean pass with no warning noise"). The pre-amendment design had a dedicated fixture for exactly
+this (`test_charter_disposition_is_none_on_agreement`), but the amendment's replacement subtask set
+(T002-T006) only covered the disagreeing case (T003/T004), the strict-mode-fail case (T005), and
+the infra-break case (T006) — the agreeing-case fixture was dropped entirely. T008's incidental
+observation of whatever today's live repo state happens to be is not a substitute: it can silently
+never exercise the agreeing branch at all and never fails specifically because that branch went
+unexercised. Fixed by adding two new WP01 subtasks, **T003b** and **T004b**, one per production
+gate function, each constructing a deterministic AGREEING fixture (`committed == collected`) and
+asserting via the `recwarn` fixture that **zero** `ShardTimingsDriftWarning` instances are recorded
+and that the function returns normally. `tasks/WP01-*.md`'s frontmatter `subtasks` list grew from 8
+IDs to 10 (T001, T002, T003, T003b, T004, T004b, T005, T006, T007, T008) — a frontmatter change,
+though `dependencies`/`owned_files`/`create_intent` are unaffected, so it does not by itself compel
+a `finalize-tasks` re-run; the orchestrator still makes that call explicitly. `tasks.md`'s FR-004
+traceability row, Subtask Index, and WP01's subtask-count summary/rationale prose were all updated
+to name T003b/T004b and the new count of 10; WP01's own Success Criteria (SC-001), Test Strategy,
+Risks, and Review Guidance sections were updated so none of them still enumerate a stale T003-T008
+set.
+
+**AMENDMENT-FRESH-003 (severity 2).** Spec.md's Non-Goals section still closed with "...only the
+assertion behavior inside one test in that suite changes" — the same "charter-only demotion"/
+"single-test" claim class that FR-003, SC-006, Charter Tension point 3 (the original amendment
+pass), and C-001/Ledger Cross-Reference (this fix round's first pass) had already been corrected
+for, at a third location both passes missed. Reworded to: "only the assertion behavior inside two
+existing tests in that suite changes (the demotion mechanism absorbed from #5240, covering both
+`test_charter_is_not_allowlisted_and_agrees` and the cross-module
+`test_non_allowlisted_modules_agree_with_live_collection`; the *recapture* itself still touches
+only `charter`)" — consistent with FR-003/C-001's already-corrected language. The rest of that
+Non-Goals bullet (the `ci-router.yml` trigger-condition claim) was left as-is; only the trailing
+clause was stale.
+
+A quick sweep of the six amendment-touched files (spec.md, plan.md, tasks.md, WP01, WP03,
+`tracer-design-decisions.md`) for any further "one test"/"only one assertion" phrasing found no
+other instance of this exact defect class; plan.md's unrelated "one test-file edit"/"one
+test-assertion edit" phrasing (Project Structure / Structure Decision) describes file counts and
+edit-type, not a claim about how many tests or assertions the demotion mechanism touches, so it was
+left untouched per this round's narrow scope.
+
+## Fix round 3 (2026-09-28): T018's stale `xfail` wording; T004b's overstated Acceptance Scenario citation
+
+A final fix round (`reviews/amendment.confirmed-3.yaml`, both findings severity <= 3) found two
+small, precise wording defects the prior two sweeps missed.
+
+**AMENDMENT-FRESH2-001 (severity 3).** WP03's pre-existing Subtask T018 (the docs-supersession
+note, unrelated to T020) still told the implementer to write "the per-PR assertion is now
+non-blocking (`xfail`)" into the committed `docs/development/reference/known-friction-points.md`
+— describing the retired `pytest.xfail` mechanism, not the absorbed `ShardTimingsDriftWarning`/
+`_report_drift` mechanism from #5240. Reworded to: "non-blocking (a `ShardTimingsDriftWarning`,
+restorable to a hard failure via `SPEC_KITTY_STRICT_SHARD_TIMINGS=1`)", matching spec.md/plan.md/
+WP01's language. No other part of T018 changed.
+
+**AMENDMENT-FRESH2-002 (severity 2).** WP01's SC-001 sentence and its Review Guidance checklist
+bullet both cited "User Story 3 Acceptance Scenario 2" as covering T003b and T004b together, but
+that Acceptance Scenario is charter-specific in spec.md (`test_charter_is_not_allowlisted_and_agrees`
+only) and was never amended to mention the cross-module gate. Reworded both spots to attribute the
+Acceptance Scenario citation to T003b (charter) only, and to cite FR-004's general third mandatory
+fixture as the authority covering T004b's cross-module case. No test code or fixture changed.
+
+## Analyze fix (2026-09-28): T006's wrong exception class; WP01/WP02 header lines missing C-005
+
+A fresh `/spec-kitty.analyze` run found two defects: one HIGH, one LOW.
+
+**I1 (HIGH).** WP01's Subtask T006 code samples used `pytest.raises(Exception)` to catch
+`_load_timings()`/`_load_registry()`'s missing-artefact failure, but both functions call
+`pytest.fail(...)`, which raises `pytest.fail.Exception` (`_pytest.outcomes.Failed`) — not a subclass
+of `Exception`. As written, both tests would themselves fail instead of passing. Changed both
+occurrences to `pytest.raises(pytest.fail.Exception)`, matching T005's already-correct pattern.
+
+**I2 (LOW, cosmetic).** `tasks.md`'s `**Requirements**:` summary lines under WP01 and WP02 omitted
+`C-005`, even though both WPs' frontmatter `requirement_refs` and the FR/NFR/Constraint
+traceability table already include it (WP03's line already did). Added `C-005` to both lines.
 
 ## Fresh-sweep fix (2026-09-27): FR-007's "always push" framing corrected
 
