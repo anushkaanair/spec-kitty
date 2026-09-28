@@ -58,6 +58,9 @@ def _build_handoff_repo(
     planning_drift_after_lane_merge: bool = False,
     missing_workspace_base_commit: bool = False,
     refresh_planning_commit_after_lane_merge: bool = False,
+    coordination_updates_after_lane_base: bool = False,
+    d07_noncoord_inherited_paths: bool = False,
+    include_claim_time_planning_pin: bool = True,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -80,35 +83,37 @@ def _build_handoff_repo(
     coord_branch = str(meta["coordination_branch"])
     coord_worktree = CoordinationWorkspace.worktree_path(repo_root, mission_slug, mission_id[:8])
     coord_dir = coord_worktree / "kitty-specs" / mission_slug
+    coord_base_commit = _git(coord_worktree, "rev-parse", "HEAD")
 
-    append_event(
-        coord_dir,
-        StatusEvent(
-            event_id="01KX5151HANDOFFINPROGRESS0001",
-            mission_slug=mission_slug,
-            mission_id=mission_id,
-            wp_id="WP01",
-            from_lane=Lane.PLANNED,
-            to_lane=Lane.IN_PROGRESS,
-            at="2026-09-28T12:00:00+00:00",
-            actor="test-runner",
-            force=False,
-            execution_mode="worktree",
-            reason="seed live handoff fixture",
-        ),
-    )
-    materialize(coord_dir)
+    if not d07_noncoord_inherited_paths:
+        append_event(
+            coord_dir,
+            StatusEvent(
+                event_id="01KX5151HANDOFFINPROGRESS0001",
+                mission_slug=mission_slug,
+                mission_id=mission_id,
+                wp_id="WP01",
+                from_lane=Lane.PLANNED,
+                to_lane=Lane.IN_PROGRESS,
+                at="2026-09-28T12:00:00+00:00",
+                actor="test-runner",
+                force=False,
+                execution_mode="worktree",
+                reason="seed live handoff fixture",
+            ),
+        )
+        materialize(coord_dir)
 
-    # These updates are owned by the live coordination branch. Two of them
-    # are classified as COORD artifacts; the event log and WP prompt are not.
-    (coord_dir / "acceptance-matrix.json").write_text(
-        (coord_dir / "acceptance-matrix.json").read_text(encoding="utf-8") + "\n",
-        encoding="utf-8",
-    )
-    (coord_dir / "issue-matrix.md").write_text(
-        "# Issue Matrix\n\nCoordination-owned fixture row.\n",
-        encoding="utf-8",
-    )
+        # These updates are owned by the live coordination branch. Two of them
+        # are classified as COORD artifacts; the event log and WP prompt are not.
+        (coord_dir / "acceptance-matrix.json").write_text(
+            (coord_dir / "acceptance-matrix.json").read_text(encoding="utf-8") + "\n",
+            encoding="utf-8",
+        )
+        (coord_dir / "issue-matrix.md").write_text(
+            "# Issue Matrix\n\nCoordination-owned fixture row.\n",
+            encoding="utf-8",
+        )
     (coord_dir / "mission-events.jsonl").write_text('{"event":"coordination-update"}\n', encoding="utf-8")
     wp_prompt = coord_dir / "tasks" / "WP01.md"
     wp_prompt.write_text(
@@ -142,7 +147,10 @@ def _build_handoff_repo(
 
     lane_branch = lane_branch_name(mission_slug, "lane-a")
     lane_worktree = lane_worktree_path(repo_root, mission_slug, "lane-a")
-    _git(repo_root, "worktree", "add", "-b", lane_branch, str(lane_worktree), coord_branch)
+    lane_base_commit = coord_base_commit if coordination_updates_after_lane_base else coord_tip
+    _git(repo_root, "worktree", "add", "-b", lane_branch, str(lane_worktree), lane_base_commit)
+    if coordination_updates_after_lane_base:
+        _git(lane_worktree, "merge", "--no-edit", coord_tip)
     _git(lane_worktree, "merge", "--no-edit", recorded_planning_commit)
 
     if planning_drift_after_lane_merge:
@@ -205,7 +213,7 @@ def _build_handoff_repo(
             worktree_path=lane_worktree.relative_to(repo_root).as_posix(),
             branch_name=lane_branch,
             base_branch=coord_branch,
-            base_commit=None if missing_workspace_base_commit else coord_tip,
+            base_commit=None if missing_workspace_base_commit else lane_base_commit,
             dependencies=[],
             created_at="2026-09-28T12:01:00+00:00",
             created_by="test-fixture",
@@ -215,12 +223,12 @@ def _build_handoff_repo(
             current_wp="WP01",
         ),
     )
-    # The claim-time planning pin is persisted in workspace context. Write the
-    # field into raw JSON so this regression remains red until the context model
-    # and handoff guard consume it as immutable claim provenance.
-    context_data = json.loads(context_path.read_text(encoding="utf-8"))
-    context_data["planning_commit_sha"] = recorded_planning_commit
-    context_path.write_text(json.dumps(context_data, indent=2) + "\n", encoding="utf-8")
+    if include_claim_time_planning_pin:
+        # The claim-time planning pin is persisted in workspace context. Write
+        # it into raw JSON until the context model consumes it as provenance.
+        context_data = json.loads(context_path.read_text(encoding="utf-8"))
+        context_data["planning_commit_sha"] = recorded_planning_commit
+        context_path.write_text(json.dumps(context_data, indent=2) + "\n", encoding="utf-8")
     return repo_root, mission_slug, lane_worktree, changed_paths
 
 
@@ -301,6 +309,23 @@ def test_claim_time_p1_survives_finalize_refresh_to_p2(tmp_path: Path, monkeypat
         monkeypatch,
         planning_drift_after_lane_merge=True,
         refresh_planning_commit_after_lane_merge=True,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code == 0, result.output
+
+
+def test_existing_lane_history_proves_p1_and_d07_coordination_content(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A legacy context can prove inherited content from its lane history."""
+    repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        planning_drift_after_lane_merge=True,
+        coordination_updates_after_lane_base=True,
+        d07_noncoord_inherited_paths=True,
+        include_claim_time_planning_pin=False,
     )
     monkeypatch.chdir(repo_root)
 
