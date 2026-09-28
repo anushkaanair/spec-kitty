@@ -765,13 +765,15 @@ def _lane_authored_kitty_specs_paths(
     fork_commit: str,
     trusted_snapshots: tuple[str, ...],
 ) -> tuple[str, ...] | None:
-    """List kitty-specs paths touched by authored first-parent lane commits.
+    """List kitty-specs paths touched by lane-history commits outside trust.
 
     The fork-to-tip tree diff cannot see a lane commit that restores a path to
     its fork bytes or deletes a file introduced by a later coordination merge.
-    First-parent commits already present in an exact trusted planning or
-    coordination snapshot are inherited fast-forwards; the remaining
-    first-parent non-merge commits represent lane-authored path touches.
+    Walk every commit reachable from the lane tip so side-branch edits are
+    visible too. A merge-result path is considered authored only when its
+    result differs from every parent. Commits already present in an exact
+    trusted planning or coordination snapshot are inherited; remaining
+    changes represent lane-history path touches.
     """
     from specify_cli.cli.commands.agent import tasks as _tasks
 
@@ -780,8 +782,7 @@ def _lane_authored_kitty_specs_paths(
             [
                 "git",
                 "rev-list",
-                "--first-parent",
-                "--no-merges",
+                "--parents",
                 f"{fork_commit}..HEAD",
             ],
             cwd=str(worktree_path),
@@ -796,9 +797,12 @@ def _lane_authored_kitty_specs_paths(
         return None
     if result.returncode != 0:
         return None
-    commits = tuple(line.strip() for line in result.stdout.splitlines() if line.strip())
+    commits = tuple(tuple(line.split()) for line in result.stdout.splitlines() if line.strip())
+    if any(len(commit) < 2 for commit in commits):
+        return None
     authored_paths: list[str] = []
-    for commit in commits:
+    for commit_and_parents in commits:
+        commit, *parents = commit_and_parents
         inherited = False
         for snapshot in trusted_snapshots:
             merge_base = git_merge_base(worktree_path, commit, snapshot)
@@ -809,15 +813,22 @@ def _lane_authored_kitty_specs_paths(
                 break
         if inherited:
             continue
-        changed_paths = git_diff_names_checked(
-            worktree_path,
-            f"{commit}^",
-            commit,
-            pathspec=f"{KITTY_SPECS_DIR}/",
-        )
-        if changed_paths is None:
-            return None
-        authored_paths.extend(changed_paths)
+        paths_by_parent: list[set[str]] = []
+        for parent in parents:
+            changed_paths = git_diff_names_checked(
+                worktree_path,
+                parent,
+                commit,
+                pathspec=f"{KITTY_SPECS_DIR}/",
+            )
+            if changed_paths is None:
+                return None
+            paths_by_parent.append(set(changed_paths))
+        if len(paths_by_parent) == 1:
+            authored_paths.extend(paths_by_parent[0])
+        elif paths_by_parent:
+            merge_resolution_paths = set.intersection(*paths_by_parent)
+            authored_paths.extend(merge_resolution_paths)
     return tuple(authored_paths)
 
 
@@ -946,8 +957,8 @@ def _list_wp_branch_mission_specs_changes(
     planning candidate is clean only when it matches a claim-time planning
     snapshot, a current planning tip actually merged after the fork, or a
     coordination snapshot actually merged after the fork. Coordination-kind
-    candidates require the exact coordination snapshot; a first-parent lane
-    touch always remains a violation even if its final bytes match a snapshot.
+    candidates require the exact coordination snapshot; a lane-history touch
+    always remains a violation even if its final bytes match a snapshot.
 
     An unknown base, missing merge-base, or failed content diff is not evidence
     of a clean lane and returns ``None`` so the caller can fail closed.
