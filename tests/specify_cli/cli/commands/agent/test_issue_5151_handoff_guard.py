@@ -55,24 +55,24 @@ def _commit_all(cwd: Path, message: str) -> None:
     _git(cwd, "commit", "-q", "-m", message)
 
 
-def _merge_duplicate_planning_dependency_lane(
+def _merge_identical_coordination_planning_snapshot(
     repo_root: Path,
     mission_slug: str,
     lane_worktree: Path,
-    fork_commit: str,
     planning_commit: str,
-    planning_paths: tuple[str, ...],
+    planning_path: str,
 ) -> str:
-    """Merge an independent lane that reproduces the same planning bytes."""
-    dependency_branch = lane_branch_name(mission_slug, "dependency")
-    dependency_worktree = lane_worktree_path(repo_root, mission_slug, "dependency")
-    _git(repo_root, "worktree", "add", "-b", dependency_branch, str(dependency_worktree), fork_commit)
-    for rel_path in planning_paths:
-        target_path = dependency_worktree / rel_path
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        target_path.write_bytes(_git_bytes(dependency_worktree, "show", f"{planning_commit}:{rel_path}"))
-    _commit_all(dependency_worktree, "dependency: repeat planning snapshot")
-    _git(lane_worktree, "merge", "--no-edit", "--no-ff", dependency_branch)
+    """Merge an identical planning snapshot from the trusted coordination lane."""
+    mission_meta = json.loads((repo_root / "kitty-specs" / mission_slug / "meta.json").read_text(encoding="utf-8"))
+    coord_worktree = CoordinationWorkspace.worktree_path(
+        repo_root,
+        mission_slug,
+        str(mission_meta["mission_id"])[:8],
+    )
+    target_path = coord_worktree / planning_path
+    target_path.write_bytes(_git_bytes(coord_worktree, "show", f"{planning_commit}:{planning_path}"))
+    _commit_all(coord_worktree, "coord: retain inherited planning snapshot")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", str(mission_meta["coordination_branch"]))
     return _git(lane_worktree, "rev-parse", "HEAD")
 
 
@@ -507,7 +507,7 @@ def test_clean_coordination_inheritance_passes_move_task(tmp_path: Path, monkeyp
     assert result.exit_code == 0, result.output
 
 
-def test_identical_planning_content_on_both_dependency_merge_parents_is_inherited(
+def test_identical_planning_content_on_both_coordination_merge_parents_is_inherited(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -522,20 +522,20 @@ def test_identical_planning_content_on_both_dependency_merge_parents_is_inherite
     mission_meta = json.loads((repo_root / "kitty-specs" / mission_slug / "meta.json").read_text(encoding="utf-8"))
     workspace_context = load_context(repo_root, lane_worktree.name)
     assert workspace_context is not None and workspace_context.base_commit is not None
-    fork_commit = workspace_context.base_commit
+    assert _git(lane_worktree, "merge-base", "HEAD", str(mission_meta["coordination_branch"])) == workspace_context.base_commit
     planning_ref = str(mission_meta["target_branch"])
     planning_commit = _git(lane_worktree, "merge-base", "HEAD", planning_ref)
     planning_path = f"kitty-specs/{mission_slug}/plan.md"
-    dependency_merge = _merge_duplicate_planning_dependency_lane(
+    dependency_merge = _merge_identical_coordination_planning_snapshot(
         repo_root,
         mission_slug,
         lane_worktree,
-        fork_commit,
         planning_commit,
-        (planning_path,),
+        planning_path,
     )
     merge_parents = _git(lane_worktree, "show", "-s", "--format=%P", dependency_merge).split()
     assert len(merge_parents) == 2
+    assert _git(lane_worktree, "merge-base", *merge_parents) == workspace_context.base_commit
     result_bytes = _git_bytes(lane_worktree, "show", f"{dependency_merge}:{planning_path}")
     assert result_bytes == _git_bytes(lane_worktree, "show", f"{merge_parents[0]}:{planning_path}")
     assert result_bytes == _git_bytes(lane_worktree, "show", f"{merge_parents[1]}:{planning_path}")
