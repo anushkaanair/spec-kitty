@@ -454,21 +454,21 @@ def test_expected_parent_ref_update_cas_rejects_tip_advance_at_commit_boundary(
     original_lanes = (feature_dir / "lanes.json").read_bytes()
     initial_tip = _git(repo_root, "rev-parse", TARGET_BRANCH)
     coord_before = _git(repo_root, "rev-parse", coord_branch)
-    from specify_cli.git import commit_helpers
+    from specify_cli.git import ref_advance
 
-    run_git = commit_helpers._run_git_for_commit
+    run_git = ref_advance._run_git
     advanced_tip: list[str] = []
 
-    def advance_before_ref_update(worktree_root: Path, args: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+    def advance_before_ref_update(repo: Path, args: list[str], *, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         if args and args[0] == "update-ref" and not advanced_tip:
-            advanced_tip.append(_commit_marker(repo_root, "RACE-AT-CAS.txt"))
-        return run_git(worktree_root, args, env=env)
+            advanced_tip.append(_commit_marker(repo, "RACE-AT-CAS.txt"))
+        return run_git(repo, args, env=env)
 
     exit_code, emitted = _run_refresh(
         repo_root,
         feature_dir,
         mission_slug,
-        extra_patches={"specify_cli.git.commit_helpers._run_git_for_commit": advance_before_ref_update},
+        extra_patches={"specify_cli.git.ref_advance._run_git": advance_before_ref_update},
     )
 
     assert advanced_tip and advanced_tip[0] != initial_tip, "the race must occur immediately before Git's conditional ref update"
@@ -490,8 +490,10 @@ def test_landed_pin_commit_is_reported_when_index_refresh_fails(
     initial_tip = _git(repo_root, "rev-parse", TARGET_BRANCH)
     lane_path = f"kitty-specs/{mission_slug}/lanes.json"
     from specify_cli.git import commit_helpers
+    from specify_cli.git import ref_advance
 
     run_git = commit_helpers._run_git_for_commit
+    run_ref_git = ref_advance._run_git
     landed_ref_update = False
     injected_reset = False
 
@@ -501,11 +503,21 @@ def test_landed_pin_commit_is_reported_when_index_refresh_fails(
         *,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        nonlocal landed_ref_update, injected_reset
+        nonlocal injected_reset
         if args and args[0] == "reset" and landed_ref_update and not injected_reset:
             injected_reset = True
             return subprocess.CompletedProcess(["git", *args], 1, "", "injected index refresh failure")
         result = run_git(worktree_root, args, env=env)
+        return result
+
+    def observe_successful_ref_update(
+        repo: Path,
+        args: list[str],
+        *,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal landed_ref_update
+        result = run_ref_git(repo, args, env=env)
         if args and args[0] == "update-ref" and result.returncode == 0:
             landed_ref_update = True
         return result
@@ -514,7 +526,10 @@ def test_landed_pin_commit_is_reported_when_index_refresh_fails(
         repo_root,
         feature_dir,
         mission_slug,
-        extra_patches={"specify_cli.git.commit_helpers._run_git_for_commit": fail_index_refresh_after_ref_update},
+        extra_patches={
+            "specify_cli.git.commit_helpers._run_git_for_commit": fail_index_refresh_after_ref_update,
+            "specify_cli.git.ref_advance._run_git": observe_successful_ref_update,
+        },
     )
 
     assert landed_ref_update and injected_reset, "the injected failure must follow a successful compare-and-swap"
@@ -550,8 +565,10 @@ def test_landed_pin_commit_is_reported_when_index_refresh_raises_oserror(
     initial_tip = _git(repo_root, "rev-parse", TARGET_BRANCH)
     lane_path = f"kitty-specs/{mission_slug}/lanes.json"
     from specify_cli.git import commit_helpers
+    from specify_cli.git import ref_advance
 
     run_git = commit_helpers._run_git_for_commit
+    run_ref_git = ref_advance._run_git
     landed_ref_update = False
     injected_reset = False
 
@@ -561,11 +578,21 @@ def test_landed_pin_commit_is_reported_when_index_refresh_raises_oserror(
         *,
         env: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
-        nonlocal landed_ref_update, injected_reset
+        nonlocal injected_reset
         if args and args[0] == "reset" and landed_ref_update and not injected_reset:
             injected_reset = True
             raise OSError("injected index refresh OSError")
         result = run_git(worktree_root, args, env=env)
+        return result
+
+    def observe_successful_ref_update(
+        repo: Path,
+        args: list[str],
+        *,
+        env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        nonlocal landed_ref_update
+        result = run_ref_git(repo, args, env=env)
         if args and args[0] == "update-ref" and result.returncode == 0:
             landed_ref_update = True
         return result
@@ -574,7 +601,10 @@ def test_landed_pin_commit_is_reported_when_index_refresh_raises_oserror(
         repo_root,
         feature_dir,
         mission_slug,
-        extra_patches={"specify_cli.git.commit_helpers._run_git_for_commit": raise_index_refresh_after_ref_update},
+        extra_patches={
+            "specify_cli.git.commit_helpers._run_git_for_commit": raise_index_refresh_after_ref_update,
+            "specify_cli.git.ref_advance._run_git": observe_successful_ref_update,
+        },
     )
 
     assert landed_ref_update and injected_reset, "the OSError must follow a successful compare-and-swap"

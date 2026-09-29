@@ -2303,12 +2303,13 @@ def _refresh_worktree_status_findings(
     elif primary_status:
         findings.append(f"primary worktree has pending changes: {primary_status}")
 
-    from mission_runtime import routes_through_coordination, resolve_mid8, resolve_topology
+    from mission_runtime import placement_seam, routes_through_coordination, resolve_mid8, resolve_topology
 
     if not routes_through_coordination(resolve_topology(primary_root, mission_slug)):
         return findings
 
-    meta = load_meta_fail_closed(primary_root / KITTY_SPECS_DIR / mission_slug) or {}
+    meta_dir = placement_seam(primary_root, mission_slug).read_dir(MissionArtifactKind.PRIMARY_METADATA)
+    meta = load_meta_fail_closed(meta_dir) or {}
     raw_mission_id = meta.get("mission_id")
     if not isinstance(raw_mission_id, str):
         findings.append("coordination worktree status could not be inspected without writing mission metadata")
@@ -2418,25 +2419,23 @@ def _prepare_primary_pin_refresh_commit(
     owned: OwnedMission | None,
 ) -> _PrimaryPinRefreshCommit:
     """Resolve, preflight, and tip-check the one primary candidate commit."""
-    from mission_runtime import CommitTarget, is_primary_artifact_kind, resolve_placement_only
+    from mission_runtime import is_primary_artifact_kind, placement_seam
     from specify_cli.git.commit_helpers import preflight_commit
 
     primary_root = owned.primary if owned else repo_root
     worktree_root = owned.root if owned else repo_root
     effective_root = owned.root if owned else None
     lanes_path = planning_dir / "lanes.json"
-    placement = resolve_placement_only(
+    destination = placement_seam(
         primary_root,
         mission_slug,
-        kind=MissionArtifactKind.LANE_STATE,
         **({"effective_root": effective_root} if effective_root else {}),
-    )
-    if not is_primary_artifact_kind(MissionArtifactKind.LANE_STATE) or placement.ref != target_branch:
+    ).write_target(MissionArtifactKind.LANE_STATE)
+    if not is_primary_artifact_kind(MissionArtifactKind.LANE_STATE) or destination.ref != target_branch:
         _refuse_planning_pin_refresh("lanes.json does not resolve to the planning target branch", json_output=json_output)
 
     files = tuple(owned.files((lanes_path,))) if owned else (lanes_path,)
     message = _finalize_bookkeeping_commit_message(mission_slug)
-    destination = CommitTarget(ref=placement.ref)
     surface_error = _refresh_worktree_status_error(primary_root, worktree_root, mission_slug)
     if surface_error is not None:
         _refuse_planning_pin_refresh(surface_error, json_output=json_output)

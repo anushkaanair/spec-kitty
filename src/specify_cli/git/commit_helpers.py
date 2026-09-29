@@ -16,8 +16,9 @@ fails ``mypy --strict``, and a mismatched HEAD raises ``SafeCommitHeadMismatch``
 
 The optional ``expected_parent_sha`` path is reserved for a caller that must
 commit against one captured branch tip. It builds the commit from that parent
-and advances the destination with ``git update-ref <new> <expected>``; the
-normal commit path is unchanged when the argument is omitted.
+and advances the destination through the canonical ref-advance seam with a
+compare-and-swap; the normal commit path is unchanged when the argument is
+omitted.
 
 This is the structural invariant that makes every caller correct-by-construction.
 Policy can no longer drift from physical staging because policy and physical
@@ -111,6 +112,7 @@ from kernel.git_topology import (
     git_toplevel,
 )
 from specify_cli.git.protection_policy import ProtectionPolicy
+from specify_cli.git.ref_advance import RefAdvanceError, advance_branch_ref_for_commit
 
 logger = logging.getLogger(__name__)
 
@@ -1074,6 +1076,7 @@ def _expected_parent_signing_args(worktree_root: Path) -> list[str]:
 
 
 def _compare_and_swap_commit_ref(
+    repo_root: Path,
     worktree_root: Path,
     destination_ref: str,
     new_sha: str,
@@ -1081,23 +1084,17 @@ def _compare_and_swap_commit_ref(
     message: str,
 ) -> None:
     """Advance the target ref only while it still names the captured parent."""
-    updated = _run_git_for_commit(
-        worktree_root,
-        [
-            "update-ref",
-            "-m",
-            message,
-            f"refs/heads/{destination_ref}",
+    try:
+        advance_branch_ref_for_commit(
+            repo_root,
+            worktree_root,
+            destination_ref,
             new_sha,
-            expected_parent_sha,
-        ],
-    )
-    if updated.returncode != 0:
-        detail = (updated.stderr or updated.stdout).strip()
-        raise RuntimeError(
-            f"safe_commit: target {destination_ref!r} no longer has expected parent "
-            f"{expected_parent_sha}; conditional ref update failed: {detail or 'git update-ref failed'}"
+            expected_old_sha=expected_parent_sha,
+            message=message,
         )
+    except RefAdvanceError as exc:
+        raise RuntimeError(f"safe_commit: conditional advance of target {destination_ref!r} from expected parent {expected_parent_sha} failed: {exc}") from exc
 
 
 def _expected_parent_index_repair_diagnostic(
@@ -1123,6 +1120,7 @@ def _append_commit_diagnostic(current: str | None, addition: str) -> str:
 
 def _safe_commit_with_expected_parent(
     *,
+    repo_root: Path,
     worktree_root: Path,
     destination_ref: str,
     expected_parent_sha: str,
@@ -1150,11 +1148,18 @@ def _safe_commit_with_expected_parent(
                 env=candidate_env,
                 expected_path_bytes=expected_path_bytes,
             )
-            expected_tree = _run_git_text(worktree_root, ["rev-parse", f"{expected_parent_sha}^{{tree}}"])
+            expected_tree = _run_git_text(worktree_root, ["show", "-s", "--format=%T", expected_parent_sha])
             if tree_sha == expected_tree:
                 raise SafeCommitStagedTreeUnchanged(destination_ref=destination_ref)
             new_sha = _create_expected_parent_commit(worktree_root, tree_sha, expected_parent_sha, message_file)
-            _compare_and_swap_commit_ref(worktree_root, destination_ref, new_sha, expected_parent_sha, message)
+            _compare_and_swap_commit_ref(
+                repo_root,
+                worktree_root,
+                destination_ref,
+                new_sha,
+                expected_parent_sha,
+                message,
+            )
             landed_sha = new_sha
 
             try:
@@ -1453,6 +1458,7 @@ def safe_commit(
             expected_path_bytes,
         )
         return _safe_commit_with_expected_parent(
+            repo_root=repo_root,
             worktree_root=worktree_root,
             destination_ref=destination_ref,
             expected_parent_sha=expected_parent_sha,
