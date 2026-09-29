@@ -801,7 +801,12 @@ def _merge_commit_authored_kitty_specs_paths(
             return None
         parent_changes.append(changed_paths)
 
-    authored_paths = parent_changes[0] & parent_changes[1]
+    # A path changed from the merge base on both sides is not necessarily
+    # merge-authored: identical inherited bytes remain clean when the result
+    # matches both parents. Any resolution that differs from either parent
+    # remains authored and is included here.
+    both_parents_changed = parent_changes[0] & parent_changes[1]
+    authored_paths = both_parents_changed & (result_paths_by_parent[0] | result_paths_by_parent[1])
     one_parent_changed = parent_changes[0] ^ parent_changes[1]
     for path in one_parent_changed:
         changed_parent = 0 if path in parent_changes[0] else 1
@@ -837,6 +842,11 @@ def _lane_authored_kitty_specs_paths(
     worktree_path: Path,
     fork_commit: str,
     trusted_snapshots: tuple[str, ...],
+    *,
+    mission_slug: str | None = None,
+    planning_pin: str | None = None,
+    coordination_snapshot: str | None = None,
+    derived_status_paths: set[str] | None = None,
 ) -> tuple[str, ...] | None:
     """List kitty-specs paths touched by lane-history commits outside trust.
 
@@ -847,6 +857,70 @@ def _lane_authored_kitty_specs_paths(
     snapshots are inherited; remaining changes represent lane path touches.
     """
     from specify_cli.cli.commands.agent import tasks as _tasks
+
+    derived_status_paths = derived_status_paths if derived_status_paths is not None else set()
+
+    def _canonical_status_replay(commit: str) -> bool:
+        if (
+            not mission_slug
+            or mission_slug in {".", ".."}
+            or Path(mission_slug).name != mission_slug
+            or planning_pin is None
+            or coordination_snapshot is None
+        ):
+            return False
+
+        def _committed_blob(ref: str, path: str) -> bytes | None:
+            try:
+                result = _tasks.subprocess.run(
+                    ["git", "show", f"{ref}:{path}"],
+                    cwd=str(worktree_path),
+                    capture_output=True,
+                    check=False,
+                    timeout=30,
+                )
+            except (OSError, _tasks.subprocess.TimeoutExpired):
+                return None
+            return result.stdout if result.returncode == 0 else None
+
+        mission_dir = f"{KITTY_SPECS_DIR}/{mission_slug}"
+        events_path = f"{mission_dir}/status.events.jsonl"
+        status_path = f"{mission_dir}/status.json"
+        meta_path = f"{mission_dir}/meta.json"
+        coordination_events = _committed_blob(coordination_snapshot, events_path)
+        result_events = _committed_blob(commit, events_path)
+        coordination_status = _committed_blob(coordination_snapshot, status_path)
+        result_status = _committed_blob(commit, status_path)
+        pinned_meta = _committed_blob(planning_pin, meta_path)
+        result_meta = _committed_blob(commit, meta_path)
+        if (
+            coordination_events is None
+            or result_events != coordination_events
+            or coordination_status is None
+            or result_status is None
+            or pinned_meta is None
+            or result_meta != pinned_meta
+        ):
+            return False
+
+        from tempfile import TemporaryDirectory
+
+        from specify_cli.status.reducer import materialize_snapshot, materialize_to_json
+
+        try:
+            with TemporaryDirectory(prefix="spec-kitty-handoff-status-") as temp_dir:
+                feature_dir = Path(temp_dir) / mission_slug
+                feature_dir.mkdir()
+                (feature_dir / "status.events.jsonl").write_bytes(coordination_events)
+                (feature_dir / "status.json").write_bytes(coordination_status)
+                (feature_dir / "meta.json").write_bytes(pinned_meta)
+                expected = cast(str, materialize_to_json(materialize_snapshot(feature_dir))).encode(
+                    "utf-8"
+                )
+        except Exception as exc:  # noqa: BLE001 -- unverifiable replay must not authorize handoff
+            logger.debug("Could not replay canonical handoff status snapshot: %s", exc)
+            return False
+        return result_status == expected
 
     try:
         result = _tasks.subprocess.run(
@@ -878,6 +952,17 @@ def _lane_authored_kitty_specs_paths(
         changed_paths = _lane_commit_authored_kitty_specs_paths(worktree_path, commit, tuple(parents))
         if changed_paths is None:
             return None
+        status_snapshot_path = f"{KITTY_SPECS_DIR}/{mission_slug}/status.json" if mission_slug else None
+        if (
+            len(parents) == 2
+            and coordination_snapshot is not None
+            and planning_pin is not None
+            and status_snapshot_path in changed_paths
+            and _commit_in_trusted_snapshots(worktree_path, coordination_snapshot, tuple(parents)) is True
+            and _canonical_status_replay(commit)
+        ):
+            derived_status_paths.add(status_snapshot_path)
+            changed_paths = tuple(path for path in changed_paths if path != status_snapshot_path)
         authored_paths.extend(changed_paths)
     return tuple(authored_paths)
 
@@ -896,6 +981,7 @@ def _coordination_candidate_violations(
     candidates: set[str],
     authored_paths: set[str],
     coordination_snapshot: str | None,
+    derived_status_paths: set[str] | None = None,
 ) -> set[str] | None:
     """Allow coordination files only when exact post-fork inherited bytes remain."""
     if not candidates:
@@ -910,6 +996,8 @@ def _coordination_candidate_violations(
     if divergence is None:
         return None
     violations.difference_update(set(candidates) - set(divergence))
+    if derived_status_paths is not None:
+        violations.difference_update((derived_status_paths & candidates) - authored_paths)
     violations.update(candidates & authored_paths)
     return violations
 
@@ -1028,6 +1116,7 @@ def _list_wp_branch_mission_specs_changes(
 
     trusted_snapshots: tuple[str, str | None, str | None] | None = None
     authored_changes: tuple[str, ...] = ()
+    derived_status_paths: set[str] = set()
     if workspace_base_commit is not None:
         trusted_snapshots = _trusted_handoff_snapshots(
             worktree_path,
@@ -1039,7 +1128,15 @@ def _list_wp_branch_mission_specs_changes(
         if trusted_snapshots is None:
             return None
         trusted_commits = tuple(snapshot for snapshot in trusted_snapshots if snapshot is not None)
-        resolved_authored_changes = _lane_authored_kitty_specs_paths(worktree_path, workspace_base_commit, trusted_commits)
+        resolved_authored_changes = _lane_authored_kitty_specs_paths(
+            worktree_path,
+            workspace_base_commit,
+            trusted_commits,
+            mission_slug=mission_slug,
+            planning_pin=trusted_snapshots[0],
+            coordination_snapshot=trusted_snapshots[2],
+            derived_status_paths=derived_status_paths,
+        )
         if resolved_authored_changes is None:
             return None
         authored_changes = resolved_authored_changes
@@ -1065,6 +1162,7 @@ def _list_wp_branch_mission_specs_changes(
         coordination_candidates,
         authored_paths,
         trusted_snapshots[2] if trusted_snapshots is not None else None,
+        derived_status_paths,
     )
     if coordination_violations is None:
         return None
