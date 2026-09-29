@@ -560,6 +560,76 @@ def test_canonical_derived_coordination_status_snapshot_passes_move_task(
     assert result.exit_code == 0, result.output
 
 
+def _authored_paths_for_handoff(
+    repo_root: Path,
+    mission_slug: str,
+    lane_worktree: Path,
+) -> tuple[str, ...]:
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.base_commit is not None
+    primary_meta = json.loads((repo_root / "kitty-specs" / mission_slug / "meta.json").read_text(encoding="utf-8"))
+    snapshots = _trusted_handoff_snapshots(
+        lane_worktree,
+        _git(repo_root, "branch", "--show-current"),
+        context.planning_commit_sha,
+        context.base_commit,
+        str(primary_meta["coordination_branch"]),
+    )
+    assert snapshots is not None and snapshots[2] is not None
+    return _lane_authored_kitty_specs_paths(
+        lane_worktree,
+        context.base_commit,
+        tuple(snapshot for snapshot in snapshots if snapshot is not None),
+        mission_slug=mission_slug,
+        planning_pin=snapshots[0],
+        coordination_snapshot=snapshots[2],
+    ) or ()
+
+
+def test_status_snapshot_replay_fails_closed_without_verifiable_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        coordination_updates_after_lane_base=True,
+        stale_coordination_status_snapshot=True,
+        refresh_status_snapshot_after_coord_merge=True,
+    )
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+
+    original_run = subprocess.run
+
+    def fail_event_blob(args, **kwargs):
+        if args[:2] == ["git", "show"] and str(args[-1]).endswith("/status.events.jsonl"):
+            raise subprocess.TimeoutExpired(args, timeout=30)
+        return original_run(args, **kwargs)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(subprocess, "run", fail_event_blob)
+        authored_paths = _authored_paths_for_handoff(
+            repo_root,
+            mission_slug,
+            lane_worktree,
+        )
+        assert status_path in authored_paths
+
+    def invalid_event_blob(args, **kwargs):
+        if args[:2] == ["git", "show"] and str(args[-1]).endswith("/status.events.jsonl"):
+            return subprocess.CompletedProcess(args, 0, stdout=b"not-json", stderr=b"")
+        return original_run(args, **kwargs)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(subprocess, "run", invalid_event_blob)
+        authored_paths = _authored_paths_for_handoff(
+            repo_root,
+            mission_slug,
+            lane_worktree,
+        )
+        assert status_path in authored_paths
+
+
 def test_lane_authored_status_snapshot_mutation_is_rejected(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
