@@ -10,17 +10,23 @@ from __future__ import annotations
 
 import json
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from specify_cli.cli.commands.agent import tasks_shared
 from specify_cli.cli.commands.agent.tasks import (
     _filter_by_planning_tip_content,
     _list_wp_branch_mission_specs_changes,
     app as tasks_app,
 )
-from specify_cli.cli.commands.agent.tasks_shared import _lane_authored_kitty_specs_paths, _trusted_handoff_snapshots
+from specify_cli.cli.commands.agent.tasks_shared import (
+    _lane_authored_kitty_specs_paths,
+    _merge_commit_authored_kitty_specs_paths,
+    _trusted_handoff_snapshots,
+)
 from specify_cli.coordination.workspace import CoordinationWorkspace
 from specify_cli.status.models import Lane, StatusEvent
 from specify_cli.status.reducer import materialize
@@ -531,6 +537,17 @@ def _move_for_review(repo_root: Path, mission_slug: str):
     return result
 
 
+def _criss_cross_merge_bases(worktree: Path, other_ref: str) -> set[str]:
+    result = subprocess.run(
+        ["git", "merge-base", "--all", "HEAD", other_ref],
+        cwd=worktree,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return {line.strip() for line in result.stdout.splitlines() if line.strip()}
+
+
 def test_clean_coordination_inheritance_passes_move_task(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(tmp_path, monkeypatch)
     monkeypatch.chdir(repo_root)
@@ -560,6 +577,461 @@ def test_canonical_derived_coordination_status_snapshot_passes_move_task(
     assert result.exit_code == 0, result.output
 
 
+def test_stale_c2_status_is_rejected_after_c3_events_arrive_without_refresh(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        stale_coordination_status_snapshot=True,
+    )
+    mission_dir = repo_root / "kitty-specs" / mission_slug
+    mission_meta = json.loads((mission_dir / "meta.json").read_text(encoding="utf-8"))
+    coordination_ref = str(mission_meta["coordination_branch"])
+    mission_id = str(mission_meta["mission_id"])
+    coord_worktree = CoordinationWorkspace.worktree_path(repo_root, mission_slug, mission_id[:8])
+    coord_dir = coord_worktree / "kitty-specs" / mission_slug
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.planning_commit_sha is not None
+    p1 = context.planning_commit_sha
+
+    mission_meta["planning_revision"] = "P2"
+    (mission_dir / "meta.json").write_text(json.dumps(mission_meta, indent=2) + "\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: advance metadata to P2")
+    p2 = _git(repo_root, "rev-parse", "HEAD")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", p2)
+
+    c2_event_id = "01KXQB5J00H5M8S6X6AEY12347"
+    append_event(
+        coord_dir,
+        StatusEvent(
+            event_id=c2_event_id,
+            mission_slug=mission_slug,
+            mission_id=mission_id,
+            wp_id="WP01",
+            from_lane=Lane.PLANNED,
+            to_lane=Lane.IN_PROGRESS,
+            at="2026-09-28T13:00:00+00:00",
+            actor="test-runner",
+            force=False,
+            execution_mode="worktree",
+            reason="refresh status from coordination C2",
+        ),
+    )
+    materialize(coord_dir)
+    _commit_all(coord_worktree, "coord: append C2 status event")
+    c2 = _git(coord_worktree, "rev-parse", "HEAD")
+    assert json.loads(_git(coord_worktree, "show", f"{c2}:kitty-specs/{mission_slug}/status.json"))["last_event_id"] == c2_event_id
+    merge_result = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", coordination_ref],
+        cwd=lane_worktree,
+        capture_output=True,
+        text=True,
+    )
+    assert merge_result.returncode == 0, merge_result.stdout + merge_result.stderr
+    _git(lane_worktree, "add", "-A")
+    _git(lane_worktree, "commit", "-q", "-m", "Merge canonical coordination C2 refresh")
+    c2_lane_refresh = _git(lane_worktree, "rev-parse", "HEAD")
+    assert _git(lane_worktree, "show", f"{c2_lane_refresh}:kitty-specs/{mission_slug}/status.json") == _git(
+        coord_worktree,
+        "show",
+        f"{c2}:kitty-specs/{mission_slug}/status.json",
+    )
+
+    mission_meta["planning_revision"] = "P3"
+    (mission_dir / "meta.json").write_text(json.dumps(mission_meta, indent=2) + "\n", encoding="utf-8")
+    plan_path = mission_dir / "plan.md"
+    plan_path.write_text(plan_path.read_text(encoding="utf-8") + "\nPlanning branch P3 before C3.\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: advance to P3")
+    p3 = _git(repo_root, "rev-parse", "HEAD")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", p3)
+
+    c3_event_id = "01KXQB5J00H5M8S6X6AEY12348"
+    append_event(
+        coord_dir,
+        StatusEvent(
+            event_id=c3_event_id,
+            mission_slug=mission_slug,
+            mission_id=mission_id,
+            wp_id="WP01",
+            from_lane=Lane.PLANNED,
+            to_lane=Lane.IN_PROGRESS,
+            at="2026-09-28T14:00:00+00:00",
+            actor="test-runner",
+            force=False,
+            execution_mode="worktree",
+            reason="advance coordination events to C3 without status refresh",
+        ),
+    )
+    _commit_all(coord_worktree, "coord: append C3 event without materializing status")
+    c3 = _git(coord_worktree, "rev-parse", "HEAD")
+    merge_result = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", coordination_ref],
+        cwd=lane_worktree,
+        capture_output=True,
+        text=True,
+    )
+    assert merge_result.returncode == 0, merge_result.stdout + merge_result.stderr
+    _git(lane_worktree, "add", "-A")
+    _git(lane_worktree, "commit", "-q", "-m", "Merge C3 events without status refresh")
+    c3_lane_merge = _git(lane_worktree, "rev-parse", "HEAD")
+
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+    events_path = f"kitty-specs/{mission_slug}/status.events.jsonl"
+    assert _git(lane_worktree, "show", f"{c2_lane_refresh}:{status_path}") == _git(lane_worktree, "show", f"{c3_lane_merge}:{status_path}")
+    assert json.loads(_git(lane_worktree, "show", f"{c3_lane_merge}:{status_path}"))["last_event_id"] == c2_event_id
+    assert _git(coord_worktree, "show", f"{c3}:{status_path}") == _git(lane_worktree, "show", f"{c2_lane_refresh}:{status_path}")
+    assert c3_event_id in _git(lane_worktree, "show", f"{c3_lane_merge}:{events_path}")
+    assert _git(lane_worktree, "merge-base", "HEAD", p3) == p3
+    assert _git(lane_worktree, "merge-base", "HEAD", c3) == c3
+    assert p1 != p2 != p3
+
+    monkeypatch.chdir(repo_root)
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert status_path in result.output
+
+
+def test_stale_coordination_status_is_rejected_when_planning_mission_number_changes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(tmp_path, monkeypatch)
+    mission_dir = repo_root / "kitty-specs" / mission_slug
+    mission_meta = json.loads((mission_dir / "meta.json").read_text(encoding="utf-8"))
+    mission_meta["mission_number"] = 5151
+    (mission_dir / "meta.json").write_text(json.dumps(mission_meta, indent=2) + "\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: change mission number without refreshing status")
+    planning_p2 = _git(repo_root, "rev-parse", "HEAD")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", planning_p2)
+
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+    status = json.loads(_git(lane_worktree, "show", f"HEAD:{status_path}"))
+    assert status["mission_type"] == "software-dev"
+    assert status["mission_number"] != 5151
+    assert json.loads(_git(repo_root, "show", f"HEAD:{status_path}"))["mission_number"] != 5151
+    lane_meta = json.loads(_git(lane_worktree, "show", f"HEAD:kitty-specs/{mission_slug}/meta.json"))
+    assert lane_meta["mission_type"] == "software-dev"
+    assert lane_meta["mission_number"] == 5151
+
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.base_commit is not None
+    primary_meta = json.loads((mission_dir / "meta.json").read_text(encoding="utf-8"))
+    raw_candidates = tasks_shared._kitty_specs_paths_changed(lane_worktree, context.base_commit, "HEAD")
+    assert raw_candidates is not None
+    meta_path = f"kitty-specs/{mission_slug}/meta.json"
+    assert meta_path in raw_candidates
+    assert status_path not in raw_candidates
+    direct_changes = _list_wp_branch_mission_specs_changes(
+        lane_worktree,
+        str(primary_meta["coordination_branch"]),
+        planning_base_branch=str(primary_meta["target_branch"]),
+        workspace_base_commit=context.base_commit,
+        planning_commit_sha=context.planning_commit_sha,
+        coordination_ref=str(primary_meta["coordination_branch"]),
+        mission_slug=mission_slug,
+    )
+    assert status_path in (direct_changes or [])
+
+    monkeypatch.chdir(repo_root)
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert status_path in result.output
+
+
+def test_stale_inherited_c2_status_is_rejected_after_lane_merges_only_c3_events(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        status_events_at_lane_base=True,
+        include_status_artifacts_after_lane_base=False,
+    )
+    mission_meta = json.loads((repo_root / "kitty-specs" / mission_slug / "meta.json").read_text(encoding="utf-8"))
+    mission_id = str(mission_meta["mission_id"])
+    coordination_ref = str(mission_meta["coordination_branch"])
+    coord_worktree = CoordinationWorkspace.worktree_path(repo_root, mission_slug, mission_id[:8])
+    coord_dir = coord_worktree / "kitty-specs" / mission_slug
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+    events_path = f"kitty-specs/{mission_slug}/status.events.jsonl"
+    inherited_status = _git(lane_worktree, "show", f"HEAD:{status_path}")
+    c3_event_id = "01KX5151LANEBASEC3EVENT0000001"
+
+    append_event(
+        coord_dir,
+        StatusEvent(
+            event_id=c3_event_id,
+            mission_slug=mission_slug,
+            mission_id=mission_id,
+            wp_id="WP01",
+            from_lane=Lane.PLANNED,
+            to_lane=Lane.IN_PROGRESS,
+            at="2026-09-28T15:30:00+00:00",
+            actor="test-runner",
+            force=False,
+            execution_mode="worktree",
+            reason="advance coordination events after the lane fork",
+        ),
+    )
+    _commit_all(coord_worktree, "coord: append C3 event after lane fork")
+    coordinator_tip = _git(coord_worktree, "rev-parse", "HEAD")
+    assert _git(coord_worktree, "show", f"{coordinator_tip}:{status_path}") == inherited_status
+
+    merge_result = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", coordination_ref],
+        cwd=lane_worktree,
+        capture_output=True,
+        text=True,
+    )
+    assert merge_result.returncode == 0, merge_result.stdout + merge_result.stderr
+    _git(lane_worktree, "add", "-A")
+    _git(lane_worktree, "commit", "-q", "-m", "Merge C3 events without status refresh")
+    lane_tip = _git(lane_worktree, "rev-parse", "HEAD")
+
+    assert _git(lane_worktree, "show", f"{lane_tip}:{status_path}") == inherited_status
+    assert c3_event_id in _git(lane_worktree, "show", f"{lane_tip}:{events_path}")
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert status_path in result.output
+
+
+def test_unmerged_coordinator_c3_does_not_invalidate_clean_lane_c2_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(tmp_path, monkeypatch)
+    mission_meta = json.loads((repo_root / "kitty-specs" / mission_slug / "meta.json").read_text(encoding="utf-8"))
+    mission_id = str(mission_meta["mission_id"])
+    coord_worktree = CoordinationWorkspace.worktree_path(repo_root, mission_slug, mission_id[:8])
+    coord_dir = coord_worktree / "kitty-specs" / mission_slug
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+    lane_status = _git(lane_worktree, "show", f"HEAD:{status_path}")
+    c3_event_id = "01KX5151COORDONLYC30000000001"
+
+    append_event(
+        coord_dir,
+        StatusEvent(
+            event_id=c3_event_id,
+            mission_slug=mission_slug,
+            mission_id=mission_id,
+            wp_id="WP01",
+            from_lane=Lane.PLANNED,
+            to_lane=Lane.IN_PROGRESS,
+            at="2026-09-28T15:00:00+00:00",
+            actor="test-runner",
+            force=False,
+            execution_mode="worktree",
+            reason="advance coordinator events without merging them into the lane",
+        ),
+    )
+    _commit_all(coord_worktree, "coord: append unmerged C3 event")
+    coordinator_tip = _git(coord_worktree, "rev-parse", "HEAD")
+
+    assert _git(coord_worktree, "show", f"{coordinator_tip}:{status_path}") == lane_status
+    assert c3_event_id in _git(coord_worktree, "show", f"{coordinator_tip}:kitty-specs/{mission_slug}/status.events.jsonl")
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    # Handoff validates the latest coordination snapshot already present in the
+    # lane. Coordinator-only C3 events have not become lane history yet.
+    assert result.exit_code == 0, result.output
+
+
+def test_merge_commit_authorship_fails_closed_for_criss_cross_best_bases(tmp_path: Path) -> None:
+    repo_root = tmp_path / "criss-cross"
+    repo_root.mkdir()
+    _git(repo_root, "init", "-q", "-b", "main")
+    _git(repo_root, "config", "user.email", "test@example.invalid")
+    _git(repo_root, "config", "user.name", "Test Runner")
+    _git(repo_root, "config", "commit.gpgsign", "false")
+
+    artifact_path = Path("kitty-specs/issue-5151-handoff/spec.md")
+    artifact = repo_root / artifact_path
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("base\n", encoding="utf-8")
+    _commit_all(repo_root, "base")
+    fork = _git(repo_root, "rev-parse", "HEAD")
+
+    _git(repo_root, "checkout", "-q", "-b", "left", fork)
+    artifact.write_text("left\n", encoding="utf-8")
+    _commit_all(repo_root, "left side")
+    left = _git(repo_root, "rev-parse", "HEAD")
+
+    _git(repo_root, "checkout", "-q", "-b", "right", fork)
+    artifact.write_text("right\n", encoding="utf-8")
+    _commit_all(repo_root, "right side")
+    right = _git(repo_root, "rev-parse", "HEAD")
+
+    _git(repo_root, "checkout", "-q", "left")
+    merge = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", right],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert merge.returncode != 0
+    artifact.write_text("left\n", encoding="utf-8")
+    _commit_all(repo_root, "left merge resolution")
+    left_merge = _git(repo_root, "rev-parse", "HEAD")
+
+    _git(repo_root, "checkout", "-q", "right")
+    merge = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", left],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert merge.returncode != 0
+    artifact.write_text("right\n", encoding="utf-8")
+    _commit_all(repo_root, "right merge resolution")
+    right_merge = _git(repo_root, "rev-parse", "HEAD")
+
+    merge_bases = set(_git(repo_root, "merge-base", "--all", left_merge, right_merge).splitlines())
+    assert merge_bases == {left, right}
+
+    _git(repo_root, "checkout", "-q", "-b", "combined", left_merge)
+    merge = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", right_merge],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    assert merge.returncode != 0
+    artifact.write_text("left\n", encoding="utf-8")
+    _commit_all(repo_root, "combined merge resolution")
+    combined = _git(repo_root, "rev-parse", "HEAD")
+    result_paths_by_parent = [set(tasks_shared._kitty_specs_paths_changed(repo_root, parent, combined) or ()) for parent in (left_merge, right_merge)]
+
+    assert (
+        _merge_commit_authored_kitty_specs_paths(
+            repo_root,
+            (left_merge, right_merge),
+            result_paths_by_parent,
+        )
+        is None
+    )
+
+
+def test_ambiguous_planning_merge_base_is_rejected_by_move_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(tmp_path, monkeypatch)
+    mission_dir = repo_root / "kitty-specs" / mission_slug
+    mission_meta = json.loads((mission_dir / "meta.json").read_text(encoding="utf-8"))
+    planning_ref = str(mission_meta["target_branch"])
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.planning_commit_sha is not None
+    assert context.base_commit is not None
+
+    plan_path = mission_dir / "plan.md"
+    plan_path.write_text(plan_path.read_text(encoding="utf-8") + "\nPlanning-side criss-cross commit.\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: create criss-cross side")
+    planning_side = _git(repo_root, "rev-parse", "HEAD")
+
+    lane_side = _git(lane_worktree, "rev-parse", "HEAD")
+
+    _git(repo_root, "merge", "--no-edit", "--no-ff", lane_side)
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", planning_side)
+    assert _criss_cross_merge_bases(lane_worktree, planning_ref) == {planning_side, lane_side}
+    planning_snapshots = _trusted_handoff_snapshots(
+        lane_worktree,
+        planning_ref,
+        context.planning_commit_sha,
+        context.base_commit,
+        str(mission_meta["coordination_branch"]),
+    )
+    assert planning_snapshots is None
+
+    monkeypatch.chdir(repo_root)
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "could not verify" in result.output.lower()
+    assert "No handoff was made" in result.output
+
+
+@pytest.mark.parametrize("failure_mode", ["os-error", "timeout"])
+def test_unpinned_planning_snapshot_git_failure_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_mode: str,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(tmp_path, monkeypatch)
+    mission_meta = json.loads((repo_root / "kitty-specs" / mission_slug / "meta.json").read_text(encoding="utf-8"))
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.base_commit is not None
+    planning_ref = str(mission_meta["target_branch"])
+    coordination_ref = str(mission_meta["coordination_branch"])
+    original_run = subprocess.run
+
+    def fail_shared_snapshot(args, **kwargs):
+        if args[:3] == ["git", "merge-base", "--all"] and args[3] == "HEAD":
+            if failure_mode == "timeout":
+                raise subprocess.TimeoutExpired(args, timeout=30)
+            raise OSError("merge-base is unavailable")
+        return original_run(args, **kwargs)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(subprocess, "run", fail_shared_snapshot)
+        snapshots = _trusted_handoff_snapshots(
+            lane_worktree,
+            planning_ref,
+            None,
+            context.base_commit,
+            coordination_ref,
+        )
+
+    assert snapshots is None
+
+
+def test_ambiguous_coordination_merge_base_is_untrusted(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(tmp_path, monkeypatch)
+    mission_dir = repo_root / "kitty-specs" / mission_slug
+    mission_meta = json.loads((mission_dir / "meta.json").read_text(encoding="utf-8"))
+    planning_ref = str(mission_meta["target_branch"])
+    coordination_ref = str(mission_meta["coordination_branch"])
+    mission_id = str(mission_meta["mission_id"])
+    coord_worktree = CoordinationWorkspace.worktree_path(repo_root, mission_slug, mission_id[:8])
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.planning_commit_sha is not None
+    assert context.base_commit is not None
+    planning_side = context.planning_commit_sha
+
+    anchor_path = coord_worktree / "src" / "coordination_history_anchor.py"
+    anchor_path.parent.mkdir(parents=True, exist_ok=True)
+    anchor_path.write_text("def coordination_anchor() -> None:\n    pass\n", encoding="utf-8")
+    _commit_all(coord_worktree, "coord: create criss-cross side")
+    coordination_side = _git(coord_worktree, "rev-parse", "HEAD")
+    _git(coord_worktree, "merge", "--no-edit", "--no-ff", planning_side)
+
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", coordination_side)
+
+    assert _criss_cross_merge_bases(lane_worktree, coordination_ref) == {planning_side, coordination_side}
+    assert (
+        _trusted_handoff_snapshots(
+            lane_worktree,
+            planning_ref,
+            context.planning_commit_sha,
+            context.base_commit,
+            coordination_ref,
+        )
+        is None
+    )
+
+
 def _authored_paths_for_handoff(
     repo_root: Path,
     mission_slug: str,
@@ -568,22 +1040,134 @@ def _authored_paths_for_handoff(
     context = load_context(repo_root, lane_worktree.name)
     assert context is not None and context.base_commit is not None
     primary_meta = json.loads((repo_root / "kitty-specs" / mission_slug / "meta.json").read_text(encoding="utf-8"))
+    planning_ref = _git(repo_root, "branch", "--show-current")
+    coordination_ref = str(primary_meta["coordination_branch"])
     snapshots = _trusted_handoff_snapshots(
         lane_worktree,
-        _git(repo_root, "branch", "--show-current"),
+        planning_ref,
         context.planning_commit_sha,
         context.base_commit,
-        str(primary_meta["coordination_branch"]),
+        coordination_ref,
     )
     assert snapshots is not None and snapshots[2] is not None
-    return _lane_authored_kitty_specs_paths(
-        lane_worktree,
-        context.base_commit,
-        tuple(snapshot for snapshot in snapshots if snapshot is not None),
+    candidate_paths = tasks_shared._kitty_specs_paths_changed(lane_worktree, context.base_commit, "HEAD")
+    assert candidate_paths is not None
+    return (
+        _lane_authored_kitty_specs_paths(
+            lane_worktree,
+            context.base_commit,
+            tuple(snapshot for snapshot in snapshots if snapshot is not None),
+            mission_slug=mission_slug,
+            planning_pin=snapshots[0],
+            planning_ref=planning_ref,
+            coordination_snapshot=snapshots[2],
+            coordination_ref=coordination_ref,
+            candidate_paths=candidate_paths,
+        )
+        or ()
+    )
+
+
+@pytest.mark.parametrize(
+    ("failure_mode", "mission_slug", "planning_pin", "coordination_snapshot"),
+    [
+        ("invalid-mission-slug", "unsafe/nested", "planning-pin", "coord-snapshot"),
+        ("missing-planning-pin", "safe-mission", None, "coord-snapshot"),
+        ("missing-coordination-snapshot", "safe-mission", "planning-pin", None),
+        ("untrusted-coordination-snapshot", "safe-mission", "planning-pin", "coord-snapshot"),
+    ],
+)
+def test_status_snapshot_replay_fails_closed_for_invalid_replay_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_mode: str,
+    mission_slug: str,
+    planning_pin: str | None,
+    coordination_snapshot: str | None,
+) -> None:
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+
+    def fake_run(args, **kwargs):
+        if args[:3] == ["git", "rev-list", "--parents"]:
+            return subprocess.CompletedProcess(args, 0, stdout="lane-merge parent-a parent-b\n", stderr="")
+        if args[:3] == ["git", "merge-base", "--all"]:
+            shared = "planning-shared" if args[4] == "planning-history" else "coord-snapshot"
+            return subprocess.CompletedProcess(args, 0, stdout=f"{shared}\n", stderr="")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        tasks_shared,
+        "_lane_commit_authored_kitty_specs_paths",
+        lambda _worktree, _commit, _parents: (status_path,),
+    )
+    monkeypatch.setattr(tasks_shared, "_commit_is_post_fork_lane_ancestor", lambda *_args: True)
+    monkeypatch.setattr(
+        tasks_shared,
+        "_commit_in_trusted_snapshots",
+        lambda _worktree, commit, _snapshots: commit == "coord-snapshot" and failure_mode != "untrusted-coordination-snapshot",
+    )
+
+    derived_status_paths: set[str] = set()
+    authored_paths = _lane_authored_kitty_specs_paths(
+        tmp_path,
+        "fork",
+        (),
         mission_slug=mission_slug,
-        planning_pin=snapshots[0],
-        coordination_snapshot=snapshots[2],
-    ) or ()
+        planning_pin=planning_pin,
+        merged_planning_tip="planning-history",
+        coordination_snapshot=coordination_snapshot,
+        derived_status_paths=derived_status_paths,
+    )
+
+    assert authored_paths == (status_path,)
+    assert status_path not in derived_status_paths
+
+
+@pytest.mark.parametrize("failure_mode", ["missing-refs", "missing-tip", "unresolved-snapshot", "mismatched-snapshot"])
+def test_final_status_replay_fails_closed_when_refs_cannot_be_verified(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_mode: str,
+) -> None:
+    mission_slug = "safe-mission"
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+    planning_ref = None if failure_mode == "missing-refs" else "planning-ref"
+
+    def fake_run(args, **kwargs):
+        if args[:3] == ["git", "rev-list", "--parents"]:
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        if args[:3] == ["git", "merge-base", "--all"]:
+            if failure_mode == "unresolved-snapshot":
+                return subprocess.CompletedProcess(args, 1, stdout="", stderr="missing shared snapshot")
+            shared = "different-planning" if args[4] == "planning-tip" else "different-coordination"
+            return subprocess.CompletedProcess(args, 0, stdout=f"{shared}\n", stderr="")
+        raise AssertionError(args)
+
+    def fake_capture_branch_tip(_worktree: Path, branch: str) -> str | None:
+        if failure_mode == "missing-tip" and branch == "planning-ref":
+            return None
+        return "planning-tip" if branch == "planning-ref" else "coordination-tip"
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks_shared, "capture_branch_tip", fake_capture_branch_tip)
+
+    derived_status_paths = {status_path}
+    authored_paths = _lane_authored_kitty_specs_paths(
+        tmp_path,
+        "fork",
+        (),
+        mission_slug=mission_slug,
+        planning_pin="planning-pin",
+        planning_ref=planning_ref,
+        merged_planning_tip="expected-planning",
+        coordination_snapshot="expected-coordination",
+        coordination_ref="coordination-ref",
+        derived_status_paths=derived_status_paths,
+    )
+
+    assert authored_paths == ()
+    assert derived_status_paths == set()
 
 
 def test_status_snapshot_replay_fails_closed_without_verifiable_events(
@@ -628,6 +1212,43 @@ def test_status_snapshot_replay_fails_closed_without_verifiable_events(
             lane_worktree,
         )
         assert status_path in authored_paths
+
+
+@pytest.mark.parametrize("failure_mode", ["ambiguous", "timeout"])
+def test_status_snapshot_replay_fails_closed_without_unique_merge_base(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_mode: str,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        coordination_updates_after_lane_base=True,
+        stale_coordination_status_snapshot=True,
+        refresh_status_snapshot_after_coord_merge=True,
+    )
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+    original_run = subprocess.run
+    merge_base_calls = 0
+    head_merge_base_calls = 0
+
+    def untrusted_merge_base(args, **kwargs):
+        nonlocal head_merge_base_calls, merge_base_calls
+        if args[:3] == ["git", "merge-base", "--all"] and args[3] == "HEAD":
+            head_merge_base_calls += 1
+            if head_merge_base_calls > 2:
+                merge_base_calls += 1
+                if failure_mode == "timeout":
+                    raise subprocess.TimeoutExpired(args, timeout=30)
+                return subprocess.CompletedProcess(args, 0, stdout=f"{'a' * 40}\n{'b' * 40}\n", stderr="")
+        return original_run(args, **kwargs)
+
+    with monkeypatch.context() as patcher:
+        patcher.setattr(subprocess, "run", untrusted_merge_base)
+        authored_paths = _authored_paths_for_handoff(repo_root, mission_slug, lane_worktree)
+
+    assert merge_base_calls > 0
+    assert status_path in authored_paths
 
 
 def test_lane_authored_status_snapshot_mutation_is_rejected(
@@ -700,6 +1321,431 @@ def test_recorded_p1_plan_stays_clean_after_planning_target_advances_to_p2(tmp_p
     result = _move_for_review(repo_root, mission_slug)
 
     assert result.exit_code == 0, result.output
+
+
+def test_merged_p2_plan_stays_trusted_after_planning_target_advances_to_p3(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(tmp_path, monkeypatch)
+    primary_dir = repo_root / "kitty-specs" / mission_slug
+    mission_meta = json.loads((primary_dir / "meta.json").read_text(encoding="utf-8"))
+    planning_ref = str(mission_meta["target_branch"])
+    planning_path = f"kitty-specs/{mission_slug}/plan.md"
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.base_commit is not None
+    assert context.planning_commit_sha is not None
+    p1 = context.planning_commit_sha
+
+    plan_path = repo_root / planning_path
+    plan_path.write_text(plan_path.read_text(encoding="utf-8") + "\nPlanning branch P2 before lane handoff.\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: advance to P2 before handoff")
+    p2 = _git(repo_root, "rev-parse", "HEAD")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", p2)
+
+    plan_path.write_text(plan_path.read_text(encoding="utf-8") + "\nPlanning branch P3 before lane handoff.\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: advance to P3 before handoff")
+    p3 = _git(repo_root, "rev-parse", "HEAD")
+
+    # Pin P1 at claim, merge the authoritative P2 into the lane, then move
+    # the planning branch to P3 while the lane remains at P2.
+    assert context.planning_commit_sha == p1
+    assert _git(repo_root, "merge-base", planning_ref, p2) == p2
+    assert _git(repo_root, "merge-base", p1, p2) == p1
+    assert _git(repo_root, "merge-base", p2, p3) == p2
+    assert _git(lane_worktree, "merge-base", "HEAD", p2) == p2
+    assert _git(lane_worktree, "merge-base", "HEAD", p3) == p2
+    assert _git(repo_root, "show", f"{p2}:{planning_path}") != _git(repo_root, "show", f"{p1}:{planning_path}")
+
+    trusted_snapshots = _trusted_handoff_snapshots(
+        lane_worktree,
+        planning_ref,
+        p1,
+        context.base_commit,
+        str(mission_meta["coordination_branch"]),
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code == 0, result.output
+    assert trusted_snapshots is not None
+    assert trusted_snapshots[0] == p1
+    assert trusted_snapshots[1] == p2
+
+
+def test_p2_meta_canonical_status_refresh_stays_trusted_after_planning_advances_to_p3(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        stale_coordination_status_snapshot=True,
+    )
+    mission_dir = repo_root / "kitty-specs" / mission_slug
+    meta_path = f"kitty-specs/{mission_slug}/meta.json"
+    meta_file = mission_dir / "meta.json"
+    mission_meta = json.loads(meta_file.read_text(encoding="utf-8"))
+    planning_ref = str(mission_meta["target_branch"])
+    coordination_ref = str(mission_meta["coordination_branch"])
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.base_commit is not None
+    assert context.planning_commit_sha is not None
+    p1 = context.planning_commit_sha
+    p1_meta = _git_bytes(repo_root, "show", f"{p1}:{meta_path}")
+
+    mission_meta["planning_revision"] = "P2"
+    meta_file.write_text(json.dumps(mission_meta, indent=2) + "\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: update metadata to P2")
+    p2 = _git(repo_root, "rev-parse", "HEAD")
+    p2_meta = _git_bytes(repo_root, "show", f"{p2}:{meta_path}")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", p2)
+    assert _git_bytes(lane_worktree, "show", f"HEAD:{meta_path}") == p2_meta
+
+    mission_id = str(mission_meta["mission_id"])
+    coord_worktree = CoordinationWorkspace.worktree_path(repo_root, mission_slug, mission_id[:8])
+    coord_dir = coord_worktree / "kitty-specs" / mission_slug
+    refresh_event_id = "01KXQB5J00H5M8S6X6AEY12345"
+    append_event(
+        coord_dir,
+        StatusEvent(
+            event_id=refresh_event_id,
+            mission_slug=mission_slug,
+            mission_id=mission_id,
+            wp_id="WP01",
+            from_lane=Lane.PLANNED,
+            to_lane=Lane.IN_PROGRESS,
+            at="2026-09-28T13:00:00+00:00",
+            actor="test-runner",
+            force=False,
+            execution_mode="worktree",
+            reason="refresh status after P2 metadata merge",
+        ),
+    )
+    _commit_all(coord_worktree, "coord: append status event after P2 metadata merge")
+    coordination_status_tip = _git(coord_worktree, "rev-parse", "HEAD")
+
+    merge_result = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", coordination_ref],
+        cwd=lane_worktree,
+        capture_output=True,
+        text=True,
+    )
+    assert merge_result.returncode == 0, merge_result.stdout + merge_result.stderr
+    lane_mission_dir = lane_worktree / "kitty-specs" / mission_slug
+    materialize(lane_mission_dir)
+    _git(lane_worktree, "add", "-A")
+    _git(lane_worktree, "commit", "-q", "-m", "Merge canonical coordination refresh after P2")
+    coordination_merge = _git(lane_worktree, "rev-parse", "HEAD")
+    coordination_merge_parents = _git(lane_worktree, "show", "-s", "--format=%P", coordination_merge).split()
+    refreshed_status = json.loads(_git(lane_worktree, "show", f"{coordination_merge}:kitty-specs/{mission_slug}/status.json"))
+    assert coordination_status_tip in coordination_merge_parents
+    assert refreshed_status["last_event_id"] == refresh_event_id
+    assert _git_bytes(lane_worktree, "show", f"{coordination_merge}:{meta_path}") == p2_meta
+    assert p2_meta != p1_meta
+
+    plan_path = mission_dir / "plan.md"
+    plan_path.write_text(plan_path.read_text(encoding="utf-8") + "\nPlanning branch P3 before handoff.\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: advance to P3 after coordination refresh")
+    p3 = _git(repo_root, "rev-parse", "HEAD")
+    trusted_snapshots = _trusted_handoff_snapshots(
+        lane_worktree,
+        planning_ref,
+        p1,
+        context.base_commit,
+        coordination_ref,
+    )
+
+    assert context.planning_commit_sha == p1
+    assert _git(repo_root, "merge-base", planning_ref, p2) == p2
+    assert _git(repo_root, "merge-base", p1, p2) == p1
+    assert _git(repo_root, "merge-base", p2, p3) == p2
+    assert _git(lane_worktree, "merge-base", "HEAD", p2) == p2
+    assert _git(lane_worktree, "merge-base", "HEAD", p3) == p2
+    assert _git(lane_worktree, "merge-base", "HEAD", coordination_status_tip) == coordination_status_tip
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code == 0, result.output
+    assert trusted_snapshots is not None
+    assert trusted_snapshots[0] == p1
+    assert trusted_snapshots[1] == p2
+    assert trusted_snapshots[2] == coordination_status_tip
+
+
+def test_flat_primary_status_replay_accepts_planning_merge_and_rejects_lane_edit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug = _build_mission_repo(
+        tmp_path,
+        monkeypatch,
+        coord=False,
+        mission_slug="issue-5151-flat-status",
+        wp_lane="planned",
+    )
+    mission_dir = repo_root / "kitty-specs" / mission_slug
+    mission_meta = json.loads((mission_dir / "meta.json").read_text(encoding="utf-8"))
+    mission_id = str(mission_meta["mission_id"])
+    planning_ref = str(mission_meta["target_branch"])
+    append_event(
+        mission_dir,
+        StatusEvent(
+            event_id="01KXQB5J00H5M8S6X6AEY12349",
+            mission_slug=mission_slug,
+            mission_id=mission_id,
+            wp_id="WP01",
+            from_lane=Lane.PLANNED,
+            to_lane=Lane.IN_PROGRESS,
+            at="2026-09-28T12:00:00+00:00",
+            actor="test-runner",
+            force=False,
+            execution_mode="worktree",
+            reason="seed flat mission status at fork",
+        ),
+    )
+    materialize(mission_dir)
+    _commit_all(repo_root, "planning: seed flat mission status")
+    fork_commit = _git(repo_root, "rev-parse", "HEAD")
+
+    lane_branch = lane_branch_name(mission_slug, "lane-a")
+    lane_worktree = lane_worktree_path(repo_root, mission_slug, "lane-a")
+    _git(repo_root, "worktree", "add", "-b", lane_branch, str(lane_worktree), fork_commit)
+
+    mission_meta["mission_type"] = "research"
+    (mission_dir / "meta.json").write_text(json.dumps(mission_meta, indent=2) + "\n", encoding="utf-8")
+    materialize(mission_dir)
+    _commit_all(repo_root, "planning: update flat status after metadata change")
+    planning_p2 = _git(repo_root, "rev-parse", "HEAD")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", planning_p2)
+
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+    merged_status = json.loads(_git(lane_worktree, "show", f"HEAD:{status_path}"))
+    assert merged_status["mission_type"] == "research"
+    inherited_changes = _list_wp_branch_mission_specs_changes(
+        lane_worktree,
+        planning_ref,
+        planning_base_branch=planning_ref,
+        workspace_base_commit=fork_commit,
+        planning_commit_sha=fork_commit,
+        coordination_ref=None,
+        mission_slug=mission_slug,
+    )
+    assert inherited_changes == []
+
+    status_file = lane_worktree / status_path
+    status = json.loads(status_file.read_text(encoding="utf-8"))
+    status["summary"]["done"] = 99
+    status_file.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    _commit_all(lane_worktree, "lane: tamper with inherited primary status")
+
+    authored_changes = _list_wp_branch_mission_specs_changes(
+        lane_worktree,
+        planning_ref,
+        planning_base_branch=planning_ref,
+        workspace_base_commit=fork_commit,
+        planning_commit_sha=fork_commit,
+        coordination_ref=None,
+        mission_slug=mission_slug,
+    )
+    assert authored_changes == [status_path]
+
+
+def test_repeated_planning_and_coordination_refreshes_replay_per_commit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        stale_coordination_status_snapshot=True,
+    )
+    mission_dir = repo_root / "kitty-specs" / mission_slug
+    meta_path = f"kitty-specs/{mission_slug}/meta.json"
+    events_path = f"kitty-specs/{mission_slug}/status.events.jsonl"
+    status_path = f"kitty-specs/{mission_slug}/status.json"
+    meta_file = mission_dir / "meta.json"
+    mission_meta = json.loads(meta_file.read_text(encoding="utf-8"))
+    planning_ref = str(mission_meta["target_branch"])
+    coordination_ref = str(mission_meta["coordination_branch"])
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.base_commit is not None
+    assert context.planning_commit_sha is not None
+    p1 = context.planning_commit_sha
+    p1_meta = _git_bytes(repo_root, "show", f"{p1}:{meta_path}")
+
+    mission_meta["planning_revision"] = "P2"
+    meta_file.write_text(json.dumps(mission_meta, indent=2) + "\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: update metadata to P2")
+    p2 = _git(repo_root, "rev-parse", "HEAD")
+    p2_meta = _git_bytes(repo_root, "show", f"{p2}:{meta_path}")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", p2)
+
+    mission_id = str(mission_meta["mission_id"])
+    coord_worktree = CoordinationWorkspace.worktree_path(repo_root, mission_slug, mission_id[:8])
+    coord_dir = coord_worktree / "kitty-specs" / mission_slug
+    c2_event_id = "01KXQB5J00H5M8S6X6AEY12345"
+    append_event(
+        coord_dir,
+        StatusEvent(
+            event_id=c2_event_id,
+            mission_slug=mission_slug,
+            mission_id=mission_id,
+            wp_id="WP01",
+            from_lane=Lane.PLANNED,
+            to_lane=Lane.IN_PROGRESS,
+            at="2026-09-28T13:00:00+00:00",
+            actor="test-runner",
+            force=False,
+            execution_mode="worktree",
+            reason="refresh status from coordination C2",
+        ),
+    )
+    _commit_all(coord_worktree, "coord: append C2 status event")
+    c2 = _git(coord_worktree, "rev-parse", "HEAD")
+
+    c2_merge_result = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", coordination_ref],
+        cwd=lane_worktree,
+        capture_output=True,
+        text=True,
+    )
+    assert c2_merge_result.returncode == 0, c2_merge_result.stdout + c2_merge_result.stderr
+    lane_mission_dir = lane_worktree / "kitty-specs" / mission_slug
+    materialize(lane_mission_dir)
+    _git(lane_worktree, "add", "-A")
+    _git(lane_worktree, "commit", "-q", "-m", "Merge canonical coordination C2 refresh")
+    c2_lane_refresh = _git(lane_worktree, "rev-parse", "HEAD")
+    c2_lane_parents = _git(lane_worktree, "show", "-s", "--format=%P", c2_lane_refresh).split()
+
+    mission_meta["planning_revision"] = "P3"
+    meta_file.write_text(json.dumps(mission_meta, indent=2) + "\n", encoding="utf-8")
+    plan_path = mission_dir / "plan.md"
+    plan_path.write_text(plan_path.read_text(encoding="utf-8") + "\nPlanning branch P3 before C3.\n", encoding="utf-8")
+    _commit_all(repo_root, "planning: advance to P3")
+    p3 = _git(repo_root, "rev-parse", "HEAD")
+    p3_meta = _git_bytes(repo_root, "show", f"{p3}:{meta_path}")
+    _git(lane_worktree, "merge", "--no-edit", "--no-ff", p3)
+
+    c3_event_id = "01KXQB5J00H5M8S6X6AEY12346"
+    append_event(
+        coord_dir,
+        StatusEvent(
+            event_id=c3_event_id,
+            mission_slug=mission_slug,
+            mission_id=mission_id,
+            wp_id="WP01",
+            from_lane=Lane.PLANNED,
+            to_lane=Lane.IN_PROGRESS,
+            at="2026-09-28T14:00:00+00:00",
+            actor="test-runner",
+            force=False,
+            execution_mode="worktree",
+            reason="refresh status from coordination C3",
+        ),
+    )
+    _commit_all(coord_worktree, "coord: append C3 status event")
+    c3 = _git(coord_worktree, "rev-parse", "HEAD")
+    c3_merge_result = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", coordination_ref],
+        cwd=lane_worktree,
+        capture_output=True,
+        text=True,
+    )
+    assert c3_merge_result.returncode == 0, c3_merge_result.stdout + c3_merge_result.stderr
+    materialize(lane_mission_dir)
+    _git(lane_worktree, "add", "-A")
+    _git(lane_worktree, "commit", "-q", "-m", "Merge canonical coordination C3 refresh")
+    c3_lane_refresh = _git(lane_worktree, "rev-parse", "HEAD")
+    c3_lane_parents = _git(lane_worktree, "show", "-s", "--format=%P", c3_lane_refresh).split()
+
+    c2_refreshed_status = json.loads(_git(lane_worktree, "show", f"{c2_lane_refresh}:{status_path}"))
+    c3_refreshed_status = json.loads(_git(lane_worktree, "show", f"{c3_lane_refresh}:{status_path}"))
+    assert c2 in c2_lane_parents
+    assert c3 in c3_lane_parents
+    assert _git_bytes(lane_worktree, "show", f"{c2_lane_refresh}:{meta_path}") == p2_meta
+    assert _git_bytes(lane_worktree, "show", f"{c2_lane_refresh}:{events_path}") == _git_bytes(coord_worktree, "show", f"{c2}:{events_path}")
+    assert c2_refreshed_status["last_event_id"] == c2_event_id
+    assert _git_bytes(lane_worktree, "show", f"{c3_lane_refresh}:{meta_path}") == p3_meta
+    assert _git_bytes(lane_worktree, "show", f"{c3_lane_refresh}:{events_path}") == _git_bytes(coord_worktree, "show", f"{c3}:{events_path}")
+    assert c3_refreshed_status["last_event_id"] == c3_event_id
+    assert p1_meta != p2_meta and p2_meta != p3_meta
+
+    trusted_snapshots = _trusted_handoff_snapshots(
+        lane_worktree,
+        planning_ref,
+        p1,
+        context.base_commit,
+        coordination_ref,
+    )
+    assert trusted_snapshots is not None
+    assert _git(repo_root, "merge-base", p1, p2) == p1
+    assert _git(repo_root, "merge-base", p2, p3) == p2
+    assert _git(lane_worktree, "merge-base", c2_lane_refresh, p3) == p2
+    assert _git(lane_worktree, "merge-base", c2_lane_refresh, c3) == c2
+    assert _git(lane_worktree, "merge-base", c3_lane_refresh, p3) == p3
+    assert _git(lane_worktree, "merge-base", c3_lane_refresh, c3) == c3
+    assert trusted_snapshots[0] == p1
+    assert trusted_snapshots[1] == p3
+    assert trusted_snapshots[2] == c3
+
+    authored_paths = _lane_authored_kitty_specs_paths(
+        lane_worktree,
+        context.base_commit,
+        tuple(snapshot for snapshot in trusted_snapshots if snapshot is not None),
+        mission_slug=mission_slug,
+        planning_pin=trusted_snapshots[0],
+        planning_ref=planning_ref,
+        merged_planning_tip=trusted_snapshots[1],
+        coordination_snapshot=trusted_snapshots[2],
+        coordination_ref=coordination_ref,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code == 0, result.output
+    assert authored_paths is not None
+    assert status_path not in authored_paths
+
+
+def test_reachable_lane_authored_plan_pin_fails_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    repo_root, mission_slug, lane_worktree, changed_paths = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        lane_edit="plan",
+        planning_drift_after_lane_merge=True,
+    )
+    planning_path = f"kitty-specs/{mission_slug}/plan.md"
+    assert changed_paths == [planning_path]
+
+    context = load_context(repo_root, lane_worktree.name)
+    assert context is not None and context.base_commit is not None
+    lane_authored_pin = _git(lane_worktree, "rev-parse", "HEAD")
+    assert (
+        planning_path
+        in _git(
+            lane_worktree,
+            "diff-tree",
+            "--no-commit-id",
+            "--name-only",
+            "-r",
+            lane_authored_pin,
+        ).splitlines()
+    )
+    assert _git(lane_worktree, "merge-base", context.base_commit, lane_authored_pin) != lane_authored_pin
+    assert _git(lane_worktree, "merge-base", "HEAD", lane_authored_pin) == lane_authored_pin
+
+    save_context(repo_root, replace(context, planning_commit_sha=lane_authored_pin))
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "could not verify" in result.output.lower()
+    assert "No handoff was made" in result.output
 
 
 @pytest.mark.parametrize(

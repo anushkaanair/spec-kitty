@@ -52,6 +52,12 @@ from specify_cli.cli.commands.agent.tasks_outline import TaskIdResolutionOutcome
 from specify_cli.cli.commands.agent.tasks_parsing_validation import (
     _validate_ready_for_review as _seam_validate_ready_for_review,
 )
+from specify_cli.cli.commands.agent.tasks_handoff import (
+    _canonical_final_head_status_replay,
+    _lane_commit_handoff_paths,
+    _lane_history_commits,
+    _unique_shared_snapshot,
+)
 from specify_cli.cli.selector_resolution import resolve_mission_handle
 from specify_cli.core.constants import KITTY_SPECS_DIR, is_occurrence_map_path
 from specify_cli.core.vcs.git import capture_branch_tip, git_diff_names_checked, git_merge_base
@@ -742,10 +748,15 @@ def _trusted_handoff_snapshots(
         return None
     recorded_pin = planning_commit_sha
     if recorded_pin is None:
-        recorded_pin = git_merge_base(worktree_path, "HEAD", planning_tip)
+        recorded_pin = _unique_shared_snapshot(worktree_path, "HEAD", planning_tip)
         if recorded_pin is None or not _commit_is_post_fork_lane_ancestor(worktree_path, recorded_pin, workspace_base_commit):
             return None
     else:
+        # A context pin names planning provenance only when the authoritative
+        # planning branch contains that exact commit. Lane reachability alone
+        # cannot turn a lane-authored planning edit into a trusted snapshot.
+        if git_merge_base(worktree_path, planning_tip, recorded_pin) != recorded_pin:
+            return None
         # A fresh lane may start at its immutable claim-time planning pin (or a
         # later commit that already contains it). The explicit workspace pin
         # remains trustworthy in that topology even though no post-fork merge
@@ -757,13 +768,20 @@ def _trusted_handoff_snapshots(
         if git_merge_base(worktree_path, "HEAD", recorded_pin) != recorded_pin:
             return None
 
-    merged_planning_tip = planning_tip if _commit_is_post_fork_lane_ancestor(worktree_path, planning_tip, workspace_base_commit) else None
+    # Trust the newest authoritative planning snapshot shared by this lane and
+    # the planning ref. The planning ref may have advanced past a merged P2 to
+    # P3 before handoff, so its current tip need not be present in the lane.
+    merged_planning_tip = _unique_shared_snapshot(worktree_path, "HEAD", planning_tip)
+    if merged_planning_tip is None:
+        return None
+    if merged_planning_tip is not None and not _commit_is_post_fork_lane_ancestor(worktree_path, merged_planning_tip, workspace_base_commit):
+        merged_planning_tip = None
     coordination_snapshot = None
     if coordination_ref is not None:
         coordination_tip = capture_branch_tip(worktree_path, coordination_ref)
         if coordination_tip is None:
             return None
-        snapshot = git_merge_base(worktree_path, "HEAD", coordination_tip)
+        snapshot = _unique_shared_snapshot(worktree_path, "HEAD", coordination_tip)
         if snapshot is None:
             return None
         if _commit_is_post_fork_lane_ancestor(worktree_path, snapshot, workspace_base_commit):
@@ -791,7 +809,7 @@ def _merge_commit_authored_kitty_specs_paths(
     parents: tuple[str, ...],
     result_paths_by_parent: list[set[str]],
 ) -> tuple[str, ...] | None:
-    merge_base = git_merge_base(worktree_path, parents[0], parents[1])
+    merge_base = _unique_shared_snapshot(worktree_path, parents[0], parents[1])
     if merge_base is None:
         return None
     parent_changes: list[set[str]] = []
@@ -845,8 +863,12 @@ def _lane_authored_kitty_specs_paths(
     *,
     mission_slug: str | None = None,
     planning_pin: str | None = None,
+    planning_ref: str | None = None,
+    merged_planning_tip: str | None = None,
     coordination_snapshot: str | None = None,
+    coordination_ref: str | None = None,
     derived_status_paths: set[str] | None = None,
+    candidate_paths: set[str] | None = None,
 ) -> tuple[str, ...] | None:
     """List kitty-specs paths touched by lane-history commits outside trust.
 
@@ -856,114 +878,55 @@ def _lane_authored_kitty_specs_paths(
     visible too. Commits already present in exact planning or coordination
     snapshots are inherited; remaining changes represent lane path touches.
     """
-    from specify_cli.cli.commands.agent import tasks as _tasks
-
-    derived_status_paths = derived_status_paths if derived_status_paths is not None else set()
-
-    def _canonical_status_replay(commit: str) -> bool:
-        if (
-            not mission_slug
-            or mission_slug in {".", ".."}
-            or Path(mission_slug).name != mission_slug
-            or planning_pin is None
-            or coordination_snapshot is None
-        ):
-            return False
-
-        def _committed_blob(ref: str, path: str) -> bytes | None:
-            try:
-                result = _tasks.subprocess.run(
-                    ["git", "show", f"{ref}:{path}"],
-                    cwd=str(worktree_path),
-                    capture_output=True,
-                    check=False,
-                    timeout=30,
-                )
-            except (OSError, _tasks.subprocess.TimeoutExpired):
-                return None
-            return result.stdout if result.returncode == 0 else None
-
-        mission_dir = f"{KITTY_SPECS_DIR}/{mission_slug}"
-        events_path = f"{mission_dir}/status.events.jsonl"
-        status_path = f"{mission_dir}/status.json"
-        meta_path = f"{mission_dir}/meta.json"
-        coordination_events = _committed_blob(coordination_snapshot, events_path)
-        result_events = _committed_blob(commit, events_path)
-        coordination_status = _committed_blob(coordination_snapshot, status_path)
-        result_status = _committed_blob(commit, status_path)
-        pinned_meta = _committed_blob(planning_pin, meta_path)
-        result_meta = _committed_blob(commit, meta_path)
-        if (
-            coordination_events is None
-            or result_events != coordination_events
-            or coordination_status is None
-            or result_status is None
-            or pinned_meta is None
-            or result_meta != pinned_meta
-        ):
-            return False
-
-        from tempfile import TemporaryDirectory
-
-        from specify_cli.status.reducer import materialize_snapshot, materialize_to_json
-
-        try:
-            with TemporaryDirectory(prefix="spec-kitty-handoff-status-") as temp_dir:
-                feature_dir = Path(temp_dir) / mission_slug
-                feature_dir.mkdir()
-                (feature_dir / "status.events.jsonl").write_bytes(coordination_events)
-                (feature_dir / "status.json").write_bytes(coordination_status)
-                (feature_dir / "meta.json").write_bytes(pinned_meta)
-                expected = cast(str, materialize_to_json(materialize_snapshot(feature_dir))).encode(
-                    "utf-8"
-                )
-        except Exception as exc:  # noqa: BLE001 -- unverifiable replay must not authorize handoff
-            logger.debug("Could not replay canonical handoff status snapshot: %s", exc)
-            return False
-        return result_status == expected
-
-    try:
-        result = _tasks.subprocess.run(
-            ["git", "rev-list", "--parents", f"{fork_commit}..HEAD"],
-            cwd=str(worktree_path),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            check=False,
-            timeout=30,
-        )
-    except (OSError, _tasks.subprocess.TimeoutExpired):
+    derived_paths = derived_status_paths if derived_status_paths is not None else set()
+    commits = _lane_history_commits(worktree_path, fork_commit)
+    if commits is None:
         return None
-    if result.returncode != 0:
-        return None
-    commits = tuple(tuple(line.split()) for line in result.stdout.splitlines() if line.strip())
-    if any(len(commit) < 2 for commit in commits):
-        return None
-
+    status_snapshot_path = f"{KITTY_SPECS_DIR}/{mission_slug}/status.json" if mission_slug else None
     authored_paths: list[str] = []
     for commit_and_parents in commits:
-        commit, *parents = commit_and_parents
-        inherited = _commit_in_trusted_snapshots(worktree_path, commit, trusted_snapshots)
-        if inherited is None:
+        commit, *parent_items = commit_and_parents
+        parents = tuple(parent_items)
+        outcome = _lane_commit_handoff_paths(
+            worktree_path,
+            fork_commit,
+            commit,
+            parents,
+            trusted_snapshots,
+            status_snapshot_path,
+            mission_slug,
+            planning_pin,
+            merged_planning_tip,
+            coordination_snapshot,
+        )
+        if outcome is None:
             return None
-        if inherited:
-            continue
-        changed_paths = _lane_commit_authored_kitty_specs_paths(worktree_path, commit, tuple(parents))
-        if changed_paths is None:
-            return None
-        status_snapshot_path = f"{KITTY_SPECS_DIR}/{mission_slug}/status.json" if mission_slug else None
-        if (
-            len(parents) == 2
-            and coordination_snapshot is not None
-            and planning_pin is not None
-            and status_snapshot_path in changed_paths
-            and _commit_in_trusted_snapshots(worktree_path, coordination_snapshot, tuple(parents)) is True
-            and _canonical_status_replay(commit)
-        ):
-            derived_status_paths.add(status_snapshot_path)
-            changed_paths = tuple(path for path in changed_paths if path != status_snapshot_path)
+        changed_paths, status_is_derived = outcome
+        if status_is_derived and status_snapshot_path is not None:
+            derived_paths.add(status_snapshot_path)
         authored_paths.extend(changed_paths)
+
+    # Replay final status even when no merge commit changed status.json: a later
+    # event-only merge can leave an inherited snapshot stale without changing it.
+    if status_snapshot_path is not None and not _canonical_final_head_status_replay(
+        worktree_path,
+        fork_commit,
+        mission_slug,
+        planning_pin,
+        planning_ref,
+        merged_planning_tip,
+        coordination_snapshot,
+        coordination_ref,
+        capture_branch_tip,
+    ):
+        derived_paths.discard(status_snapshot_path)
+        status_events_path = f"{KITTY_SPECS_DIR}/{mission_slug}/status.events.jsonl"
+        status_meta_path = f"{KITTY_SPECS_DIR}/{mission_slug}/meta.json"
+        replay_inputs_changed = candidate_paths is not None and (
+            status_snapshot_path in candidate_paths or status_events_path in candidate_paths or status_meta_path in candidate_paths
+        )
+        if replay_inputs_changed and status_snapshot_path not in authored_paths:
+            authored_paths.append(status_snapshot_path)
     return tuple(authored_paths)
 
 
@@ -1134,8 +1097,12 @@ def _list_wp_branch_mission_specs_changes(
             trusted_commits,
             mission_slug=mission_slug,
             planning_pin=trusted_snapshots[0],
+            planning_ref=planning_ref,
+            merged_planning_tip=trusted_snapshots[1],
             coordination_snapshot=trusted_snapshots[2],
+            coordination_ref=coordination_ref,
             derived_status_paths=derived_status_paths,
+            candidate_paths=set(changed),
         )
         if resolved_authored_changes is None:
             return None
