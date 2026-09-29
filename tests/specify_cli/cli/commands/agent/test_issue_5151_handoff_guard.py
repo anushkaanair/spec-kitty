@@ -62,12 +62,28 @@ def _merge_coordination_update(
     force_merge_commit: bool,
     resolve_path_to_pin: str | None = None,
     planning_pin: str | None = None,
+    discard_path_to_pin: str | None = None,
 ) -> None:
     if force_merge_commit:
         (lane_worktree / "src").mkdir(parents=True, exist_ok=True)
         (lane_worktree / "src" / "pre_coord_sync.py").write_text("def anchor() -> None: pass\n", encoding="utf-8")
         _commit_all(lane_worktree, "lane: add pre-sync implementation anchor")
         _git(lane_worktree, "merge", "--no-edit", "--no-ff", coord_tip)
+        assert len(_git(lane_worktree, "show", "-s", "--format=%P", "HEAD").split()) == 2
+        return
+    if discard_path_to_pin is not None:
+        assert planning_pin is not None
+        result = subprocess.run(
+            ["git", "merge", "--no-edit", "--no-commit", "--no-ff", coord_tip],
+            cwd=lane_worktree,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        target_path = lane_worktree / discard_path_to_pin
+        target_path.write_bytes(_git_bytes(lane_worktree, "show", f"{planning_pin}:{discard_path_to_pin}"))
+        _git(lane_worktree, "add", discard_path_to_pin)
+        _git(lane_worktree, "commit", "-q", "-m", "lane: discard coordinator matrix update")
         assert len(_git(lane_worktree, "show", "-s", "--format=%P", "HEAD").split()) == 2
         return
     if resolve_path_to_pin is not None:
@@ -236,6 +252,7 @@ def _build_handoff_repo(
     lane_base_at_planning_pin: bool = False,
     lane_base_at_later_planning_tip: bool = False,
     resolve_coordination_conflict_to_planning_pin: bool = False,
+    discard_coordination_update_to_planning_pin: bool = False,
 ) -> tuple[Path, str, Path, list[str]]:
     """Create a coord-parented lane with a later planning-tip commit.
 
@@ -360,7 +377,10 @@ def _build_handoff_repo(
             coord_tip,
             force_merge_commit=force_coordination_merge_commit,
             resolve_path_to_pin=conflict_path if resolve_coordination_conflict_to_planning_pin else None,
-            planning_pin=recorded_planning_commit if resolve_coordination_conflict_to_planning_pin else None,
+            planning_pin=recorded_planning_commit
+            if resolve_coordination_conflict_to_planning_pin or discard_coordination_update_to_planning_pin
+            else None,
+            discard_path_to_pin=conflict_path if discard_coordination_update_to_planning_pin else None,
         )
     if merge_claim_time_planning_commit:
         _merge_planning_commit(
@@ -519,6 +539,27 @@ def test_conflicted_coordination_merge_cannot_discard_matrix_update_to_p1(
         lane_base_at_planning_pin=True,
         merge_claim_time_planning_commit=False,
         resolve_coordination_conflict_to_planning_pin=True,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "kitty-specs/ changes are not allowed on lane branches" in result.output
+    assert f"kitty-specs/{mission_slug}/acceptance-matrix.json" in result.output
+
+
+def test_one_sided_coordination_merge_cannot_discard_matrix_update_to_p1(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, _lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        coordination_updates_after_lane_base=True,
+        lane_base_at_planning_pin=True,
+        merge_claim_time_planning_commit=False,
+        discard_coordination_update_to_planning_pin=True,
     )
     monkeypatch.chdir(repo_root)
 
