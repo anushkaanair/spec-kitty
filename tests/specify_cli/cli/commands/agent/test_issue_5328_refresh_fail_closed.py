@@ -528,12 +528,15 @@ def test_landed_pin_commit_is_reported_when_index_refresh_fails(
     diagnostic = str(success.get("commit_diagnostic", ""))
     assert "landed" in diagnostic and "index" in diagnostic and landed_sha in diagnostic
     lanes_path = feature_dir / "lanes.json"
-    assert lanes_path.read_bytes() == subprocess.run(
-        ["git", "show", f"{landed_sha}:{lane_path}"],
-        cwd=repo_root,
-        capture_output=True,
-        check=True,
-    ).stdout
+    assert (
+        lanes_path.read_bytes()
+        == subprocess.run(
+            ["git", "show", f"{landed_sha}:{lane_path}"],
+            cwd=repo_root,
+            capture_output=True,
+            check=True,
+        ).stdout
+    )
     lanes_manifest = read_lanes_json(feature_dir)
     assert lanes_manifest is not None and lanes_manifest.planning_commit_sha == initial_tip
     assert _git(repo_root, "rev-parse", coord_branch) == _git(coord_root, "rev-parse", "HEAD")
