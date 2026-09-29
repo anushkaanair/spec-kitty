@@ -377,9 +377,7 @@ def _build_handoff_repo(
             coord_tip,
             force_merge_commit=force_coordination_merge_commit,
             resolve_path_to_pin=conflict_path if resolve_coordination_conflict_to_planning_pin else None,
-            planning_pin=recorded_planning_commit
-            if resolve_coordination_conflict_to_planning_pin or discard_coordination_update_to_planning_pin
-            else None,
+            planning_pin=recorded_planning_commit if resolve_coordination_conflict_to_planning_pin or discard_coordination_update_to_planning_pin else None,
             discard_path_to_pin=conflict_path if discard_coordination_update_to_planning_pin else None,
         )
     if merge_claim_time_planning_commit:
@@ -855,6 +853,21 @@ def test_lane_authorship_octopus_merge_fails_closed(
 
     monkeypatch.setattr("specify_cli.cli.commands.agent.tasks.subprocess.run", _octopus_history)
     monkeypatch.setattr("specify_cli.cli.commands.agent.tasks_shared.git_merge_base", lambda *_args: "not-commit")
+
+    result = _lane_authored_kitty_specs_paths(tmp_path, "fork", ("trusted",))
+
+    assert result is None
+
+
+def test_lane_authorship_missing_trusted_merge_base_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _single_commit_history(args, **_kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout="lane-commit lane-parent\n", stderr="")
+
+    monkeypatch.setattr("specify_cli.cli.commands.agent.tasks.subprocess.run", _single_commit_history)
+    monkeypatch.setattr("specify_cli.cli.commands.agent.tasks_shared.git_merge_base", lambda *_args: None)
 
     result = _lane_authored_kitty_specs_paths(tmp_path, "fork", ("trusted",))
 
