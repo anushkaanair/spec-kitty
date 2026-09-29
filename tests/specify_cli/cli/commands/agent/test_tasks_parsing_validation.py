@@ -1163,7 +1163,7 @@ def test_check_kitty_specs_contamination_blocks_with_planning_branch(tmp_path: P
     text = "\n".join(guidance)
     assert "Committed kitty-specs files on this lane branch:" in text
     assert "Planning artifacts must live on: kitty/plan" in text
-    assert "git show kitty/plan:<listed-path>" in text
+    assert "git show kitty/plan:kitty-specs/demo/spec.md" in text
     assert "Do not restore the entire kitty-specs/ tree" in text
     assert "git restore --source" not in text
 
