@@ -185,7 +185,17 @@ modules:
   # 40-minute per-shard timeout (~25m vs ~32m projected at shard_count=4,
   # which leaves almost no margin) -- not the manual wall-clock/test-count
   # heuristic C-002 rejects as a precedent.
-  shard_count: 5
+  # shard_count=7 (per-PR headroom, unblocks #5383; #5378 discipline): the
+  # measured CI wall-clock outgrew the projection above. Across the charter
+  # shards of ~170 CI Modules runs (2026-09-07..29) the pytest step reached
+  # 36:28 green (run 36563732095, shard 1/5) and was cut off at 38:03 by
+  # the 40m cap (run 36570492217, shard 1/5, PR #5383); shards 2-5 ran
+  # 32-35 min. LPT keeps the shards balanced (skew ~0% at every count), so
+  # 7 shards project the worst shard to ~27 min (38:03 x 5/7) -- under the
+  # old 40m cap even before module-tests.yml's measured 58m cap. The
+  # durations were recaptured at the same time so the positional pairing
+  # stays committed == collected (see the provenance entry).
+  shard_count: 7
   # DUAL test tree (CLAUDE.md Modularity SSOT): the doctrine test tree did
   # not move when src/doctrine/ was absorbed into src/charter/offering/, so
   # both dirs cover `charter`. This pair was previously hardcoded inside

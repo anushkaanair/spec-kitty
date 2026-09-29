@@ -109,7 +109,14 @@ jobs:
     # uniform 30m untouched. 40m covers the observed charter ceiling plus
     # headroom for charter test-mass growth, one ceiling for every registry
     # module's shards.
-    timeout-minutes: 40
+    # Re-derived (#5378 discipline, unblocks #5383): charter shards at
+    # shard_count=5 reached 36:28 suite wall-clock green and were cut off at
+    # 38:03 by the old 40m cap, so the max is a lower bound. Job overhead
+    # outside pytest runs ~2-3 min. RAISE-ONLY; charter also moved 5 -> 7
+    # shards (.github/ci-module-registry.yml), so real shards now sit far
+    # below this cap. tests/ci/test_module_tests_timeout_headroom.py pins it.
+    # headroom (#5378): max-suite>=38:03 runs=36570492217,36563732095,36553736315,36498972402,36502394954 formula=ceil((max+0:30)*1.5)
+    timeout-minutes: 58
     steps:
       # A local composite action (./.github/actions/warmup) can only be resolved
       # once the repository is on disk — GitHub loads its action.yml from the
