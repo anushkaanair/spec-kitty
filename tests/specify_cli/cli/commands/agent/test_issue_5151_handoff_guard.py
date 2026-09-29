@@ -805,6 +805,21 @@ def test_unrelated_explicit_planning_pin_fails_closed(tmp_path: Path) -> None:
     assert result is None
 
 
+def test_lane_authorship_octopus_merge_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _octopus_history(args, **_kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout="merge p1 p2 p3\n", stderr="")
+
+    monkeypatch.setattr("specify_cli.cli.commands.agent.tasks.subprocess.run", _octopus_history)
+    monkeypatch.setattr("specify_cli.cli.commands.agent.tasks_shared.git_merge_base", lambda *_args: "not-commit")
+
+    result = _lane_authored_kitty_specs_paths(tmp_path, "fork", ("trusted",))
+
+    assert result is None
+
+
 def test_lane_authored_coordination_matrix_change_is_rejected(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo_root, mission_slug, _lane_worktree, changed_paths = _build_handoff_repo(tmp_path, monkeypatch, lane_edit="coord")
     monkeypatch.chdir(repo_root)
