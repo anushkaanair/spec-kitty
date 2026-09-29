@@ -771,6 +771,68 @@ def _trusted_handoff_snapshots(
     return recorded_pin, merged_planning_tip, coordination_snapshot
 
 
+def _commit_in_trusted_snapshots(worktree_path: Path, commit: str, snapshots: tuple[str, ...]) -> bool | None:
+    for snapshot in snapshots:
+        merge_base = git_merge_base(worktree_path, commit, snapshot)
+        if merge_base is None:
+            return None
+        if merge_base == commit:
+            return True
+    return False
+
+
+def _kitty_specs_paths_changed(worktree_path: Path, base: str, commit: str) -> set[str] | None:
+    changed = git_diff_names_checked(worktree_path, base, commit, pathspec=f"{KITTY_SPECS_DIR}/")
+    return None if changed is None else set(changed)
+
+
+def _merge_commit_authored_kitty_specs_paths(
+    worktree_path: Path,
+    parents: tuple[str, ...],
+    result_paths_by_parent: list[set[str]],
+) -> tuple[str, ...] | None:
+    merge_base = git_merge_base(worktree_path, parents[0], parents[1])
+    if merge_base is None:
+        return None
+    parent_changes: list[set[str]] = []
+    for parent in parents:
+        changed_paths = _kitty_specs_paths_changed(worktree_path, merge_base, parent)
+        if changed_paths is None:
+            return None
+        parent_changes.append(changed_paths)
+
+    authored_paths = parent_changes[0] & parent_changes[1]
+    one_parent_changed = parent_changes[0] ^ parent_changes[1]
+    for path in one_parent_changed:
+        changed_parent = 0 if path in parent_changes[0] else 1
+        if path in result_paths_by_parent[changed_parent]:
+            authored_paths.add(path)
+
+    # A merge result different from both parents is a novel resolution, even
+    # if it happens to equal the fork or an older trusted snapshot.
+    authored_paths.update(set.intersection(*result_paths_by_parent))
+    return tuple(authored_paths)
+
+
+def _lane_commit_authored_kitty_specs_paths(
+    worktree_path: Path,
+    commit: str,
+    parents: tuple[str, ...],
+) -> tuple[str, ...] | None:
+    if len(parents) > 2:
+        # Octopus merge semantics are harder to assign to one trusted source.
+        return None
+    result_paths_by_parent: list[set[str]] = []
+    for parent in parents:
+        changed_paths = _kitty_specs_paths_changed(worktree_path, parent, commit)
+        if changed_paths is None:
+            return None
+        result_paths_by_parent.append(changed_paths)
+    if len(parents) == 1:
+        return tuple(result_paths_by_parent[0])
+    return _merge_commit_authored_kitty_specs_paths(worktree_path, parents, result_paths_by_parent)
+
+
 def _lane_authored_kitty_specs_paths(
     worktree_path: Path,
     fork_commit: str,
@@ -781,21 +843,14 @@ def _lane_authored_kitty_specs_paths(
     The fork-to-tip tree diff cannot see a lane commit that restores a path to
     its fork bytes or deletes a file introduced by a later coordination merge.
     Walk every commit reachable from the lane tip so side-branch edits are
-    visible too. A merge-result path is considered authored only when its
-    result differs from every parent. Commits already present in an exact
-    trusted planning or coordination snapshot are inherited; remaining
-    changes represent lane-history path touches.
+    visible too. Commits already present in exact planning or coordination
+    snapshots are inherited; remaining changes represent lane path touches.
     """
     from specify_cli.cli.commands.agent import tasks as _tasks
 
     try:
         result = _tasks.subprocess.run(
-            [
-                "git",
-                "rev-list",
-                "--parents",
-                f"{fork_commit}..HEAD",
-            ],
+            ["git", "rev-list", "--parents", f"{fork_commit}..HEAD"],
             cwd=str(worktree_path),
             capture_output=True,
             text=True,
@@ -811,35 +866,19 @@ def _lane_authored_kitty_specs_paths(
     commits = tuple(tuple(line.split()) for line in result.stdout.splitlines() if line.strip())
     if any(len(commit) < 2 for commit in commits):
         return None
+
     authored_paths: list[str] = []
     for commit_and_parents in commits:
         commit, *parents = commit_and_parents
-        inherited = False
-        for snapshot in trusted_snapshots:
-            merge_base = git_merge_base(worktree_path, commit, snapshot)
-            if merge_base is None:
-                return None
-            if merge_base == commit:
-                inherited = True
-                break
+        inherited = _commit_in_trusted_snapshots(worktree_path, commit, trusted_snapshots)
+        if inherited is None:
+            return None
         if inherited:
             continue
-        paths_by_parent: list[set[str]] = []
-        for parent in parents:
-            changed_paths = git_diff_names_checked(
-                worktree_path,
-                parent,
-                commit,
-                pathspec=f"{KITTY_SPECS_DIR}/",
-            )
-            if changed_paths is None:
-                return None
-            paths_by_parent.append(set(changed_paths))
-        if len(paths_by_parent) == 1:
-            authored_paths.extend(paths_by_parent[0])
-        elif paths_by_parent:
-            merge_resolution_paths = set.intersection(*paths_by_parent)
-            authored_paths.extend(merge_resolution_paths)
+        changed_paths = _lane_commit_authored_kitty_specs_paths(worktree_path, commit, tuple(parents))
+        if changed_paths is None:
+            return None
+        authored_paths.extend(changed_paths)
     return tuple(authored_paths)
 
 
