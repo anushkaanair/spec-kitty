@@ -55,6 +55,15 @@ def _commit_all(cwd: Path, message: str) -> None:
     _git(cwd, "commit", "-q", "-m", message)
 
 
+def _set_stale_coordination_status_snapshot(coord_dir: Path, *, stale: bool) -> None:
+    if not stale:
+        return
+    snapshot_path = coord_dir / "status.json"
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    snapshot["mission_type"] = ""
+    snapshot_path.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def _merge_identical_coordination_planning_snapshot(
     repo_root: Path,
     mission_slug: str,
@@ -81,10 +90,24 @@ def _merge_coordination_update(
     coord_tip: str,
     *,
     force_merge_commit: bool,
+    refresh_status_snapshot_dir: Path | None = None,
     resolve_path_to_pin: str | None = None,
     planning_pin: str | None = None,
     discard_path_to_pin: str | None = None,
 ) -> None:
+    if refresh_status_snapshot_dir is not None:
+        result = subprocess.run(
+            ["git", "merge", "--no-commit", "--no-ff", coord_tip],
+            cwd=lane_worktree,
+            capture_output=True,
+            text=True,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        materialize(refresh_status_snapshot_dir)
+        _git(lane_worktree, "add", "-A")
+        _git(lane_worktree, "commit", "-q", "-m", "Merge coordination snapshot")
+        assert len(_git(lane_worktree, "show", "-s", "--format=%P", "HEAD").split()) == 2
+        return
     if force_merge_commit:
         (lane_worktree / "src").mkdir(parents=True, exist_ok=True)
         (lane_worktree / "src" / "pre_coord_sync.py").write_text("def anchor() -> None: pass\n", encoding="utf-8")
@@ -247,6 +270,12 @@ def _apply_lane_edit(
         prompt_path = lane_worktree / "kitty-specs" / mission_slug / "tasks" / "WP01.md"
         prompt_path.write_text(prompt_path.read_text(encoding="utf-8") + "\nLane-authored prompt edit.\n", encoding="utf-8")
         changed_paths.append(f"kitty-specs/{mission_slug}/tasks/WP01.md")
+    elif lane_edit == "status-json-tamper":
+        status_path = lane_worktree / "kitty-specs" / mission_slug / "status.json"
+        snapshot = json.loads(status_path.read_text(encoding="utf-8"))
+        snapshot["summary"]["done"] = 99
+        status_path.write_text(json.dumps(snapshot, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        changed_paths.append(f"kitty-specs/{mission_slug}/status.json")
     return changed_paths
 
 
@@ -266,6 +295,8 @@ def _build_handoff_repo(
     materialize_status_snapshot_after_lane_base: bool = True,
     include_issue_matrix_after_coord_update: bool = True,
     include_claim_time_planning_pin: bool = True,
+    stale_coordination_status_snapshot: bool = False,
+    refresh_status_snapshot_after_coord_merge: bool = False,
     merge_claim_time_planning_commit: bool = True,
     lane_edit_on_side_branch: bool = False,
     force_coordination_merge_commit: bool = False,
@@ -335,6 +366,7 @@ def _build_handoff_repo(
         )
     if materialize_status_snapshot_after_lane_base:
         materialize(coord_dir)
+    _set_stale_coordination_status_snapshot(coord_dir, stale=stale_coordination_status_snapshot)
 
     if not d07_noncoord_inherited_paths:
         # These updates are owned by the live coordination branch. Two of them
@@ -397,6 +429,7 @@ def _build_handoff_repo(
             lane_worktree,
             coord_tip,
             force_merge_commit=force_coordination_merge_commit,
+            refresh_status_snapshot_dir=(lane_worktree / "kitty-specs" / mission_slug if refresh_status_snapshot_after_coord_merge else None),
             resolve_path_to_pin=conflict_path if resolve_coordination_conflict_to_planning_pin else None,
             planning_pin=recorded_planning_commit if resolve_coordination_conflict_to_planning_pin or discard_coordination_update_to_planning_pin else None,
             discard_path_to_pin=conflict_path if discard_coordination_update_to_planning_pin else None,
@@ -505,6 +538,47 @@ def test_clean_coordination_inheritance_passes_move_task(tmp_path: Path, monkeyp
     result = _move_for_review(repo_root, mission_slug)
 
     assert result.exit_code == 0, result.output
+
+
+def test_canonical_derived_coordination_status_snapshot_passes_move_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, lane_worktree, _ = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        coordination_updates_after_lane_base=True,
+        stale_coordination_status_snapshot=True,
+        refresh_status_snapshot_after_coord_merge=True,
+    )
+    monkeypatch.chdir(repo_root)
+    status_path = lane_worktree / "kitty-specs" / mission_slug / "status.json"
+    assert json.loads(status_path.read_text(encoding="utf-8"))["mission_type"] == "software-dev"
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code == 0, result.output
+
+
+def test_lane_authored_status_snapshot_mutation_is_rejected(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root, mission_slug, _lane_worktree, changed_paths = _build_handoff_repo(
+        tmp_path,
+        monkeypatch,
+        lane_edit="status-json-tamper",
+        coordination_updates_after_lane_base=True,
+        stale_coordination_status_snapshot=True,
+        refresh_status_snapshot_after_coord_merge=True,
+    )
+    monkeypatch.chdir(repo_root)
+
+    result = _move_for_review(repo_root, mission_slug)
+
+    assert result.exit_code != 0
+    assert "kitty-specs/ changes are not allowed on lane branches" in result.output
+    assert changed_paths[0] in result.output
 
 
 def test_identical_planning_content_on_both_coordination_merge_parents_is_inherited(
