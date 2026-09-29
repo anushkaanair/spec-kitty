@@ -54,6 +54,7 @@ from specify_cli.cli.commands.agent.tasks_parsing_validation import (
 )
 from specify_cli.cli.commands.agent.tasks_handoff import (
     _canonical_final_head_status_replay,
+    _fallback_planning_pin_is_trusted,
     _lane_commit_handoff_paths,
     _lane_history_commits,
     _unique_shared_snapshot,
@@ -749,7 +750,14 @@ def _trusted_handoff_snapshots(
     recorded_pin = planning_commit_sha
     if recorded_pin is None:
         recorded_pin = _unique_shared_snapshot(worktree_path, "HEAD", planning_tip)
-        if recorded_pin is None or not _commit_is_post_fork_lane_ancestor(worktree_path, recorded_pin, workspace_base_commit):
+        if recorded_pin is None or not _fallback_planning_pin_is_trusted(
+            worktree_path,
+            planning_tip,
+            recorded_pin,
+            workspace_base_commit,
+            merge_base=git_merge_base,
+            is_post_fork_ancestor=_commit_is_post_fork_lane_ancestor,
+        ):
             return None
     else:
         # A context pin names planning provenance only when the authoritative

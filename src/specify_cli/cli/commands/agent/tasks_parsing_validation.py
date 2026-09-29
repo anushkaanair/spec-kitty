@@ -737,11 +737,12 @@ def _check_kitty_specs_contamination(
     if len(contamination_files) > 5:
         guidance.append(f"  ... and {len(contamination_files) - 5} more")
     if _planning_branch:
+        first_planning_path = contamination_files[0] if contamination_files else f"{KITTY_SPECS_DIR}/<path-to-file>"
         guidance.append(
             f"{KITTY_SPECS_DIR}/ changes are not allowed on lane branches.\n"
             f"Planning artifacts must live on: {_planning_branch}\n\n"
             f"To verify a file exists on the planning branch, inspect only the listed path(s) with:\n"
-            f"  git show {_planning_branch}:<listed-path>"
+            f"  git show {_planning_branch}:{first_planning_path}"
         )
     else:
         guidance.append(f"{KITTY_SPECS_DIR}/ changes are not allowed on lane branches (planning branch unknown — check {KITTY_SPECS_DIR}/ on the base branch).")

@@ -994,6 +994,56 @@ def test_unpinned_planning_snapshot_git_failure_fails_closed(
     assert snapshots is None
 
 
+def test_unpinned_planning_snapshot_equal_to_workspace_fork_is_trusted(tmp_path: Path) -> None:
+    """A single-branch workspace can fork exactly from its planning snapshot."""
+    repo = tmp_path / "forked-planning-snapshot-repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    _git(repo, "config", "user.name", "Test Runner")
+    _git(repo, "config", "commit.gpgsign", "false")
+    (repo / "README.md").write_text("planning snapshot\n", encoding="utf-8")
+    _commit_all(repo, "planning snapshot")
+    workspace_base_commit = _git(repo, "rev-parse", "HEAD")
+
+    snapshots = _trusted_handoff_snapshots(
+        repo,
+        "main",
+        None,
+        workspace_base_commit,
+        None,
+    )
+
+    assert snapshots == (workspace_base_commit, None, None)
+
+
+@pytest.mark.parametrize("unreachable_ref", ["planning-tip", "HEAD"])
+def test_fallback_fork_pin_requires_planning_and_head_reachability(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    unreachable_ref: str,
+) -> None:
+    workspace_base_commit = "immutable-fork"
+    monkeypatch.setattr(tasks_shared, "capture_branch_tip", lambda *_args: "planning-tip")
+    monkeypatch.setattr(tasks_shared, "_unique_shared_snapshot", lambda *_args: workspace_base_commit)
+
+    def merge_base(_worktree: Path, left: str, right: str) -> str | None:
+        assert right == workspace_base_commit
+        return None if left == unreachable_ref else workspace_base_commit
+
+    monkeypatch.setattr(tasks_shared, "git_merge_base", merge_base)
+
+    snapshots = _trusted_handoff_snapshots(
+        tmp_path,
+        "planning-ref",
+        None,
+        workspace_base_commit,
+        None,
+    )
+
+    assert snapshots is None
+
+
 def test_ambiguous_coordination_merge_base_is_untrusted(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

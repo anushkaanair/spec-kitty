@@ -13,6 +13,24 @@ from specify_cli.core.constants import KITTY_SPECS_DIR
 logger = logging.getLogger(__name__)
 
 
+def _fallback_planning_pin_is_trusted(
+    worktree_path: Path,
+    planning_tip: str,
+    recorded_pin: str,
+    workspace_base_commit: str,
+    *,
+    merge_base: Callable[[Path, str, str], str | None],
+    is_post_fork_ancestor: Callable[[Path, str, str], bool],
+) -> bool:
+    """Trust a recovered claim pin at the immutable fork or proven post-fork."""
+    if recorded_pin == workspace_base_commit:
+        # SINGLE_BRANCH and freshly claimed workspaces can fork directly from
+        # the planning tip. The immutable fork is then itself the claim-time
+        # planning snapshot, not a post-fork lane commit.
+        return merge_base(worktree_path, planning_tip, recorded_pin) == recorded_pin and merge_base(worktree_path, "HEAD", recorded_pin) == recorded_pin
+    return is_post_fork_ancestor(worktree_path, recorded_pin, workspace_base_commit)
+
+
 def _unique_shared_snapshot(worktree_path: Path, left: str, right: str) -> str | None:
     """Return a shared commit only when Git reports one best merge base."""
     from specify_cli.cli.commands.agent import tasks as _tasks
@@ -81,16 +99,23 @@ def _status_snapshot_matches(
     ):
         return False
 
-    from specify_cli.status.reducer import materialize_snapshot, materialize_to_json
+    from specify_cli.status import materialize_snapshot_from_text, materialize_to_json
 
     try:
         with TemporaryDirectory(prefix="spec-kitty-handoff-status-") as temp_dir:
-            mission_dir_path = Path(temp_dir) / mission_slug
-            mission_dir_path.mkdir()
-            (mission_dir_path / "status.events.jsonl").write_bytes(cast(bytes, coordination_events))
-            (mission_dir_path / "status.json").write_bytes(cast(bytes, coordination_status))
-            (mission_dir_path / "meta.json").write_bytes(cast(bytes, planning_meta))
-            expected = cast(str, materialize_to_json(materialize_snapshot(mission_dir_path))).encode("utf-8")
+            replay_dir = Path(temp_dir)
+            (replay_dir / "status.json").write_bytes(cast(bytes, coordination_status))
+            (replay_dir / "meta.json").write_bytes(cast(bytes, planning_meta))
+            expected = cast(
+                str,
+                materialize_to_json(
+                    materialize_snapshot_from_text(
+                        replay_dir,
+                        cast(bytes, coordination_events).decode("utf-8"),
+                        mission_slug=mission_slug,
+                    )
+                ),
+            ).encode("utf-8")
     except Exception as exc:  # noqa: BLE001 -- unverifiable replay must not authorize handoff
         logger.debug("Could not replay canonical handoff status snapshot: %s", exc)
         return False
