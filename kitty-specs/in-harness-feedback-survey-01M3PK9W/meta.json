@@ -7,9 +7,12 @@
   "mission_number": null,
   "mission_slug": "in-harness-feedback-survey-01M3PK9W",
   "mission_type": "software-dev",
+  "pr_bound": true,
   "purpose_context": "Spec Kitty has no direct channel for hearing how people experience missions and ad-hoc work. A short, optional two-question Feedback Survey (a 1-5 rating plus 'what would you change?') shown at natural completion points gives maintainers a steady signal, while staying anonymous by default, sending only with explicit consent each time, and never blocking the user's workflow.",
   "purpose_tldr": "Let Spec Kitty users rate their experience and suggest changes at key moments, without getting in their way.",
   "slug": "in-harness-feedback-survey-01M3PK9W",
+  "source_description": "Present a quick two-question feedback survey (1-5 rating + 'what would you change?') at mission end, Op close, planning complete, or on demand; send to a web service only with explicit per-submission consent; fire-and-forget; harness-native UI; non-intrusive; anonymous by default with opt-in email.",
   "target_branch": "feat/in-harness-feedback-survey",
-  "topology": "coord"
+  "topology": "coord",
+  "vcs": "git"
 }
