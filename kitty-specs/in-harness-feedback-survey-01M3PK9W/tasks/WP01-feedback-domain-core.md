@@ -11,10 +11,12 @@ requirement_refs:
 - NFR-003
 - NFR-005
 - NFR-007
-tracker_refs: []
 planning_base_branch: feat/in-harness-feedback-survey
 merge_target_branch: feat/in-harness-feedback-survey
 branch_strategy: Planning artifacts for this mission were generated on feat/in-harness-feedback-survey. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into feat/in-harness-feedback-survey unless the human explicitly redirects the landing branch.
+base_branch: kitty/mission-in-harness-feedback-survey-01M3PK9W
+base_commit: 78483af356ca88d98d38fefce7ef190da9957a32
+created_at: '2026-09-30T08:56:41.041683+00:00'
 subtasks:
 - T001
 - T002
@@ -61,6 +63,7 @@ owned_files:
 role: implementer
 tags: []
 task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP01 – Feedback Domain Core — Models, Preferences, Offer Eligibility
