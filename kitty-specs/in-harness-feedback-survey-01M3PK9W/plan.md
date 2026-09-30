@@ -17,7 +17,7 @@ Offer a short, optional **Feedback Survey** — a 1–5 rating, "What would you 
 **Project Type**: single (existing `src/specify_cli` CLI package)
 **Performance Goals**: eligibility check ≤ 100 ms with no network I/O (NFR-003); control returns ≤ 1 s after "Send feedback" (NFR-001); background attempt abandoned at 5 s
 **Constraints**: nothing sent without per-submission consent; allowlisted anonymous payload; HTTPS required except loopback; never block, fail, or change exit status of a trigger command; trigger commands' existing `--json` output contracts unchanged; vendor-neutral upstream (no company identity in code, docs, or defaults)
-**Scale/Scope**: ~1 new package (`src/specify_cli/feedback/`, 6–7 modules), 1 new CLI command, 1 additive field on `DistributionProfile`, 3 trigger hook points, 1 renderer seam, glossary + docs; no server-side work
+**Scale/Scope**: ~1 new package (`src/specify_cli/feedback/`, 6–7 modules), 1 new CLI command, 1 additive field on `DistributionProfile`, 3 trigger hook points, 2 agent-surface mechanisms (pack prompts + Python helper), glossary + docs; no server-side work
 
 ## Charter Check
 
@@ -77,9 +77,10 @@ src/specify_cli/feedback/
 
 src/specify_cli/cli/commands/feedback.py        # `spec-kitty feedback` (+ --status, --prompts, hidden agent flags)
 src/specify_cli/distribution/profile.py         # + optional `feedback_endpoint: str | None = None`
-src/specify_cli/skills/command_renderer.py      # append agent block for trigger commands (same seam as upgrade check)
-src/specify_cli/skills/command_installer.py     #   "
-src/specify_cli/template/asset_generator.py     #   "
+src/specify_cli/skills/command_installer.py     # append agent block to the CLI-wrapper skill body (consolidate)
+src/specify_cli/shims/generator.py              # append agent block to CLI-driven shims (consolidate, tasks-finalize)
+packs/built-in/missions/mission-steps/software-dev/{tasks,tasks-finalize}/prompt.md  # agent block between markers
+src/charter/offering/skills/spec-kitty/SKILL.md # Op-close guidance
 src/specify_cli/cli/commands/consolidate.py     # mission-end hook (one call, after success)
 src/specify_cli/cli/commands/agent/mission_finalize.py  # planning-complete hook (one call, after success)
 src/specify_cli/cli/commands/profile_invocation.py      # Op-close hook (one call, after close, done|failed only)
@@ -100,7 +101,9 @@ tests/specify_cli/feedback/acceptance/          # ATDD: one file per user story,
 
 (Full rationale and alternatives in [research.md](./research.md); decision moments recorded under `decisions/`.)
 
-1. **Surfacing mirrors the upgrade check.** Trigger commands keep their JSON output unchanged. Agents get a short post-command block, appended by the same renderer seam that prepends the upgrade check, to the trigger-bearing commands only (`tasks-finalize`, `consolidate`), plus one guidance line in the dispatch capsule for Op close. The block tells the agent to run `spec-kitty feedback --agent-check --trigger <t> --agent <key> --json`, ask with the host-native UI if `action == "prompt"`, then record the result with `--agent-submit` or `--agent-choice`.
+1. **Surfacing mirrors the upgrade check.** Trigger commands keep their JSON output unchanged. Agents get a short post-command "Feedback Survey Check" block on the trigger-bearing commands only, plus one guidance line in the dispatch capsule for Op close. The block tells the agent to run `spec-kitty feedback --agent-check --trigger <t> --agent <key> --json`, ask with the host-native UI if `action == "prompt"`, then record the result with `--agent-submit` or `--agent-choice`. The block has one canonical definition (`feedback/agent_block.py`) and reaches agents through two mechanisms (refined at tasks time, see research R-10):
+   - **Prompt-backed commands** (`tasks`, `tasks-finalize`): an exact copy between markers in their pack source prompts under `packs/built-in/missions/mission-steps/software-dev/`, guarded by a drift test. This single edit reaches the skills installer, the slash-command asset generator, and the `spec-kitty next` runtime, which cannot import `specify_cli` under the layer rules.
+   - **CLI-driven commands** (`consolidate`, `tasks-finalize` shims): appended by the Python helper in the CLI-wrapper skill body (`skills/command_installer.py`) and the shim generator (`shims/generator.py`).
 2. **Humans in a terminal** see the form inline after the trigger command succeeds, only when `is_interactive()` is true, the command was not run with `--json`, and `is_ci_env()` is false. Agent harnesses normally run commands without a TTY on stdin (or set `SPEC_KITTY_NON_INTERACTIVE`), so `is_interactive()` keeps them off the inline path; this is the same authority `init`, `merge` preflight, `intake`, and `doctor` already rely on (#2876/#2912).
 3. **"Shown" is recorded at offer time**, under `machine_file_lock`, before any question is asked. Two concurrent processes therefore cannot both offer (NFR-005), and an abandoned form still counts as shown.
 4. **Fire-and-forget via a detached child.** After consent the parent writes the validated payload to the child's stdin (never argv, never disk), detaches, and returns immediately. The child makes one HTTPS POST with a 5 s total timeout and exits 0 whatever happens; its stdout/stderr go to the null device.
@@ -148,9 +151,9 @@ tests/specify_cli/feedback/acceptance/          # ATDD: one file per user story,
 
 - **Purpose**: Offer the survey at planning complete, mission end, and Op close without changing any trigger's outcome or JSON contract.
 - **Relevant requirements**: FR-005, FR-006, FR-007, FR-010, FR-015, FR-018, C-002, C-008
-- **Affected surfaces**: `src/specify_cli/feedback/agent_block.py`; renderer/installer/asset-generator seams that already call `prepend_agent_upgrade_check`; `consolidate.py`, `agent/mission_finalize.py`, `profile_invocation.py`, `dispatch.py`
+- **Affected surfaces**: `src/specify_cli/feedback/agent_block.py`, `src/specify_cli/feedback/hooks.py`; the `tasks` and `tasks-finalize` pack source prompts + `packs/built-in/pack-manifest.yaml`; `skills/command_installer.py` (CLI-wrapper body); `shims/generator.py` + the twelve-agent regression baselines; `consolidate.py`, `agent/mission_finalize.py`, `profile_invocation.py`, `dispatch.py`; `src/charter/offering/skills/spec-kitty/SKILL.md`
 - **Sequencing/depends-on**: IC-04
-- **Risks**: `consolidate` and `finalize_tasks` are near the complexity ceiling (`finalize_tasks` already carries a `C901` suppression). Hooks must be single calls placed after the success path, with a tidy-first extraction if needed. The runtime `spec-kitty next` prompt path for `tasks-finalize` must also carry the block (verify it renders through the same seam; if not, route it there rather than editing generated copies). `profile-invocation complete --json` output must stay byte-identical. An agent harness that runs commands inside a pseudo-terminal would pass `is_interactive()`; the inline form therefore opens with a single "Share quick feedback? [y/N]" question that auto-skips after 30 seconds without input, so an unattended run can never stall (timed input needs a Windows-specific implementation path and tests), and the generated agent block tells agents to run trigger commands with `SPEC_KITTY_NON_INTERACTIVE=1`.
+- **Risks**: `consolidate` and `finalize_tasks` are near the complexity ceiling (`finalize_tasks` already carries a `C901` suppression). Hooks must be single calls placed after the success path, with a tidy-first extraction if needed. The runtime `spec-kitty next` prompt path for `tasks-finalize` must also carry the block (verify it renders through the same seam; if not, route it there rather than editing generated copies). `profile-invocation complete --json` output must stay byte-identical. An agent harness that runs commands inside a pseudo-terminal would pass `is_interactive()`; the inline form's first question (the rating, with an "Enter to skip, 'never' to stop asking" hint) therefore auto-skips after 30 seconds without input, so an unattended run can never stall and the flow stays within NFR-008's four interactions (timed input needs a Windows-specific implementation path and tests), and the generated agent block tells agents to run trigger commands with `SPEC_KITTY_NON_INTERACTIVE=1`.
 
 ### IC-06 — Terminology, documentation, and changelog
 

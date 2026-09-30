@@ -187,7 +187,7 @@ def agent_submit(
   - `COMMENT_QUESTION = "What would you change? (optional)"`
   - `EMAIL_QUESTION = "Email, only if you want to sign your feedback (optional)"`
   - `CONSENT_QUESTION = "Send feedback?"`
-  - `SHARE_PROMPT = "Share quick feedback?"` (used by WP05's timed inline question)
+  - `RATING_TERMINAL_HINT = "Enter to skip, 'never' to stop asking"` (appended in parentheses by WP05's terminal form to the rating question on automatic offers; the agent contract wording stays unchanged)
   - `THANK_YOU = "Thanks for your feedback."`
   - `NOT_SENT_MESSAGE`, `PROMPTS_OFF_MESSAGE`, `COMMENT_TRUNCATED_NOTICE`, `EMAIL_MALFORMED_NOTICE`, `NO_ENDPOINT_MESSAGE`
   - `agent_survey_payload() -> dict` returning exactly the `survey` object from the agent-check contract (with `comment_max_length` taken from `payload.COMMENT_MAX_LENGTH`, not a second literal).

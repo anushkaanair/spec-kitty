@@ -201,3 +201,4 @@ A developer (or a Spec Kitty distributor) wants to know where feedback is sent a
 - An offer that is skipped, abandoned, or answered all count as "shown" for the weekly limit; non-interactive runs do not.
 - The comment is sent as the user wrote it (within the length cap); the consent step is the user's control over its content.
 - Distributions without a packaged default endpoint (possibly including the upstream open-source build) will have dormant automatic surveys until a user configures an endpoint.
+- Spec Kitty can detect CI and non-interactive terminals, but it cannot tell whether an agent harness session has a human present. For agent-presented surveys, FR-018 therefore relies on the agent following the instruction to offer the survey only when a human is in the loop; this limitation is documented for users.

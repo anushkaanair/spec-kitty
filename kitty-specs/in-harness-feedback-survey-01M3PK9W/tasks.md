@@ -168,7 +168,7 @@ T023 Shared survey wording constants + harness key normalization (WP04)
 ### Included Subtasks
 
 T024 Red-first CLI integration tests for the command surface (WP05)
-T025 `feedback/terminal_form.py`: form flow, validation re-prompts, consent, timed "Share quick feedback?" question (WP05)
+T025 `feedback/terminal_form.py`: four-step form (rating, comment, email, consent), validation re-prompts, timed first (rating) question for inline offers (WP05)
 T026 `cli/commands/feedback.py`: bare form, `--status`, `--prompts`, hidden agent flags → JSON (WP05)
 T027 Register the command in `cli/commands/__init__.py` (WP05)
 T028 Regenerate the completion manifest and the CLI reference docs (WP05)
@@ -273,7 +273,7 @@ T042 Glossary entries (Feedback Survey, Feedback Submission, Survey Trigger, Fee
 T043 How-to guide: give feedback and control the Feedback Survey (WP08)
 T044 Reference updates: env var, `feedback.json` fields, `DistributionProfile.feedback_endpoint` packager note (WP08)
 T045 `CHANGELOG.md` entry (WP08)
-T046 Run the `quickstart.md` walkthrough + terminology guard; record evidence and tracer entries (WP08)
+T046 Run the `quickstart.md` walkthrough, the real-harness check (Claude Code, Cursor, Codex, plain terminal; SC-006), and the terminology guard; record evidence and tracer entries (WP08)
 
 ### Implementation Notes
 

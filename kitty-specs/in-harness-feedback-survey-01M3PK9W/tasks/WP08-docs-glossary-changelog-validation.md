@@ -129,7 +129,7 @@ Use language identifiers in code blocks: ````python`, ````bash`
 ### Subtask T043 – How-to guide
 
 - **Steps**: Create `docs/guides/how-to/collaboration/give-feedback.md` for persona `docs/context/audience/external/project-owner.md` (or the closest existing external-user persona). Sections:
-  1. When you'll see the survey: the three triggers, at most once a week, never in CI or unattended runs.
+  1. When you'll see the survey: the three triggers, at most once a week, never in CI or non-interactive terminals. State the known limitation plainly: Spec Kitty cannot tell whether an agent session has a person watching, so in agent harnesses it relies on the agent to offer the survey only when a human is in the loop (spec Assumptions; research R-11).
   2. Answering, skipping, or turning it off: "Skip", "Don't ask again", and `spec-kitty feedback --prompts off|on`.
   3. Giving feedback any time: `spec-kitty feedback`.
   4. What is sent: the exact field list from the submission contract. What is never sent: repository, mission, branch, user or host identity, credentials. Email only if you type it.
@@ -158,8 +158,9 @@ Use language identifiers in code blocks: ````python`, ````bash`
   1. Use an isolated profile: `export XDG_CONFIG_HOME=$(mktemp -d)` (Linux) or the macOS/Windows equivalent the preferences module honours. Reinstall the editable package if you use the `spec-kitty` binary (stale-install gotcha).
   2. Walk `quickstart.md` steps 1–7 exactly; paste the key outputs (status text, received JSON body, agent-check/submit JSON) into the Activity Log.
   3. Run the gates: `tests/architectural/test_no_legacy_terminology.py`, `tests/docs/test_env_var_scope_warning.py`, and the docs freshness/frontmatter checks the repository uses for new pages (for example `scripts/docs/check_docs_freshness.py`; read its usage first).
-  4. Grep the whole diff for company names and non-`example.test` hosts; record the command and the zero-hit result.
-  5. Append tracer entries (assess step preparation) to `traces/approach.md` and `traces/design-decisions.md`.
+  4. **Real-harness check (SC-006; analysis finding C1)**: in a scratch project initialised with the merged CLI (`spec-kitty init` + `spec-kitty upgrade` so the generated commands carry the Feedback Survey Check), with a loopback endpoint configured, trigger `tasks-finalize` (or `consolidate`) from at least three harnesses — Claude Code, Cursor, and Codex — plus once from a plain terminal. For each, record: the harness name, whether the survey was presented with the harness's own question UI, whether all four steps plus skip / "don't ask again" were offered, and the received submission's `harness` value. Attach transcript excerpts or screenshots in the Activity Log. If a harness cannot be exercised on the machine, record why and mark SC-006 as partially verified in the PR body.
+  5. Grep the whole diff for company names and non-`example.test` hosts; record the command and the zero-hit result.
+  6. Append tracer entries (assess step preparation) to `traces/approach.md` and `traces/design-decisions.md`.
 - **Files**: none owned (validation); tracer files are an expected out-of-map edit.
 
 ## Test Strategy

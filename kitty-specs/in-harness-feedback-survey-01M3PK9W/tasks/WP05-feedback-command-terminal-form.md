@@ -106,7 +106,7 @@ Ship the lean, single command agreed at planning (no subcommand group):
 | hidden `--agent-submit --trigger <t> [--agent <key>] --rating N [--comment T] [--email E] --consent yes --json` | WP04 `agent_submit` → JSON |
 | hidden `--agent-choice skip\|never --trigger <t> --json` | WP04 `agent_choice` → JSON |
 
-Also create the reusable **terminal form** used by the bare command and, in WP06, by inline trigger offers, including the **timed** "Share quick feedback? [y/N]" question that auto-skips after 30 s.
+Also create the reusable **terminal form** used by the bare command and, in WP06, by inline trigger offers. For inline offers the **rating question itself is timed**: it shows the hint "(Enter to skip, 'never' to stop asking)" and auto-skips after 30 s without input. There is no separate "share feedback?" gate question, so every flow stays within NFR-008's four interactions (rating, comment, email, consent). This resolves analysis finding I1.
 
 Done when: CliRunner integration tests pass; the completion manifest and CLI reference are regenerated and their gates pass; mypy/ruff/format are clean; exit status is always 0 for the survey paths (a survey never fails a command).
 
@@ -154,18 +154,22 @@ class FormResult:
     answers: SurveyAnswers | None
     comment_truncated: bool = False
 
-def run_form(*, allow_never: bool, ask: Callable[[str], str] | None = None) -> FormResult: ...
-def ask_share_feedback_timed(timeout_s: float = 30.0) -> Literal["yes", "no", "never", "timeout"]: ...
+def run_form(
+    *,
+    allow_never: bool,
+    first_question_timeout_s: float | None = None,
+    ask: Callable[[str], str] | None = None,
+) -> FormResult: ...
 ```
 
-- **Flow for `run_form`**:
-  1. Rating: re-ask on invalid input (use WP03 `parse_rating`); empty input or `s` → `skipped`; `never` (only when `allow_never`) → `never`.
+- **Flow for `run_form`** (at most four interactions: rating, comment, email, consent — NFR-008):
+  1. Rating: when `allow_never` (automatic offers), the prompt is `RATING_QUESTION` plus the hint `(RATING_TERMINAL_HINT)`. When `first_question_timeout_s` is set, read this first answer with the timed reader below; a timeout → `skipped`. Re-ask on invalid input (use WP03 `parse_rating`; re-asks are not timed); empty input or `s` → `skipped`; `never` (only when `allow_never`) → `never`.
   2. Comment (optional): if truncated, show `COMMENT_TRUNCATED_NOTICE` **before** consent.
   3. Email (optional): malformed → show `EMAIL_MALFORMED_NOTICE` and re-ask once; blank allowed.
   4. Consent: `CONSENT_QUESTION` [y/N] → `submitted` or `declined`.
   5. `KeyboardInterrupt` / `EOFError` anywhere → `aborted` (never propagates).
   6. `ask` is injectable for tests; default uses `typer.prompt` / `rich` prompt consistent with other interactive commands in the repo.
-- **Timed question** (`ask_share_feedback_timed`): used only by inline trigger offers (WP06). POSIX: `select.select([sys.stdin], [], [], timeout_s)`. Windows: poll `msvcrt.kbhit()` in a short-sleep loop until the deadline, then read a line. Accept `y`/`yes` → `yes`, `never` → `never`, anything else or blank → `no`; deadline → `timeout`. Isolate the platform branch in one private function so both branches can be unit-tested by monkeypatching.
+- **Timed reader** (private `_read_line_with_timeout(prompt, timeout_s) -> str | None`, used only for the first question of inline trigger offers in WP06): POSIX uses `select.select([sys.stdin], [], [], timeout_s)`; Windows polls `msvcrt.kbhit()` in a short-sleep loop until the deadline, then reads a line. Returns `None` on timeout. Isolate the platform branch in one private function so both branches can be unit-tested by monkeypatching. The on-demand command never passes a timeout.
 - **Files**: `src/specify_cli/feedback/terminal_form.py`
 - **Parallel?**: Yes, with T026.
 
@@ -194,7 +198,7 @@ def ask_share_feedback_timed(timeout_s: float = 30.0) -> Literal["yes", "no", "n
 
 ### Subtask T029 – Terminal-form unit tests
 
-- **Steps** (`tests/specify_cli/feedback/test_terminal_form.py`): drive `run_form` with an injected `ask` sequence for each outcome (submitted, declined, skipped, never when allowed / treated as invalid when not allowed, aborted via `KeyboardInterrupt` and `EOFError`), re-ask on bad rating, the truncation notice shown before consent, and email re-ask. For `ask_share_feedback_timed`: monkeypatch the POSIX `select` path to simulate timeout and input, and the Windows `msvcrt` path (inject a fake module) to simulate the same.
+- **Steps** (`tests/specify_cli/feedback/test_terminal_form.py`): drive `run_form` with an injected `ask` sequence for each outcome (submitted, declined, skipped, never when allowed / treated as invalid when not allowed, aborted via `KeyboardInterrupt` and `EOFError`), re-ask on bad rating, the truncation notice shown before consent, and email re-ask. For the timed first question: with `first_question_timeout_s` set, monkeypatch the POSIX `select` path to simulate a timeout (→ `skipped`) and input (→ continues), and the Windows `msvcrt` path (inject a fake module) to simulate the same. Assert the whole happy path asks exactly four questions (NFR-008 guard).
 - **Files**: `tests/specify_cli/feedback/test_terminal_form.py`
 
 ## Test Strategy

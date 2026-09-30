@@ -9,3 +9,6 @@ Decisions already made (see `research.md` R-01…R-09 and `decisions/`):
 - Detached child sender with the payload on stdin (never argv or disk); 5 s cap; always silent.
 - Preferences live in one hardened `feedback.json` in the user config dir (not the cache dir), built on kernel primitives rather than copies of `NagCache` internals.
 - Inline terminal form's first question auto-skips after 30 s, so a pseudo-terminal agent run cannot stall.
+- 2026-09-30 — Analyze (finding I1): dropped the separate "Share quick feedback?" gate; the rating question itself is timed, keeping every flow at four interactions (NFR-008).
+- 2026-09-30 — Analyze (finding I2, research R-10): the agent block reaches prompt-backed commands through their pack source prompts (runtime cannot import `specify_cli`) and CLI-driven commands through the Python helper.
+- 2026-09-30 — Analyze (finding U1, research R-11): unattended agent sessions are undetectable by the CLI; documented as a limitation rather than honouring `SPEC_KITTY_NON_INTERACTIVE` in `agent_check`.

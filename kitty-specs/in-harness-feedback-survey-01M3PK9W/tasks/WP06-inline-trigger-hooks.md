@@ -97,7 +97,7 @@ A human running a trigger command in a real terminal is offered the Feedback Sur
 Hard guarantees (FR-015, FR-018):
 
 - The hook never changes the command's exit status, output contract, or recorded outcome. `--json` output is **byte-identical** to before.
-- Offers happen only when `is_interactive()` is true, the command was not run with `--json`, and `is_ci_env()` is false. The first question is the **timed** "Share quick feedback? [y/N]" (30 s auto-skip), so a pseudo-terminal agent run can never stall.
+- Offers happen only when `is_interactive()` is true, the command was not run with `--json`, and `is_ci_env()` is false. The first question is the **timed rating** ("How would you rate your experience? (1-5) (Enter to skip, 'never' to stop asking)", 30 s auto-skip), so a pseudo-terminal agent run can never stall and the flow stays at four interactions (NFR-008).
 - Any exception inside the hook, including `KeyboardInterrupt` during the survey, is contained and treated as a skip.
 - Each host function gains exactly **one** straight-line call; no new branches in `consolidate()` or `finalize_tasks()` (C901 ceiling; `finalize_tasks` already carries a justified suppression).
 
@@ -109,7 +109,7 @@ Hard guarantees (FR-015, FR-018):
   - `src/specify_cli/cli/commands/consolidate.py::consolidate` — the real path ends with `_run_real_merge(...)`. The `--json` flag is refused for non-dry-run consolidation, so `json_output` is False on this path. `--resume` also ends there, which is fine.
   - `src/specify_cli/cli/commands/agent/mission_finalize.py::finalize_tasks` (line ~3217, `# noqa: C901`) and `_emit_success_report(...)` (~2788).
   - `src/specify_cli/cli/commands/profile_invocation.py::complete_invocation` — after `_render_complete_response(...)`. The `--json` payload is contract-frozen.
-- WP05 provides `terminal_form.run_form` and `ask_share_feedback_timed`; WP04 provides the offer/submit services; WP01 provides `claim_offer`.
+- WP05 provides `terminal_form.run_form` (with `first_question_timeout_s`); WP04 provides the offer/submit services; WP01 provides `claim_offer`.
 - `mission_type` for the payload: read it from the mission's `meta.json` through the existing canonical reader used by these commands (do not parse JSON by hand). For `op_close`, pass `None`.
 
 ## Branch Strategy
@@ -126,7 +126,7 @@ Hard guarantees (FR-015, FR-018):
 
 - **Purpose**: Pin trigger behaviour through the **production entry points** (non-vacuity tactic: no helper-only tests).
 - **Steps** (`tests/specify_cli/feedback/acceptance/test_trigger_hooks.py`):
-  1. For `profile-invocation complete`: build a minimal repo with an open Op (reuse fixtures from `tests/specify_cli/invocation/` where possible). With `SPEC_KITTY_FORCE_INTERACTIVE=1`, a loopback endpoint, and input `"y\n4\n\n\ny\n"`, invoke the real CLI (`CliRunner`) with `--outcome done` → exit 0, the Op is closed, and the loopback server receives one submission with `trigger == "op_close"`. **Negative cases on the same fixture**: `--outcome abandoned` → no offer; `--json` → stdout byte-identical to a baseline captured with the hook monkeypatched to a no-op; `SPEC_KITTY_NON_INTERACTIVE=1` → no offer and `last_shown_at` untouched.
+  1. For `profile-invocation complete`: build a minimal repo with an open Op (reuse fixtures from `tests/specify_cli/invocation/` where possible). With `SPEC_KITTY_FORCE_INTERACTIVE=1`, a loopback endpoint, and input `"4\n\n\ny\n"` (rating, blank comment, blank email, consent), invoke the real CLI (`CliRunner`) with `--outcome done` → exit 0, the Op is closed, and the loopback server receives one submission with `trigger == "op_close"`. **Negative cases on the same fixture**: `--outcome abandoned` → no offer; `--json` → stdout byte-identical to a baseline captured with the hook monkeypatched to a no-op; `SPEC_KITTY_NON_INTERACTIVE=1` → no offer and `last_shown_at` untouched.
   2. For `consolidate` and `finalize-tasks`: full end-to-end fixtures are heavy. Prove the wiring by monkeypatching `specify_cli.feedback.hooks.offer_after_trigger` with a recorder and running the real command on the smallest existing fixture used by their current tests (look in `tests/specify_cli/consolidation/` and `tests/specify_cli/cli/commands/agent/` for mission fixtures). Assert: called once with the right trigger after success; **not** called on `--dry-run`, `--validate-only`, or a failing run (positive control: the success run). Exit codes are unchanged versus the same run with the recorder.
 - **Files**: `tests/specify_cli/feedback/acceptance/test_trigger_hooks.py`
 
@@ -148,7 +148,7 @@ def offer_after_trigger(
   1. Wrap the whole body in `try: ... except BaseException: return`, logging at debug level only. Re-raising `SystemExit` is not needed because the survey never calls `exit`. Document why `BaseException` is caught: the host command has already finished, and Ctrl-C during an optional survey must not turn a successful command into a failure.
   2. Early returns: `json_output` → return; `not is_interactive()` → return; `is_ci_env()` → return; the trigger is not automatic → return.
   3. Resolve the endpoint; `claim_offer(trigger, endpoint_available=..., interactive=True, ci=False)`; not `prompt` → return.
-  4. `ask_share_feedback_timed()` → `no`/`timeout` → return (already counted as shown); `never` → `set_automatic_prompts(False)` and print the re-enable hint; `yes` → `run_form(allow_never=True)`.
+  4. `run_form(allow_never=True, first_question_timeout_s=30.0)`. Outcomes `skipped` (including timeout), `declined`, and `aborted` → return quietly (the offer already counts as shown); `never` → `set_automatic_prompts(False)` and print the re-enable hint.
   5. On `submitted` → `build_and_hand_off(..., consent=True)` with `harness="cli"`, then print `THANK_YOU`. On `never` → as above. Otherwise return quietly.
   6. Print a blank line and a subtle separator before the question so it is visually distinct from the command's own output; use `rich` styling consistent with the CLI.
 - **Files**: `src/specify_cli/feedback/hooks.py`
@@ -174,7 +174,7 @@ def offer_after_trigger(
 
 ### Subtask T035 – Hook unit tests + complexity check
 
-- **Steps** (`tests/specify_cli/feedback/test_hooks.py`): table-drive `offer_after_trigger` over json/non-interactive/CI/non-automatic/claim-none/timeout/no/never/yes→submitted/yes→declined/exception-inside (monkeypatch `run_form` to raise `KeyboardInterrupt` → returns None, nothing propagates). Assert the recorded `build_and_hand_off` calls. Run ruff's C901 check on the three host files and confirm no new violations: `uv run --frozen ruff check --select C901 src/specify_cli/cli/commands/consolidate.py src/specify_cli/cli/commands/agent/mission_finalize.py src/specify_cli/cli/commands/profile_invocation.py`.
+- **Steps** (`tests/specify_cli/feedback/test_hooks.py`): table-drive `offer_after_trigger` over json/non-interactive/CI/non-automatic/claim-none/form-outcomes (skipped incl. timeout, declined, aborted, never, submitted)/exception-inside; assert `run_form` is called with `allow_never=True, first_question_timeout_s=30.0` (monkeypatch `run_form` to raise `KeyboardInterrupt` → returns None, nothing propagates). Assert the recorded `build_and_hand_off` calls. Run ruff's C901 check on the three host files and confirm no new violations: `uv run --frozen ruff check --select C901 src/specify_cli/cli/commands/consolidate.py src/specify_cli/cli/commands/agent/mission_finalize.py src/specify_cli/cli/commands/profile_invocation.py`.
 - **Files**: `tests/specify_cli/feedback/test_hooks.py`
 
 ## Test Strategy
@@ -194,7 +194,7 @@ These are the owning subsystems' directories at the fast tier. Do not run the wh
 ## Risks & Mitigations
 
 - **Accidental JSON contamination** → the survey prints only on the non-JSON path; the byte-identity test catches regressions.
-- **Hangs in agent pseudo-terminals** → the timed first question; unit-tested in WP05, exercised here.
+- **Hangs in agent pseudo-terminals** → the timed first (rating) question; unit-tested in WP05, exercised here.
 - **Complexity creep in god-functions** → one call each; C901 check in T035.
 
 ## Review Guidance
