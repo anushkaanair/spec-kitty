@@ -93,7 +93,7 @@ A developer wants to share feedback right now, regardless of when they last saw 
 
 A developer (or a Spec Kitty distributor) wants to know where feedback is sent and what it contains, and to point it at a different service. Each distribution ships its own default Feedback Endpoint; a user can override it. With no endpoint at all, automatic surveys simply never appear.
 
-**Why this priority**: Supports informed consent (the consent prompt stays short) and lets distributions such as company builds route feedback to their own service.
+**Why this priority**: Supports informed consent (the consent prompt stays short) and lets each downstream distribution route feedback to its own service.
 
 **Independent Test**: Inspect the survey settings in a build with a packaged endpoint, override it with a user setting, then remove both; verify the reported destination and the dormant behaviour.
 
