@@ -8,10 +8,12 @@ requirement_refs:
 - FR-016
 - FR-017
 - NFR-006
-tracker_refs: []
 planning_base_branch: feat/in-harness-feedback-survey
 merge_target_branch: feat/in-harness-feedback-survey
 branch_strategy: Planning artifacts for this mission were generated on feat/in-harness-feedback-survey. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into feat/in-harness-feedback-survey unless the human explicitly redirects the landing branch.
+base_branch: kitty/mission-in-harness-feedback-survey-01M3PK9W
+base_commit: a41a9844e0965e3ce8a2096ffe6411661fd22bd6
+created_at: '2026-09-30T12:35:52.226859+00:00'
 subtasks:
 - T008
 - T009
@@ -41,6 +43,7 @@ owned_files:
 role: implementer
 tags: []
 task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP02 – Endpoint Resolution & Distribution Seam
