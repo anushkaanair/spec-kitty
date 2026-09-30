@@ -9,10 +9,12 @@ requirement_refs:
 - FR-007
 - FR-015
 - FR-018
-tracker_refs: []
 planning_base_branch: feat/in-harness-feedback-survey
 merge_target_branch: feat/in-harness-feedback-survey
 branch_strategy: Planning artifacts for this mission were generated on feat/in-harness-feedback-survey. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into feat/in-harness-feedback-survey unless the human explicitly redirects the landing branch.
+base_branch: kitty/mission-in-harness-feedback-survey-01M3PK9W
+base_commit: c3b1efc2219bc652adfb2308f653ef5d7375b128
+created_at: '2026-09-30T16:46:57.327232+00:00'
 subtasks:
 - T030
 - T031
@@ -45,6 +47,7 @@ owned_files:
 role: implementer
 tags: []
 task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP06 – Inline Trigger Hooks for Humans
