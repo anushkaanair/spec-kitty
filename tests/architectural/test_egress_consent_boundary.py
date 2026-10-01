@@ -630,6 +630,20 @@ _EGRESS_ALLOWLIST: dict[str, Allowance] = {
         inventory_id="E18",
         note="Localhost detached-child readiness probe: GET /api/health on 127.0.0.1 to verify the listener's project identity (#4125).",
     ),
+    # -- Anonymous Feedback Submission (in-harness-feedback-survey-01M3PK9W) --
+    "specify_cli/feedback/sender.py": Allowance(
+        kind=AllowanceKind.NOT_PROJECT_DATA,
+        inventory_id="E18-feedback",
+        note=(
+            "Detached Feedback Submission POST (WP03). The wire body is the "
+            "closed allowlist in contracts/feedback-submission.schema.json — "
+            "rating/comment/email plus CLI version, distribution, trigger, "
+            "harness, os, mission_type. Explicitly never includes repository, "
+            "mission id/slug, branch, user, host, or credentials. Consent is "
+            "enforced by build_and_hand_off before spawn; the child re-validates "
+            "https-or-loopback and sends no Authorization/Cookie headers."
+        ),
+    ),
 }
 
 #: Ratcheted in ``_baselines.yaml`` as

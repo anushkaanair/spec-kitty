@@ -1602,8 +1602,8 @@ _Project health diagnostics_
 │                         prerelease-opt-in).                                  │
 │ env-file                Report ``.kitty.env`` operator env-file health       │
 │                         (presence/tier/ignore).                              │
-│ provenance              Flag committed absolute built-in-pack source_path    │
-│                         leaks (C-PRV-5).                                     │
+│ provenance              Flag committed absolute built-in-pack leaks and      │
+│                         ambiguous template sources (C-PRV-5).                │
 │ command-files           Check all agent command files for correctness.       │
 │ skills                  Check command-skill manifest drift for Codex, Vibe,  │
 │                         Pi, and Letta.                                       │
@@ -1643,7 +1643,7 @@ _Project health diagnostics_
 │                         authoritative                                        │
 │                         ``DecisionPointOpened``/``DecisionPointResolved``    │
 │                         event log                                            │
-│                         (FR-004/FR-005).                                     │
+│                         (#4919).                                             │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1837,13 +1837,13 @@ _Project health diagnostics_
 
  Diagnose or repair divergence between ``decisions/index.json`` and the
  authoritative ``DecisionPointOpened``/``DecisionPointResolved`` event log
- (FR-004/FR-005; #4919 FR-001—FR-004).
+ (#4919).
 
  Diagnose (default): read-only; reports decisions present in the event
  log but missing from the index, index entries with no backing event, a
  decision_id whose event group cannot be folded at all (e.g. an
  ``open -> open`` corruption), and an index entry whose status disagrees
- with the folded log (a stale entry). Always exits 0 (report only) — C-007.
+ with the folded log (a stale entry). Always exits 0 (report only).
 
  ``--repair``: rebuilds ``index.json`` from the log via the single
  canonical ``event -> IndexEntry`` fold
@@ -1856,7 +1856,7 @@ _Project health diagnostics_
  of which one the (git-merge-driver-resorted) log lists first (#4919).
  When a decision cannot be reconciled, ``--repair`` leaves it unchanged
  (never drops it), names it in the report, and the command then exits
- **1** — C-007. It exits 0 only when every decision the repair touched
+ **1**. It exits 0 only when every decision the repair touched
  folds cleanly.
 
  Run ``--repair`` as an offline maintenance step, not concurrently with
@@ -2083,12 +2083,13 @@ _Project health diagnostics_
 ```
  Usage: spec-kitty doctor provenance [OPTIONS]
 
- Flag committed absolute built-in-pack source_path leaks (C-PRV-5).
+ Flag committed absolute built-in-pack leaks and ambiguous template sources
+ (C-PRV-5).
 
  Scans .kittify/charter/charter.yaml's catalog and
- .kittify/agent_profiles_manifest.json for a source_path that should
- be a ${SPEC_KITTY_PACKS_ROOT}/built-in/... token but is not, and
- prints a heal hint for each. Read-only -- never mutates state.
+ .kittify/agent_profiles_manifest.json for source_path values that
+ should be portable pack tokens. Read-only -- never mutates state;
+ ambiguous former-checkout paths are reported without a heal hint.
 
  Examples:
      spec-kitty doctor provenance
@@ -2699,6 +2700,29 @@ _Event log tailing commands_
 │    --help            -h               Show this message and exit.            │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
+
+## spec-kitty feedback
+
+```
+ Usage: spec-kitty feedback [OPTIONS]
+
+ Offer the Feedback Survey on demand, or inspect / toggle settings.
+
+ Submissions are anonymous unless an email is typed, and are sent only after
+ ``Send feedback?``. Automatic prompts ignore the weekly limit for this
+ on-demand command. Prefer ``--status`` to see the destination; the consent
+ step never prints a URL.
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --status                     Show the effective destination, fields sent,    │
+│                              last-shown date, and automatic prompts.         │
+│ --prompts          [on|off]  Turn automatic feedback prompts on or off.      │
+│ --json                       Emit machine-readable JSON for --status or      │
+│                              hidden agent modes.                             │
+│ --help     -h                Show this message and exit.                     │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
 
 ## spec-kitty glossary
 
@@ -5295,8 +5319,8 @@ _Manage invocation records._
 │ *  --invocation-id  -i      TEXT  Invocation ULID to close [required]        │
 │ *  --outcome                TEXT  done | failed | abandoned [required]       │
 │    --evidence               TEXT  Path to evidence file (Tier 2 promotion)   │
-│    --artifact               TEXT  Path (repo-relative or absolute) of an     │
-│                                   artifact produced by this invocation.      │
+│    --artifact               TEXT  Path (repo-relative or absolute) or URL of │
+│                                   an artifact produced by this invocation.   │
 │                                   Repeatable.                                │
 │    --commit                 TEXT  Git commit SHA most directly produced by   │
 │                                   this invocation. Singular.                 │

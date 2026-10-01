@@ -704,8 +704,10 @@ def test_real_typer_app_visible_count_within_tolerance() -> None:
 
     Baseline re-pinned 2026-09-05 at 281 visible after converging the 11
     orchestrator-api design-phase verbs onto the experimental tree while
-    preserving its retired-surface removals.
-    Tolerance: ±10% on the visible count (253..309) to allow natural growth.
+    preserving its retired-surface removals. Re-pinned 2026-10-01 at 282
+    visible: +1 for the new top-level ``feedback`` command (in-harness
+    feedback survey mission), a deliberate and spec-required addition.
+    Tolerance: ±10% on the visible count (254..310) to allow natural growth.
 
     Block-scoped (``pytest.MonkeyPatch.context()``, not the ``monkeypatch``
     fixture): the sibling
@@ -733,7 +735,7 @@ def test_real_typer_app_visible_count_within_tolerance() -> None:
     entries = walk(app)
     visible = [e for e in entries if not e.hidden]
     deprecated = [e for e in entries if e.deprecated]
-    assert 253 <= len(visible) <= 309, f"visible count {len(visible)} is outside the ±10% tolerance band around the 2026-09-05 convergence audit baseline of 281"
+    assert 254 <= len(visible) <= 310, f"visible count {len(visible)} is outside the ±10% tolerance band around the 2026-10-01 re-pinned baseline of 282"
     assert len(deprecated) >= 1
 
 
