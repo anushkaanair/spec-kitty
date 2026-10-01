@@ -12,7 +12,7 @@ uv run --frozen spec-kitty feedback --agent-submit --trigger on_demand --agent c
   --rating 6 --consent yes --json
 
 # Targeted tests
-uv run --frozen pytest tests/feedback -q
+uv run --frozen pytest tests/specify_cli/feedback -q
 ```
 
 In a supported harness, type `/spec-kitty.feedback` after installing the generated command with `spec-kitty upgrade`.

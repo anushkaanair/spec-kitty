@@ -62,7 +62,7 @@ src/specify_cli/feedback/
 └── hooks.py             # inline prompts use the updated wording
 src/specify_cli/shims/registry.py   # register "feedback" consumer skill
 packs/built-in/...                  # SOURCE prompt for /spec-kitty.feedback
-tests/feedback/                     # red-first tests, shared input table
+tests/specify_cli/feedback/                     # red-first tests, shared input table
 docs/                               # CLI reference and give-feedback guide refresh
 ```
 
