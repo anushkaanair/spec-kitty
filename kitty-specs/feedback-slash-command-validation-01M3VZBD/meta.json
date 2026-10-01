@@ -13,5 +13,7 @@
   "purpose_tldr": "Users open the feedback form on demand with /spec-kitty.feedback, and every answer is validated and sanitized before anything is sent.",
   "slug": "feedback-slash-command-validation-01M3VZBD",
   "target_branch": "feat/in-harness-feedback-survey",
-  "topology": "coord"
+  "topology": "coord",
+  "vcs": "git",
+  "vcs_locked_at": "2026-10-01T19:37:50.238931+00:00"
 }
