@@ -67,7 +67,7 @@ The email is optional. If provided, it must be one well-formed address. A malfor
 
 **Acceptance Scenarios**:
 
-1. **Given** `a@b`, `a b@example.test`, `a@@example.test`, `a@example.test, b@example.test`, an address with control characters, or one over 254 characters, **When** it is submitted, **Then** it is rejected with `email_invalid`.
+1. **Given** `a@b`, `a b@example.test`, `a@@example.test`, `a@example.test, b@example.test`, an address with control characters, or one over 254 characters, **When** it is submitted, **Then** it is rejected with `email_malformed`.
 2. **Given** `person@example.test` or an empty value, **When** it is submitted, **Then** it is accepted (empty means no email).
 
 ---
@@ -144,7 +144,7 @@ The slash command, the terminal form, the inline survey hooks and the `--agent-s
 ### Key Entities *(include if the mission involves data)*
 
 - **Feedback answers**: rating (1 to 5), optional comment (cleaned, at most 2000 characters), optional email (one well-formed address).
-- **Validation result**: per-field outcome carrying the cleaned value or a structured error code (`rating_out_of_range`, `email_invalid`, and a notice when a comment was truncated).
+- **Validation result**: per-field outcome carrying the cleaned value or a structured error code (`rating_out_of_range`, `email_malformed`, and a notice when a comment was truncated).
 - **Feedback command**: the single pack-defined `/spec-kitty.feedback` instruction generated for every supported agent.
 
 ## Success Criteria *(mandatory)*
