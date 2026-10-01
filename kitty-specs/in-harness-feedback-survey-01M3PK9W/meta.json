@@ -26,6 +26,7 @@
   "purpose_tldr": "Let Spec Kitty users rate their experience and suggest changes at key moments, without getting in their way.",
   "slug": "in-harness-feedback-survey-01M3PK9W",
   "source_description": "Present a quick two-question feedback survey (1-5 rating + 'what would you change?') at mission end, Op close, planning complete, or on demand; send to a web service only with explicit per-submission consent; fire-and-forget; harness-native UI; non-intrusive; anonymous by default with opt-in email.",
+  "status_phase": "1",
   "target_branch": "feat/in-harness-feedback-survey",
   "topology": "coord",
   "vcs": "git"
