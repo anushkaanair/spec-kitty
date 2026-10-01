@@ -1,5 +1,5 @@
 {
-  "event_count": 70,
+  "event_count": 76,
   "last_event_id": "01M3VNTBECQ541EBJ28S9W3SDB",
   "materialized_at": "2026-10-01T12:07:54.060769+00:00",
   "mission_number": "",
@@ -20,264 +20,130 @@
     "WP01": {
       "actor": "merge",
       "agent": "cursor",
-      "agent_profile": "__resolved_profile_absent__",
-      "agent_profile_version": "__resolved_profile_version_absent__",
       "force_count": 0,
+      "implementer_of_record": "cursor",
       "lane": "done",
       "last_event_id": "01M3VNSAHZ52YP92GFEGR28W1Q",
       "last_transition_at": "2026-10-01T12:07:20.384003+00:00",
-      "model": "__resolved_model_absent__",
-      "notes": [
-        "Ready for review: feedback domain core (models, hardened feedback.json preferences, pure decide_offer + locked claim_offer); red-first acceptance commit 9f77f74e4, impl d925b7eee; 133 feedback tests pass at 100% coverage; mypy --strict/ruff/format clean",
-        "Independent review APPROVE: T001 red-first verified (ImportError on planning base); decide_offer order + OfferReason enum match contract; claim_offer lock/race hardening verified (lock-removal probe fails contention+race tests); preferences fail-closed; mypy/ruff/format clean; 133 passed, 100% cov on owned package."
-      ],
-      "provider": "__resolved_provider_absent__",
       "review_result": {
         "reference": "auto-approval:WP01:20260930",
         "reviewer": "Zohar Stolar",
         "verdict": "approved"
       },
-      "role": "reviewer",
-      "shell_pid": 47408,
-      "shell_pid_created_at": "1790770853.924174",
-      "subtasks": {
-        "T001": "done",
-        "T002": "done",
-        "T003": "done",
-        "T004": "done",
-        "T005": "done",
-        "T006": "done",
-        "T007": "done"
-      }
+      "shell_pid": 7478,
+      "shell_pid_created_at": "1790758580.419143"
     },
     "WP02": {
       "actor": "merge",
-      "agent": "cursor:claude:reviewer-renata:reviewer",
-      "agent_profile": "__resolved_profile_absent__",
-      "agent_profile_version": "__resolved_profile_version_absent__",
+      "agent": "cursor:claude:python-pedro:implementer",
       "force_count": 0,
+      "implementer_of_record": "cursor:claude:python-pedro:implementer",
       "lane": "done",
       "last_event_id": "01M3VNSFNY4DPR0Y1B3N0CKRFA",
       "last_transition_at": "2026-10-01T12:07:25.632085+00:00",
-      "model": "__resolved_model_absent__",
-      "notes": [
-        "WP02 ready for review.\n\nCommits:\n- 0ce1ccb0c test(WP02): red-first endpoint resolution and distribution seam tests\n- d13ec9e5d feat(WP02): endpoint resolution and DistributionProfile.feedback_endpoint\n\nFiles: src/specify_cli/feedback/endpoint.py (new), src/specify_cli/distribution/profile.py (+feedback_endpoint), tests/specify_cli/feedback/test_endpoint.py, tests/specify_cli/distribution/test_profile_feedback_endpoint.py\n\nValidation:\n- red-first: 26 failed, 2 passed (ImportError/AttributeError as expected)\n- uv run --frozen pytest tests/specify_cli/feedback tests/specify_cli/distribution -q → 242 passed\n- uv run --frozen pytest … --cov=specify_cli.feedback.endpoint --cov-fail-under=90 → 31 passed, endpoint 100%\n- uv run --frozen mypy --strict endpoint.py profile.py → Success\n- uv run --frozen ruff check + ruff format --check (feedback+distribution) → All checks passed / 21 files already formatted\n- uv run --frozen pytest tests/architectural/test_layer_rules.py -q → 74 passed\n- make test-fast → 2107 passed, 5 skipped, EXIT 0\n- Integration: resolve_feedback_endpoint/describe_endpoint/ResolvedEndpoint are intentional API for WP03–WP05 (--status, payload hand-off, agent protocol); live callers deferred by design. feedback_endpoint field exercised via resolve + profile tests.\n\nDeviations: none material. Covered urlsplit ValueError via monkeypatch for 100% endpoint coverage.",
-        "WP02 independent review APPROVED.\n\nEvidence (reviewer-run):\n- Red-first: scratch pre-impl tree (git archive 0ce1ccb0c^ + tests from 0ce1ccb0c) → 26 failed, 2 passed (neutrality scanner only); endpoint.py and feedback_endpoint absent.\n- pytest tests/specify_cli/feedback tests/specify_cli/distribution -q → 242 passed\n- coverage specify_cli.feedback.endpoint → 100% (66/66)\n- mypy --strict endpoint.py + profile.py → clean\n- ruff check + ruff format --check on owned files → clean\n- pytest tests/architectural/test_layer_rules.py -q → 74 passed\n\nAdversarial probes: precedence env>user>dist>none with invalid/blank higher tiers fail-closed (no fallthrough); lookalike http (127.0.0.1.evil.com, localhost@evil.com, IPv4-mapped, decimal/hex IP, trailing-dot localhost) rejected; loopback http + HTTPS accepted; no network I/O in resolution; stock/degraded dormant; owned_files only; describe_endpoint is status-oriented (full URL only when resolved for --status)."
-      ],
-      "provider": "__resolved_provider_absent__",
       "review_result": {
         "reference": "auto-approval:WP02:20260930",
         "reviewer": "Zohar Stolar",
         "verdict": "approved"
       },
-      "role": "reviewer",
-      "shell_pid": 73340,
-      "shell_pid_created_at": "1790772802.903573",
-      "subtasks": {
-        "T008": "done",
-        "T009": "done",
-        "T010": "done",
-        "T011": "done",
-        "T012": "done"
-      }
+      "shell_pid": 57209,
+      "shell_pid_created_at": "1790771737.688802"
     },
     "WP03": {
       "actor": "merge",
-      "agent": "cursor:claude:reviewer-renata:reviewer",
-      "agent_profile": "__resolved_profile_absent__",
-      "agent_profile_version": "__resolved_profile_version_absent__",
+      "agent": "cursor:claude:python-pedro:implementer",
       "force_count": 0,
+      "implementer_of_record": "cursor:claude:python-pedro:implementer",
       "lane": "done",
       "last_event_id": "01M3VNSPN5S1GBRBBJHB5AD5TD",
       "last_transition_at": "2026-10-01T12:07:32.773920+00:00",
-      "model": "__resolved_model_absent__",
-      "notes": [
-        "Ready for review: payload.py + sender.py fire-and-forget delivery (T013–T018).\n\nCommits: 4314a9f3b (red acceptance), b0c548df0 (impl+unit/contract+egress allowlist), cf15cfe55 (ruff C416).\n\nValidation:\n- uv run --frozen pytest tests/specify_cli/feedback -q → 228 passed\n- coverage payload+sender → 99% (payload 100%, sender 99%; only __main__ residual)\n- uv run --frozen mypy --strict src/specify_cli/feedback/payload.py src/specify_cli/feedback/sender.py → Success\n- ruff check + format --check on changed feedback files → All checks passed; C901 clean\n- pytest tests/architectural/test_layer_rules.py test_egress_consent_boundary.py test_ratchet_baselines.py -q → 158 passed, 2 xfailed\n- make test-fast → 2107 passed, 5 skipped\n\nDeviation: touched tests/architectural/test_egress_consent_boundary.py + _baselines.yaml (17→18) so the anonymous Feedback Submission sink is allowlisted (NOT_PROJECT_DATA); required for green egress gate though outside owned_files.",
-        "APPROVE WP03. Independent review: red-first 4314a9f3b tests-only and 6/6 RED; feedback suite 228 passed; payload/sender coverage 100%/99%; mypy --strict clean; ruff check+format clean; arch gates 158 passed/2 xfailed. Privacy allowlist holds under hostile HOME/USER; email omitted by default; argv/env clean (stdin-only); fire-and-forget (no wait, 5s, follow_redirects=False, no auth, child exit 0). Egress 17→18 narrowly scoped to feedback/sender.py and necessary (gate reds without it) — deviation acceptable. Non-blocking: fixture can drift without identity guard; mission_type is opaque passthrough (caller/WP06)."
-      ],
-      "provider": "__resolved_provider_absent__",
       "review_result": {
         "reference": "auto-approval:WP03:20260930",
         "reviewer": "Zohar Stolar",
         "verdict": "approved"
       },
-      "role": "reviewer",
-      "shell_pid": 96696,
-      "shell_pid_created_at": "1790777063.843041",
-      "subtasks": {
-        "T013": "done",
-        "T014": "done",
-        "T015": "done",
-        "T016": "done",
-        "T017": "done",
-        "T018": "done"
-      }
+      "shell_pid": 78334,
+      "shell_pid_created_at": "1790773059.986614"
     },
     "WP04": {
       "actor": "merge",
-      "agent": "cursor:claude:reviewer-renata:reviewer",
-      "agent_profile": "__resolved_profile_absent__",
-      "agent_profile_version": "__resolved_profile_version_absent__",
+      "agent": "cursor:claude:python-pedro:implementer",
       "force_count": 0,
+      "implementer_of_record": "cursor:claude:python-pedro:implementer",
       "lane": "done",
       "last_event_id": "01M3VNSWMS1MH53W3FH290T1H3",
       "last_transition_at": "2026-10-01T12:07:38.905823+00:00",
-      "model": "__resolved_model_absent__",
-      "notes": [
-        "Ready for review: WP04 agent protocol service.\n\nCommits: 917723de2 (red-first tests), 3c7c45ce1 (implementation).\n\nFiles: src/specify_cli/feedback/agent_protocol.py, wording.py; tests/.../test_agent_contracts.py, test_agent_protocol.py, fixtures/agent-*.schema.json; also tests/.../test_endpoint.py (carry-forward: annotate _resolve/_describe, remove bare type:ignore).\n\nValidation:\n- uv run --frozen pytest tests/specify_cli/feedback -q → 255 passed, 3 skipped (fixture drift skips: mission contracts absent on lane checkout; fixtures byte-copied from planning branch)\n- coverage agent_protocol+wording → 100%\n- uv run --frozen mypy --strict src/specify_cli/feedback/agent_protocol.py wording.py → Success\n- ruff check + format --check on changed files → pass\n- pytest tests/architectural/test_layer_rules.py test_egress_consent_boundary.py → 117 passed, 2 xfailed\n- make test-fast → 2107 passed, 5 skipped, EXIT=0\n\nIntegration: agent_check/submit/choice are WP05 CLI wiring targets (intentional API); normalize_mission_type + wording.agent_survey_payload consumed here.\n\nDeviations: mission contract files not in lane worktree (coord partition); fixture drift tests skip with documented reason; mission_type normalized to built-in vocabulary or 'other'.",
-        "WP04 independent review APPROVED. Evidence: feedback suite 255 passed/3 skipped; agent_protocol+wording 100% cov; mypy --strict clean; ruff check+format clean; arch gates 117 passed/2 xfailed. Red-first 917723de2 tests-only genuinely RED (22 failed ImportError). Contract fidelity: 18 live outputs validated against primary kitty-specs contracts via jsonschema; fixtures byte-identical. Drift skips in lane are non-blocking (narrow is_file skip; feat/ target has contracts). Handshake/consent/wording/reuse checks passed."
-      ],
-      "provider": "__resolved_provider_absent__",
       "review_result": {
         "reference": "auto-approval:WP04:20260930",
         "reviewer": "Zohar Stolar",
         "verdict": "approved"
       },
-      "role": "reviewer",
-      "shell_pid": 67972,
-      "shell_pid_created_at": "1790778850.398496",
-      "subtasks": {
-        "T019": "done",
-        "T020": "done",
-        "T021": "done",
-        "T022": "done",
-        "T023": "done"
-      }
+      "shell_pid": 1002,
+      "shell_pid_created_at": "1790777441.040301"
     },
     "WP05": {
       "actor": "merge",
-      "agent": "cursor:claude:reviewer-renata:reviewer",
-      "agent_profile": "__resolved_profile_absent__",
-      "agent_profile_version": "__resolved_profile_version_absent__",
+      "agent": "cursor:claude:python-pedro:implementer",
       "force_count": 1,
+      "implementer_of_record": "cursor:claude:python-pedro:implementer",
       "lane": "done",
       "last_event_id": "01M3VNSZXWAGMWFF82F91BXN1P",
       "last_transition_at": "2026-10-01T12:07:42.268798+00:00",
-      "model": "__resolved_model_absent__",
-      "notes": [
-        "WP05 ready for review. Commits: d92c477f4 (red tests), 09e045e3b (impl). Tests: feedback suite 280 passed/3 skipped; WP05 unit+cli 33 passed cov 98%; mypy strict clean; ruff clean; key arch gates test_completion_manifest_freshness + test_visible_paths_match_reference + test_completion_fast_path = 23 passed; E2E loopback OK (form-submit on_demand/cli, agent-check/submit handed_off, --status, --prompts off, dormant). test-fast equiv under sandbox: 1964 passed/94 failed/50 errors — zero feedback failures (worktree/sandbox env). Deviations: CLI reference regenerated in-process (uv run blocked by sandbox on .venv); docs/api/agent-subcommands.md not in owned_files (reverted).",
-        "REQUEST_CHANGES: EOF/Abort exits 1; completion manifest not canonical regenerate bytes",
-        "Cycle 2 REQUEST_CHANGES fixes: (B1) catch typer.Abort from typer.prompt on EOF/Ctrl-C so survey always exits 0 with nothing sent; CliRunner EOF regressions at each question (red-first 12b61f3b4). (B2) regenerated _completion_manifest.json via python -m specify_cli.completion --regenerate; byte-identical cmp proved; cli-commands freshness OK; agent-subcommands no drift. Dead Choice else removed. Validation: feedback pytest 296 passed/3 skipped, terminal_form+feedback.py cov 100%; mypy --strict clean; ruff check+format clean; arch+lazy+egress 295 passed/2 xfailed; make test-fast 2108 passed/5 skipped. Real CLI: empty/mid-flow EOF exit 0 no Aborted nothing sent; complete run 1 POST.",
-        "APPROVE cycle2: EOF/typer.Abort->exit0 verified (RED without catch); manifest byte-identical; tests 296+arch green"
-      ],
-      "provider": "__resolved_provider_absent__",
-      "review": null,
       "review_result": {
         "reference": "auto-approval:WP05:20260930",
         "reviewer": "unknown",
         "verdict": "approved"
       },
-      "role": "reviewer",
-      "shell_pid": 36200,
-      "shell_pid_created_at": "1790785385.71807",
-      "subtasks": {
-        "T024": "done",
-        "T025": "done",
-        "T026": "done",
-        "T027": "done",
-        "T028": "done",
-        "T029": "done"
-      }
+      "shell_pid": 21153,
+      "shell_pid_created_at": "1790783481.910205"
     },
     "WP06": {
       "actor": "merge",
-      "agent": "cursor",
-      "agent_profile": "__resolved_profile_absent__",
-      "agent_profile_version": "__resolved_profile_version_absent__",
+      "agent": "cursor:claude:python-pedro:implementer",
       "force_count": 0,
+      "implementer_of_record": "cursor:claude:python-pedro:implementer",
       "lane": "done",
       "last_event_id": "01M3VNT3H9E0HBDH1MD7QHDTZ8",
       "last_transition_at": "2026-10-01T12:07:45.962062+00:00",
-      "model": "__resolved_model_absent__",
-      "notes": [
-        "WP06 complete: fail-quiet inline Feedback Survey hooks at mission_end (consolidate), planning_complete (finalize_tasks), and op_close (profile-invocation complete for done/failed only).\n\nCommits: 784cd70ec (ATDD red), eff629cb3 (impl+wiring), 5cf717c30 (ruff format).\n\nValidation:\n- uv run --frozen pytest tests/specify_cli/feedback -q → 295 passed, 3 skipped\n- pytest tests/specify_cli/cli/commands/test_consolidate*.py tests/agent/test_mission_finalize*.py tests/specify_cli/agent/test_profile_invocation*.py tests/unit/test_profile_invocation*.py -q → 79 passed\n- mypy --strict on hooks.py + consolidate/mission_finalize/profile_invocation → clean\n- ruff check + format --check on changed files → clean; C901 all ≤15\n- arch: test_layer_rules + egress + lazy-import → 123 passed, 2 xfailed\n- make test-fast (sandbox-blocked locally; CI owns full gate)\n\nReal-CLI: interactive offers after consolidate/finalize/op-close(done|failed); --json/CI/abandoned/throttled leave host stdout/exit byte-unchanged; claim_offer once; failures swallowed.",
-        "Review passed (reviewer-renata): red-first verified (3 positive controls RED pre-impl); real-CLI pty probes fail-quiet for all 3 triggers; make test-fast 2108 passed/5 skipped; feedback dir 295 passed/3 skipped; hooks.py cov 92%; mypy --strict, ruff check/format, C901 clean. Non-blocking findings recorded in review summary."
-      ],
-      "provider": "__resolved_provider_absent__",
       "review_result": {
         "reference": "auto-approval:WP06:20260930",
         "reviewer": "Zohar Stolar",
         "verdict": "approved"
       },
-      "role": "reviewer",
-      "shell_pid": 45817,
-      "shell_pid_created_at": "1790805194.657402",
-      "subtasks": {
-        "T030": "done",
-        "T031": "done",
-        "T032": "done",
-        "T033": "done",
-        "T034": "done",
-        "T035": "done"
-      }
+      "shell_pid": 45575,
+      "shell_pid_created_at": "1790786799.821647"
     },
     "WP07": {
       "actor": "merge",
-      "agent": "claude:opus:reviewer-renata:reviewer",
-      "agent_profile": "__resolved_profile_absent__",
-      "agent_profile_version": "__resolved_profile_version_absent__",
+      "agent": "cursor:claude:python-pedro:implementer",
       "force_count": 1,
+      "implementer_of_record": "cursor:claude:python-pedro:implementer",
       "lane": "done",
       "last_event_id": "01M3VNT70NNWBTT6TB7T2TNGQ9",
       "last_transition_at": "2026-10-01T12:07:49.525308+00:00",
-      "model": "__resolved_model_absent__",
-      "notes": [
-        "WP07 complete. Verified dead-agent work + follow-up commits.\n\nSubtasks: T036-T041 done. Parity suspicion: T041 intentional (glob→packs/built-in + non-vacuity floor); collateral ruff reformat of ratchet files reverted in 5929b3489.\n\nValidation (lane):\n- pytest tests/specify_cli/feedback: 304 passed, 3 skipped\n- pytest tests/specify_cli/regression: 234 passed\n- pytest skills/test_command_installer: 88 passed\n- pytest doctrine (filtered): 3581 passed, 3 failed (sandbox: git init / .cursor EPERM — not WP07)\n- charter sample: sandbox EPERM on .cursor; skill content 4/4 pass\n- gates: snippet+floor+pack-scan 3/3; layer/packaging/pack-manifest 85 passed\n- agent_block coverage 100%; mypy --strict clean on touched src; ruff check clean\n- make test-fast blocked in sandbox (psutil cpu_count); equivalent -n0: 1964 passed, failures/errors are setup EPERM/git — env, not WP07\n- regenerate-graph: byte-identical (prompts not in pack-manifest constituents)\n- twelve-agent baseline: only specify pinned; no refresh needed\n\nProof: shim consolidate+claude and dispatch op_close_guidance_line render Feedback Survey Check / op_close agent-check.",
-        "REQUEST_CHANGES: B1 op_close guidance lacks done|failed filter (FR-006); B2 --comment double-quote shell expansion hazard",
-        "Cycle 2 fixes; 319 feedback + 645 narrow regression + 187 gate tests green; mypy/ruff clean; DRG fresh.",
-        "Cycle 2: shell-injection, TOML escaping, op_close done|failed, survey-before-handoff, consent all fixed and pinned by tests; T041 parity non-weakening"
-      ],
-      "provider": "__resolved_provider_absent__",
-      "review": null,
       "review_result": {
         "reference": "auto-approval:WP07:20261001",
         "reviewer": "Zohar Stolar",
         "verdict": "approved"
       },
-      "role": "reviewer",
-      "shell_pid": 3672,
-      "shell_pid_created_at": "1790848220.761324",
-      "subtasks": {
-        "T036": "done",
-        "T037": "done",
-        "T038": "done",
-        "T039": "done",
-        "T040": "done",
-        "T041": "done"
-      }
+      "shell_pid": 71072,
+      "shell_pid_created_at": "1790845319.120596"
     },
     "WP08": {
       "actor": "merge",
-      "agent": "claude:opus:reviewer-renata:reviewer",
-      "agent_profile": "__resolved_profile_absent__",
-      "agent_profile_version": "__resolved_profile_version_absent__",
+      "agent": "cursor:claude-sonnet-5-5:curator-carla:implementer",
       "force_count": 1,
+      "implementer_of_record": "cursor:claude-sonnet-5-5:curator-carla:implementer",
       "lane": "done",
       "last_event_id": "01M3VNTBECQ541EBJ28S9W3SDB",
       "last_transition_at": "2026-10-01T12:07:54.060769+00:00",
-      "model": "__resolved_model_absent__",
-      "notes": [
-        "WP08 docs/glossary/changelog/validation done; quickstart 1-7 evidence on loopback; docs gates green except 3 tests (1 likely caused by new feedback command pushing CLI visible-count to 310 > 309 band; 2 pre-existing docs-query/visible-count). Real-harness check + make test-fast left to orchestrator.",
-        "Rejected: T046 validation evidence not recorded in Activity Log",
-        "Cycle 2: T046 evidence recorded in Activity Log (B1). No code change."
-      ],
-      "provider": "__resolved_provider_absent__",
-      "review": null,
       "review_result": {
         "reference": "auto-approval:WP08:20261001",
         "reviewer": "Zohar Stolar",
         "verdict": "approved"
       },
-      "role": "reviewer",
-      "shell_pid": 65997,
-      "shell_pid_created_at": "1790855193.427991",
-      "subtasks": {
-        "T042": "done",
-        "T043": "done",
-        "T044": "done",
-        "T045": "done",
-        "T046": "done"
-      }
+      "shell_pid": 63620,
+      "shell_pid_created_at": "1790855128.565844"
     }
   }
 }
