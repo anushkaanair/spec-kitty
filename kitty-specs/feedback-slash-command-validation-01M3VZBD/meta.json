@@ -1,0 +1,17 @@
+{
+  "coordination_branch": "kitty/mission-feedback-slash-command-validation-01M3VZBD",
+  "created_at": "2026-10-01T14:54:30.851643+00:00",
+  "flattened": false,
+  "friendly_name": "Feedback slash command and input hardening",
+  "mid8": "01M3VZBD",
+  "mission_id": "01M3VZBDW0BV0HZX5ZY5VXBAW7",
+  "mission_number": null,
+  "mission_slug": "feedback-slash-command-validation-01M3VZBD",
+  "mission_type": "software-dev",
+  "pr_bound": true,
+  "purpose_context": "The in-harness feedback survey only appears on throttled triggers, and its free-text validation is minimal. This mission adds an on-demand slash command rendered through the harness question UI, and hardens rating, comment and email validation in one shared validator used by every flow, including a visible 2000-character comment limit shown before the user types.",
+  "purpose_tldr": "Users open the feedback form on demand with /spec-kitty.feedback, and every answer is validated and sanitized before anything is sent.",
+  "slug": "feedback-slash-command-validation-01M3VZBD",
+  "target_branch": "feat/in-harness-feedback-survey",
+  "topology": "coord"
+}
