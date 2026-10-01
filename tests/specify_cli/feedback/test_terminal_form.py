@@ -31,7 +31,7 @@ def test_happy_path_asks_exactly_four_questions() -> None:
         prompts.append(prompt)
         mapping = {
             wording.RATING_QUESTION: "4",
-            wording.COMMENT_QUESTION: "faster",
+            wording.comment_question(): "faster",
             wording.EMAIL_QUESTION: "",
             f"{wording.CONSENT_QUESTION} [y/N]": "y",
         }
@@ -109,7 +109,21 @@ def test_comment_truncation_notice_before_consent(capsys: pytest.CaptureFixture[
     assert result.answers.comment is not None
     assert len(result.answers.comment) == COMMENT_MAX_LENGTH
     captured = capsys.readouterr().out
-    assert wording.COMMENT_TRUNCATED_NOTICE in captured
+    assert wording.comment_truncated_notice() in captured
+
+
+def test_comment_prompt_states_limit_before_input() -> None:
+    prompts: list[str] = []
+    answers = iter(["4", "", "", "n"])
+
+    def ask(prompt: str) -> str:
+        prompts.append(prompt)
+        return next(answers)
+
+    run_form(allow_never=False, ask=ask)
+    comment_prompt = prompts[1]
+    assert f"up to {COMMENT_MAX_LENGTH} characters" in comment_prompt
+    assert comment_prompt == wording.comment_question()
 
 
 def test_email_reask_once(capsys: pytest.CaptureFixture[str]) -> None:

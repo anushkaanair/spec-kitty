@@ -27,7 +27,7 @@ How-to: [Give feedback on Spec Kitty](../guides/how-to/collaboration/give-feedba
 
 | | |
 |---|---|
-| **Definition** | The short, optional prompt Spec Kitty offers: a rating from 1 to 5, "What would you change?", an optional email, and "Send feedback?". Every part can be skipped, and the person can choose "Don't ask again". |
+| **Definition** | The short, optional prompt Spec Kitty offers: a rating from 1 to 5, "What would you change?" (with its character limit shown), an optional email, and "Send feedback?". Every part can be skipped, and the person can choose "Don't ask again". |
 | **Context** | Feedback |
 | **Status** | candidate |
 | **Applicable to** | `3.x` |
@@ -53,7 +53,7 @@ How-to: [Give feedback on Spec Kitty](../guides/how-to/collaboration/give-feedba
 
 | | |
 |---|---|
-| **Definition** | A point in the workflow where Spec Kitty may offer the Feedback Survey: planning complete (`planning_complete`), mission end (`mission_end`), [Op](./planning-and-tracking.md#op) close (`op_close`), or on demand (`on_demand`, the `spec-kitty feedback` command). The three automatic triggers share one limit of at most one offer per week and never fire in CI or non-interactive terminals. |
+| **Definition** | A point in the workflow where Spec Kitty may offer the Feedback Survey: planning complete (`planning_complete`), mission end (`mission_end`), [Op](./planning-and-tracking.md#op) close (`op_close`), or on demand (`on_demand`, the `spec-kitty feedback` command and the `/spec-kitty.feedback` agent command). The three automatic triggers share one limit of at most one offer per week and never fire in CI or non-interactive terminals; the `on_demand` trigger ignores that weekly limit. |
 | **Context** | Feedback |
 | **Status** | candidate |
 | **Applicable to** | `3.x` |
@@ -72,3 +72,16 @@ How-to: [Give feedback on Spec Kitty](../guides/how-to/collaboration/give-feedba
 | **Applicable to** | `3.x` |
 | **Avoid** | SaaS, Team Kitty, relay |
 | **Related terms** | [Feedback Submission](#feedback-submission) |
+
+---
+
+### Feedback Validation
+
+| | |
+|---|---|
+| **Definition** | The single set of input rules applied to every Feedback Survey answer, in the terminal form and in the agent hand-off alike. Rating: an integer from 1 to 5. Comment: control and invisible characters and terminal escape sequences removed, markup kept, newlines collapsed to a space, truncated at the shown limit with a notice. Email: optional, one well-formed address, rejected rather than corrected. If any answer is invalid, nothing is sent. |
+| **Context** | Feedback |
+| **Status** | candidate |
+| **Applicable to** | `3.x` |
+| **Avoid** | sanitising, escaping |
+| **Related terms** | [Feedback Survey](#feedback-survey), [Feedback Submission](#feedback-submission) |

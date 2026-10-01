@@ -35,7 +35,7 @@
           "description": "The agent must tell the user before the consent step if their comment exceeds this and will be cut."
         },
         "rating_question": { "const": "How would you rate your experience? (1-5)" },
-        "comment_question": { "const": "What would you change? (optional)" },
+        "comment_question": { "const": "What would you change? (optional, up to 2000 characters)" },
         "email_question": { "const": "Email, only if you want to sign your feedback (optional)" },
         "consent_question": { "const": "Send feedback?" },
         "choices": {

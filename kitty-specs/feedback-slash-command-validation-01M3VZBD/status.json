@@ -1,0 +1,150 @@
+{
+  "event_count": 33,
+  "last_event_id": "01M3WKDEPHZ0XRYTDE3GHGFH8E",
+  "materialized_at": "2026-10-01T20:45:08.689557+00:00",
+  "mission_number": "210",
+  "mission_slug": "feedback-slash-command-validation-01M3VZBD",
+  "mission_type": "software-dev",
+  "schema_version": 2,
+  "summary": {
+    "approved": 0,
+    "blocked": 0,
+    "canceled": 0,
+    "claimed": 0,
+    "done": 4,
+    "for_review": 0,
+    "in_progress": 0,
+    "in_review": 0,
+    "planned": 0
+  },
+  "work_packages": {
+    "WP01": {
+      "actor": "merge",
+      "agent": "cursor:claude-opus:reviewer-renata:reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 1,
+      "implementer_of_record": "cursor:claude-sonnet:python-pedro:implementer",
+      "lane": "done",
+      "last_event_id": "01M3WKD9X0D1VRVK34APQF1S4F",
+      "last_transition_at": "2026-10-01T20:45:03.776479+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "Ready for review. Tests: 'uv run --frozen pytest tests/specify_cli/feedback/test_validation_table.py test_payload.py test_agent_protocol.py -q' = 138 passed, 1 failed (test_collect_context_uses_installed_version_and_profile: env sysconfigdata import error in isolated run, fails identically on baseline, passes in subsystem run); 'uv run --frozen pytest tests/specify_cli/feedback -q' = 443 passed. ruff check/format --check clean, mypy --strict clean on payload.py+agent_protocol.py, no noqa/type-ignore added. Existing tests needed no changes (T006). Callers: agent_protocol.agent_submit and terminal_form use parse_rating/normalize_comment/parse_email.",
+        "Cycle 2: addressed NFC ordering and C1 introducers; owned files 155 passed + 1 baseline env failure, feedback subsystem 460 passed, ruff/format/mypy clean",
+        "Review passed (cycle 2): NFC-last verified (e\\u200b\\u0301 -> é, every table output NFC, also after truncation); C1 CSI/string introducers no longer leak payload (a\\x9b31mb -> ab). Changed table rows legitimate (introducer consumes following final byte); no tests weakened. 460 feedback tests pass, ruff/format/mypy clean. Note: unterminated \\x9d/\\x90 string introducer drops the rest of the comment (cleaning not rejecting; acceptable, linear-time regex, matches terminal semantics)."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review": null,
+      "review_result": {
+        "reference": "auto-approval:WP01:20261001",
+        "reviewer": "Zohar Stolar",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 29556,
+      "shell_pid_created_at": "1790884690.512086",
+      "subtasks": {
+        "T001": "done",
+        "T002": "done",
+        "T003": "done",
+        "T004": "done",
+        "T005": "done",
+        "T006": "done"
+      }
+    },
+    "WP02": {
+      "actor": "merge",
+      "agent": "cursor:claude-opus:reviewer-renata:reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 0,
+      "implementer_of_record": "cursor:claude-sonnet:python-pedro:implementer",
+      "lane": "done",
+      "last_event_id": "01M3WKDBB4WEVYYBEAV85C3WSS",
+      "last_transition_at": "2026-10-01T20:45:05.252699+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "Ready for review. Tests: pytest test_wording.py test_terminal_form.py test_agent_contracts.py => 43 passed; pytest tests/specify_cli/feedback => 348 passed. ruff clean; mypy --strict clean except pre-existing no-any-return terminal_form.py:138 (on baseline). Mission contract copy needs same const update on primary partition.",
+        "Review passed: limit text built from COMMENT_MAX_LENGTH via comment_question()/comment_truncated_notice(); shown before input in terminal form and agent payload; callers updated; fixture matches primary contract; 348 feedback tests pass; ruff/format clean; only pre-existing mypy at terminal_form.py:138"
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review_result": {
+        "reference": "auto-approval:WP02:20261001",
+        "reviewer": "Zohar Stolar",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 14836,
+      "shell_pid_created_at": "1790884002.403473",
+      "subtasks": {
+        "T007": "done",
+        "T008": "done",
+        "T009": "done",
+        "T010": "done"
+      }
+    },
+    "WP03": {
+      "actor": "merge",
+      "agent": "cursor:claude-opus:reviewer-renata:reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 0,
+      "implementer_of_record": "cursor:claude-sonnet:python-pedro:implementer",
+      "lane": "done",
+      "last_event_id": "01M3WKDD7QWPH2AWABRNZBCS4P",
+      "last_transition_at": "2026-10-01T20:45:07.191049+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "T011 spike: prompt-backed 'feedback' step dir (step.yaml+prompt.md) accepted by DRG regenerate-graph/--check, no wrapper fallback needed. Registered in CONSUMER_SKILLS, PROMPT_DRIVEN_COMMANDS, PROMPT_BACKED_COMMANDS; other enumerators (agent_commands, slash_commands provider, rewrite_shims, doctor) derive from the sets. Tests: test_feedback_command_surface 21 passed; tests/specify_cli/feedback + shims + skills/test_command_installer + template_cleanliness + m_2_1_3 + docs freshness (slash, cli-reference) 957 passed, 1 failed (agent-check.schema.json fixture drift, red on base). Pins updated: test_registry 8->9, canonical count 15->16, m_2_1_3 ALL_COMMANDS += feedback, docs/api/slash-commands.md feedback section. Baseline-red: test_init_hybrid x2, test_installer chmod x2, agent-check schema.",
+        "Review passed: flags/JSON fields verified against feedback.py and wording.py; registry/installer set invariants hold; 2726 narrow tests pass, only baseline reds (agent-check.schema stale copy, docs_query width, both fail on base); ruff format drift in registry.py/test_registry.py/test_m_2_1_3 is pre-existing on base; doctrine graph fresh"
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review_result": {
+        "reference": "auto-approval:WP03:20261001",
+        "reviewer": "Zohar Stolar",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 50982,
+      "shell_pid_created_at": "1790886067.909507",
+      "subtasks": {
+        "T011": "done",
+        "T012": "done",
+        "T013": "done",
+        "T014": "done",
+        "T015": "done"
+      }
+    },
+    "WP04": {
+      "actor": "merge",
+      "agent": "cursor:claude-opus:reviewer-renata:reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 0,
+      "implementer_of_record": "cursor:claude-sonnet:curator-carla:implementer",
+      "lane": "done",
+      "last_event_id": "01M3WKDEPHZ0XRYTDE3GHGFH8E",
+      "last_transition_at": "2026-10-01T20:45:08.689557+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "pytest tests/specify_cli/feedback: 603 passed, 1 failed (pre-existing contract drift: stale kitty-specs agent-check.schema.json vs WP02 fixture, not editable in lane); test_flow_parity.py 118 passed; test_no_legacy_terminology 96 passed; docs freshness/index/status/lint/inventory/slash tests 142 passed; ruff check+format, mypy --strict clean on new test; doctrine regenerate-graph --check fresh"
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review_result": {
+        "reference": "auto-approval:WP04:20261001",
+        "reviewer": "Zohar Stolar",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 61084,
+      "shell_pid_created_at": "1790886851.861529",
+      "subtasks": {
+        "T016": "done",
+        "T017": "done",
+        "T018": "done",
+        "T019": "done"
+      }
+    }
+  }
+}

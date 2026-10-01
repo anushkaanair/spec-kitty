@@ -225,3 +225,76 @@ def test_agent_submit_honours_build_and_hand_off_outcomes(
 
     monkeypatch.setattr(agent_protocol, "build_and_hand_off", lambda *_a, **_k: "not_sent")
     assert agent_protocol.agent_submit(_AUTO, "cursor", rating=1, comment=None, email=None, consent="yes")["status"] == "not_sent"
+
+
+def test_agent_submit_reports_all_invalid_fields_together_and_sends_nothing(
+    endpoint_env: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from specify_cli.feedback import agent_protocol, sender as sender_mod
+
+    monkeypatch.setenv(ENV_FEEDBACK_URL, endpoint_env[ENV_FEEDBACK_URL])
+    handed: list[object] = []
+    monkeypatch.setattr(sender_mod, "hand_off", lambda *a, **k: handed.append(1) or True)
+    built: list[object] = []
+    monkeypatch.setattr(
+        agent_protocol,
+        "build_and_hand_off",
+        lambda *a, **k: built.append(1) or "handed_off",
+    )
+
+    result = agent_protocol.agent_submit(
+        _AUTO,
+        "cursor",
+        rating="9",
+        comment="fine",
+        email="a@example.test, b@example.test",
+        consent="yes",
+    )
+
+    assert result["status"] == "invalid_input"
+    assert result["errors"] == ["rating_out_of_range", "email_malformed"]
+    assert built == []
+    assert handed == []
+
+
+@pytest.mark.parametrize(
+    ("rating", "email", "expected"),
+    [
+        ("0", None, ["rating_out_of_range"]),
+        (None, None, ["rating_out_of_range"]),
+        (True, None, ["rating_out_of_range"]),
+        (" 5 ", None, ["rating_out_of_range"]),
+        (3, "a@b", ["email_malformed"]),
+        (3, "a@@example.test", ["email_malformed"]),
+    ],
+)
+def test_agent_submit_single_invalid_field_sends_nothing(
+    endpoint_env: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    rating: str | int | None,
+    email: str | None,
+    expected: list[str],
+) -> None:
+    from specify_cli.feedback import agent_protocol
+
+    monkeypatch.setenv(ENV_FEEDBACK_URL, endpoint_env[ENV_FEEDBACK_URL])
+    built: list[object] = []
+    monkeypatch.setattr(
+        agent_protocol,
+        "build_and_hand_off",
+        lambda *a, **k: built.append(1) or "handed_off",
+    )
+
+    result = agent_protocol.agent_submit(
+        _AUTO,
+        "cursor",
+        rating=rating,
+        comment=None,
+        email=email,
+        consent="yes",
+    )
+
+    assert result["status"] == "invalid_input"
+    assert result["errors"] == expected
+    assert built == []

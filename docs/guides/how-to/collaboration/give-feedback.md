@@ -41,8 +41,9 @@ not expect it, choose "skip" or "don't ask again", or run
 
 ## Answer, skip, or turn it off
 
-The survey asks, in order: a rating from 1 to 5, "What would you change?"
-(optional), an email (optional), and "Send feedback?".
+The survey asks, in order: a rating from 1 to 5, "What would you change?
+(optional, up to 2000 characters)", an email (optional), and "Send feedback?".
+The character limit is shown before you type, so you can plan your answer.
 
 - **Skip**: leave the rating empty (press Enter). Nothing is sent, and you may be
   asked again after the weekly limit.
@@ -64,6 +65,29 @@ spec-kitty feedback
 This works in a terminal whenever a feedback endpoint is configured, and
 ignores the weekly limit. It asks the same questions. In a non-interactive
 terminal, or with no endpoint configured, it asks nothing and tells you why.
+
+In an agent harness that supports slash commands, run `/spec-kitty.feedback`
+for the same thing. The agent asks the same questions and checks availability
+with the `on_demand` trigger, so the weekly limit does not apply. It still
+sends nothing unless a feedback endpoint is configured and you say yes to
+"Send feedback?".
+
+## What counts as a valid answer
+
+The same rules apply in the terminal and in an agent harness.
+
+- **Rating**: an integer from 1 to 5 only. Words ("five"), decimals ("4.5"),
+  and other numbers are rejected.
+- **Comment**: optional, up to 2000 characters. The limit is shown before you
+  type. Control characters, invisible characters, and terminal escape
+  sequences are removed. Markup you type (such as `<b>`) is kept as typed.
+  Line breaks and runs of spaces collapse to a single space. A longer comment
+  is truncated to the limit, and you are told it was.
+- **Email**: optional. If you give one, it must be a single well-formed
+  address. A bad address is rejected, never silently corrected. The terminal
+  asks once more; an agent reports the problem.
+
+If any answer is invalid, nothing is sent.
 
 ## What is sent
 

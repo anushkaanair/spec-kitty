@@ -79,10 +79,10 @@ def _run_form_body(
     if isinstance(rating, FormResult):
         return rating
 
-    comment_raw = ask(wording.COMMENT_QUESTION)
+    comment_raw = ask(wording.comment_question())
     comment, truncated = normalize_comment(comment_raw)
     if truncated:
-        typer.echo(wording.COMMENT_TRUNCATED_NOTICE)
+        typer.echo(wording.comment_truncated_notice())
 
     email = _ask_email(ask)
     consent_raw = ask(f"{wording.CONSENT_QUESTION} [y/N]").strip().casefold()
