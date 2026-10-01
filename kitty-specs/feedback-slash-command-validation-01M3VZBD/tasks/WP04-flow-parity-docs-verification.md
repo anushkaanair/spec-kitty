@@ -10,6 +10,9 @@ requirement_refs:
 planning_base_branch: feat/in-harness-feedback-survey
 merge_target_branch: feat/in-harness-feedback-survey
 branch_strategy: Planning artifacts for this mission were generated on feat/in-harness-feedback-survey. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into feat/in-harness-feedback-survey unless the human explicitly redirects the landing branch.
+base_branch: kitty/mission-feedback-slash-command-validation-01M3VZBD
+base_commit: 781d93bcd1742bc0eac7e833b5d02548eb48796e
+created_at: '2026-10-01T20:27:13.734747+00:00'
 subtasks:
 - T016
 - T017
