@@ -1,6 +1,8 @@
 {
+  "accept_commit": "65a4f381877687067f9f36b9fc363f619a965f71",
   "acceptance_history": [
     {
+      "accept_commit": "65a4f381877687067f9f36b9fc363f619a965f71",
       "acceptance_mode": "pr",
       "accepted_at": "2026-10-01T20:42:26.481806+00:00",
       "accepted_by": "zohar",
