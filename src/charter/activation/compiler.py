@@ -9,13 +9,15 @@ from io import StringIO
 import logging
 from pathlib import Path
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final, Literal, NamedTuple, TypedDict
 
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
+from charter.activation._catalog_miss import CatalogMissCause, CatalogMissDiagnosis
 from charter.activation._io import load_charter_file
 from charter.activation.catalog import DoctrineCatalog, load_doctrine_catalog, resolve_doctrine_root
+from charter.activation.context_renderers.catalog_diagnosis import _diagnose_catalog_miss
 from charter.activation.charter_yaml_io import (
     PreparedYamlWrite,
     apply_yaml_write,
@@ -54,6 +56,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "CharterReference",
     "CompiledCharter",
+    "WholeKindUnresolvedError",
     "WriteBundleResult",
     "compile_charter",
     "provision_mission_type_activations",
@@ -66,6 +69,31 @@ __all__ = [
 #: ``mission-type`` charter kind is the documented outlier that does not follow
 #: the ``activated_<plural>`` pattern (see ``pack_manager.YAML_KEY_MAP``).
 _MISSION_TYPE_ACTIVATIONS_KEY = "mission_type_activations"
+#: Every ``cause`` an unresolved-reference record can carry: the four
+#: :class:`~charter.activation._catalog_miss.CatalogMissCause` values (mapped by
+#: :data:`_CAUSE_BY_CATALOG_MISS`) plus the three compiler-owned causes for
+#: entries that are not a per-artifact classification. ``_catalog_miss.py``
+#: stays untouched, which is why these are not members of that enum.
+UnresolvedCause = Literal[
+    "missing_artifact",
+    "typo_suspected",
+    "schema_validation_suspected",
+    "scope_filtered",
+    "graph_load_failed",
+    "malformed_urn",
+    "unattributed_kind",
+]
+
+
+class UnresolvedReferenceRecord(TypedDict):
+    """Structured form of one unresolved-reference diagnostic (``--json`` ``unresolved_references``)."""
+
+    kind: str
+    id: str
+    cause: UnresolvedCause
+    detail: str
+
+
 # NOTE: ``ConfigActivatedRoots`` is intentionally NOT public API -- it is the
 # return type of ``resolve_config_activated_roots`` but every real caller
 # (e.g. ``specify_cli.cli.commands.charter._synthesis``) consumes the
@@ -73,14 +101,6 @@ _MISSION_TYPE_ACTIVATIONS_KEY = "mission_type_activations"
 # itself; only its own test module imports it directly, which does not
 # count as a caller under ``test_no_public_symbol_in_all_is_unimported``
 # (WP05/T021b, mission unify-charter-activation-surfaces-01KX5SJ9).
-
-
-@dataclass(frozen=True)
-class _SelectionBundle:
-    """Bundled paradigm + directive selections passed to service-based reference builders."""
-
-    paradigms: list[str]
-    directives: list[str]
 
 
 @dataclass(frozen=True)
@@ -364,6 +384,11 @@ class CompiledCharter:
     #: :func:`charter.activation.language_scope.infer_repo_languages`, the single
     #: authority this field's value is sourced from.
     active_languages: list[str] | None = field(default_factory=list)
+    #: Structured form of every unresolved-reference entry recorded into
+    #: ``diagnostics`` above (issue #5257) -- one record per entry, written by
+    #: :func:`_record_unresolved_reference` alongside its free-text line and
+    #: surfaced as ``charter generate --json``'s ``unresolved_references``.
+    unresolved_reference_records: list[UnresolvedReferenceRecord] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -382,6 +407,7 @@ def compile_charter(
     doctrine_service: DoctrineService | None = None,
     repo_root: Path | None = None,
     pack_context: PackContext | None = None,
+    rederive_languages: bool = False,
 ) -> CompiledCharter:
     """Compile charter markdown, references manifest, and library docs.
 
@@ -411,6 +437,14 @@ def compile_charter(
     _promote_interview_selections``). Re-aliasing here was a no-op for that
     path and had zero effect on the config-sourced activation set for any
     path (#2530) -- removed rather than re-applied a second time.
+
+    *rederive_languages* (#4614 / FR-011): when ``True``, ``catalog.languages``
+    is derived from *interview* alone instead of reading back the previously
+    compiled list (``infer_repo_languages(..., prefer_interview=True)``). Only
+    ``charter generate`` from a loaded interview sets it -- a regenerate is the
+    one place a stale compiled language must not survive. ``charter activate``
+    and pack recompiles keep the default ``False`` (compiled-first, #2395/#3292:
+    a recompile never re-litigates the recorded languages).
     """
     # Single authority (issue #3292): route through the SAME function the
     # doctrine-service language gate (charter.activation.doctrine_service_builder) uses,
@@ -421,9 +455,10 @@ def compile_charter(
     # `catalog.languages`, which the next run's `infer_repo_languages` then
     # read back as authoritative "admit none" — see that function's
     # docstring for the full feedback-loop this closes.
-    active_languages = infer_repo_languages(repo_root, interview=interview)
+    active_languages = infer_repo_languages(repo_root, interview=interview, prefer_interview=rederive_languages)
     catalog = doctrine_catalog or load_doctrine_catalog(active_languages=active_languages)
     diagnostics: list[str] = []
+    unresolved_reference_records: list[UnresolvedReferenceRecord] = []
 
     if doctrine_service is None:
         doctrine_service = _default_doctrine_service(repo_root)
@@ -444,6 +479,7 @@ def compile_charter(
         allowed=set(DEFAULT_TOOL_REGISTRY),
         label="available_tools",
         diagnostics=diagnostics,
+        missing_message=_unregistered_tool_message,
     )
 
     # Validate and normalize local support file declarations.
@@ -465,6 +501,7 @@ def compile_charter(
         doctrine_service=doctrine_service,
         repo_root=repo_root,
         diagnostics=diagnostics,
+        unresolved_reference_records=unresolved_reference_records,
     )
 
     # Build additive local support references.
@@ -499,6 +536,7 @@ def compile_charter(
         diagnostics=diagnostics,
         selected_tactics=config_roots.tactics,
         active_languages=active_languages,
+        unresolved_reference_records=unresolved_reference_records,
     )
 
 
@@ -942,12 +980,27 @@ def _resolve_template_set(
     return mission_default
 
 
+def _unregistered_tool_message(missing: list[str]) -> str:
+    """Diagnostic for ``available_tools`` entries outside the tool registry.
+
+    Names the entries as *tool ids* (#4614 / FR-013): ``available_tools`` is
+    validated against ``DEFAULT_TOOL_REGISTRY``, which is unrelated to project
+    languages, so a language such as ``zig`` listed there is an unregistered
+    tool id -- not an "unknown" language. The registry is deliberately not
+    widened.
+    """
+    quoted = ", ".join(f"'{name}'" for name in sorted(missing))
+    verb = "is not a registered tool id" if len(missing) == 1 else "are not registered tool ids"
+    return f"available_tools: {quoted} {verb}; ignored (tool ids are validated separately from project languages)"
+
+
 def _sanitize_catalog_selection(
     *,
     values: list[str],
     allowed: set[str],
     label: str,
     diagnostics: list[str],
+    missing_message: Callable[[list[str]], str] | None = None,
 ) -> list[str]:
     seen: list[str] = []
     missing: list[str] = []
@@ -966,7 +1019,10 @@ def _sanitize_catalog_selection(
             seen.append(canonical)
 
     if missing:
-        diagnostics.append(f"Ignored unknown {label}: {', '.join(sorted(missing))}")
+        if missing_message is not None:
+            diagnostics.append(missing_message(missing))
+        else:
+            diagnostics.append(f"Ignored unknown {label}: {', '.join(sorted(missing))}")
 
     if seen:
         return seen
@@ -1051,6 +1107,7 @@ def _build_references(
     doctrine_service: DoctrineService,
     repo_root: Path | None = None,
     diagnostics: list[str] | None = None,
+    unresolved_reference_records: list[UnresolvedReferenceRecord] | None = None,
 ) -> list[CharterReference]:
     doctrine_root = resolve_doctrine_root()
 
@@ -1065,6 +1122,7 @@ def _build_references(
             doctrine_service=doctrine_service,
             repo_root=repo_root,
             diagnostics=diagnostics if diagnostics is not None else [],
+            unresolved_records=unresolved_reference_records if unresolved_reference_records is not None else [],
         )
     )
     return references
@@ -1086,11 +1144,320 @@ def _raw_kind_repository(doctrine_service: DoctrineService, kind: str) -> Any:
     - a raw, unwrapped ``charter.offering.service.DoctrineService``, whose
       same-named properties are ALREADY the unfiltered repository object (no
       ``raw_repository`` method exists on it, nor is one needed).
+
+    Degrades to ``None`` (never raises) when *kind* has no matching
+    attribute on the raw/unwrapped shape either -- e.g. ``"templates"``/
+    ``"anti_patterns"``, valid :class:`ArtifactKind` members outside the
+    nine gated raw-repository kinds. This mirrors the wrapped shape's own
+    ``raw_repository(kind)`` accessor, which degrades to ``None`` for the same
+    kinds rather than raising ``AttributeError``.
     """
     raw_repository = getattr(doctrine_service, "raw_repository", None)
     if callable(raw_repository):
         return raw_repository(kind)
-    return getattr(doctrine_service, kind)
+    return getattr(doctrine_service, kind, None)
+
+
+#: Shared free-text template for every unresolved-reference diagnostic line
+#: (issue #5257). Extends the original ``"Unresolved reference: <kind>/<id>"``
+#: format with a reason category and a human-readable detail, so an operator can
+#: tell "never existed" apart from "exists but filtered out".
+_UNRESOLVED_DIAGNOSTIC_TEMPLATE = "Unresolved reference: {kind}/{artifact_id} ({cause}): {detail}"
+
+#: The baseline placeholder summary (``_doctrine_yaml_reference``'s own
+#: fallback, already committed verbatim in existing ``charter.yaml`` files for
+#: still-unresolved ids) stays byte-for-byte as a stable prefix; the
+#: reason-bearing suffix is appended, never substituted.
+_SCOPE_FILTERED_PLACEHOLDER_SUMMARY_TEMPLATE = "Definition unavailable in bundled doctrine. Reason: scope_filtered — {suggestion}"
+
+
+def _record_unresolved_reference(
+    *,
+    kind: str,
+    raw_id: str,
+    cause: UnresolvedCause,
+    detail: str,
+    diagnostics: list[str],
+    unresolved_records: list[UnresolvedReferenceRecord],
+    diagnostic: str | None = None,
+) -> None:
+    """Append the reason-bearing diagnostic string AND the structured record
+    for one unresolved reference.
+
+    The single writer for both lists: the per-id classify-and-placeholder path
+    (:func:`_classify_and_placeholder_reference`), every unattributable
+    ``graph.unresolved`` URN class (:func:`_route_unresolved_urn`) and the
+    graph-load failure all go through it, so the free-text line and the
+    structured record cannot drift (FR-002/FR-004/NFR-002). *diagnostic*
+    overrides the templated free-text line for the one entry whose established
+    wording is not ``Unresolved reference: ...``.
+    """
+    diagnostics.append(diagnostic or _UNRESOLVED_DIAGNOSTIC_TEMPLATE.format(kind=kind, artifact_id=raw_id, cause=cause, detail=detail))
+    unresolved_records.append({"kind": kind, "id": raw_id, "cause": cause, "detail": detail})
+
+
+#: Readable ``detail`` for a cause whose classifier carries no suggestion text of
+#: its own (only ``SCOPE_FILTERED`` always does), worded to match the advice
+#: ``charter context`` gives for the same miss.
+_MISSING_ARTIFACT_DETAIL = (
+    "no artifact with this id in any doctrine layer (project, org, built-in); run `spec-kitty doctrine validate` to rule out a silent schema-validation drop"
+)
+_SCHEMA_DROP_DETAIL = "the artifact failed schema validation and was dropped by the loader; run `spec-kitty doctrine validate` to see why"
+_SCOPE_FILTERED_DETAIL = "the artifact exists but its applies_to_languages scope excludes the active language set"
+_TYPO_DETAIL_TEMPLATE = "did you mean '{suggestion}'?"
+_CAUSE_BY_CATALOG_MISS: dict[CatalogMissCause, UnresolvedCause] = {
+    CatalogMissCause.MISSING_ARTIFACT: "missing_artifact",
+    CatalogMissCause.TYPO_SUSPECTED: "typo_suspected",
+    CatalogMissCause.SCHEMA_VALIDATION_SUSPECTED: "schema_validation_suspected",
+    CatalogMissCause.SCOPE_FILTERED: "scope_filtered",
+}
+_DEFAULT_DETAIL_BY_CAUSE: dict[CatalogMissCause, str] = {
+    CatalogMissCause.MISSING_ARTIFACT: _MISSING_ARTIFACT_DETAIL,
+    CatalogMissCause.SCHEMA_VALIDATION_SUSPECTED: _SCHEMA_DROP_DETAIL,
+    CatalogMissCause.SCOPE_FILTERED: _SCOPE_FILTERED_DETAIL,
+    CatalogMissCause.TYPO_SUSPECTED: "a similarly named artifact exists",
+}
+
+
+def _unresolved_detail(diagnosis: CatalogMissDiagnosis) -> str:
+    """Human-readable ``detail`` for one classified miss (never empty).
+
+    A ``TYPO_SUSPECTED`` suggestion is a bare id, so it is phrased as a question;
+    every other cause uses the classifier's own suggestion text when it has one,
+    else the cause's default.
+    """
+    suggestion = diagnosis.suggestion
+    if diagnosis.cause is CatalogMissCause.TYPO_SUSPECTED and suggestion:
+        return _TYPO_DETAIL_TEMPLATE.format(suggestion=suggestion)
+    return suggestion or _DEFAULT_DETAIL_BY_CAUSE[diagnosis.cause]
+
+
+def _classify_and_placeholder_reference(
+    *,
+    kind: str,
+    raw_id: str,
+    repository: Any,
+    diagnostics: list[str],
+    unresolved_records: list[UnresolvedReferenceRecord],
+    project_root: Path | None = None,
+) -> CharterReference | None:
+    """Classify one raw-repository miss and, for a ``SCOPE_FILTERED`` cause
+    only, build a reason-bearing placeholder :class:`CharterReference`.
+
+    Reuses the canonical ``_diagnose_catalog_miss`` gate (the same one
+    ``charter context`` uses) rather than re-deriving the scope-filtered check
+    inline; the gate reads the active languages off *repository*'s own
+    ``_active_languages`` attribute, so none is threaded through here.
+
+    A ``MISSING_ARTIFACT``/``TYPO_SUSPECTED`` cause stays diagnostics-only:
+    this function returns ``None`` and the id is never placeholdered (#4785).
+    Every miss records a reason-bearing diagnostic string and a structured
+    record via :func:`_record_unresolved_reference`, so even a diagnostics-only
+    miss is machine-readable.
+    """
+    diagnosis = _diagnose_catalog_miss(raw_id, repository, repo_root=project_root)
+    detail = _unresolved_detail(diagnosis)
+    _record_unresolved_reference(
+        kind=kind,
+        raw_id=raw_id,
+        cause=_CAUSE_BY_CATALOG_MISS[diagnosis.cause],
+        detail=detail,
+        diagnostics=diagnostics,
+        unresolved_records=unresolved_records,
+    )
+    if diagnosis.cause is not CatalogMissCause.SCOPE_FILTERED:
+        return None
+
+    summary = _SCOPE_FILTERED_PLACEHOLDER_SUMMARY_TEMPLATE.format(suggestion=detail)
+    source: dict[str, object] = {"id": raw_id, "title": raw_id, "summary": summary}
+    return _doctrine_yaml_reference(kind=kind, raw_id=raw_id, source=source, project_root=project_root)
+
+
+#: Reserved sentinel ``kind`` for a malformed ``graph.unresolved`` URN (no
+#: ``":"``, or nothing after it), where no kind could be attributed. Distinct
+#: from any real DRG-backed kind; see
+#: ``contracts/charter-generate-json-diagnostics.md``.
+_MALFORMED_URN_KIND_LABEL = "_unattributed"
+_MALFORMED_URN_CAUSE: Final[UnresolvedCause] = "malformed_urn"
+_MALFORMED_URN_NO_KIND_DETAIL = "malformed URN, no kind prefix"
+_MALFORMED_URN_NO_ID_DETAIL = "malformed URN, no artifact id"
+_UNATTRIBUTED_KIND_CAUSE: Final[UnresolvedCause] = "unattributed_kind"
+
+
+class _ReferenceFields(NamedTuple):
+    """How to read a :class:`CharterReference`'s id/title/summary off one kind's repository model."""
+
+    id_of: Callable[[Any], str]
+    title_of: Callable[[Any], str]
+    summary_of: Callable[[Any], str]
+
+
+class _TrackedKind(NamedTuple):
+    """One DRG-backed kind whose references :func:`_build_references_from_service` renders."""
+
+    #: Plural name shared by the :class:`~charter.offering.drg.query.ResolveTransitiveRefsResult`
+    #: bucket (``graph.<plural>``) and the raw-repository accessor
+    #: (``_raw_kind_repository(service, <plural>)``).
+    plural: str
+    fields: _ReferenceFields
+
+
+#: Single source of truth for the six DRG-backed kinds the compiler renders
+#: per-id references for, in catalog order. The render loop, the
+#: ``graph.unresolved`` routing and the whole-kind fail-closed check all read
+#: this table, so a kind added here is honoured by all three. It is narrower
+#: than the nine-kind ``_RAW_REPOSITORY_KINDS`` gate in
+#: ``charter.activation.resolver``, which also covers ``paradigms``,
+#: ``mission_step_contracts`` and ``glossary_packs`` (real repositories, but
+#: not rendered per id here).
+_TRACKED_KINDS: dict[str, _TrackedKind] = {
+    "directive": _TrackedKind(
+        "directives",
+        _ReferenceFields(
+            id_of=lambda d: str(d.id),
+            title_of=lambda d: str(d.title),
+            summary_of=lambda d: str(d.intent),
+        ),
+    ),
+    "tactic": _TrackedKind(
+        "tactics",
+        _ReferenceFields(
+            id_of=lambda t: str(t.id),
+            title_of=lambda t: str(t.name),
+            summary_of=lambda t: str(t.purpose or f"Tactic: {t.name}"),
+        ),
+    ),
+    "styleguide": _TrackedKind(
+        "styleguides",
+        _ReferenceFields(
+            id_of=lambda sg: str(sg.id),
+            title_of=lambda sg: str(sg.title),
+            summary_of=lambda sg: str(sg.principles[0] if sg.principles else f"Styleguide: {sg.title}"),
+        ),
+    ),
+    "toolguide": _TrackedKind(
+        "toolguides",
+        _ReferenceFields(
+            id_of=lambda tg: str(tg.id),
+            title_of=lambda tg: str(tg.title),
+            summary_of=lambda tg: str(tg.summary),
+        ),
+    ),
+    "procedure": _TrackedKind(
+        "procedures",
+        _ReferenceFields(
+            id_of=lambda proc: str(proc.id),
+            title_of=lambda proc: str(proc.name),
+            summary_of=lambda proc: str(proc.purpose),
+        ),
+    ),
+    "agent_profile": _TrackedKind(
+        "agent_profiles",
+        _ReferenceFields(
+            id_of=lambda ap: str(ap.profile_id),
+            title_of=lambda ap: str(ap.name),
+            summary_of=lambda ap: str(ap.description or f"Agent profile: {ap.name}"),
+        ),
+    ),
+}
+
+
+def _model_reference(kind: str, model: Any, fields: _ReferenceFields) -> CharterReference:
+    """Build the :class:`CharterReference` for a repository *model* of *kind*."""
+    return _doctrine_model_reference(
+        kind=kind,
+        raw_id=fields.id_of(model),
+        title=fields.title_of(model),
+        summary=fields.summary_of(model),
+    )
+
+
+def _route_unresolved_urn(
+    urn: str,
+    *,
+    doctrine_service: DoctrineService,
+    diagnostics: list[str],
+    unresolved_records: list[UnresolvedReferenceRecord],
+    project_root: Path | None,
+) -> tuple[str | None, CharterReference | None]:
+    """Resolve or classify one ``graph.unresolved`` URN (issue #5257).
+
+    The URN is split as ``resolve_transitive_refs`` does
+    (``urn.partition(":")``) and its kind prefix is mapped through
+    ``ArtifactKind``. When the kind is one of the tracked kinds, the raw
+    repository is asked for the id first (the DRG can list an id the repository
+    does have); otherwise the miss goes through the shared classify-and-
+    placeholder helper, so the whole-kind check sees both source buckets.
+
+    A URN that cannot be attributed to a tracked kind (malformed, an
+    unrecognized kind prefix, a kind with no repository, or a real kind outside
+    the tracked set) is never silently dropped: it gets one of the four
+    unattributable structured shapes documented in
+    ``contracts/charter-generate-json-diagnostics.md``.
+
+    Returns ``(attributed_kind, reference)``: *attributed_kind* is the tracked
+    kind's singular value when attribution succeeded (consumed by the whole-kind
+    check), else ``None``; *reference* is a real reference when the repository
+    resolved the id, the placeholder for a ``SCOPE_FILTERED`` miss, or ``None``.
+    """
+    kind_prefix, separator, bare_id = urn.partition(":")
+    if not separator or not bare_id:
+        _record_unresolved_reference(
+            kind=_MALFORMED_URN_KIND_LABEL,
+            raw_id=urn,
+            cause=_MALFORMED_URN_CAUSE,
+            detail=_MALFORMED_URN_NO_ID_DETAIL if separator else _MALFORMED_URN_NO_KIND_DETAIL,
+            diagnostics=diagnostics,
+            unresolved_records=unresolved_records,
+        )
+        return None, None
+
+    try:
+        artifact_kind = ArtifactKind(kind_prefix)
+    except ValueError:
+        _record_unresolved_reference(
+            kind=kind_prefix,
+            raw_id=bare_id,
+            cause=_UNATTRIBUTED_KIND_CAUSE,
+            detail=f"unrecognized artifact kind: {kind_prefix}",
+            diagnostics=diagnostics,
+            unresolved_records=unresolved_records,
+        )
+        return None, None
+
+    plural = artifact_kind.plural
+    repository = _raw_kind_repository(doctrine_service, plural)
+    if artifact_kind.value not in _TRACKED_KINDS:
+        detail = (
+            f"no repository for kind: {kind_prefix}"
+            if repository is None
+            else f"kind '{kind_prefix}' is not one of the six DRG-backed kinds tracked for reference resolution"
+        )
+        _record_unresolved_reference(
+            kind=artifact_kind.value,
+            raw_id=bare_id,
+            cause=_UNATTRIBUTED_KIND_CAUSE,
+            detail=detail,
+            diagnostics=diagnostics,
+            unresolved_records=unresolved_records,
+        )
+        return None, None
+
+    # The DRG can list an id as unresolved while the raw repository has it (an
+    # org pack the graph does not know about): render it like the per-kind path.
+    model = repository.get(bare_id) if repository is not None else None
+    if model is not None:
+        return artifact_kind.value, _model_reference(artifact_kind.value, model, _TRACKED_KINDS[artifact_kind.value].fields)
+
+    placeholder = _classify_and_placeholder_reference(
+        kind=artifact_kind.value,
+        raw_id=bare_id,
+        repository=repository,
+        diagnostics=diagnostics,
+        unresolved_records=unresolved_records,
+        project_root=project_root,
+    )
+    return artifact_kind.value, placeholder
 
 
 def _render_kind_references(
@@ -1098,10 +1465,10 @@ def _render_kind_references(
     *,
     kind: str,
     repository: Any,
-    id_of: Callable[[Any], str],
-    title_of: Callable[[Any], str],
-    summary_of: Callable[[Any], str],
+    fields: _ReferenceFields,
     diagnostics: list[str],
+    unresolved_records: list[UnresolvedReferenceRecord] | None = None,
+    project_root: Path | None = None,
 ) -> list[CharterReference]:
     """Render one :class:`CharterReference` per id, via a typed repository lookup.
 
@@ -1117,28 +1484,88 @@ def _render_kind_references(
     which legitimately reaches ids beyond direct config activation (#4785
     Finding 4b) -- looking those up against the activation-filtered view
     produced false "no bundled definition" misses for ids that resolve fine
-    against the raw repository. A miss against the raw repository IS a
-    genuine unresolved reference: it is recorded into *diagnostics* using the
-    same ``"Unresolved reference: <kind>/<id>"`` format
-    :func:`_build_references_from_service`'s own ``graph.unresolved`` loop
-    uses, rather than a silent placeholder ``CharterReference`` row (contract
-    C4).
+    against the raw repository. A miss against the raw repository is
+    classified via :func:`_classify_and_placeholder_reference` (issue #5257):
+    a ``SCOPE_FILTERED`` cause (present on disk, excluded solely by
+    language/scope) becomes a reason-bearing placeholder row; a
+    ``MISSING_ARTIFACT``/``TYPO_SUSPECTED`` cause stays diagnostics-only,
+    exactly as before (Contract C4).
     """
+    if unresolved_records is None:
+        unresolved_records = []
     references: list[CharterReference] = []
     for raw_id in ids:
         model = repository.get(raw_id)
         if model is not None:
-            references.append(
-                _doctrine_model_reference(
-                    kind=kind,
-                    raw_id=id_of(model),
-                    title=title_of(model),
-                    summary=summary_of(model),
-                )
-            )
-        else:
-            diagnostics.append(f"Unresolved reference: {kind}/{raw_id}")
+            references.append(_model_reference(kind, model, fields))
+            continue
+        placeholder = _classify_and_placeholder_reference(
+            kind=kind,
+            raw_id=raw_id,
+            repository=repository,
+            diagnostics=diagnostics,
+            unresolved_records=unresolved_records,
+            project_root=project_root,
+        )
+        if placeholder is not None:
+            references.append(placeholder)
     return references
+
+
+class WholeKindUnresolvedError(RuntimeError):
+    """Every activated reference of one tracked kind is unresolvable.
+
+    Raised by :func:`compile_charter` instead of writing a catalog whose section
+    for that kind would be silently empty. It stays a :class:`RuntimeError` so a
+    caller that predates it keeps failing closed, but each command that reaches
+    the compiler translates it deliberately: ``charter generate`` and
+    ``charter pack apply --compile`` report it and exit non-zero, while
+    ``charter activate``/``deactivate`` (whose config write already succeeded)
+    downgrade it to a "catalog not recompiled" notice.
+
+    *kind* is the singular tracked kind that tripped the check and
+    *unresolved_records* is the compile run's whole structured unresolved list
+    (what ``CompiledCharter.unresolved_reference_records`` would have carried),
+    so a caller can surface it without re-deriving anything.
+    """
+
+    def __init__(self, kind: str, unresolved_records: list[UnresolvedReferenceRecord]) -> None:
+        self.kind = kind
+        self.unresolved_records = list(unresolved_records)
+        unresolved_ids = [record["id"] for record in self.unresolved_records if record.get("kind") == kind]
+        super().__init__(
+            f"every activated '{kind}' reference is unresolvable "
+            f"({', '.join(unresolved_ids) or 'no ids captured'}); refusing to write "
+            "a silently-empty catalog section."
+        )
+
+
+def _check_whole_kind_unresolved(
+    *,
+    graph: Any,
+    kind_reference_counts: dict[str, int],
+    activated_via_unresolved: set[str],
+    unresolved_records: list[UnresolvedReferenceRecord],
+) -> None:
+    """Fail closed when a tracked kind was activated but produced zero
+    references (issue #5257): a cause-agnostic whole-kind check.
+
+    Evaluated once, after every per-kind :func:`_render_kind_references` call
+    and the ``graph.unresolved`` pass have both contributed -- never per source.
+    A kind counts as **activated** if its own ``graph.<kind>`` bucket is
+    non-empty OR at least one ``graph.unresolved`` URN was attributed to it via
+    :func:`_route_unresolved_urn`. A kind with even one reference (a resolved
+    one or a ``SCOPE_FILTERED`` placeholder) does not trip the check.
+
+    Raises :class:`WholeKindUnresolvedError` naming the kind and its
+    unresolved ids; it propagates out of ``compile_charter`` and no catalog is
+    written for this run.
+    """
+    for kind, tracked in _TRACKED_KINDS.items():
+        activated = bool(getattr(graph, tracked.plural)) or kind in activated_via_unresolved
+        if not activated or kind_reference_counts.get(kind, 0) > 0:
+            continue
+        raise WholeKindUnresolvedError(kind, unresolved_records)
 
 
 def _build_references_from_service(
@@ -1150,8 +1577,11 @@ def _build_references_from_service(
     doctrine_service: DoctrineService,
     repo_root: Path | None,
     diagnostics: list[str],
+    unresolved_records: list[UnresolvedReferenceRecord] | None = None,
 ) -> list[CharterReference]:
     """Load references via typed repository queries and DRG-backed transitive resolution."""
+    if unresolved_records is None:
+        unresolved_records = []
     references: list[CharterReference] = []
 
     # Paradigms: still loaded via YAML scanning (no typed paradigm references in graph).
@@ -1177,82 +1607,66 @@ def _build_references_from_service(
         directives=config_roots.directives,
         direct_root_urns=_direct_root_urns(config_roots),
         repo_root=repo_root,
+        diagnostics=diagnostics,
+        unresolved_records=unresolved_records,
     )
 
-    references.extend(
-        _render_kind_references(
-            graph.directives,
-            kind="directive",
-            repository=_raw_kind_repository(doctrine_service, "directives"),
-            id_of=lambda d: str(d.id),
-            title_of=lambda d: str(d.title),
-            summary_of=lambda d: str(d.intent),
-            diagnostics=diagnostics,
-        )
-    )
-    references.extend(
-        _render_kind_references(
-            graph.tactics,
-            kind="tactic",
-            repository=_raw_kind_repository(doctrine_service, "tactics"),
-            id_of=lambda t: str(t.id),
-            title_of=lambda t: str(t.name),
-            summary_of=lambda t: str(t.purpose or f"Tactic: {t.name}"),
-            diagnostics=diagnostics,
-        )
-    )
-    references.extend(
-        _render_kind_references(
-            graph.styleguides,
-            kind="styleguide",
-            repository=_raw_kind_repository(doctrine_service, "styleguides"),
-            id_of=lambda sg: str(sg.id),
-            title_of=lambda sg: str(sg.title),
-            summary_of=lambda sg: str(sg.principles[0] if sg.principles else f"Styleguide: {sg.title}"),
-            diagnostics=diagnostics,
-        )
-    )
-    references.extend(
-        _render_kind_references(
-            graph.toolguides,
-            kind="toolguide",
-            repository=_raw_kind_repository(doctrine_service, "toolguides"),
-            id_of=lambda tg: str(tg.id),
-            title_of=lambda tg: str(tg.title),
-            summary_of=lambda tg: str(tg.summary),
-            diagnostics=diagnostics,
-        )
-    )
-    references.extend(
-        _render_kind_references(
-            graph.procedures,
-            kind="procedure",
-            repository=_raw_kind_repository(doctrine_service, "procedures"),
-            id_of=lambda proc: str(proc.id),
-            title_of=lambda proc: str(proc.name),
-            summary_of=lambda proc: str(proc.purpose),
-            diagnostics=diagnostics,
-        )
-    )
-    references.extend(
-        _render_kind_references(
-            graph.agent_profiles,
-            kind="agent_profile",
-            repository=_raw_kind_repository(doctrine_service, "agent_profiles"),
-            id_of=lambda ap: str(ap.profile_id),
-            title_of=lambda ap: str(ap.name),
-            summary_of=lambda ap: str(ap.description or f"Agent profile: {ap.name}"),
-            diagnostics=diagnostics,
-        )
-    )
+    kind_reference_counts: dict[str, int] = {}
 
-    # Record unresolved refs in diagnostics
-    for artifact_type, artifact_id in graph.unresolved:
-        diagnostics.append(f"Unresolved reference: {artifact_type}/{artifact_id}")
+    for kind, tracked in _TRACKED_KINDS.items():
+        kind_references = _render_kind_references(
+            getattr(graph, tracked.plural),
+            kind=kind,
+            repository=_raw_kind_repository(doctrine_service, tracked.plural),
+            fields=tracked.fields,
+            diagnostics=diagnostics,
+            unresolved_records=unresolved_records,
+            project_root=repo_root,
+        )
+        references.extend(kind_references)
+        kind_reference_counts[kind] = len(kind_references)
+
+    # Route every graph.unresolved URN through the same classification the
+    # per-kind loop uses, so both source buckets count toward the whole-kind
+    # check. ``graph.unresolved`` stores each URN twice (``(urn, urn)``).
+    activated_via_unresolved: set[str] = set()
+    for urn, _urn_dup in graph.unresolved:
+        attributed_kind, reference = _route_unresolved_urn(
+            urn,
+            doctrine_service=doctrine_service,
+            diagnostics=diagnostics,
+            unresolved_records=unresolved_records,
+            project_root=repo_root,
+        )
+        if attributed_kind is not None:
+            activated_via_unresolved.add(attributed_kind)
+            if reference is not None:
+                references.append(reference)
+                kind_reference_counts[attributed_kind] = kind_reference_counts.get(attributed_kind, 0) + 1
+
+    # A kind activated but left with no reference at all (for example a
+    # misconfigured pack root) has neither a placeholder nor a diagnostic that
+    # stops the run, so fail closed here rather than write a silently-empty
+    # section. Runs once, after both source buckets have contributed.
+    _check_whole_kind_unresolved(
+        graph=graph,
+        kind_reference_counts=kind_reference_counts,
+        activated_via_unresolved=activated_via_unresolved,
+        unresolved_records=unresolved_records,
+    )
 
     references.append(_template_reference(mission=mission, template_set=template_set))
 
     return references
+
+
+#: A total DRG graph-load failure is reported loudly and structurally but never
+#: fails closed, and it does not count toward the whole-kind check (there is no
+#: per-kind bucket to attribute it to). Its sentinel ``kind``/``id`` cannot
+#: collide with a real artifact.
+_GRAPH_LOAD_FAILURE_KIND = "_graph"
+_GRAPH_LOAD_FAILURE_ID = "_load_failure"
+_GRAPH_LOAD_FAILURE_CAUSE: Final[UnresolvedCause] = "graph_load_failed"
 
 
 def _resolve_transitive_reference_graph(
@@ -1262,6 +1676,8 @@ def _resolve_transitive_reference_graph(
     repo_root: Path | None,
     direct_root_urns: frozenset[str] = frozenset(),
     pack_context: Any = None,
+    diagnostics: list[str] | None = None,
+    unresolved_records: list[UnresolvedReferenceRecord] | None = None,
 ) -> Any:
     """Resolve the transitive closure from built-in/project DRG layers.
 
@@ -1271,6 +1687,13 @@ def _resolve_transitive_reference_graph(
     ``config.activated_*`` with no directive edge reaching them; they are
     unioned into the same BFS start set so they (and anything they in turn
     require/suggest) resolve alongside the directive closure.
+
+    *diagnostics*/*unresolved_records* (issue #5257) are optional sinks: when
+    the whole DRG graph fails to load, the failure is recorded in them (loudly,
+    not fail-closed) instead of vanishing. The return type stays
+    :class:`~charter.offering.drg.query.ResolveTransitiveRefsResult`; a caller
+    that passes no sinks (e.g. ``tests/charter/test_activation_consumers.py``)
+    is unaffected.
     """
     from charter.activation._drg_helpers import load_validated_graph
     from charter.activation.drg_activation import filter_graph_by_activation
@@ -1278,6 +1701,11 @@ def _resolve_transitive_reference_graph(
     from charter.offering.drg.models import Relation
     from charter.offering.drg.query import ResolveTransitiveRefsResult, resolve_transitive_refs
     from charter.offering.drg.validator import assert_valid
+
+    if diagnostics is None:
+        diagnostics = []
+    if unresolved_records is None:
+        unresolved_records = []
 
     start_urns = {f"directive:{directive_id}" for directive_id in directives} | set(direct_root_urns)
     if not start_urns:
@@ -1303,7 +1731,17 @@ def _resolve_transitive_reference_graph(
                 return fallback
             merged = load_built_in_graph()
             assert_valid(merged)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 -- any load failure is reported, never fatal
+        summary = f"{exc.__class__.__name__}: {exc}"
+        _record_unresolved_reference(
+            kind=_GRAPH_LOAD_FAILURE_KIND,
+            raw_id=_GRAPH_LOAD_FAILURE_ID,
+            cause=_GRAPH_LOAD_FAILURE_CAUSE,
+            detail=summary,
+            diagnostics=diagnostics,
+            unresolved_records=unresolved_records,
+            diagnostic=f"Graph load failed: {summary}. Transitive closure not resolved; direct-root ids only.",
+        )
         return fallback
 
     # FR-032, FR-035 (WP08): apply activation filter after load, before resolution.
@@ -1499,8 +1937,8 @@ def _doctrine_yaml_reference(
     token, an in-tree path becomes repo-relative, and anything else stays
     absolute. This is one of three normalizer call sites
     (contracts/provenance-and-channel.md C-PRV-6, extended by issue #5253).
-    The local-support declaration reference remains excluded and keeps using
-    :func:`_trim_source_path`.
+    The local-support declaration reference remains excluded from this
+    normalizer.
     """
     source = source or {"id": raw_id, "title": raw_id, "summary": "Definition unavailable in bundled doctrine."}
 
@@ -1745,15 +2183,6 @@ def _dump_yaml(data: dict[str, object]) -> str:
     buffer = StringIO()
     yaml.dump(cleaned, buffer)
     return buffer.getvalue()
-
-
-def _trim_source_path(source_path: str) -> str:
-    if not source_path:
-        return ""
-    marker = "src/charter/offering/"
-    if marker in source_path:
-        return source_path[source_path.index(marker) :]
-    return source_path
 
 
 def _yaml_inline_list(values: list[str]) -> str:

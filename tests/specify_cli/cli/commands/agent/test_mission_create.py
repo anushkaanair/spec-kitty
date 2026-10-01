@@ -27,6 +27,7 @@ from typer.testing import CliRunner
 from specify_cli.core.mission_creation import MissionCreationResult
 
 from specify_cli.cli.commands.agent.mission import app as mission_app
+from specify_cli.coordination.surface_resolver import resolve_status_surface
 from specify_cli.core.mission_creation import create_mission_core
 from specify_cli.core.paths import MissionMetaReadError
 from specify_cli.missions._create import (
@@ -269,29 +270,38 @@ def test_mission_create_mints_coordination_branch(tmp_path: Path) -> None:
 
 
 def test_mission_create_idempotent_second_run(tmp_path: Path) -> None:
-    """Re-creating the same mission slug (slug collision permitted in same dir) is a no-op for the branch.
+    """A same-identity re-ensure after create refuses and leaves the branch untouched.
 
     Because each ``mission create`` mints a fresh ULID, two calls with the
     same input slug yield *different* mission directories and therefore
-    different coordination branch names. The idempotency guarantee at the
-    branch level is exercised by directly invoking
-    ``ensure_coordination_branch`` twice for the same identity (already
-    covered above), and at the mission level we assert that re-running with
-    the *same* identity (same mission_id) does not raise.
+    different coordination branch names, so a same-identity re-ensure never
+    happens in production. The branch-level idempotency guarantee is
+    exercised by invoking ``ensure_coordination_branch`` twice on an untouched
+    branch (``test_ensure_is_idempotent_when_branch_at_target``). After a real
+    create the coordination branch carries the status-log seed commit (#5440)
+    while the target advanced with the scaffold, so a same-identity re-ensure is a
+    divergence: it must refuse with the structured error and never move or
+    rewrite the coordination branch (only ``force_recreate`` may reset it).
     """
     _init_repo(tmp_path)
     result = _create(tmp_path, "twice-run")
     mission_id = result.meta["mission_id"]
+    assert result.coordination_branch is not None
+    tip_before = _branch_sha(tmp_path, result.coordination_branch)
+    tip_subject = _git(tmp_path, "log", "-1", "--pretty=%s", result.coordination_branch).stdout.strip()
+    assert tip_subject == f"Add status log for mission {result.mission_slug}"
 
-    # Direct second invocation with the same identity: no error, no churn.
-    second = ensure_coordination_branch(
-        repo_root=tmp_path,
-        mission_slug=result.mission_slug,
-        mission_id=mission_id,
-        target_branch="main",
-    )
-    assert second.created is False
-    assert second.branch_name == result.coordination_branch
+    with pytest.raises(CoordinationBranchDiverged) as exc_info:
+        ensure_coordination_branch(
+            repo_root=tmp_path,
+            mission_slug=result.mission_slug,
+            mission_id=mission_id,
+            target_branch="main",
+        )
+
+    assert exc_info.value.coordination_branch == result.coordination_branch
+    assert exc_info.value.target_branch == "main"
+    assert _branch_sha(tmp_path, result.coordination_branch) == tip_before
 
 
 def test_meta_json_contains_coordination_branch(tmp_path: Path) -> None:
@@ -363,22 +373,28 @@ def test_create_json_output_contains_coordination_branch(tmp_path: Path) -> None
 
 
 # ---------------------------------------------------------------------------
-# Issue #2581 — context-derived topology default
+# Issue #2581 / WP06 #2602 (FR-013) — context-derived topology default
 #
 # Coordination-bearing topology (coord) mints a coordination branch that a
 # non-primary-branch mission (created without --pr-bound) has to be manually
-# flattened out of afterwards. The default must instead be derived from
-# context: single_branch on a non-primary feature/fork branch with no
-# --pr-bound; coord everywhere else (primary branch, --pr-bound, or an
-# explicit --topology choice).
+# flattened out of afterwards. The default is derived from context: lanes on
+# a non-primary feature/fork branch with no --pr-bound; coord everywhere else
+# (primary branch, --pr-bound with coordination reachable, or an explicit
+# --topology choice). Binding decision #5100 (comment 5870360497): the
+# original #2581 fix made this arm default to single_branch, but
+# single_branch must be an explicit-only choice — default users keep
+# worktree isolation, so this arm was re-keyed to lanes (WP06, #2602).
 # ---------------------------------------------------------------------------
 
 
-def test_create_on_non_primary_branch_without_pr_bound_defaults_to_single_branch(
+def test_create_on_non_primary_branch_without_pr_bound_defaults_to_lanes(
     tmp_path: Path,
 ) -> None:
-    """RED before #2581: a feature-branch create with no ``--topology``/``--pr-bound``
-    must default to ``single_branch`` and mint NO coordination branch.
+    """WP06/#2602: a feature-branch create with no ``--topology``/``--pr-bound``
+    defaults to ``lanes`` (not the pre-#5100 ``single_branch``) and mints NO
+    coordination branch. ``single_branch`` is now explicit-only — via
+    ``--topology single_branch`` or ``--owned-checkout`` — per the binding
+    decision on #5100 (comment 5870360497).
 
     The on-disk repo stays on ``main`` (``resolve_primary_branch`` falls back to
     the real current branch when no ``origin`` is configured); the CLI's view of
@@ -411,9 +427,13 @@ def test_create_on_non_primary_branch_without_pr_bound_defaults_to_single_branch
 
     assert result.exit_code == 0, result.output
     payload = _json_payload_from_output(result.output)
-    assert payload["topology"] == "single_branch", payload
+    assert payload["topology"] == "lanes", payload
     assert payload.get("coordination_branch") is None, payload
     assert payload.get("coordination_branch_created") is False, payload
+    # T026 CLI-level check: confirm the STORED meta.json (not merely the
+    # --json echo) records the lanes default.
+    meta = json.loads(Path(str(payload["meta_file"])).read_text(encoding="utf-8"))
+    assert meta["topology"] == "lanes", meta
 
 
 def test_create_on_primary_branch_still_defaults_to_coord(tmp_path: Path) -> None:
@@ -459,11 +479,12 @@ def test_create_pr_bound_on_non_primary_branch_still_defaults_to_coord(tmp_path:
     checkout, so ``coord_topology_reachable(pr_bound=True, primary_protected=True,
     current_is_primary=False)`` is ``True`` → ``coord``.
 
-    If this test FLIPS to ``single_branch`` you keyed on the current checkout
+    If this test FLIPS to ``lanes`` you keyed on the current checkout
     (unprotected) instead of the primary target (protected) — that is the bug this
     tripwire guards against; fix the keying, do not relax the assertion. The
-    complementary "unprotected target → single_branch" case is proven by
-    ``tests/regression/test_coord_topology_no_strand.py``.
+    complementary "unprotected target → lanes" case (WP06/#2602 re-keying;
+    ``single_branch`` is explicit-only per #5100 comment 5870360497) is proven
+    by ``tests/specify_cli/cli/commands/agent/test_coord_topology_no_strand.py``.
     """
     _init_repo(tmp_path)
 
@@ -895,7 +916,9 @@ def test_explicit_research_create_keeps_scaffold_meta_and_event_type_coherent(tm
 
     meta = json.loads((result.feature_dir / "meta.json").read_text(encoding="utf-8"))
     spec = (result.feature_dir / "spec.md").read_text(encoding="utf-8")
-    events = [json.loads(line) for line in (result.feature_dir / "status.events.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+    # #5440: the status log lives on the resolved status surface (the coordination worktree).
+    status_log = resolve_status_surface(tmp_path, result.mission_slug)
+    events = [json.loads(line) for line in status_log.read_text(encoding="utf-8").splitlines() if line.strip()]
     created = next(event for event in events if event["event_type"] == "MissionCreated")
 
     assert meta["mission_type"] == "research"

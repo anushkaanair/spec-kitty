@@ -41,7 +41,6 @@ __all__ = [
     "get_merge_order",
     "MergeOrderError",
     "has_dependency_info",
-    "display_merge_order",
     "assign_next_mission_number",
     "_already_baked",
     "_mark_mission_number_baked",
@@ -206,25 +205,6 @@ def assign_next_mission_number(target_branch_path: Path, mission_specs_dir: Path
     if not collected:
         return 1
     return max(collected) + 1
-
-
-def display_merge_order(
-    ordered_workspaces: list[tuple[Path, str, str]],
-    console,
-) -> None:
-    """Display the merge order to the user.
-
-    Args:
-        ordered_workspaces: Ordered list of (path, wp_id, branch) tuples
-        console: Rich Console for output
-    """
-    if not ordered_workspaces:
-        return
-
-    console.print("\n[bold]Merge Order[/bold] (dependency-based):\n")
-    for i, (_, wp_id, branch) in enumerate(ordered_workspaces, 1):
-        console.print(f"  {i}. {wp_id} ({branch})")
-    console.print()
 
 
 # ---------------------------------------------------------------------------
@@ -585,8 +565,8 @@ def _write_mission_number_to_branch(
             # #4474 / FR-011: the mission-branch tree lacks meta.json -- on a
             # coord-topology mission (the "083+ layout" where
             # ``mission_branch == coordination_branch``, see
-            # ``merge/executor.py``'s ``_capture_pre_mutation_coord_checkpoint``
-            # docstring) that branch carries only lifecycle surfaces
+            # ``consolidation/executor.py``'s ``_CoordCheckpoint`` docstring)
+            # that branch carries only lifecycle surfaces
             # (status/notes/trace); meta.json is a PRIMARY-partition artifact
             # that instead lives on the PRIMARY checkout (``main_repo``'s own
             # on-disk tree -- see ``mission_runtime.resolution.read_dir_for``'s

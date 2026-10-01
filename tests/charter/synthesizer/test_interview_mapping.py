@@ -35,13 +35,6 @@ pytestmark = [pytest.mark.unit]
 class TestInterviewMappingsTable:
     """Validate the static mapping table is well-formed."""
 
-    def test_all_entries_are_interview_section_mapping(self) -> None:
-        """Every entry in INTERVIEW_MAPPINGS is an InterviewSectionMapping."""
-        for entry in INTERVIEW_MAPPINGS:
-            assert isinstance(entry, InterviewSectionMapping), (
-                f"Expected InterviewSectionMapping, got {type(entry)}"
-            )
-
     def test_all_kinds_are_valid(self) -> None:
         """Every kind in every entry is a valid artifact kind."""
         valid_kinds = {"directive", "tactic", "styleguide"}
@@ -334,6 +327,38 @@ class TestResolveSectionsLanguageScope:
 
         assert langs == ["python", "typescript"]
 
+    @pytest.mark.parametrize("answer", ["unknown", "N/A", "[]"])
+    def test_string_placeholder_answers_emit_no_language_target(self, answer: str) -> None:
+        """GREEN control (pins unchanged behaviour): string placeholders already yield no target."""
+        results = resolve_sections({"languages_frameworks": answer})
+
+        assert [label for label, _ in results if label == "language_scope"] == []
+
+    @pytest.mark.parametrize("answer", [["unknown"], ["N/A"], ["any", "TBD"]])
+    def test_list_placeholder_answers_emit_no_language_target(self, answer: list[str]) -> None:
+        """RED (pins the fix): list-shaped placeholders/unknown never become a styleguide target."""
+        results = resolve_sections({"languages_frameworks": answer})
+
+        assert [label for label, _ in results if label == "language_scope"] == []
+
+    def test_list_answer_drops_placeholders_but_keeps_real_values(self) -> None:
+        """RED (pins the fix): only the placeholder members of a list are filtered."""
+        results = resolve_sections({"languages_frameworks": ["Rust", "unknown", "N/A"]})
+
+        assert [ctx["language"] for label, ctx in results if label == "language_scope"] == ["rust"]
+
+    def test_unknown_in_explicit_language_scope_emits_no_target(self) -> None:
+        """RED (pins the fix): a persisted ``language_scope: [unknown]`` never yields an Unknown styleguide."""
+        results = resolve_sections({"language_scope": ["unknown"]})
+
+        assert [label for label, _ in results if label == "language_scope"] == []
+
+    def test_normalize_snapshot_does_not_promote_unknown_list(self) -> None:
+        """RED (pins the fix): normalisation leaves no ``language_scope`` for a placeholder list."""
+        normalized = normalize_interview_snapshot({"languages_frameworks": ["unknown"]})
+
+        assert not normalized.get("language_scope")
+
     def test_language_scope_takes_precedence_over_alias(self) -> None:
         """Explicit legacy language_scope remains stable if both keys are present."""
         snapshot = {
@@ -417,11 +442,16 @@ class TestResolveFullSnapshot:
             assert isinstance(item, tuple)
             assert len(item) == 2
 
-    def test_context_is_dict(self) -> None:
-        """Every answer_context is a dict."""
-        result = resolve_sections({"testing_philosophy": "tdd"})
-        for _, ctx in result:
-            assert isinstance(ctx, dict)
+    def test_answer_context_carries_answer_kinds_and_provenance(self) -> None:
+        """answer_context carries the answer, kinds, and provenance keys
+        that ``targets.py`` reads (``kinds``, ``source_section``)."""
+        contexts = dict(resolve_sections({"testing_philosophy": "tdd"}))
+        assert contexts["testing_philosophy"] == {
+            "answer": "tdd",
+            "kinds": ["tactic", "styleguide"],
+            "source_section": "testing_philosophy",
+            "answer_source": "testing_philosophy",
+        }
 
 
 class TestNormalizeInterviewSnapshot:

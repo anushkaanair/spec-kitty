@@ -41,6 +41,7 @@ from ruamel.yaml.error import YAMLError
 from charter.offering.artifact_kinds import ArtifactKind
 from charter.offering.discovery_recursion import overlay_scan_is_recursive
 from charter.offering.shared.scoping import applies_to_languages_match, normalize_languages
+from charter.offering.yaml_utils import parse_shipped_yaml
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -191,10 +192,11 @@ class BaseDoctrineRepository(ABC, Generic[T]):
 
     def _include_item(self, obj: T) -> bool:
         """Return whether a loaded asset applies to the active language scope."""
-        return applies_to_languages_match(
+        included: bool = applies_to_languages_match(
             getattr(obj, "applies_to_languages", None),
             self._active_languages,
         )
+        return included
 
     # ------------------------------------------------------------------ #
     # Concrete implementation                                              #
@@ -212,7 +214,7 @@ class BaseDoctrineRepository(ABC, Generic[T]):
             return built_in
         for yaml_file in sorted(self._built_in_dir.rglob(self._glob)):
             try:
-                data = yaml_parser.load(yaml_file)
+                data = parse_shipped_yaml(yaml_file, yaml_parser.load, variant="safe")
                 if data is None:
                     continue
                 self._pre_validate(data, yaml_file)
@@ -357,6 +359,7 @@ class BaseDoctrineRepository(ABC, Generic[T]):
         self._post_validate(merged, yaml_file)
         self._items[item_id] = merged
         self._provenance[item_id] = layer_name
+        self._scope_filtered_ids.discard(item_id)
 
     def _insert_overlay_item(
         self,
@@ -383,6 +386,9 @@ class BaseDoctrineRepository(ABC, Generic[T]):
         self._post_validate(obj, yaml_file)
         self._items[key] = obj
         self._provenance[key] = layer_name
+        # An admitted overlay supersedes a built-in of the same id that the
+        # language scope filtered out: the id is live, not filtered (F1).
+        self._scope_filtered_ids.discard(key)
 
     def _load(self) -> None:
         """Walk built-in + org + project dirs, parse, merge, warn on failure."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -454,7 +455,9 @@ class TestMapRequirementsValidation:
 
         assert result.exit_code == 0
         refs = _read_wp_refs(feature_dir, "WP01")
-        assert refs == ["FR-001", "FR-002"]
+        # FR-005 append-only: order preserved (was sorted) -- the tasks.md
+        # fallback (FR-002) seeds the base, the new ref (FR-001) is appended.
+        assert refs == ["FR-002", "FR-001"]
 
     @patch("specify_cli.cli.commands.agent.tasks.locate_project_root")
     @patch("specify_cli.cli.commands.agent.tasks._find_mission_slug")
@@ -527,11 +530,15 @@ class TestMapRequirementsValidation:
         assert payload["error"] == "Stale or invalid refs in WP frontmatter"
         assert "WP02" in payload["stale_refs"]
         # #2066: payload now surfaces the parsed spec FR set, per-WP offender
-        # classification, and a hint naming the FR-NNN format rule.
+        # classification, and a hint naming the grammar.
         assert payload["parsed_spec_ids"] == ["FR-001", "FR-002", "FR-003", "NFR-001"]
         assert payload["stale_ref_reasons"]["WP02"]["malformed"] == ["BOGUS"]
         assert payload["stale_ref_reasons"]["WP02"]["unknown_spec_id"] == []
-        assert "FR-NNN" in payload["hint"]
+        # requirement-id-grammar-01M3NRCA WP03 (FR-019): the reason partition
+        # gains a foreign_qualified bucket, and the hint now names the grammar
+        # rule text rather than restating "FR-NNN, NFR-NNN, or C-NNN".
+        assert payload["stale_ref_reasons"]["WP02"]["foreign_qualified"] == []
+        assert "kind FR, NFR, C or SC" in payload["hint"]
 
     @patch("specify_cli.cli.commands.agent.tasks.locate_project_root")
     @patch("specify_cli.cli.commands.agent.tasks._find_mission_slug")
@@ -543,9 +550,12 @@ class TestMapRequirementsValidation:
         mock_locate: Mock,
         tmp_path: Path,
     ):
-        """#2066 Repro A: a letter-suffixed FR-003a reads as malformed, while a
-        well-formed-but-undeclared FR-999 reads as unknown_spec_id — so the
-        operator can tell a format typo from an orphaned ref."""
+        """#2066 Repro A, re-pinned by requirement-id-grammar-01M3NRCA WP03:
+        ``FR-003a`` is now WELL-FORMED grammar (a letter suffix), so on this
+        fixture (which declares only FR-001..FR-003 and NFR-001) it reads as
+        unknown_spec_id, not malformed. A genuinely malformed token (``FR_003``,
+        underscore) proves the malformed bucket instead, so the test still
+        exercises both buckets on one fixture."""
         mock_locate.return_value = tmp_path
         mock_slug.return_value = "001-test"
         mock_branch.return_value = (tmp_path, "main")
@@ -553,7 +563,7 @@ class TestMapRequirementsValidation:
         tasks_dir = feature_dir / "tasks"
         wp_file = next(tasks_dir.glob("WP02*.md"))
         frontmatter, body = read_frontmatter(wp_file)
-        frontmatter["requirement_refs"] = ["FR-003a", "FR-999"]
+        frontmatter["requirement_refs"] = ["FR_003", "FR-999"]
         from specify_cli.frontmatter import write_frontmatter
 
         write_frontmatter(wp_file, frontmatter, body)
@@ -566,7 +576,7 @@ class TestMapRequirementsValidation:
         assert result.exit_code == 1
         payload = json.loads(result.stdout.strip())
         reasons = payload["stale_ref_reasons"]["WP02"]
-        assert reasons["malformed"] == ["FR-003a"]
+        assert reasons["malformed"] == ["FR_003"]
         assert reasons["unknown_spec_id"] == ["FR-999"]
 
 
@@ -599,6 +609,9 @@ class TestFinalizeTasksWithFrontmatterRefs:
     ):
         mock_locate.return_value = tmp_path
         monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+        # finalize-tasks reads dirty planning files through kernel.git, which fails closed
+        # outside a repository, so the fixture must be a real one.
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
 
         feature_dir = tmp_path / "kitty-specs" / "001-test"
         tasks_dir = feature_dir / "tasks"
@@ -659,6 +672,9 @@ class TestFinalizeTasksWithFrontmatterRefs:
     ):
         mock_locate.return_value = tmp_path
         monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path))
+        # finalize-tasks reads dirty planning files through kernel.git, which fails closed
+        # outside a repository, so the fixture must be a real one.
+        subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
 
         feature_dir = tmp_path / "kitty-specs" / "001-test"
         tasks_dir = feature_dir / "tasks"

@@ -166,20 +166,15 @@ class TestProjectContextGuards:
         _provision_minimal_config(tmp_path)
         ctx = ProjectContext.from_repo(tmp_path)
         pc = ctx.require_pack_context()
-        assert pc is not None
+        assert pc is ctx.pack_context
+        # Assumption check: the provisioned config was actually loaded.
+        assert pc.activated_mission_types == frozenset({"software-dev"})
 
     def test_require_pack_context_raises_when_none(self) -> None:
         ctx = ProjectContext()
         with pytest.raises(ContextPreconditionError) as exc_info:
             ctx.require_pack_context()
         assert exc_info.value.field == "pack_context"
-        assert exc_info.value.context_type == "ProjectContext"
-
-    def test_require_org_root_raises_when_none(self) -> None:
-        ctx = ProjectContext()
-        with pytest.raises(ContextPreconditionError) as exc_info:
-            ctx.require_org_root()
-        assert exc_info.value.field == "org_root"
         assert exc_info.value.context_type == "ProjectContext"
 
 
@@ -197,17 +192,6 @@ class TestOperationalContext:
         assert ctx.current_activity is None
         assert ctx.tech_stack == frozenset()
 
-    def test_require_active_profile_raises_when_none(self) -> None:
-        ctx = OperationalContext()
-        with pytest.raises(ContextPreconditionError) as exc_info:
-            ctx.require_active_profile()
-        assert exc_info.value.field == "active_profile"
-        assert exc_info.value.context_type == "OperationalContext"
-
-    def test_require_active_profile_returns_value(self) -> None:
-        ctx = OperationalContext(active_profile="python-pedro")
-        assert ctx.require_active_profile() == "python-pedro"
-
     def test_require_active_role_raises_when_none(self) -> None:
         ctx = OperationalContext()
         with pytest.raises(ContextPreconditionError) as exc_info:
@@ -221,10 +205,6 @@ class TestOperationalContext:
 
 
 class TestBuildOperationalContext:
-    def test_returns_operational_context_instance(self) -> None:
-        ctx = build_operational_context()
-        assert isinstance(ctx, OperationalContext)
-
     def test_all_fields_none(self) -> None:
         ctx = build_operational_context()
         assert ctx.active_profile is None

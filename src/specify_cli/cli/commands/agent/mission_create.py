@@ -28,12 +28,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated, NoReturn, cast
 
 from mission_runtime import MissionTopology
 from specify_cli.cli.console import console
 import typer
 
+from specify_cli.cli.commands._owned_checkout import OwnedCheckoutOption
 from specify_cli.cli.selector_resolution import resolve_selector
 from specify_cli.core.constants import MISSION_TYPE_DOCUMENTATION
 from specify_cli.diagnostics import mark_invocation_succeeded
@@ -42,13 +43,11 @@ from specify_cli.git.ref_advance import RefRestoreError, restore_branch_ref
 from specify_cli.cli.commands.agent.mission_branch_context import (
     _inject_branch_contract,
 )
-from specify_cli.cli.commands.agent.mission_check_prerequisites import (
-    _read_meta_for_pr_bound,
-)
 from specify_cli.cli.commands.agent.mission_parsing import _emit_json
 
 if TYPE_CHECKING:
     from specify_cli.core.mission_creation import MissionCreationResult
+    from specify_cli.core.owned_mission import OwnedCreateRoot
 
 
 # ``--start-branch`` / ``--target-branch`` must name the same branch because
@@ -376,28 +375,54 @@ def _resolve_default_topology_phase(
     repo_root: Path | None,
     current_branch: str | None,
     pr_bound: bool,
+    owned_create_root: OwnedCreateRoot | None = None,
 ) -> MissionTopology:
-    """Derive the create-time topology default from branch/pr-bound context (#2581, #2533).
+    """Derive the create-time topology default from branch/pr-bound context (#2581, #2533, #2602).
 
-    An explicit ``--topology`` always wins. Otherwise the default keys on
-    *topology honesty* (INV-2): a coordination topology is minted only when
-    coordination routing is actually reachable, never as pure overhead.
+    ``single_branch`` is explicit-only (binding decision on #5100, comment
+    5870360497): it is produced ONLY by an explicit ``--topology
+    single_branch`` or by ``--owned-checkout`` — never as an implicit
+    default. Every other implicit arm below resolves to either ``coord`` or
+    ``lanes``, so default users on the ordinary create path keep worktree
+    isolation (US4/FR-013).
 
+    - An explicit ``--topology`` always wins.
+    - ``--owned-checkout`` is itself an explicit request for an isolated,
+      operator-managed write surface (ADR 2026-09-03-1: owned mode supports
+      ``single_branch`` only), so it also wins outright — before any
+      branch/pr-bound context is consulted. This is a genuine BEHAVIOUR
+      CHANGE, not a preservation of prior implicit routing: an owned
+      checkout with no configured ``origin`` has no protection/reachability
+      signal of its own, so ``resolve_primary_branch`` falls back to
+      reading the checkout's OWN current branch — making
+      ``current_branch == primary_branch`` true for that checkout
+      regardless of which branch it is on. Pre-WP06 that fallback quirk
+      routed a real owned-checkout create with no ``--topology`` to the
+      *primary-branch* ``coord`` arm, never to the non-primary arm's
+      (then-implicit) ``single_branch`` (#5100 review cycle 1, nit 3).
+    - Otherwise the default keys on *topology honesty* (INV-2): a
+      coordination topology is minted only when coordination routing is
+      actually reachable, never as pure overhead.
     - ``--pr-bound`` missions consult :func:`coord_topology_reachable` — coord
       is reachable iff ``primary_protected or current_is_primary``. A pr-bound
       mission on an **unprotected** primary target (e.g. created with
-      ``--start-branch <feature-branch>``) therefore defaults to
-      ``single_branch``, eliminating the stranded coord branch behind the #2533
-      split-brain. Protection is keyed on the **primary TARGET branch**
-      (``ProtectionPolicy`` + ``resolve_primary_branch``), NOT the current
-      checkout (the tripwire in ``test_mission_create.py`` proves this).
+      ``--start-branch <feature-branch>``) therefore defaults to ``lanes``,
+      eliminating the stranded coord branch behind the #2533 split-brain
+      without falling back to the no-longer-implicit ``single_branch``.
+      Protection is keyed on the **primary TARGET branch** (``ProtectionPolicy``
+      + ``resolve_primary_branch``), NOT the current checkout (the tripwire in
+      ``test_mission_create.py`` proves this).
     - A non-pr-bound mission created on the repository's primary branch keeps the
       historical ``coord`` default; one created on a non-primary feature/fork
-      branch defaults to ``single_branch`` — minting a coordination branch there
-      just to have the operator manually flatten it is the friction #2581 closes.
+      branch defaults to ``lanes`` — minting a coordination branch there just
+      to have the operator manually flatten it is the friction #2581 closed,
+      and #2602 keeps that friction closed via worktree isolation rather than
+      an implicit ``single_branch``.
     """
     if explicit_topology is not None:
         return explicit_topology
+    if owned_create_root is not None:
+        return MissionTopology.SINGLE_BRANCH
     # Fail-safe: without a resolvable repo/checkout we cannot key on target
     # protection, so keep the historical ``coord`` default. Hoisted ahead of the
     # pr-bound arm because that arm now needs a resolvable ``repo_root`` to read
@@ -414,10 +439,10 @@ def _resolve_default_topology_phase(
 
         primary_protected = ProtectionPolicy.resolve(repo_root).is_protected(primary_branch)
         current_is_primary = current_branch == primary_branch
-        return MissionTopology.COORD if coord_topology_reachable(pr_bound, primary_protected, current_is_primary) else MissionTopology.SINGLE_BRANCH
+        return MissionTopology.COORD if coord_topology_reachable(pr_bound, primary_protected, current_is_primary) else MissionTopology.LANES
     if current_branch == primary_branch:
         return MissionTopology.COORD
-    return MissionTopology.SINGLE_BRANCH
+    return MissionTopology.LANES
 
 
 def _print_worktree_navigation_hint(mission_slug: str, error_msg: str) -> None:
@@ -442,82 +467,65 @@ def _print_worktree_navigation_hint(mission_slug: str, error_msg: str) -> None:
         console.print(f"  spec-kitty agent mission create {mission_slug}")
 
 
-def _run_create_core_phase(
+def _emit_create_core_error_and_exit(
+    exc: Exception,
     *,
-    repo_root: Path | None,
     mission_slug: str,
-    resolved_mission_type: str | None,
-    target_branch: str | None,
-    friendly_name: str | None,
-    purpose_tldr: str | None,
-    purpose_context: str | None,
-    pr_bound: bool,
-    force_recreate_coordination_branch: bool,
-    owned_checkout: Path | None,
     json_output: bool,
-    topology: MissionTopology = MissionTopology.COORD,
-    retain_branches: bool = False,
-    retain_worktrees: bool = False,
-    allow_duplicate: bool = False,
-) -> MissionCreationResult:
-    """Invoke ``create_mission_core`` with the deterministic error funnel.
+) -> NoReturn:
+    """Classify a ``create_mission_core`` failure and emit its CLI payload.
 
-    Exits 1 (with the appropriate structured payload) on the three documented
-    failure classes: coordination-branch divergence (NFR-007 stable error_code),
-    a ``MissionCreationError`` (with worktree navigation hint), or any other
+    MEDIUM-6 fix-cycle-1 extraction: the error-classification logic used to
+    live as five ``except`` clauses directly in ``_run_create_core_phase``,
+    which pushed that function's complexity from 12 to 14 once T055 touched
+    its body. Extracted here (a single ``isinstance`` dispatch, still one
+    branch per documented failure class) so the caller's own try/except goes
+    back to a single generic ``except Exception`` -- unchanged behaviour,
+    lower complexity at the call site.
+
+    Exits 1 (with the appropriate structured payload) on the four documented
+    failure classes: an owned-checkout claim refusal (typed error code),
+    coordination-branch divergence (NFR-007 stable error_code), a
+    ``MissionCreationError`` (with worktree navigation hint), or any other
     unexpected exception.
     """
     from charter.activation.pack_context import CharterPackConfigError
-    from specify_cli.core.mission_creation import (
-        MissionCreationError,
-        create_mission_core,
-    )
-    from specify_cli.core.checkout_ownership import CheckoutOwnershipError
+    from mission_runtime import ActionContextError
+    from specify_cli.core.mission_creation import MissionCreationError
     from specify_cli.missions._create import CoordinationBranchDiverged
 
-    try:
-        return create_mission_core(
-            repo_root=repo_root,
-            mission_slug=mission_slug,
-            mission=resolved_mission_type,
-            target_branch=target_branch,
-            friendly_name=friendly_name,
-            purpose_tldr=purpose_tldr,
-            purpose_context=purpose_context,
-            pr_bound=pr_bound,
-            topology=topology,
-            force_recreate_coordination_branch=force_recreate_coordination_branch,
-            owned_checkout=owned_checkout.resolve() if owned_checkout is not None else None,
-            retain_branches=retain_branches,
-            retain_worktrees=retain_worktrees,
-            allow_duplicate=allow_duplicate,
-        )
-    except CoordinationBranchDiverged as exc:
+    if isinstance(exc, CoordinationBranchDiverged):
         # Structured error path (NFR-007): emit a stable error_code payload
         # so scripted callers (CI, doctor) can detect this case unambiguously.
         if json_output:
             _emit_json({"error": str(exc), **exc.to_dict()})
         else:
             console.print(f"[bold red]Error:[/bold red] {exc}")
-        raise typer.Exit(1) from exc
-    except CheckoutOwnershipError as exc:
+    elif isinstance(exc, ActionContextError):
+        # MEDIUM-5 fix-cycle-1: the former `except CheckoutOwnershipError`
+        # arm was dead code after T053 -- create_mission_core no longer calls
+        # error_for_claim (resolve_owned_create_root converts every claim
+        # refusal to this single ActionContextError type instead), so it was
+        # deleted rather than kept unreachable. This branch carries the SAME
+        # registered error codes (including OWNED_CHECKOUT_IS_REPOSITORY_ROOT)
+        # the old CheckoutOwnershipError branch handled, so the --json
+        # envelope is unchanged.
         error_msg = str(exc)
         if json_output:
             # Shared ownership refusal contract (mirrors
-            # next_cmd._emit_checkout_ownership_error): exactly
+            # _owned_checkout.emit_owned_refusal): exactly
             # {success, error_code, error} — no redundant `message` key from
             # StructuredError.to_dict().
             _emit_json(
                 {
                     "success": False,
-                    "error_code": exc.error_code,
+                    "error_code": exc.code,
                     "error": error_msg,
                 }
             )
         else:
             console.print(f"[bold red]Error:[/bold red] {error_msg}")
-        raise typer.Exit(1) from exc
-    except MissionCreationError as exc:
+    elif isinstance(exc, MissionCreationError):
         error_msg = str(exc)
         if json_output:
             # #3861: carry the delegate's TYPED failure reason (e.g.
@@ -531,12 +539,11 @@ def _run_create_core_phase(
         else:
             console.print(f"[bold red]Error:[/bold red] {error_msg}")
             _print_worktree_navigation_hint(mission_slug, error_msg)
-        raise typer.Exit(1) from exc
-    except CharterPackConfigError as exc:
+    elif isinstance(exc, CharterPackConfigError):
         # FR-010 (#3337): the fail-closed charter-pack gate raises a
         # ``KittyInternalConsistencyError`` whose ``str(exc)`` is only the
         # stable ``.code`` — the actionable remediation lives on ``.body``. The
-        # generic handler below would emit ``{"error": "<CODE>"}`` and drop the
+        # generic branch below would emit ``{"error": "<CODE>"}`` and drop the
         # remediation entirely, so carry both the code and the body into the
         # --json envelope for scripted callers.
         if json_output:
@@ -549,25 +556,116 @@ def _run_create_core_phase(
             )
         else:
             console.print(f"[bold red]Error:[/bold red] {exc.body}")
-        raise typer.Exit(1) from exc
-    except Exception as e:
+    else:
         if json_output:
-            _emit_json({"error": str(e)})
+            _emit_json({"error": str(exc)})
         else:
-            console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1) from e
+            console.print(f"[red]Error:[/red] {exc}")
+    raise typer.Exit(1) from exc
 
 
-def _persist_pr_bound_phase(result: MissionCreationResult, *, pr_bound: bool) -> None:
-    """Persist the ``pr_bound`` flag in ``meta.json`` (FR-033 schema addition)."""
-    if not pr_bound:
-        return
-    meta_data = _read_meta_for_pr_bound(result.feature_dir)
-    if meta_data and not meta_data.get("pr_bound"):
-        meta_data["pr_bound"] = True
-        from specify_cli.mission_metadata import write_meta
+def _mint_owned_create_root(
+    repo_root: Path | None,
+    owned_checkout: OwnedCheckoutOption,
+    *,
+    mission_slug: str,
+    json_output: bool,
+) -> OwnedCreateRoot | None:
+    """Mint the owned-checkout fact ONCE, before ANY git operation (fix-cycle-2 HIGH).
 
-        write_meta(result.feature_dir, meta_data)
+    Review cycle 2's fail-open: pre-fix, ``create_mission`` computed
+    ``command_checkout = owned_checkout.resolve()`` straight from the RAW,
+    UNVALIDATED ``--owned-checkout`` claim, then ran
+    ``_rollback_start_branch_on_failure`` / ``_resolve_start_branch_phase``
+    (which calls ``_switch_to_start_branch``) / ``get_current_branch`` /
+    ``_resolve_default_topology_phase`` against it -- git mutations (a branch
+    switch) of a checkout the validator would go on to REFUSE (the
+    repository root itself, or a foreign repository entirely), landing before
+    validation ever ran. This function is called FIRST in ``create_mission``,
+    before any of those phases, so a claim is validated -- or refused -- before
+    a single git command touches the claimed path.
+
+    Returns ``None`` when no claim was given (``owned_checkout is None``).
+    With a claim: fails closed with the SAME typed ``MissionCreationError``
+    the unowned-create path uses when ``repo_root`` could not be located
+    (HIGH-3 fix-cycle-1); otherwise mints via WP02's
+    :func:`specify_cli.core.owned_mission.resolve_owned_create_root`. Any
+    failure (either raise) is routed through
+    :func:`_emit_create_core_error_and_exit`, so the ``--json`` envelope is
+    byte-identical to the funnel's own classification of the same errors.
+    """
+    if owned_checkout is None:
+        return None
+
+    from specify_cli.core.mission_creation import MissionCreationError
+    from specify_cli.core.owned_mission import resolve_owned_create_root
+
+    if repo_root is None:
+        _emit_create_core_error_and_exit(
+            MissionCreationError("Could not locate project root. Run from within spec-kitty repository."),
+            mission_slug=mission_slug,
+            json_output=json_output,
+        )
+    try:
+        return resolve_owned_create_root(repo_root, owned_checkout)
+    except Exception as exc:  # classified and re-raised as typer.Exit by the helper below
+        _emit_create_core_error_and_exit(exc, mission_slug=mission_slug, json_output=json_output)
+
+
+def _run_create_core_phase(
+    *,
+    repo_root: Path | None,
+    mission_slug: str,
+    resolved_mission_type: str | None,
+    target_branch: str | None,
+    friendly_name: str | None,
+    purpose_tldr: str | None,
+    purpose_context: str | None,
+    pr_bound: bool,
+    force_recreate_coordination_branch: bool,
+    owned_create_root: OwnedCreateRoot | None = None,
+    json_output: bool,
+    topology: MissionTopology = MissionTopology.COORD,
+    retain_branches: bool = False,
+    retain_worktrees: bool = False,
+    commit_to_target: bool = False,
+    allow_duplicate: bool = False,
+) -> MissionCreationResult:
+    """Invoke ``create_mission_core`` with the deterministic error funnel.
+
+    ``owned_create_root`` is the already-validated owned-checkout fact
+    (fix-cycle-2 HIGH: minted ONCE by :func:`_mint_owned_create_root`, at the
+    very top of ``create_mission``, before any git operation the command's
+    earlier phases perform -- never re-validated here). ``None`` means an
+    unowned (repository root) create.
+
+    Exits 1 (with the appropriate structured payload) on the three documented
+    failure classes: coordination-branch divergence (NFR-007 stable
+    error_code), a ``MissionCreationError`` (with worktree navigation hint),
+    or any other unexpected exception. See :func:`_emit_create_core_error_and_exit`.
+    """
+    from specify_cli.core.mission_creation import create_mission_core
+
+    try:
+        return create_mission_core(
+            repo_root=repo_root,
+            mission_slug=mission_slug,
+            mission=resolved_mission_type,
+            target_branch=target_branch,
+            friendly_name=friendly_name,
+            purpose_tldr=purpose_tldr,
+            purpose_context=purpose_context,
+            pr_bound=pr_bound,
+            topology=topology,
+            force_recreate_coordination_branch=force_recreate_coordination_branch,
+            owned_create_root=owned_create_root,
+            retain_branches=retain_branches,
+            retain_worktrees=retain_worktrees,
+            commit_to_target=commit_to_target,
+            allow_duplicate=allow_duplicate,
+        )
+    except Exception as exc:
+        _emit_create_core_error_and_exit(exc, mission_slug=mission_slug, json_output=json_output)
 
 
 def _build_create_payload(result: MissionCreationResult) -> dict[str, object]:
@@ -593,6 +691,11 @@ def _build_create_payload(result: MissionCreationResult) -> dict[str, object]:
         "meta_file": str(meta_file),
         "created_at": str(result.meta.get("created_at", "")),
         "created_files": [str(path) for path in result.created_files],
+        # #5100 FR-007/FR-008 (WP08): the protected-target single_branch mint,
+        # when it fired, or the explicit `commit_to_target` override, when
+        # set. `None` for every other mission (never a written empty string).
+        "mission_branch": result.meta.get("mission_branch"),
+        "commit_to_target": result.meta.get("commit_to_target"),
         # #2693: spec.md is scaffolded empty and left uncommitted on purpose
         # (#846) — it is committed later by /spec-kitty.specify once it holds
         # substantive content. Disclose it as a structured uncommitted artifact
@@ -632,9 +735,47 @@ def _build_create_payload(result: MissionCreationResult) -> dict[str, object]:
         "topology": str(result.meta.get("topology", "")),
     }
     if result.owned_checkout is not None:
-        payload["owned_checkout"] = str(result.owned_checkout)
+        # Serialized key stays byte-identical (occurrence_map serialized_keys:
+        # do_not_change): "owned_checkout", holding the owned checkout path.
+        payload["owned_checkout"] = str(result.owned_checkout.checkout)
         payload["canonical_repo_root"] = str(result.canonical_repo_root)
     return payload
+
+
+def _minted_mission_branch(result: MissionCreationResult) -> str | None:
+    """The protected-target mission branch the create left checked out, if one was minted."""
+    minted = result.meta.get("mission_branch")
+    return minted if isinstance(minted, str) and minted else None
+
+
+def _print_branch_line(result: MissionCreationResult, mission_branch: str | None) -> None:
+    """Human ``Branch:`` line -- the minted mission branch when create switched onto one."""
+    if mission_branch:
+        console.print(f"[bold cyan]Branch:[/bold cyan] {mission_branch} (mission branch; merges into {result.target_branch})")
+    else:
+        console.print(f"[bold cyan]Branch:[/bold cyan] {result.target_branch} (target for this mission)")
+
+
+def _print_meta_outcome(result: MissionCreationResult, mission_branch: str | None) -> None:
+    """Report where ``meta.json`` landed (or that it did not), naming the real branch."""
+    landed_branch = mission_branch or result.target_branch
+    meta_committed = (result.feature_dir / "meta.json") not in result.uncommitted_files
+    if mission_branch:
+        suffix = "; meta committed there" if meta_committed else ""
+        console.print(f"   Switched checkout to {mission_branch} (was {result.current_branch}){suffix}")
+    if meta_committed:
+        tail = "spec.md scaffold left untracked" if mission_branch else f"Meta committed to {result.target_branch}; spec.md scaffold left untracked"
+        console.print(f"   {tail}")
+        return
+    console.print(
+        f"   [yellow]Meta not committed:[/yellow] the scaffold commit to "
+        f"{landed_branch} was refused (protected or unavailable target "
+        f"branch); kitty-specs/{result.mission_slug}/ is left on disk, untracked"
+    )
+    console.print(
+        "   Planning artifacts must land on a feature branch, or land via the mission lane worktree "
+        "— switch to a feature branch first, or re-run 'agent mission create --start-branch <feature-branch>'."
+    )
 
 
 def _emit_create_result_phase(
@@ -644,8 +785,9 @@ def _emit_create_result_phase(
     json_output: bool,
 ) -> None:
     """Emit the create result in JSON or human form (output stays in the CLI layer)."""
+    mission_branch = _minted_mission_branch(result)
     if not json_output:
-        console.print(f"[bold cyan]Branch:[/bold cyan] {result.target_branch} (target for this mission)")
+        _print_branch_line(result, mission_branch)
         if resolved_mission_type == MISSION_TYPE_DOCUMENTATION:
             console.print("[cyan]→ Documentation state initialized in meta.json[/cyan]")
 
@@ -654,7 +796,11 @@ def _emit_create_result_phase(
             _inject_branch_contract(
                 _build_create_payload(result),
                 target_branch=result.target_branch,
-                current_branch=result.current_branch,
+                # A minted mission branch is the real checkout after create
+                # (``result.current_branch`` is the pre-mint branch), so the
+                # contract describes it, not the protected merge target.
+                current_branch=mission_branch or result.current_branch,
+                expected_checkout_branch=mission_branch,
             )
         )
         # FR-008: signal atexit handlers that this invocation succeeded so
@@ -676,18 +822,7 @@ def _emit_create_result_phase(
         # target branch), meta.json sits in ``result.uncommitted_files`` — the
         # same evidence the ``--json`` envelope discloses via
         # ``uncommitted_artifacts`` — and claiming a commit would be false.
-        if (result.feature_dir / "meta.json") in result.uncommitted_files:
-            console.print(
-                f"   [yellow]Meta not committed:[/yellow] the scaffold commit to "
-                f"{result.target_branch} was refused (protected or unavailable target "
-                f"branch); kitty-specs/{result.mission_slug}/ is left on disk, untracked"
-            )
-            console.print(
-                "   Planning artifacts must land on a feature branch, or land via the mission lane worktree "
-                "— switch to a feature branch first, or re-run 'agent mission create --start-branch <feature-branch>'."
-            )
-        else:
-            console.print(f"   Meta committed to {result.target_branch}; spec.md scaffold left untracked")
+        _print_meta_outcome(result, mission_branch)
         console.print("   [yellow]Scaffold only:[/yellow] run [cyan]/spec-kitty.specify <intent>[/cyan] in your agent, or edit and commit spec.md before planning.")
 
 
@@ -715,10 +850,11 @@ def create_mission(
                 "Create-time mission shape: single_branch | lanes | coord | "
                 "lanes_with_coord. Coordination-bearing shapes (coord, "
                 "lanes_with_coord) mint a coordination branch; branch-flat "
-                "shapes (single_branch, lanes) do not. Default: context-derived "
-                "(#2581) — coord on the primary branch, with --pr-bound, or "
-                "when explicitly requested; single_branch on a non-primary "
-                "feature/fork branch without --pr-bound."
+                "shapes (single_branch, lanes) do not. Default: "
+                "context-derived (#2581, #2602) — coord on the primary "
+                "branch or with --pr-bound when coordination is reachable; "
+                "lanes otherwise. single_branch only when requested "
+                "explicitly (or via --owned-checkout)."
             ),
         ),
     ] = None,
@@ -747,17 +883,7 @@ def create_mission(
             ),
         ),
     ] = False,
-    owned_checkout: Annotated[
-        Path | None,
-        typer.Option(
-            "--owned-checkout",
-            help=(
-                "Explicitly declare a checkout root owned by this invocation. "
-                "The path must be the primary checkout or a validated linked "
-                "worktree of the resolved primary repository."
-            ),
-        ),
-    ] = None,
+    owned_checkout: OwnedCheckoutOption = None,
     retain_branches: Annotated[
         bool,
         typer.Option(
@@ -770,6 +896,18 @@ def create_mission(
         typer.Option(
             "--retain-worktrees",
             help="Opt this mission's worktrees out of post-merge cleanup deletion.",
+        ),
+    ] = False,
+    commit_to_target: Annotated[
+        bool,
+        typer.Option(
+            "--commit-to-target/--no-commit-to-target",
+            help=(
+                "single_branch only: skip the protected-target mission-branch "
+                "mint (#5100 FR-008) and commit directly onto --target-branch, "
+                "even when it is protected. Persisted; honoured through "
+                "ProtectionPolicy for every later write."
+            ),
         ),
     ] = False,
     allow_duplicate: Annotated[
@@ -800,7 +938,11 @@ def create_mission(
     from specify_cli.cli.commands.agent import mission as _mission
 
     repo_root = _mission.locate_project_root()
-    command_checkout = owned_checkout.resolve() if owned_checkout is not None else repo_root
+    # fix-cycle-2 HIGH: mint the owned-checkout fact ONCE, here, before any of
+    # the phases below run a git operation against it (start-branch switch,
+    # get_current_branch, topology derivation). None when no claim was given.
+    owned_create_root = _mint_owned_create_root(repo_root, owned_checkout, mission_slug=mission_slug, json_output=json_output)
+    command_checkout = owned_create_root.checkout if owned_create_root is not None else repo_root
 
     with _rollback_start_branch_on_failure(command_checkout, start_branch):
         _resolve_start_branch_phase(
@@ -831,6 +973,7 @@ def create_mission(
             repo_root=command_checkout,
             current_branch=current_branch,
             pr_bound=pr_bound,
+            owned_create_root=owned_create_root,
         )
 
         # Import the tracker package here (NOT at module scope) so ``tracker/__init__.py``
@@ -853,10 +996,11 @@ def create_mission(
             pr_bound=pr_bound,
             topology=resolved_topology,
             force_recreate_coordination_branch=force_recreate_coordination_branch,
-            owned_checkout=owned_checkout,
+            owned_create_root=owned_create_root,
             json_output=json_output,
             retain_branches=retain_branches,
             retain_worktrees=retain_worktrees,
+            commit_to_target=commit_to_target,
             allow_duplicate=allow_duplicate,
         )
     _emit_create_result_phase(

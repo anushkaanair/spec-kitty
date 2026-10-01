@@ -2,7 +2,8 @@
 title: Execution Lanes
 description: "Spec Kitty's lane-based execution model: finalize-tasks computes lanes.json from dependencies and file ownership, giving each lane one worktree and branch to preserve parallelism."
 doc_status: active
-updated: '2026-09-26'
+updated: '2026-09-30'
+audience: docs/context/audience/internal/lead-developer.md
 related:
 - docs/architecture/branch-target-routing.md
 - docs/migrations/mission-id-canonical-identity.md
@@ -11,8 +12,8 @@ related:
 
 Spec Kitty uses a lane-based execution model.
 
-- `finalize_tasks` computes `lanes.json` from dependencies, ownership, and predicted surfaces.
-- Each lane gets exactly one git worktree and one lane branch.
+- For `lanes` and `lanes_with_coord` missions, `finalize_tasks` computes `lanes.json` from dependencies, ownership, and predicted surfaces. A `single_branch` mission gets a one-lane repo-root manifest instead.
+- Each code lane gets exactly one git worktree and one lane branch.
 - Sequential work packages in the same lane reuse that same worktree.
 - Independent lanes can run in parallel in separate worktrees.
 
@@ -21,7 +22,7 @@ Spec Kitty uses a lane-based execution model.
 1. Planning happens in the primary repository checkout.
 2. `spec-kitty agent action implement WP## --agent <name>` requires a valid `lanes.json`.
 3. The runtime chooses the lane worktree. Agents do not pick a base branch manually.
-4. If a feature computes one lane, the feature uses one worktree.
+4. If a `lanes` mission computes one lane, the mission uses one worktree. A `single_branch` mission uses no lane worktree at all.
 5. Merge always follows `lane branches -> mission branch -> target branch`.
 
 ## Workspace Resolution Contract
@@ -37,9 +38,15 @@ Spec Kitty uses a lane-based execution model.
 
 `require_lanes_json` is fail-closed: when `lanes.json` is absent it raises
 `MissingLanesError` rather than degrading to a name-guessed path. **There is
-no `-WP##` legacy worktree fallback** — flat, `SINGLE_BRANCH`, and `LANES`
-missions all still require a computed `lanes.json`; a mission that hasn't run
-`finalize-tasks` cannot resolve a workspace at all. (An earlier revision of
+no `-WP##` legacy worktree fallback** — `LANES` and `LANES_WITH_COORD`
+missions require a computed `lanes.json`; a mission that hasn't run
+`finalize-tasks` cannot resolve a workspace at all. A `SINGLE_BRANCH` mission
+also needs its `lanes.json`, but that manifest is not computed from
+dependencies: it is a one-lane repo-root manifest (`lane-planning`) whose WPs all
+resolve to the write checkout (the repository root checkout, or a validated owned
+checkout) with `execution_mode: direct_repo`. It has no lane worktree, no lane
+branch and no dependency merge. See the
+[topology glossary](../context/topology.md). (An earlier revision of
 this repo's `AGENTS.md` claimed such a fallback existed; that claim was
 false and has been corrected — see the `MissingLanesError` contract above
 for the real behavior.)
@@ -121,7 +128,7 @@ Each entry in `collapse_report` lists the WPs that were merged into a single lan
 `compute_lanes` (`src/specify_cli/lanes/compute.py`) has a second collapse
 rule beyond file-overlap: two WPs that share an inferred *surface* keyword
 (e.g. both bodies mention "legacy" or "cleanup", matching the
-`legacy-cleanup` tag in `SURFACE_TAXONOMY`) are also candidates for merging
+`legacy-cleanup` tag in `_SURFACE_KEYWORDS`) are also candidates for merging
 into one lane — **unless their `owned_files` are provably disjoint**
 (`_are_disjoint`), in which case the merge is skipped.
 

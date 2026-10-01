@@ -2,7 +2,7 @@
 title: Specification-Driven Development (SDD)
 description: Specification-Driven Development methodology behind Spec Kitty — how executable specifications and implementation plans generate code, inverting the code-first power structure.
 doc_status: active
-updated: '2026-08-10'
+updated: '2026-09-29'
 audience: docs/context/audience/internal/system-architect.md
 type: explanation
 ---
@@ -93,9 +93,9 @@ adds OAuth2 providers as delta to existing system.
 
 **The difference:** Spec Kitty specs are concise change requests. LLMs read the codebase to understand context, then implement the specified delta.
 
-## Real-Time Progress Tracking with Integrated Kanban
+## Progress Tracking with Kanban Lanes
 
-Spec Kitty pairs specification rigor with a **visual workflow** that keeps the entire team aligned. The built-in task dashboard streams lane transitions from every feature worktree, giving product owners, reviewers, and AI assistants a single source of truth for progress. Agents coordinate through structured lane scripts, so the dashboard highlights blockers, review requests, and idle work packages in real time. This **task dashboard** becomes the heartbeat of the project—drive agent coordination from one screen, rebalance workloads instantly, and archive the full timeline for compliance.
+Spec Kitty pairs specification rigor with a **lane-based workflow** that keeps the entire team aligned. Every lane transition is appended to the Mission's status event log, giving product owners, reviewers, and AI assistants a single source of truth for progress. Agents coordinate through structured lane commands, and `spec-kitty agent tasks status` highlights blockers, review requests, and idle work packages. This **status board** becomes the heartbeat of the project—drive agent coordination from one place, rebalance workloads, and archive the full timeline for compliance.
 
 ## The SDD Workflow in Practice
 
@@ -578,3 +578,42 @@ By embedding these principles into the specification and planning process, SDD e
 This isn't about replacing developers or automating creativity. It's about amplifying human capability by automating mechanical translation. It's about creating a tight feedback loop where specifications, research, and code evolve together, each iteration bringing deeper understanding and better alignment between intent and implementation.
 
 Software development needs better tools for maintaining alignment between intent and implementation. SDD provides the methodology for achieving this alignment through executable specifications that generate code rather than merely guiding it.
+
+## Glossary: requirement identifiers
+
+### Requirement ID
+
+| | |
+|---|---|
+| **Definition** | A stable identifier for one spec requirement: a kind (`FR`, `NFR`, `C`, or `SC`), a digit string whose width is significant, an optional single lowercase letter suffix, and an optional `<mission-slug>#` qualifier; canonical form is kind uppercase, digits verbatim, suffix lowercase. |
+| **Context** | Spec-Driven Development |
+| **Status** | canonical |
+| **Applicable to** | `3.x` |
+| **Do NOT use when** | The identifier is an implementation-concern ID (`IC-##`, a separate plan-level grammar; see the linked ADR below), or a work package ID. |
+| **Related terms** | [Success criterion](#success-criterion), [Qualified citation](#qualified-citation), [work package](./orchestration.md#work-package), [Mission](./orchestration.md#mission), the single-grammar-authority ADR (`../adr/3.x/2026-09-29-1-requirement-id-grammar-single-authority.md`) |
+
+---
+
+### Success criterion
+
+| | |
+|---|---|
+| **Definition** | A measurable outcome a spec declares with the `SC` kind. It is a Requirement ID that is tracked (reported in finalize-tasks' informational success-criteria coverage) but not gating: an undeclared `SC` ref cited on a work package still fails as `unknown_spec_id`. |
+| **Context** | Spec-Driven Development |
+| **Status** | canonical |
+| **Applicable to** | `3.x` |
+| **Do NOT use when** | The concept is an acceptance scenario of a user story, or a functional requirement whose mapping is coverage-gated. |
+| **Related terms** | [Requirement ID](#requirement-id), [Qualified citation](#qualified-citation) |
+
+---
+
+### Qualified citation
+
+| | |
+|---|---|
+| **Definition** | A Requirement ID prefixed with another mission's slug and `#` (`<mission-slug>#FR-###`). It belongs to the named mission, is never declared, required, flagged, or warned about, and is reported as `foreign_qualified` (never failing) when cited in a work package's refs; the qualifier itself is never resolved. |
+| **Context** | Spec-Driven Development |
+| **Status** | canonical |
+| **Applicable to** | `3.x` |
+| **Do NOT use when** | Citing a GitHub issue reference (`#` plus digits) or a file path. |
+| **Related terms** | [Requirement ID](#requirement-id), [Success criterion](#success-criterion), the single-grammar-authority ADR (`../adr/3.x/2026-09-29-1-requirement-id-grammar-single-authority.md`) |

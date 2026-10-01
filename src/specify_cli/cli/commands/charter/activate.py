@@ -43,6 +43,7 @@ from charter.activation.invocation_context import ProjectContext
 from charter.activation.kind_vocabulary import (
     ArtifactKind,
     MissionTypeNotAnArtifactKind,
+    ResolutionPass,
     UnknownArtifactIdError,
     resolve_artifact_urn,
 )
@@ -338,11 +339,14 @@ def _render_cascade_activation(
                 f"[cyan]Cascade-activated[/cyan]: {kind_token}/{config_id}"
             )
 
+    # The activations above are done; everything below only reads, so one
+    # resolution pass parses each artifact file once for all remaining lines.
+    render_pass = ResolutionPass()
     for kind_value in sorted(result.skipped_by_scope):
         kind_token = ArtifactKind(kind_value).operator_token
         for skipped_id in result.skipped_by_scope[kind_value]:
             config_id = drg_urn_to_config_id(
-                f"{kind_value}:{skipped_id}", doctrine_root, layer_roots, org_roots
+                f"{kind_value}:{skipped_id}", doctrine_root, layer_roots, org_roots, render_pass
             )
             console.print(
                 f"[dim]Skipped (out of scope)[/dim]: {kind_token}/{config_id}"
@@ -359,7 +363,7 @@ def _render_cascade_activation(
         kind_token = ArtifactKind(kind_value).operator_token
         for filtered_id in result.not_cascaded_kind_filtered[kind_value]:
             config_id = drg_urn_to_config_id(
-                f"{kind_value}:{filtered_id}", doctrine_root, layer_roots, org_roots
+                f"{kind_value}:{filtered_id}", doctrine_root, layer_roots, org_roots, render_pass
             )
             render_kind_filtered_line(kind_token, config_id)
 
@@ -448,11 +452,14 @@ def _render_no_cascade_warning(
     if not report.has_skipped:
         return
     doctrine_root = resolve_doctrine_root()
+    # A read-only render: one resolution pass parses each artifact file once
+    # for every warning line, not once per referenced artifact (#5526).
+    render_pass = ResolutionPass()
     for kind_value in sorted(report.skipped):
         kind_token = ArtifactKind(kind_value).operator_token
         for skipped_drg_id in report.skipped[kind_value]:
             config_id = drg_urn_to_config_id(
-                f"{kind_value}:{skipped_drg_id}", doctrine_root, layer_roots, org_roots
+                f"{kind_value}:{skipped_drg_id}", doctrine_root, layer_roots, org_roots, render_pass
             )
             console.print(
                 f"[yellow]Warning[/yellow]: referenced {kind_token}/{config_id} "
@@ -484,7 +491,7 @@ def _render_no_cascade_warning(
         kind_token = ArtifactKind(kind_value).operator_token
         for filtered_id in report.not_cascaded_kind_filtered[kind_value]:
             config_id = drg_urn_to_config_id(
-                f"{kind_value}:{filtered_id}", doctrine_root, layer_roots, org_roots
+                f"{kind_value}:{filtered_id}", doctrine_root, layer_roots, org_roots, render_pass
             )
             render_kind_filtered_line(kind_token, config_id)
 
@@ -675,7 +682,7 @@ def resolve_write_root_or_exit(repo_root: Path) -> Path:
 
 
 def _recompile_catalog_best_effort(repo_root: Path) -> None:
-    """Run :func:`recompile_catalog`, degrading to a warning on two narrow,
+    """Run :func:`recompile_catalog`, degrading to a warning on three narrow,
     environmental preconditions instead of crashing the command.
 
     (1) ``recompile_catalog``'s bootstrap branch (``charter.yaml`` absent)
@@ -701,9 +708,17 @@ def _recompile_catalog_best_effort(repo_root: Path) -> None:
     pre-existing resolution gap elsewhere in the activation set from
     crashing an otherwise-successful, unrelated activate/deactivate call.
 
-    Both are environmental/pre-existing-state preconditions, not a failure
+    (3) ``compile_charter`` fails closed with
+    :class:`~charter.activation.compiler.WholeKindUnresolvedError` when every
+    activated reference of one tracked kind is unresolvable (a misconfigured
+    pack root, a DRG edge to an artifact that does not exist). The exception
+    text names the kind and ids; nothing is written, so the existing catalog is
+    kept as-is rather than emptied, and the already-successful config write
+    stands.
+
+    All three are environmental/pre-existing-state preconditions, not a failure
     of the recompile itself on an otherwise-healthy, established store --
-    letting either crash the whole command over an opportunistic recompile
+    letting any of them crash the whole command over an opportunistic recompile
     that a successful config write does not need would be a real
     regression, not coherence-by-construction. The mutation itself already
     succeeded by the time this runs; only the recompile is skipped, exactly
@@ -711,12 +726,13 @@ def _recompile_catalog_best_effort(repo_root: Path) -> None:
     with git and no pre-existing danglers, the overwhelming common case, is
     unaffected by either branch).
     """
+    from charter.activation.compiler import WholeKindUnresolvedError  # noqa: PLC0415
     from charter.activation.kind_vocabulary import UnknownArtifactIdError  # noqa: PLC0415
     from charter.resolution import GitCommonDirUnavailableError, NotInsideRepositoryError  # noqa: PLC0415
 
     try:
         recompile_catalog(repo_root)
-    except (NotInsideRepositoryError, GitCommonDirUnavailableError, UnknownArtifactIdError) as exc:
+    except (NotInsideRepositoryError, GitCommonDirUnavailableError, UnknownArtifactIdError, WholeKindUnresolvedError) as exc:
         console.print(
             f"[yellow]Catalog not recompiled[/yellow]: {exc} catalog.references "
             "may go stale until the next `charter generate` (from a git "

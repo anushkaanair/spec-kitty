@@ -2,9 +2,8 @@
 
 Hosts the ``check-prerequisites`` command and its dedicated emit helpers
 (``_emit_check_prerequisites_detection_error``, ``_emit_check_prerequisites_result``,
-``_paths_only_payload``) plus the small ``meta.json`` readers
-(``_read_meta_for_pr_bound``, ``_read_meta_for_emission``) the create/finalize
-lifecycle shares.
+``_paths_only_payload``) plus the small ``meta.json`` reader
+(``_read_meta_for_emission``) the finalize lifecycle uses.
 
 The command is defined here as a plain callable; ``mission`` registers it on its
 Typer ``app`` (and re-exports the name so ``mission.check_prerequisites`` — the
@@ -29,7 +28,14 @@ from typing import Annotated, Any, cast
 from specify_cli.cli.console import console
 import typer
 
-from mission_runtime import ActionContextError
+from mission_runtime import ActionContextError, OwnedCheckout, OwnedRefusalCode
+from specify_cli.cli.commands._owned_checkout import (
+    OwnedCheckoutOption,
+    emit_owned_refusal,
+    flat_error_envelope,
+    resolve_owned_or_refuse,
+)
+from specify_cli.core.owned_mission import LIFECYCLE_OWNED_TOPOLOGIES
 
 from specify_cli.cli.commands.agent.mission_branch_context import (
     _inject_branch_contract,
@@ -41,6 +47,7 @@ from specify_cli.cli.commands.agent.mission_feature_resolution import (
 from specify_cli.cli.commands.agent.mission_parsing import (
     _emit_console_or_json_error,
     _emit_json,
+    _with_cli_version,
 )
 
 
@@ -397,20 +404,6 @@ def _emit_resume_probe_payload(payload: dict[str, object], *, json_output: bool)
         console.print(f"[red]Resume probe:[/red] {state}: {payload.get('error', '')}")
 
 
-def _read_meta_for_pr_bound(feature_dir: Path) -> dict[str, Any]:
-    """Read ``meta.json`` for the ``pr_bound`` write-back, silent-empty contract.
-
-    Routes through the canonical ``mission_metadata.load_meta`` authority
-    (FR-009 / SC-004) via ``load_meta_or_empty``: a missing *or* malformed file
-    degrades to ``{}`` so the write-back is skipped, preserving the prior
-    ``except (OSError, JSONDecodeError): pass`` (a corrupt meta never crashes
-    the create flow).
-    """
-    from specify_cli.mission_metadata import load_meta_or_empty
-
-    return cast(dict[str, Any], load_meta_or_empty(feature_dir))
-
-
 def _read_meta_for_emission(feature_dir: Path) -> dict[str, Any] | None:
     """Read ``meta.json`` for finalize-tasks event emission, silent-none contract.
 
@@ -550,6 +543,18 @@ def _run_resume_probe(
         raise typer.Exit(1)
 
 
+def _refusal_envelope(code: str, message: str) -> dict[str, object]:
+    """The ``error``/``error_code`` payload this command's JSON surface carries, plus the CLI version."""
+    enriched: dict[str, object] = _with_cli_version(flat_error_envelope(code, message))
+    return enriched
+
+
+def _refuse_resume_probe_with_owned(owned: OwnedCheckout | None, *, resume_probe: bool) -> None:
+    """``--resume-probe`` never opts into an owned checkout: refuse it once ownership is validated."""
+    if owned is not None and resume_probe:
+        raise ActionContextError(OwnedRefusalCode.OWNED_OPTION_UNSUPPORTED, "--resume-probe is not supported with --owned-checkout.")
+
+
 def check_prerequisites(
     feature: Annotated[str | None, typer.Option("--mission", help="Mission slug (e.g., '020-my-mission')")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output JSON format")] = False,
@@ -566,7 +571,7 @@ def check_prerequisites(
         bool,
         typer.Option("--require-tasks", hidden=True, help="Deprecated alias for --include-tasks"),
     ] = False,
-    owned_checkout: Annotated[Path | None, typer.Option("--owned-checkout", help="Explicit single-branch checkout root.")] = None,
+    owned_checkout: OwnedCheckoutOption = None,
 ) -> None:
     """Validate mission structure and prerequisites.
 
@@ -598,14 +603,27 @@ def check_prerequisites(
             )
             raise typer.Exit(1) from None
 
-        owned = None
-        if owned_checkout is not None:
-            from specify_cli.core.owned_mission import resolve_owned_mission
-
-            owned = resolve_owned_mission(repo_root, owned_checkout, feature)
-            if resume_probe:
-                raise ActionContextError("OWNED_OPTION_UNSUPPORTED", "--resume-probe is not supported with --owned-checkout.")
-            repo_root = owned.root
+        # Validate --owned-checkout (or adopt the caller's checkout) exactly once; the
+        # raw option value goes straight into the shared helper. A flagless
+        # --resume-probe skips adoption so the repository-root probe is unchanged; an
+        # explicit flag is refused after validation, so an invalid checkout still
+        # reports its ownership code first.
+        owned = (
+            None
+            if resume_probe and owned_checkout is None
+            else resolve_owned_or_refuse(
+                repo_root,
+                owned_checkout,
+                feature,
+                cwd=Path.cwd(),
+                allowed_topologies=LIFECYCLE_OWNED_TOPOLOGIES,
+                json_output=json_output,
+                envelope=_refusal_envelope,
+            )
+        )
+        _refuse_resume_probe_with_owned(owned, resume_probe=resume_probe)
+        if owned is not None:
+            repo_root = owned.owned_root
 
         if resume_probe:
             _run_resume_probe(
@@ -642,7 +660,7 @@ def check_prerequisites(
         # single-authority-topology-cleanup mission (#1716 write-surface coherence).
         cwd = Path.cwd().resolve()
         try:
-            feature_dir = owned.directory if owned else _mission._primary_anchored_feature_dir(repo_root, feature)
+            feature_dir = owned.mission_dir if owned else _mission._primary_anchored_feature_dir(repo_root, feature)
             if feature_dir is None:
                 feature_dir = _mission._find_feature_directory(
                     repo_root,
@@ -675,11 +693,14 @@ def check_prerequisites(
     except typer.Exit:
         raise
     except ActionContextError as e:
-        if json_output:
-            _emit_json({"error": str(e), "error_code": e.code})
-        else:
-            console.print(f"[red]{e.code}:[/red] {e}")
-        raise typer.Exit(1) from None
+        # Unified owned-refusal output (#5445): route through the canonical
+        # ``emit_owned_refusal`` renderer with this command's own
+        # ``_refusal_envelope`` so human mode lands on stderr as
+        # ``Error: [<CODE>] <message>`` and ``--json`` mode is indented, matching
+        # the ``resolve_owned_or_refuse`` call above. The only code that reaches
+        # this generic handler today is ``OWNED_OPTION_UNSUPPORTED`` (raised by
+        # ``_refuse_resume_probe_with_owned``), which is registered.
+        emit_owned_refusal(e, json_output=json_output, envelope=_refusal_envelope)
     except Exception as e:
         if json_output:
             _emit_json({"error": str(e)})

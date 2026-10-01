@@ -32,6 +32,7 @@ from specify_cli.lanes.persistence import (
     require_lanes_json,
 )
 from specify_cli.lanes.consolidation import preview_mission_target_integration
+from specify_cli.lanes.models import LanesManifest
 from specify_cli.consolidation._constants import (
     TARGET_BRANCH_CONTENT_CONFLICT,
     TARGET_BRANCH_CONTENT_CONFLICT_HEADER,
@@ -40,6 +41,7 @@ from specify_cli.consolidation._constants import (
 )
 from specify_cli.consolidation.config import MergeStrategy
 from specify_cli.consolidation.ordering import assign_next_mission_number
+from specify_cli.consolidation.preflight import refuse_protected_status_target
 from specify_cli.consolidation.state import needs_number_assignment
 from mission_runtime import MissionArtifactKind, placement_seam, resolve_artifact_surface
 from specify_cli.post_merge.review_artifact_consistency import (
@@ -49,6 +51,21 @@ from specify_cli.post_merge.review_artifact_consistency import (
     review_artifact_finding_diagnostic,
     run_review_artifact_consistency_preflight,
 )
+
+
+def _effective_delete_branch(delete_branch: bool, lanes_manifest: LanesManifest) -> bool:
+    """Whether the merge would really delete a branch (#5100 B6).
+
+    An unprotected single_branch mission's ``mission_branch`` is its own
+    ``target_branch`` and it has no code lanes, so the executor deletes nothing;
+    report that instead of the raw retention flag.
+    """
+    from specify_cli.lanes.compute import is_planning_lane
+
+    if not delete_branch:
+        return False
+    only_planning = all(is_planning_lane(lane) for lane in lanes_manifest.lanes)
+    return not (only_planning and lanes_manifest.mission_branch == lanes_manifest.target_branch)
 
 
 def _emit_dry_run_error(*, error_msg: str, json_output: bool, error_code: str | None = None) -> None:
@@ -230,6 +247,19 @@ def _scan_would_assign_mission_number(repo_root: Path, feature_dir_for_preview: 
         return None
 
 
+def _refuse_protected_status_target_in_forecast(main_repo: Path, mission_slug: str, lanes_manifest: LanesManifest, *, json_output: bool) -> None:
+    """``--dry-run`` parity for the #5385 preflight: report the policy's refusal with its own ``error_code``."""
+    verdict = refuse_protected_status_target(main_repo, mission_slug, lanes_manifest)
+    if verdict is None:
+        return
+    _emit_dry_run_error(
+        error_msg=f"{verdict.error_code}: {verdict.message} Next step: {verdict.next_step}",
+        json_output=json_output,
+        error_code=verdict.error_code,
+    )
+    raise typer.Exit(1)
+
+
 def run_dry_run_forecast(
     *,
     repo_root: Path,
@@ -279,6 +309,7 @@ def run_dry_run_forecast(
     except (MissingLanesError, CorruptLanesError) as exc:
         _emit_dry_run_error(error_msg=str(exc), json_output=json_output)
         raise typer.Exit(1) from exc
+    _refuse_protected_status_target_in_forecast(get_main_repo_root(repo_root), resolved_feature, lanes_manifest, json_output=json_output)
 
     # FR-007/FR-008/FR-009: Run the same review-artifact consistency gate
     # that real merge runs (issue #991). When a rejected review-cycle
@@ -356,7 +387,7 @@ def run_dry_run_forecast(
         "mission_slug": resolved_feature,
         "target_branch": resolved_target_branch,
         "strategy": resolved_strategy.value,
-        "delete_branch": retention_decision.delete_branch,
+        "delete_branch": _effective_delete_branch(retention_decision.delete_branch, lanes_manifest),
         "remove_worktree": retention_decision.remove_worktree,
         "push": push,
         "mission_branch": lanes_manifest.mission_branch,

@@ -1,13 +1,21 @@
 """Scope: mock-boundary tests for charter compiler bundle generation -- no real git."""
 
 import dataclasses
+import types
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from charter.activation.catalog import DoctrineCatalog, load_doctrine_catalog
-from charter.activation.compiler import _resolve_template_set, compile_charter, write_compiled_charter
+from charter.activation.compiler import (
+    _resolve_template_set,
+    _sanitize_catalog_selection,
+    _unregistered_tool_message,
+    compile_charter,
+    write_compiled_charter,
+)
 from charter.activation.interview import (
     CharterInterview,
     LocalSupportDeclaration,
@@ -726,3 +734,199 @@ def test_write_compiled_charter_no_library_materialization(tmp_path: Path) -> No
     # Only charter.yaml should be written (WP03: charter.md clobber removed,
     # references.yaml writer retired -- data-model.md Landmine 3).
     assert set(result.files_written) == {"charter.yaml"}
+
+
+def test_tracked_kinds_table_matches_the_artifact_kind_vocabulary() -> None:
+    """Each tracked kind is a real ``ArtifactKind`` whose plural is the graph
+    bucket / raw-repository key the table records."""
+    import charter.activation.compiler as compiler_module
+    from charter.activation.kind_vocabulary import ArtifactKind
+
+    assert list(compiler_module._TRACKED_KINDS) == ["directive", "tactic", "styleguide", "toolguide", "procedure", "agent_profile"]
+    for kind, tracked in compiler_module._TRACKED_KINDS.items():
+        assert ArtifactKind(kind).plural == tracked.plural
+
+
+def test_added_tracked_kind_is_honoured_by_the_whole_kind_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The whole-kind fail-closed check reads the tracked-kinds table at call
+    time: a kind added to it, with an activated (non-empty ``graph.<plural>``)
+    but zero-reference bucket, trips the check."""
+    import charter.activation.compiler as compiler_module
+
+    extra = compiler_module._TrackedKind("extra_kinds", compiler_module._TRACKED_KINDS["directive"].fields)
+    mutated = {**compiler_module._TRACKED_KINDS, "extra_kind": extra}
+    monkeypatch.setattr(compiler_module, "_TRACKED_KINDS", mutated)
+
+    graph = types.SimpleNamespace(**{tracked.plural: [] for tracked in mutated.values()})
+    graph.extra_kinds = ["some-unresolved-id"]
+
+    with pytest.raises(compiler_module.WholeKindUnresolvedError, match="extra_kind"):
+        compiler_module._check_whole_kind_unresolved(
+            graph=graph,
+            kind_reference_counts={},
+            activated_via_unresolved=set(),
+            unresolved_records=[],
+        )
+
+
+def test_route_unresolved_urn_reads_the_tracked_kinds_table_at_call_time(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ``graph.unresolved`` routing attributes a URN to a kind only while
+    that kind is in the table: dropping ``toolguide`` from it makes the same URN
+    unattributable -- one table drives routing and the whole-kind check alike."""
+    import charter.activation.compiler as compiler_module
+
+    class _Service:
+        def raw_repository(self, _kind: str) -> Any:
+            class _Repo:
+                def get(self, _id: str) -> None:
+                    return None
+
+            return _Repo()
+
+    def route() -> tuple[str | None, list[Any]]:
+        records: list[Any] = []
+        kind, _placeholder = compiler_module._route_unresolved_urn(
+            "toolguide:some-id", doctrine_service=_Service(), diagnostics=[], unresolved_records=records, project_root=None
+        )
+        return kind, records
+
+    attributed, _ = route()
+    assert attributed == "toolguide"
+
+    reduced = {k: v for k, v in compiler_module._TRACKED_KINDS.items() if k != "toolguide"}
+    monkeypatch.setattr(compiler_module, "_TRACKED_KINDS", reduced)
+    attributed, records = route()
+    assert attributed is None
+    assert [record["cause"] for record in records] == ["unattributed_kind"]
+
+
+def test_unresolved_cause_vocabulary_is_one_closed_set() -> None:
+    """The record ``cause`` vocabulary is a single ``Literal`` alias: every
+    ``CatalogMissCause`` maps onto a member with the SAME string value (the
+    ``--json`` output is unchanged), and the compiler-owned causes are members
+    too -- adding a cause in one place without the other fails here."""
+    import typing
+
+    import charter.activation.compiler as compiler_module
+    from charter.activation._catalog_miss import CatalogMissCause
+
+    declared = set(typing.get_args(compiler_module.UnresolvedCause))
+    mapping = compiler_module._CAUSE_BY_CATALOG_MISS
+    compiler_owned = {
+        compiler_module._MALFORMED_URN_CAUSE,
+        compiler_module._UNATTRIBUTED_KIND_CAUSE,
+        compiler_module._GRAPH_LOAD_FAILURE_CAUSE,
+    }
+
+    assert set(mapping) == set(CatalogMissCause)
+    assert {cause: value for cause, value in mapping.items() if cause.value != value} == {}
+    assert declared == set(mapping.values()) | compiler_owned
+
+
+def test_record_unresolved_reference_writes_both_lists_and_honours_a_diagnostic_override() -> None:
+    import charter.activation.compiler as compiler_module
+
+    diagnostics: list[str] = []
+    records: list[compiler_module.UnresolvedReferenceRecord] = []
+    compiler_module._record_unresolved_reference(
+        kind="tactic", raw_id="x", cause="missing_artifact", detail="d", diagnostics=diagnostics, unresolved_records=records
+    )
+    compiler_module._record_unresolved_reference(
+        kind="_graph",
+        raw_id="_load_failure",
+        cause="graph_load_failed",
+        detail="Boom: bad",
+        diagnostics=diagnostics,
+        unresolved_records=records,
+        diagnostic="Graph load failed: Boom: bad.",
+    )
+
+    assert diagnostics == ["Unresolved reference: tactic/x (missing_artifact): d", "Graph load failed: Boom: bad."]
+    assert records == [
+        {"kind": "tactic", "id": "x", "cause": "missing_artifact", "detail": "d"},
+        {"kind": "_graph", "id": "_load_failure", "cause": "graph_load_failed", "detail": "Boom: bad"},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# #4614 / FR-013: label-specific diagnostic for unregistered tool ids
+# ---------------------------------------------------------------------------
+
+
+def test_unregistered_tool_message_single_id_names_a_tool_id() -> None:
+    assert _unregistered_tool_message(["zig"]) == (
+        "available_tools: 'zig' is not a registered tool id; ignored (tool ids are validated separately from project languages)"
+    )
+
+
+def test_unregistered_tool_message_lists_all_ids_sorted_in_one_message() -> None:
+    assert _unregistered_tool_message(["b", "a"]) == (
+        "available_tools: 'a', 'b' are not registered tool ids; ignored (tool ids are validated separately from project languages)"
+    )
+
+
+def test_sanitize_catalog_selection_uses_custom_missing_message() -> None:
+    diagnostics: list[str] = []
+
+    kept = _sanitize_catalog_selection(
+        values=["git", "zig"],
+        allowed={"git"},
+        label="available_tools",
+        diagnostics=diagnostics,
+        missing_message=_unregistered_tool_message,
+    )
+
+    assert kept == ["git"]
+    assert diagnostics == [_unregistered_tool_message(["zig"])]
+
+
+def test_sanitize_catalog_selection_default_message_is_unchanged_for_other_labels() -> None:
+    diagnostics: list[str] = []
+
+    _sanitize_catalog_selection(values=["nope"], allowed={"yes"}, label="widgets", diagnostics=diagnostics)
+
+    assert diagnostics == ["Ignored unknown widgets: nope"]
+
+
+def test_sanitize_catalog_selection_emits_no_message_when_nothing_is_missing() -> None:
+    diagnostics: list[str] = []
+
+    _sanitize_catalog_selection(
+        values=["git"], allowed={"git"}, label="available_tools", diagnostics=diagnostics, missing_message=_unregistered_tool_message
+    )
+
+    assert diagnostics == []
+
+
+def test_compile_charter_reports_unregistered_tool_as_tool_id_and_keeps_registry() -> None:
+    interview = apply_answer_overrides(
+        default_interview(mission="software-dev", profile="minimal"),
+        available_tools=["git", "zig"],
+    )
+
+    compiled = compile_charter(mission="software-dev", interview=interview)
+
+    assert "zig" not in compiled.available_tools
+    assert any(line.startswith("available_tools: 'zig' is not a registered tool id") for line in compiled.diagnostics)
+    assert not any("Ignored unknown available_tools" in line for line in compiled.diagnostics)
+
+
+def test_compile_charter_rederive_languages_ignores_stale_compiled_list(tmp_path: Path) -> None:
+    """``rederive_languages=True`` derives from the interview; the default stays compiled-first."""
+    charter_yaml = tmp_path / ".kittify" / "charter" / "charter.yaml"
+    charter_yaml.parent.mkdir(parents=True)
+    charter_yaml.write_text("schema_version: '2.0.0'\ncatalog:\n  languages: [python]\n  references: []\n", encoding="utf-8")
+    interview = apply_answer_overrides(
+        default_interview(mission="software-dev", profile="minimal"),
+        answers={"languages_frameworks": "Rust with cargo"},
+    )
+
+    kept = compile_charter(mission="software-dev", interview=interview, repo_root=tmp_path)
+    rederived = compile_charter(mission="software-dev", interview=interview, repo_root=tmp_path, rederive_languages=True)
+
+    assert kept.active_languages == ["python"]
+    assert rederived.active_languages == ["rust"]

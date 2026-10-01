@@ -71,6 +71,7 @@ produced this list.
 from __future__ import annotations
 
 import ast
+import sys
 from pathlib import Path
 
 import pytest
@@ -198,6 +199,9 @@ _CATEGORY_1_AUTO_DISCOVERED_MIGRATIONS: frozenset[str] = frozenset(
         "specify_cli.upgrade.migrations.m_3_2_0rc35_charter_manifest_defaults_repair",
         "specify_cli.upgrade.migrations.m_unify_charter_activation_finalize",
         "specify_cli.upgrade.migrations.m_3_2_0rc43_retire_profile_context_command",
+        # #5530: removes the retired dashboard command files and runtime state;
+        # auto-discovered, never statically imported.
+        "specify_cli.upgrade.migrations.m_4_0_0rc5_retire_bundled_dashboard",
         # doctrine-drg-silent-drop-boundary (#3629): consumer-project migration
         # that consolidates context-sources.* onto the *-references fields;
         # auto-discovered, never statically imported.
@@ -347,6 +351,19 @@ _CATEGORY_1_AUTO_DISCOVERED_MIGRATIONS: frozenset[str] = frozenset(
         # @MigrationRegistry.register; never statically imported by runtime
         # code -- same sibling shape as the m_zz_* backfill migrations above.
         "specify_cli.upgrade.migrations.m_4_0_0rc5_hosted_endpoint_session_backfill",
+        # single-branch-topology-honesty-01M3M22V WP03 (#5100 IC-02): re-stamps
+        # a single_branch mission whose lanes.json has a code lane to
+        # topology: lanes (Invariant T-1 repair). Auto-discovered via
+        # pkgutil.iter_modules + @MigrationRegistry.register; never statically
+        # imported by runtime code -- same sibling shape as the migrations
+        # above (registered/verified by registry lookup in
+        # tests/specify_cli/upgrade/migrations/test_single_branch_code_lanes_restamp.py).
+        "specify_cli.upgrade.migrations.m_4_0_0rc5_single_branch_code_lanes_restamp",
+        # #5115: same shape -- discovered via pkgutil.iter_modules +
+        # @MigrationRegistry.register, never statically imported; verified by
+        # registry lookup in
+        # tests/specify_cli/upgrade/migrations/test_install_lane_tip_recorder.py.
+        "specify_cli.upgrade.migrations.m_4_0_0rc5_install_lane_tip_recorder",
     }
 )
 
@@ -391,18 +408,10 @@ _CATEGORY_3_EXTERNAL_CLI_ENTRYPOINTS: frozenset[str] = frozenset(
 # onto ``specify_cli.task_utils`` and the module deleted, so this category is now
 # empty (baseline category_4_backcompat_shims: 0).
 #
-# 0 -> 1 (charter-code-topology-01M152G1 landing remediation, retire-doctrine-term
-# M2): ``doctrine`` (src/doctrine.py) is an intentional deprecation shim -- a single
-# MODULE file (not a package) kept only so pre-existing external/legacy callers that
-# still spell ``import doctrine`` / ``from doctrine import X`` keep working during the
-# CR-06 deprecation window, after the relocation of src/doctrine/ to
-# src/charter/offering/. Nothing under src/ imports it (that is the point of a
-# backcompat shim for EXTERNAL callers); it has zero src/ callers by design.
-_CATEGORY_4_BACKCOMPAT_SHIMS: frozenset[str] = frozenset(
-    {
-        "doctrine",
-    }
-)
+# 0 -> 1 -> 0: ``doctrine`` (src/doctrine.py, the CR-06 deprecation shim added by
+# charter-code-topology-01M152G1) was deleted past its 3.3.0 removal release
+# (dead-code sweep 2026-09-30, #805). Category drained again.
+_CATEGORY_4_BACKCOMPAT_SHIMS: frozenset[str] = frozenset()
 
 # ---------- 5. WP-in-flight slot-holder adapters ----------
 # Carry the `# adapter:no-logic` marker; reserved for the WP07
@@ -456,18 +465,11 @@ _CATEGORY_5_WP_IN_FLIGHT_ADAPTERS: frozenset[str] = frozenset(
 )
 
 # ---------- 6. Frozen-contract internal re-exports ----------
-# Internalized from spec-kitty-runtime under
-# shared-package-boundary-cutover-01KQ22DS. The CLI imports
-# the implementation files (engine.py, events.py); these three
-# exist as the per-task-layout public surface frozen in
-# kitty-specs/.../contracts/internal_runtime_surface.md.
-_CATEGORY_6_FROZEN_RUNTIME_REEXPORTS: frozenset[str] = frozenset(
-    {
-        "runtime.next._internal_runtime.emitter",
-        "runtime.next._internal_runtime.lifecycle",
-        "runtime.next._internal_runtime.models",
-    }
-)
+# Drained (dead-code sweep 2026-09-30): the three per-task-layout re-export
+# modules ``runtime.next._internal_runtime.{emitter,lifecycle,models}`` were
+# deleted. contracts/internal_runtime_surface.md never named them and says
+# external importers MUST NOT reach into ``_internal_runtime``.
+_CATEGORY_6_FROZEN_RUNTIME_REEXPORTS: frozenset[str] = frozenset()
 
 # ---------- 7. Grandfathered orphans (HiC triage queue) ----------
 # Modules that look like genuine "library written but never
@@ -616,6 +618,7 @@ _CATEGORY_9_AUTO_DISCOVERED_DOCTOR_SIBLINGS: frozenset[str] = frozenset(
         "specify_cli.cli.commands._channel_doctor",
         "specify_cli.cli.commands._env_file_doctor",
         "specify_cli.cli.commands._provenance_doctor",
+        "specify_cli.cli.commands._run_index_doctor",
     }
 )
 
@@ -841,3 +844,130 @@ def test_no_new_dead_modules_under_src() -> None:
         new_orphans=new_orphans,
         stale_allowlist_entries=stale_allowlist_entries,
     )
+
+
+# ---------------------------------------------------------------------------
+# Package closure (dead-code review 2026-09-30, docs/reports/dead-code-review/).
+#
+# The per-module gate above counts a package's own ``__init__.py`` as a
+# caller, so a package that is only imported by its own files (its
+# ``__init__`` re-exports its submodules and nothing outside ever imports the
+# package) looks fully wired. This second gate closes that blind spot: every
+# non-top-level package under ``src/`` must be imported by at least one file
+# OUTSIDE the package, or appear in ``_PACKAGE_CLOSURE_ALLOWLIST``. Only the
+# outermost closed package is reported. A package with no ``*.py`` besides its
+# ``__init__.py`` and at least one data file is a resource anchor for
+# ``importlib.resources`` and is exempt.
+# ---------------------------------------------------------------------------
+
+_PACKAGE_CLOSURE_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # Consumed from scripts/generate_schemas.py by dotted string, same as
+        # its models module in category 2 above.
+        "charter.offering.import_candidates",
+        # Test-consumed by design: the registry is the inventory the
+        # completeness gates iterate (tests/specify_cli/drg_writers/,
+        # tests/architectural/test_lifted_drg_writers_registry_completeness.py).
+        "specify_cli.drg_writers",
+        # TODO(triage): no src/ importer outside the package. Its tests are a
+        # live FR-032 gate, so the 2026-09-30 dead-code review recommends moving
+        # it into tests/ rather than deleting it; that move is an owner decision
+        # (review README section 5) and was left out of the deletion sweep.
+        "specify_cli.calibration",
+    }
+)
+
+
+def _iter_src_packages() -> list[Path]:
+    """Return every package directory under ``src/`` below the top level."""
+    return sorted(p.parent for p in _SRC_ROOT.rglob("__init__.py") if "__pycache__" not in p.parts and p.parent.parent != _SRC_ROOT)
+
+
+def _is_resource_anchor(package_dir: Path) -> bool:
+    """True iff *package_dir* holds only an ``__init__.py`` plus data files."""
+    children = [c for c in package_dir.iterdir() if c.name != "__pycache__"]
+    has_module = any((c.suffix == ".py" and c.name != "__init__.py") or c.is_dir() for c in children)
+    has_data = any(c.is_file() and c.suffix != ".py" for c in children)
+    return has_data and not has_module
+
+
+def _has_external_importer(
+    package_dir: Path,
+    package_dotted: str,
+    file_imports: list[tuple[Path, list[tuple[str, str, tuple[str, ...] | None]]]],
+) -> bool:
+    """Return True iff a file outside *package_dir* imports the package or anything in it."""
+    parent, _, leaf = package_dotted.rpartition(".")
+    prefix = package_dotted + "."
+    for caller_path, imports in file_imports:
+        if package_dir in caller_path.parents:
+            continue
+        for kind, mod, names in imports:
+            if mod == package_dotted or mod.startswith(prefix):
+                return True
+            if kind == "from" and mod == parent and names is not None and leaf in names:
+                return True
+    return False
+
+
+def _closed_packages(
+    package_dirs: list[Path],
+    file_imports: list[tuple[Path, list[tuple[str, str, tuple[str, ...] | None]]]],
+) -> set[str]:
+    """Return the outermost packages that no file outside themselves imports."""
+    closed = {
+        pkg: ".".join(pkg.relative_to(_SRC_ROOT).parts)
+        for pkg in package_dirs
+        if not _is_resource_anchor(pkg) and not _has_external_importer(pkg, ".".join(pkg.relative_to(_SRC_ROOT).parts), file_imports)
+    }
+    return {dotted for pkg, dotted in closed.items() if not any(other in pkg.parents for other in closed)}
+
+
+def test_no_package_is_only_imported_by_itself() -> None:
+    """Pin the package-closure invariant as a two-way ratchet.
+
+    Fails when a package has no importer outside itself and is not
+    allowlisted, and when an allowlisted package gains an outside importer
+    (or is deleted) so the entry must be removed.
+    """
+    file_imports = [(path, _collect_import_targets(parse_file(path), _package_of(path))) for path in _iter_src_python_files()]
+    closed = _closed_packages(_iter_src_packages(), file_imports)
+
+    new_closed = sorted(closed - _PACKAGE_CLOSURE_ALLOWLIST)
+    stale = sorted(_PACKAGE_CLOSURE_ALLOWLIST - closed)
+    messages: list[str] = []
+    if new_closed:
+        messages.append(
+            "Package-closure gate FAILED. These packages are imported only by their own files, "
+            "so every module in them is unreachable from the rest of src/:\n  - "
+            + "\n  - ".join(new_closed)
+            + "\n\nWire the package from a runtime caller, delete it, or add it to "
+            "`_PACKAGE_CLOSURE_ALLOWLIST` with a rationale."
+        )
+    if stale:
+        messages.append("Stale `_PACKAGE_CLOSURE_ALLOWLIST` entries (the package gained an outside importer or no longer exists):\n  - " + "\n  - ".join(stale))
+    assert not messages, "\n\n".join(messages)
+
+
+def test_closed_packages_detects_self_importing_package(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The closure scan flags a self-importing package and spares wired and data-only ones."""
+    src = tmp_path / "src"
+    monkeypatch.setattr(sys.modules[__name__], "_SRC_ROOT", src)
+    files = {
+        "top/__init__.py": "",
+        "top/island/__init__.py": "from top.island.inner import thing\n",
+        "top/island/inner.py": "thing = 1\n",
+        "top/island/sub/__init__.py": "",
+        "top/island/sub/leaf.py": "from top.island import inner\n",
+        "top/wired/__init__.py": "value = 1\n",
+        "top/user.py": "from top.wired import value\n",
+        "top/data/__init__.py": "",
+        "top/data/schema.json": "{}",
+    }
+    for rel, text in files.items():
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text(text, encoding="utf-8")
+    py_files = sorted(p for p in src.rglob("*.py"))
+    file_imports = [(p, _collect_import_targets(ast.parse(p.read_text()), _package_of(p))) for p in py_files]
+
+    assert _closed_packages(_iter_src_packages(), file_imports) == {"top.island"}

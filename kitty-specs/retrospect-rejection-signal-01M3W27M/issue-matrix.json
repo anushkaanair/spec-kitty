@@ -1,0 +1,29 @@
+{
+  "rows": {
+    "#2267": {
+      "evidence_ref": "commits 02ab7e99, a23aefaa, d6ecec3b; PR #5551",
+      "fr": null,
+      "nfr": null,
+      "repo": null,
+      "sc": null,
+      "scope": null,
+      "source_file": null,
+      "title": "retrospect: auto-classifier mislabels review-rejection --force as guard-bypass and documented rejection cycles as undocumented rework",
+      "verdict": "fixed",
+      "wp": null
+    },
+    "#3687": {
+      "evidence_ref": "context-only citation: #3687 behaviour (approved/done rewinds) preserved, see plan.md D-1",
+      "fr": null,
+      "nfr": null,
+      "repo": null,
+      "sc": null,
+      "scope": null,
+      "source_file": null,
+      "title": null,
+      "verdict": "not-applicable",
+      "wp": null
+    }
+  },
+  "schema_version": 1
+}

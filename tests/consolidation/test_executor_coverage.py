@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -19,6 +21,7 @@ from unittest.mock import patch
 import pytest
 import typer
 
+from kernel.git import GitCommandError, GitPath, StatusEntry
 from specify_cli.consolidation import executor as ex
 from specify_cli.consolidation.state import ConsolidationState
 from specify_cli.post_merge.stale_assertions import (
@@ -28,6 +31,11 @@ from specify_cli.post_merge.stale_assertions import (
 )
 
 pytestmark = pytest.mark.fast
+
+
+def _modified(path: str) -> StatusEntry:
+    """A worktree-modified tracked path as the typed porcelain entry."""
+    return StatusEntry(xy=" M", path=GitPath.parse(path))
 
 
 def _make_run(
@@ -176,17 +184,38 @@ def test_phase_merge_lanes_success_marks_unintegrated(tmp_path: Path) -> None:
     assert run.any_lane_had_unintegrated_code is True
 
 
-def test_phase_merge_lanes_resume_tolerates_already_merged(tmp_path: Path) -> None:
-    run = _make_run(tmp_path, is_resume=True)
-    result = SimpleNamespace(success=False, errors=["lane already up to date"])
+_ALREADY_MERGED_LANE_RESULT = SimpleNamespace(success=False, errors=["lane already up to date"])
+
+
+@contextmanager
+def _merge_lanes_hitting_already_merged() -> Iterator[None]:
+    """Patch ``_phase_merge_lanes`` collaborators so lane-a reports "already merged"."""
     with (
         patch("specify_cli.lanes.branch_naming.lane_branch_name", return_value="kitty/lane-a"),
         patch("specify_cli.lanes.compute.is_planning_lane", return_value=False),
         patch.object(ex, "_lane_already_integrated", return_value=False),
-        patch("specify_cli.lanes.consolidation.consolidate_lane_into_mission", return_value=result),
+        patch("specify_cli.lanes.consolidation.consolidate_lane_into_mission", return_value=_ALREADY_MERGED_LANE_RESULT),
     ):
-        # No Exit raised because resume + "already" error is tolerated.
+        yield
+
+
+def test_phase_merge_lanes_resume_tolerates_already_merged_lane(tmp_path: Path) -> None:
+    """On resume, an "already merged" lane error is tolerated and announced."""
+    run = _make_run(tmp_path, is_resume=True)
+    with _merge_lanes_hitting_already_merged(), ex.console.capture() as captured:
         ex._phase_merge_lanes(run)
+
+    assert "lane-a already merged, continuing" in captured.get()
+
+
+def test_phase_merge_lanes_fresh_run_fails_on_already_merged_lane(tmp_path: Path) -> None:
+    """A fresh run has merged nothing yet, so the same error must fail loud."""
+    run = _make_run(tmp_path, is_resume=False)
+    with _merge_lanes_hitting_already_merged(), ex.console.capture() as captured, pytest.raises(typer.Exit) as exc:
+        ex._phase_merge_lanes(run)
+
+    assert exc.value.exit_code == 1
+    assert "already merged, continuing" not in captured.get()
 
 
 def test_phase_merge_lanes_hard_failure_exits(tmp_path: Path) -> None:
@@ -335,11 +364,32 @@ def test_handle_result_rejects_zero_diff_noop_squash(tmp_path: Path) -> None:
     restore_mock.assert_called_once_with(run)
 
 
+def _already_merged_mission_result() -> SimpleNamespace:
+    return SimpleNamespace(success=False, errors=["already up to date"], commit=None, already_applied=False)
+
+
 def test_handle_result_resume_tolerates_already_merged(tmp_path: Path) -> None:
+    """On resume, equal trees + an "already" error continue without restoring the target."""
     run = _make_run(tmp_path, is_resume=True)
-    result = SimpleNamespace(success=False, errors=["already up to date"], commit=None, already_applied=False)
-    # No Exit because resume tolerates the already-merged error.
-    ex._handle_mission_merge_result(run, result, mission_integrated_into_target=True)
+    restored: list[object] = []
+    with patch.object(ex, "_restore_pre_target_if_at_baseline", side_effect=restored.append):
+        ex._handle_mission_merge_result(run, _already_merged_mission_result(), mission_integrated_into_target=True)
+
+    assert restored == []
+
+
+def test_handle_result_fresh_run_fails_on_already_merged(tmp_path: Path) -> None:
+    """On a fresh run the same result is a failed integration: exit 1 and restore the target."""
+    run = _make_run(tmp_path, is_resume=False)
+    restored: list[object] = []
+    with (
+        patch.object(ex, "_restore_pre_target_if_at_baseline", side_effect=restored.append),
+        pytest.raises(typer.Exit) as exc,
+    ):
+        ex._handle_mission_merge_result(run, _already_merged_mission_result(), mission_integrated_into_target=True)
+
+    assert exc.value.exit_code == 1
+    assert restored == [run]
 
 
 def test_handle_result_resume_never_tolerates_content_conflict(tmp_path: Path) -> None:
@@ -497,6 +547,56 @@ def test_phase_record_done_restores_on_project_failure(tmp_path: Path) -> None:
     assert restored == [{tmp_path / "x": b"o"}]
 
 
+def _unreadable_window() -> GitCommandError:
+    return GitCommandError(argv=("rev-list", "a..b"), cwd=Path("."), returncode=128, stderr="fatal: bad revision")
+
+
+def test_phase_record_done_refuses_when_projection_window_unreadable(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """FR-013: an unreadable coord window after the target advanced is a refusal, not a traceback."""
+    run = _make_run(tmp_path, done_marked_before_target=True)
+    run.final_bookkeeping_snapshots = {tmp_path / "x": b"o"}
+    restored: list[object] = []
+    with (
+        patch.object(ex, "_project_status_bookkeeping_to_target", side_effect=_unreadable_window()),
+        patch.object(ex, "restore_generated_artifact_snapshots", side_effect=lambda s: restored.append(s)),
+        pytest.raises(typer.Exit) as excinfo,
+    ):
+        ex._phase_record_done_and_project(run)
+    assert excinfo.value.exit_code == 1
+    assert isinstance(excinfo.value.__cause__, GitCommandError)
+    assert restored == [{tmp_path / "x": b"o"}]
+    out = capsys.readouterr().out
+    assert "could not be read" in out
+    assert "Nothing was torn down" in out
+
+
+# Landing reconciliation (#5444): ``_phase_record_done_and_project_or_roll_back``
+# (the phase-local rollback wrapper these two tests exercised) was removed when
+# #5385's single rollback door subsumed it — the done-and-project phase now runs
+# inside the ONE ``try``/``except`` spanning the whole post-mutation sequence in
+# ``_run_lane_based_consolidation_locked`` (``src/specify_cli/consolidation/executor.py``).
+# Both behaviors these tests pinned are covered, with the real (not mocked)
+# single-door mechanism, by existing tests elsewhere:
+#   - "a non-zero ``typer.Exit`` from ``_phase_record_done_and_project`` rolls
+#     back" -> tests/terminus/test_rollback_door.py::
+#     test_failure_in_a_post_mutation_phase_restores_every_movable_branch
+#     [record_done_and_project-exit1]
+#   - "``typer.Exit(0)`` never rolls back" -> tests/consolidation/
+#     test_executor_rollback_wiring.py::test_door_lets_a_zero_exit_through_without_rolling_back
+#   - a plain ``RuntimeError`` from that phase ALSO rolls back under the single
+#     door (the old narrow wrapper's "only a refusal" half of this test asserted
+#     the opposite and is no longer true) -> tests/terminus/test_rollback_door.py::
+#     test_failure_in_a_post_mutation_phase_restores_every_movable_branch
+#     [record_done_and_project-runtime] and tests/consolidation/
+#     test_executor_rollback_wiring.py::test_door_rolls_back_once_and_propagates_the_original[runtime]
+# Re-expressing either test here would mean calling
+# ``_run_lane_based_consolidation_locked`` directly, which needs a full on-disk
+# mission (main_repo, lanes manifest, feature dirs, ...) rather than a bare
+# ``run`` -- i.e. the same real-git harness the tests above already use. That
+# would be a pure duplicate, not a narrower unit test, so these two are deleted
+# instead of rewritten.
+
+
 def test_phase_record_done_success_sets_target_paths(tmp_path: Path) -> None:
     run = _make_run(tmp_path, done_marked_before_target=True)
     events_p = tmp_path / "e.jsonl"
@@ -507,23 +607,28 @@ def test_phase_record_done_success_sets_target_paths(tmp_path: Path) -> None:
     assert run.target_status_path == status_p
 
 
-# --- _phase_porcelain_invariant: git-status-failed skip ----------------------
+# --- _phase_porcelain_invariant: git-status-failed refuses (fail closed) -----
 
 
-def test_phase_porcelain_skips_when_git_status_fails(tmp_path: Path) -> None:
+def test_phase_porcelain_refuses_when_git_status_fails(tmp_path: Path) -> None:
+    """FR-013: an unreadable working tree is not a clean one — refuse through the
+    same restore-and-exit path a violated invariant takes (re-pinned from the
+    former fail-open "check skipped" warning)."""
     run = _make_run(tmp_path)
     with (
-        patch.object(ex, "_raw_porcelain_status", return_value=(1, "")),
+        patch.object(ex, "_raw_porcelain_status", return_value=(1, ())),
         patch.object(ex, "restore_generated_artifact_snapshots") as restore_mock,
+        pytest.raises(typer.Exit) as exc,
     ):
         ex._phase_porcelain_invariant(run)
-    restore_mock.assert_not_called()
+    assert exc.value.exit_code == 1
+    restore_mock.assert_called_once_with(run.final_bookkeeping_snapshots)
 
 
 def test_phase_porcelain_clean_tree_passes(tmp_path: Path) -> None:
     run = _make_run(tmp_path)
     with (
-        patch.object(ex, "_raw_porcelain_status", return_value=(0, "")),
+        patch.object(ex, "_raw_porcelain_status", return_value=(0, ())),
         patch.object(ex, "_classify_porcelain_lines", return_value=([], 0)),
         patch.object(ex, "restore_generated_artifact_snapshots") as restore_mock,
     ):
@@ -599,7 +704,7 @@ def test_phase_porcelain_folds_restored_gate_artifact_into_expected_paths(
     restored_path = tmp_path / "some" / "random" / "file.json"
     run.gate_artifact_restored_paths = [restored_path]
     with patch.object(
-        ex, "_raw_porcelain_status", return_value=(0, " M some/random/file.json")
+        ex, "_raw_porcelain_status", return_value=(0, (_modified("some/random/file.json"),))
     ):
         ex._phase_porcelain_invariant(run)  # must not raise typer.Exit
 
@@ -611,7 +716,7 @@ def test_phase_porcelain_flags_unrestored_unexpected_path(tmp_path: Path) -> Non
     run = _make_run(tmp_path)
     with (
         patch.object(
-            ex, "_raw_porcelain_status", return_value=(0, " M some/random/file.json")
+            ex, "_raw_porcelain_status", return_value=(0, (_modified("some/random/file.json"),))
         ),
         pytest.raises(typer.Exit) as exc,
     ):
@@ -703,13 +808,33 @@ def test_phase_push_noop_without_push_flag(tmp_path: Path) -> None:
     cmd_mock.assert_not_called()
 
 
-def test_phase_push_success(tmp_path: Path) -> None:
-    run = _make_run(tmp_path, push=True)
-    with (
-        patch.object(ex, "has_remote", return_value=True),
-        patch.object(ex, "run_command", return_value=(0, "", "")),
-    ):
-        ex._phase_push(run)
+def _git(repo: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True, text=True).stdout.strip()
+
+
+def test_phase_push_publishes_the_target_branch_to_origin(tmp_path: Path) -> None:
+    """A real push lands the TARGET branch tip on origin — not the mission branch.
+
+    Both branches exist locally at different commits, so pushing the wrong ref
+    would still "succeed" and only the remote ref state tells them apart.
+    """
+    remote = tmp_path / "origin.git"
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "Test")
+    _git(repo, "config", "commit.gpgsign", "false")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "mission tip")
+    _git(repo, "branch", "kitty/mission-m")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "target tip")
+    _git(repo, "remote", "add", "origin", str(remote))
+    run = _make_run(repo, push=True)
+
+    ex._phase_push(run)
+
+    remote_heads = _git(remote, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads/")
+    assert remote_heads == f"refs/heads/main {_git(repo, 'rev-parse', 'main')}"
 
 
 def test_phase_push_failure_with_linear_history_hint_exits(tmp_path: Path) -> None:
@@ -845,10 +970,10 @@ def test_phase_finalize_and_summary_runs_all_steps(tmp_path: Path) -> None:
 # --- _render_stale_findings -------------------------------------------------
 
 
-def _finding(confidence: Confidence) -> StaleAssertionFinding:
+def _finding(confidence: Confidence, *, test_line: int = 10) -> StaleAssertionFinding:
     return StaleAssertionFinding(
         test_file=Path("tests/test_x.py"),
-        test_line=10,
+        test_line=test_line,
         source_file=Path("src/x.py"),
         source_line=5,
         changed_symbol="foo",
@@ -857,30 +982,62 @@ def _finding(confidence: Confidence) -> StaleAssertionFinding:
     )
 
 
-def test_render_stale_findings_none_report() -> None:
-    ex._render_stale_findings(None)
-
-
-def test_render_stale_findings_no_findings(tmp_path: Path) -> None:
-    report = StaleAssertionReport(
-        base_ref="a", head_ref="HEAD", repo_root=tmp_path, findings=[],
-        elapsed_seconds=0.1, files_scanned=1, findings_per_100_loc=0.0,
+@pytest.mark.parametrize(
+    ("has_report", "expected_line"),
+    [
+        # The operator-honesty line: a check that did not run must say so,
+        # never render as an empty (clean-looking) findings block.
+        (False, "Stale-assertion check could not run."),
+        (True, "No likely-stale assertions detected."),
+    ],
+    ids=["check-could-not-run", "no-findings"],
+)
+def test_render_stale_findings_short_circuit_states_are_named(
+    tmp_path: Path, has_report: bool, expected_line: str
+) -> None:
+    report = (
+        StaleAssertionReport(
+            base_ref="a", head_ref="HEAD", repo_root=tmp_path, findings=[],
+            elapsed_seconds=0.1, files_scanned=1, findings_per_100_loc=0.0,
+        )
+        if has_report
+        else None
     )
-    ex._render_stale_findings(report)
+
+    with ex.console.capture() as captured:
+        ex._render_stale_findings(report)
+
+    assert expected_line in captured.get()
 
 
 def test_render_stale_findings_all_grades(tmp_path: Path) -> None:
+    """Every finding line carries its literal grade label, actionable first.
+
+    The grade is the operator's only cue to tell actionable findings from
+    noise, so ``[high]`` / ``[medium]`` / ``[low]`` / ``[info]`` must survive
+    Rich rendering verbatim (Rich parses a bare ``[high]`` as a markup tag and
+    silently drops it). Order: actionable, then the info block, then low.
+    """
     report = StaleAssertionReport(
         base_ref="a", head_ref="HEAD", repo_root=tmp_path,
         findings=[
-            _finding("high"),
-            _finding("medium"),
-            _finding("low"),
-            _finding("info"),
+            _finding("low", test_line=12),
+            _finding("info", test_line=13),
+            _finding("medium", test_line=11),
+            _finding("high", test_line=10),
         ],
         elapsed_seconds=0.1, files_scanned=2, findings_per_100_loc=1.0,
     )
-    ex._render_stale_findings(report)
+
+    with ex.console.capture() as captured:
+        ex._render_stale_findings(report)
+    output = captured.get()
+
+    for line in ("[high] test_x.py:10", "[medium] test_x.py:11", "[info] test_x.py:13", "[low] test_x.py:12"):
+        assert line in output
+    last_actionable = max(output.index("[high] test_x.py:10"), output.index("[medium] test_x.py:11"))
+    assert last_actionable < output.index("Message-content assertions")
+    assert output.index("[info] test_x.py:13") < output.index("[low] test_x.py:12")
 
 
 def test_render_stale_findings_info_block_is_prominent(tmp_path: Path) -> None:

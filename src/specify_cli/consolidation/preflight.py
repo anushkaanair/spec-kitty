@@ -42,9 +42,13 @@ from specify_cli.status import REVIEWER_SELF_APPROVAL
 
 if TYPE_CHECKING:
     from specify_cli.consolidation.push_preflight import TargetBranchSyncStatus
+    from specify_cli.coordination.types import Refused
+    from specify_cli.lanes.models import LanesManifest
     from specify_cli.post_merge.review_artifact_consistency import (
         ReviewArtifactFinding,
     )
+
+_DONE_LANE = "done"
 
 _PUSH_PREFLIGHT_EXPORTS = {
     "TargetBranchRefreshStatus",
@@ -312,18 +316,6 @@ def _validate_target_branch(
     raise typer.Exit(1)
 
 
-def _print_remediation_lines(remediation: object) -> None:
-    """Print remediation lines from a ``dict[str, object]`` payload value.
-
-    The payload is typed ``dict[str, object]`` so the ``remediation`` value is
-    ``object`` at the call site; normalize to a list of strings before printing
-    (behavior-preserving — the value is always a ``list[str]``).
-    """
-    lines = remediation if isinstance(remediation, list) else [str(remediation)]
-    for line in lines:
-        console.print(f"  - {line}")
-
-
 def _effective_push_requested(
     repo_root: Path,
     mission_id: str,
@@ -558,6 +550,39 @@ def _independent_reviewer_confirmed(feature_dir: Path, wp_id: str) -> bool:
     return implementer != reviewer
 
 
+def _review_force_counts(feature_dir: Path, wp_set: set[str]) -> dict[str, int]:
+    """Count forced review transitions per WP in the event log (#2267).
+
+    ``move-task --to planned --force --review-feedback-file`` is the standard
+    rejection path and a review claim is a forced ``for_review -> in_progress``
+    move, so both raise the reducer's ``force_count``. Those transitions are
+    evidence of review, not of its absence. Lines are deduped by ``event_id`` as the reducer dedupes them;
+    an absent or unreadable log yields no discount (fail toward warning).
+    """
+    from specify_cli.review.rejection_signal import is_documented_review_rejection, is_review_claim
+
+    events_path = feature_dir / _STATUS_EVENTS_FILENAME
+    try:
+        raw_lines = events_path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    seen: set[str] = set()
+    counts: dict[str, int] = {}
+    for raw_line in raw_lines:
+        try:
+            event = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or not event.get("force") or event.get("wp_id") not in wp_set:
+            continue
+        event_id = str(event.get("event_id") or "")
+        if (event_id and event_id in seen) or not (is_documented_review_rejection(event) or is_review_claim(event)):
+            continue
+        seen.add(event_id)
+        counts[event["wp_id"]] = counts.get(event["wp_id"], 0) + 1
+    return counts
+
+
 def _collect_force_count_warnings(
     feature_dir: Path,
     wp_set: set[str],
@@ -566,10 +591,12 @@ def _collect_force_count_warnings(
     """Append force_count>=2 warnings from ``status.json`` (WP05 split helper).
 
     Behavior-preserving extraction of the status-snapshot scan formerly inlined
-    in ``_collect_hollow_review_warnings`` (FR-005, keeps CC <= 15) -- plus one
-    additive guard (item #9): a WP whose approving actor is positively
+    in ``_collect_hollow_review_warnings`` (FR-005, keeps CC <= 15) -- plus two
+    additive guards. Item #9: a WP whose approving actor is positively
     confirmed distinct from its implementing actor is not a hollow review,
-    even with a high force_count, so it is not warned about here.
+    even with a high force_count. #2267: forced documented review rejections
+    and review claims are discounted, so the count reflects only undocumented
+    forcing.
     """
     status_path = feature_dir / _STATUS_FILENAME
     if not status_path.exists():
@@ -581,6 +608,7 @@ def _collect_force_count_warnings(
     work_packages = status.get("work_packages", {}) if isinstance(status, dict) else {}
     if not isinstance(work_packages, dict):
         return
+    discounts = _review_force_counts(feature_dir, wp_set)
     for wp_id in sorted(wp_set):
         wp_state = work_packages.get(wp_id, {})
         if not isinstance(wp_state, dict):
@@ -589,6 +617,7 @@ def _collect_force_count_warnings(
             force_count = int(wp_state.get("force_count", 0))
         except (TypeError, ValueError):
             force_count = 0
+        force_count = max(force_count - discounts.get(wp_id, 0), 0)
         if force_count >= 2 and not _independent_reviewer_confirmed(feature_dir, wp_id):
             warnings.setdefault(wp_id, []).append(f"force_count={force_count}")
 
@@ -875,3 +904,78 @@ def is_pure_behind_head_lag(
     if index_ret != 0:
         return False
     return not reset_would_obstruct_untracked(repo_root, "HEAD")
+
+
+def _current_lanes_or_empty(main_repo: Path, mission_slug: str) -> dict[str, str]:
+    """``{wp_id: lane}`` reduced from the mission's status surface; ``{}`` when unreadable.
+
+    The same surface/reader the done bookkeeping and ``acceptably_canceled_wp_ids``
+    use. An unreadable surface proves no WP ``done``, so every WP counts as pending
+    (the preflight then still asks the policy -- fail toward probing, never skip).
+    """
+    from specify_cli.coordination.surface_resolver import resolve_status_surface
+    from specify_cli.status import StoreError, read_events, reduce
+
+    try:
+        snapshot = reduce(read_events(resolve_status_surface(main_repo, mission_slug).parent))
+    except (FileNotFoundError, StoreError):
+        return {}
+    return {wp_id: str(wp.get("lane", "")) for wp_id, wp in snapshot.work_packages.items() if isinstance(wp, dict)}
+
+
+def pending_done_wp_ids(
+    main_repo: Path,
+    mission_slug: str,
+    lanes_manifest: LanesManifest,
+    *,
+    excluded_canceled_wp_ids: frozenset[str],
+) -> list[str]:
+    """The lane WPs the done bookkeeping would still write, in manifest order.
+
+    Mirrors ``_record_merged_wps_done_for_merge``: canceled-with-provenance WPs are
+    skipped, and a WP whose current lane is already ``done`` writes nothing.
+    """
+    lanes = _current_lanes_or_empty(main_repo, mission_slug)
+    return [wp_id for lane in lanes_manifest.lanes for wp_id in lane.wp_ids if wp_id not in excluded_canceled_wp_ids and lanes.get(wp_id) != _DONE_LANE]
+
+
+def refuse_protected_status_target(
+    main_repo: Path,
+    mission_slug: str,
+    lanes_manifest: LanesManifest,
+    *,
+    excluded_canceled_wp_ids: frozenset[str] | None = None,
+) -> Refused | None:
+    """The workflow-policy refusal the consolidation's ``done`` bookkeeping would hit, else ``None``.
+
+    #5385: a LANES (or mission-branch-less single_branch) mission whose recorded
+    target is protected used to squash onto the target and only then fail its
+    ``done`` write. This probes that write BEFORE anything moves, through the
+    transactional status door's own entry and the transaction's own policy gate
+    (:func:`~specify_cli.coordination.status_transition.status_write_refusal`,
+    C-001: no second protection rule). The request has the shape
+    ``done_bookkeeping._mark_wp_merged_done`` builds; the write target is the
+    mission's RECORDED target (meta), never ``--target``.
+
+    ``None`` when no ``done`` write is pending (an all-done resume writes nothing).
+    ``excluded_canceled_wp_ids`` defaults to ``acceptably_canceled_wp_ids``.
+    """
+    from mission_runtime import MissionArtifactKind, placement_seam
+    from specify_cli.consolidation.done_bookkeeping import acceptably_canceled_wp_ids
+    from specify_cli.coordination.status_transition import status_write_refusal
+    from specify_cli.status import TransitionRequest
+
+    if excluded_canceled_wp_ids is None:
+        excluded_canceled_wp_ids = frozenset(acceptably_canceled_wp_ids(main_repo, mission_slug))
+    pending = pending_done_wp_ids(main_repo, mission_slug, lanes_manifest, excluded_canceled_wp_ids=excluded_canceled_wp_ids)
+    if not pending:
+        return None
+    request = TransitionRequest(
+        feature_dir=placement_seam(main_repo, mission_slug).read_dir(MissionArtifactKind.WORK_PACKAGE_TASK),
+        mission_slug=mission_slug,
+        wp_id=pending[0],
+        to_lane="done",
+        actor="merge",
+        repo_root=main_repo,
+    )
+    return status_write_refusal(request)

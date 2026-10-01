@@ -15,12 +15,18 @@ from unittest.mock import patch
 
 import pytest
 
+from kernel.git import GitCommandError, GitPath, StatusEntry
 from specify_cli.consolidation import git_probes
 
 # The subprocess-backed probes below spawn real ``git`` on a tmp repo, so this
 # file is an integration test that requires a git repo (Rule 1) and must NOT
 # carry ``fast`` (Rule 2 — subprocess work would poison the inner-loop profile).
 pytestmark = [pytest.mark.integration, pytest.mark.git_repo]
+
+
+def _porcelain_entries(lines: list[str]) -> list[StatusEntry]:
+    """Typed entries for plain ``XY path`` porcelain lines (no renames; blank lines skipped)."""
+    return [StatusEntry(xy=line[:2], path=GitPath.parse(line[3:].rstrip("/")), is_directory=line.endswith("/")) for line in lines if line.strip()]
 
 
 # --- path_is_under_worktrees -----------------------------------------------
@@ -63,23 +69,21 @@ def test_classify_porcelain_lines_buckets_correctly() -> None:
         " M src/changed.py",  # tracked modification -> offending
         "?? untracked.txt",  # untracked -> skipped, counted
         "M  kitty-specs/x.md",  # staged, but expected -> dropped
-        "",  # blank -> ignored
-        "bad",  # malformed shape -> ignored
         " D removed.py",  # deletion -> offending
     ]
-    offending, skipped = git_probes._classify_porcelain_lines(lines, expected_paths={"kitty-specs/x.md"})
-    assert offending == [" M src/changed.py", " D removed.py"]
+    offending, skipped = git_probes._classify_porcelain_lines(_porcelain_entries(lines), expected_paths={"kitty-specs/x.md"})
+    assert [entry.display() for entry in offending] == [" M src/changed.py", " D removed.py"]
     assert skipped == 1
 
 
 def test_classify_porcelain_lines_residue_predicate_drops_residue() -> None:
     lines = [" M kitty-specs/m/status.json", " M src/real.py"]
     offending, skipped = git_probes._classify_porcelain_lines(
-        lines,
+        _porcelain_entries(lines),
         expected_paths=set(),
         residue_predicate=lambda p: p.startswith("kitty-specs/"),
     )
-    assert offending == [" M src/real.py"]
+    assert [entry.display() for entry in offending] == [" M src/real.py"]
     assert skipped == 0
 
 
@@ -126,12 +130,13 @@ def test_has_branch_ref_true_false() -> None:
 
 
 def test_paths_have_status_changes_detects_dirty_and_clean(tmp_path: Path) -> None:
-    with patch.object(git_probes, "run_command", return_value=(0, " M a.py\n", "")):
+    with patch.object(git_probes, "status_entries", return_value=tuple(_porcelain_entries([" M a.py"]))):
         assert git_probes._paths_have_status_changes(tmp_path, [tmp_path / "a.py"])
-    with patch.object(git_probes, "run_command", return_value=(0, "", "")):
+    with patch.object(git_probes, "status_entries", return_value=()):
         assert not git_probes._paths_have_status_changes(tmp_path, [tmp_path / "a.py"])
     # git failure -> conservative True.
-    with patch.object(git_probes, "run_command", return_value=(1, "", "err")):
+    failure = GitCommandError(argv=("status",), cwd=tmp_path, returncode=1, stderr="err")
+    with patch.object(git_probes, "status_entries", side_effect=failure):
         assert git_probes._paths_have_status_changes(tmp_path, [tmp_path / "a.py"])
 
 
@@ -189,9 +194,9 @@ def test_raw_porcelain_status_preserves_leading_column(tmp_path: Path) -> None:
     subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
     # Modify the tracked file without staging -> porcelain " M a.txt".
     (repo / "a.txt").write_text("two\n", encoding="utf-8")
-    rc, out = git_probes._raw_porcelain_status(repo)
+    rc, entries = git_probes._raw_porcelain_status(repo)
     assert rc == 0
-    assert out.startswith(" M a.txt"), repr(out)
+    assert [(entry.xy, str(entry.path)) for entry in entries] == [(" M", "a.txt")]
 
 
 # --- squash-content probes (T015 / #5013) — blob_id_at, changed_paths_in_range,
@@ -312,3 +317,64 @@ def test_first_parent_commits_in_range_excludes_second_parent(tmp_path: Path) ->
     _git_seam(repo, "merge", "-q", "--no-edit", "--no-ff", "side")
     first_parent = git_probes.first_parent_commits_in_range(repo, base, "main")
     assert side_sha not in first_parent
+
+
+# --- path_state_at (WP04 / #5046 — absence-aware, distinct from blob_id_at) --
+
+
+def test_path_state_at_returns_blob_for_existing_path(tmp_path: Path) -> None:
+    repo = _init_committed_repo(tmp_path)
+    _commit_file(repo, "src/pkg/x.py", "content\n", "add x")
+    expected = _git_seam(repo, "rev-parse", "HEAD:src/pkg/x.py")
+    assert git_probes.path_state_at(repo, "HEAD", "src/pkg/x.py") == expected
+
+
+def test_path_state_at_returns_none_for_absent_path(tmp_path: Path) -> None:
+    """Absence is a legitimate ``None`` state — never a raised GitProbeError."""
+    repo = _init_committed_repo(tmp_path)
+    _commit_file(repo, "src/pkg/x.py", "content\n", "add x")
+    assert git_probes.path_state_at(repo, "HEAD", "src/pkg/never-existed.py") is None
+
+
+def test_path_state_at_returns_none_for_path_deleted_at_ref(tmp_path: Path) -> None:
+    repo = _init_committed_repo(tmp_path)
+    _commit_file(repo, "src/pkg/x.py", "content\n", "add x")
+    (repo / "src/pkg/x.py").unlink()
+    _git_seam(repo, "add", "-A")
+    _git_seam(repo, "commit", "-qm", "delete x")
+    assert git_probes.path_state_at(repo, "HEAD", "src/pkg/x.py") is None
+
+
+def test_path_state_at_raises_on_bad_ref(tmp_path: Path) -> None:
+    repo = _init_committed_repo(tmp_path)
+    _commit_file(repo, "src/pkg/x.py", "content\n", "add x")
+    with pytest.raises(git_probes.GitProbeError):
+        git_probes.path_state_at(repo, "no-such-ref-xyz", "src/pkg/x.py")
+
+
+# --- is_merge_commit (WP04 / #5046 — R3/B4 merge-filtering support) ---------
+
+
+def test_is_merge_commit_false_for_ordinary_and_root_commits(tmp_path: Path) -> None:
+    repo = _init_committed_repo(tmp_path)
+    root = _git_seam(repo, "rev-parse", "HEAD")
+    ordinary = _commit_file(repo, "src/pkg/a.py", "a\n", "add a")
+    assert git_probes.is_merge_commit(repo, root) is False
+    assert git_probes.is_merge_commit(repo, ordinary) is False
+
+
+def test_is_merge_commit_true_for_merge_commit(tmp_path: Path) -> None:
+    repo = _init_committed_repo(tmp_path)
+    _git_seam(repo, "checkout", "-qb", "side")
+    _commit_file(repo, "side.py", "side\n", "side work")
+    _git_seam(repo, "checkout", "-q", "main")
+    _commit_file(repo, "main.py", "main\n", "main work")
+    _git_seam(repo, "merge", "-q", "--no-edit", "--no-ff", "side")
+    merge_sha = _git_seam(repo, "rev-parse", "HEAD")
+    assert git_probes.is_merge_commit(repo, merge_sha) is True
+
+
+def test_is_merge_commit_raises_on_bad_sha(tmp_path: Path) -> None:
+    repo = _init_committed_repo(tmp_path)
+    with pytest.raises(git_probes.GitProbeError):
+        git_probes.is_merge_commit(repo, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef")

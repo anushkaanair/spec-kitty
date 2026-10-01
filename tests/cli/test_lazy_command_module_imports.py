@@ -33,8 +33,8 @@ being confirmed to pass against the real lazy-lookup implementation.
 accepted "``make test-full``-only" gap (the ``tests/specify_cli/cli`` entry,
 "Accepted named gap: the residual behavioral files in this tree remain
 ``make test-full``-only"). No per-PR or nightly automation ever selected that
-directory -- ``ci-router.yml``'s hardcoded ``tests-cli`` job runs
-``pytest tests/cli -q`` (the literal top-level path, not the
+directory -- the ``cli`` module row's mirror (``pytest tests/cli``; the former
+``ci-router.yml`` ``tests-cli`` job was removed by FR-008) is the top-level path (not the
 ``tests/specify_cli/cli`` mirror), and the diff-scoped per-PR matrix
 (``.github/workflows/module-tests.yml`` via ``.github/ci-module-registry.yml``)
 has no ``test_dirs`` override for the ``cli`` module, so it falls back to
@@ -181,7 +181,12 @@ def test_next_and_live_work_hook_fast_paths_are_unchanged() -> None:
     names.
     """
     next_mods = _run_register_commands(["next", "--help"])
-    assert next_mods == {"specify_cli.cli.commands.next_cmd"}, sorted(next_mods)
+    # owned-checkout-lifecycle-authority WP19: ``next_cmd`` declares ``--owned-checkout``
+    # with the shared ``OwnedCheckoutOption`` alias (gate G5's CLI_CLAIM_INPUT_RULE),
+    # which typer resolves from module globals at registration, so the one shared
+    # owned-checkout CLI surface loads with it. It is not a command module and pulls
+    # in no other command.
+    assert next_mods == {"specify_cli.cli.commands.next_cmd", "specify_cli.cli.commands._owned_checkout"}, sorted(next_mods)
 
     live_work_mods = _run_register_commands(["live-work", "hook", "claude"])
     assert live_work_mods == {"specify_cli.cli.commands.live_work"}, sorted(live_work_mods)

@@ -2,10 +2,17 @@
 title: Charter-Resolution Program
 description: 'Program overview, mission map (M1-M6) and run instructions for the charter-resolution defect cluster: org/project doctrine that loads healthy but reaches no consumer.'
 doc_status: active
-updated: '2026-08-19'
+updated: '2026-09-30'
+audience: docs/context/audience/internal/maintainer.md
 ---
 
 # Charter-Resolution Program
+
+> **Status (2026-09-30): resumed for 4.x, tracked by #5431 on 4.x Work.** No mission in
+> this program has moved since 2026-08-19. Many of the issues it targets have since closed,
+> so the first step is to re-baseline the mission map below. M1 stopped after plan setup
+> (`PlanStarted`) and M2 after specify (`SpecifyStarted`); M3–M6 are still seeds. The state
+> column and "ready for `/spec-kitty.plan`" below are the 2026-08-19 picture.
 
 Authored governance — org-pack and project-tier doctrine — silently fails to reach the dispatched agent. This program closes that class of defect. It rolls up to reach epic **#3530** and fail-loud epic **#3410**.
 

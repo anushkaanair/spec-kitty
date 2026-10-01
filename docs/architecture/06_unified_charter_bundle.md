@@ -2,7 +2,8 @@
 title: 06 — Unified Charter Bundle
 description: 'The unified charter bundle architecture: the canonical manifest, its module and JSON Schema, inverted to a single-file authoritative charter.yaml model (#2773).'
 doc_status: active
-updated: '2026-07-18'
+updated: '2026-09-30'
+audience: docs/context/audience/internal/system-architect.md
 ---
 # 06 — Unified Charter Bundle
 
@@ -133,7 +134,7 @@ The bundle's freshness signal is content-hash driven, not sync-driven:
    field `versioning.py` reads from it.
 
 `charter sync` / `ensure_charter_bundle_fresh()` are retained for
-canonical-root resolution and back-compat call sites (the dashboard, the
+canonical-root resolution and back-compat call sites (the
 bundle-migration upgrader, `charter context`), but no longer perform
 extraction — every call is a no-op (`synced=False`, `files_written=[]`).
 

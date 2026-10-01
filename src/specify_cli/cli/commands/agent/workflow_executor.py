@@ -43,6 +43,8 @@ from typing import TYPE_CHECKING, Any, NoReturn, cast
 
 import typer
 
+from kernel.git import GitCommandError, status_entries
+
 from mission_runtime import MissionArtifactKind, placement_seam
 from specify_cli.cli.commands._commit_recipes import safe_commit_recipe
 from specify_cli.cli.commands.agent.workflow_cores import (
@@ -1191,22 +1193,12 @@ def _baseline_artifact_needs_commit(repo_root: Path, artifact: Path) -> bool:
     for the artifact skips that no-op. Degrades to ``True`` (attempt the commit,
     preserving prior behaviour) if git is unusable here.
     """
-    from specify_cli.core import git_ops
-
     try:
-        rc, out, _err = git_ops.run_command(
-            ["git", "status", "--porcelain", "--", str(artifact)],
-            capture=True,
-            check_return=False,
-            cwd=repo_root,
-        )
-    except Exception:  # noqa: BLE001 — git absent/unusable: fall back to attempting the commit
-        return True
-    if rc != 0:
-        # git couldn't report status (e.g. not a repo): don't suppress a
+        return bool(status_entries(repo_root, pathspecs=[str(artifact)], untracked=None))
+    except GitCommandError:
+        # Advisory: git absent/unusable (e.g. not a repo): don't suppress a
         # possibly-needed commit — preserve the prior "always attempt" behaviour.
         return True
-    return bool(out.strip())
 
 
 def implement_capture_baseline(
@@ -1536,6 +1528,41 @@ class ReviewLaneContext:
     is_review_claimed: bool
 
 
+def _refuse_review_of_unmigrated_single_branch(main_repo_root: Path, mission_slug: str) -> None:
+    """Fail loud (``SINGLE_BRANCH_CODE_LANES_UNMIGRATED``) for an unmigrated single_branch mission (#5100 T020b).
+
+    Review, unlike ``implement`` (contracts/single-branch-execution.md), does
+    NOT get this refusal for free from manifest-shape routing alone: an
+    unmigrated single_branch mission's WPs still sit on CODE lanes in
+    ``lanes.json``, so they would otherwise resolve to an ordinary
+    ``.worktrees/`` lane workspace and review would silently create one --
+    contradicting the mission's stored ``single_branch`` topology instead of
+    surfacing the drift. This is the writer chokepoint that catches it before
+    :func:`_prepare_review_workspace` would ever run ``git worktree add``.
+    """
+    from mission_runtime import (
+        TopologyManifestMismatch,
+        assert_topology_matches_manifest,
+        is_single_branch,
+        resolve_topology,
+    )
+    from specify_cli.lanes.compute import has_code_lanes
+    from specify_cli.lanes.persistence import read_lanes_json
+
+    topology = resolve_topology(main_repo_root, mission_slug)
+    if not is_single_branch(topology):
+        return
+    lanes_dir = placement_seam(main_repo_root, mission_slug).read_dir(MissionArtifactKind.LANE_STATE)
+    lanes_manifest = read_lanes_json(lanes_dir)
+    if lanes_manifest is None:
+        return
+    try:
+        assert_topology_matches_manifest(topology, has_code_lanes=has_code_lanes(lanes_manifest), mission_slug=mission_slug)
+    except TopologyManifestMismatch as exc:
+        print(f"Error: {exc}")
+        raise typer.Exit(1) from exc
+
+
 def review_resolve_wp_and_lane_gate(
     repo_root: Path, main_repo_root: Path, mission_slug: str, normalized_wp_id: str
 ) -> ReviewLaneContext:
@@ -1572,7 +1599,8 @@ def review_resolve_wp_and_lane_gate(
     review_workspace = _wf().resolve_workspace_for_wp(
         main_repo_root, mission_slug, normalized_wp_id, write_intent=True
     )
-    status_execution_mode = "direct_repo" if review_workspace.resolution_kind == "repo_root" else "worktree"
+    status_execution_mode = review_workspace.status_execution_mode
+    _refuse_review_of_unmigrated_single_branch(main_repo_root, mission_slug)
     latest_event = None
     for event in reversed(rv_events):
         if getattr(event, "wp_id", None) == normalized_wp_id:
@@ -2243,25 +2271,13 @@ def review_context_for_repo_root_workspace(
     ``HEAD`` and the "base" is the WP's own claim commit."""
     import subprocess
 
-    wp_paths = sorted((feature_dir / "tasks").glob(f"{wp_id}*.md"))
-    claim = subprocess.run(
-        ["git", "log", "--format=%H%x00%s", "--", *(str(path) for path in wp_paths)],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    claim_commit: str | None = None
-    for raw in claim.stdout.splitlines():
-        commit_hash, _, subject = raw.partition("\x00")
-        if not commit_hash:
-            continue
-        if f"Move {wp_id} to in_progress" in subject or f"{wp_id} claimed for implementation" in subject or f"Start {wp_id} implementation" in subject:
-            claim_commit = commit_hash.strip()
-            break
-    if claim_commit is None:
+    from mission_runtime import ClaimCommitUnresolved, claim_commit_for_wp
+
+    # FR-025: the claim commit is the unique commit that introduced the WP's last
+    # ``claimed`` event id -- never a commit-subject match. Unresolvable => no base.
+    try:
+        claim_commit = claim_commit_for_wp(feature_dir, wp_id)
+    except ClaimCommitUnresolved:
         return ctx
     count = subprocess.run(
         ["git", "rev-list", "--count", f"{claim_commit}..HEAD"],

@@ -2,7 +2,7 @@
 title: 'Landing Contributor PRs: The Maintainer Runbook'
 description: 'The maintainer workflow for landing contributor PRs: claim, worktree isolation, rebase, red classification, folds, red-first verification, push discipline, and hand-off.'
 doc_status: active
-updated: '2026-09-08'
+updated: '2026-10-01'
 audience: docs/context/audience/internal/maintainer.md
 type: how-to
 related:
@@ -18,7 +18,7 @@ related:
 
 **Audience**: Maintainers taking contributor PRs from "open with red CI" to
 "merge-ready, evidence posted, operator merges".
-**Issue**: [Priivacy-ai/spec-kitty#2341](https://github.com/Priivacy-ai/spec-kitty/issues/2341)
+**Issue**: [#2341](https://github.com/spec-kitty/spec-kitty/issues/2341)
 **Origin**: The 2026-07-04 landing pass (#2332, #2336, #2338, #2239, #2238),
 where this workflow was run end-to-end and its friction points were logged.
 
@@ -534,18 +534,24 @@ been fixed, the end-state is stated instead of the trap.
   re-export block in `agent/tasks.py`. Expect this as a fold on PRs that
   touch decomposed command modules.
 - **CI-only architectural gates land late.** Repo-wide gates (terminology,
-  shim retirement, seam boundaries) run in the
-  `integration-tests-core-misc (architectural)` shard — a PR can pass every
-  fast shard and fail ~40 minutes later. Run `tests/architectural/` locally
-  on the rebased tip before declaring a branch green.
+  shim retirement, seam boundaries) run in the architectural battery: the
+  always-on `architectural fast gates (ratchet/census, always-on)` job and the
+  two `architectural battery (heavy, code-scoped)` legs (`1/2` and `2/2`). A PR
+  can pass every module shard and still fail in a heavy leg later. Run the
+  specific `tests/architectural/` gate files your diff implicates on the rebased
+  tip before declaring a branch green; do not sweep the whole directory
+  (`NO_FULL_HEAVY_SUITES_IN_MISSION`, see
+  [known friction points](../reference/known-friction-points.md)).
 - **Shard path-filters mask pre-existing failures.** The `changes` filter
-  skips shards like `fast-tests-cli` on PRs that do not touch those paths, so
+  skips shards such as `module-tests (cli shard 1/2)` on PRs that do not touch
+  those paths, so
   a pre-existing red only surfaces on the first PR that does — the innocent
   PR wears the failure. Classify it as pre-existing (bin three of
   [step 4](#4-classify-every-red-check)), not as the PR's defect.
   **Your own folds trigger this too:** a fold that touches a new path un-skips
   that path's shard, so the pass surfaces reds the PR never caused. On
   2026-08-04 a fold under `cli/commands/agent/` un-skipped `fast-tests-agent`
+  (the then-current job name; the agent tests now run in the `agent` module row of `ci-modules.yml`)
   and exposed a golden-contract drift that reproduced cleanly on
   `abca7ec96`. Re-classify after each batch of folds, not only at the start.
 - **File-scoped linters lint the whole file, not your diff.** `markdownlint`
@@ -604,12 +610,40 @@ been fixed, the end-state is stated instead of the trap.
 - **Per-worktree venv rebuild.** The first `uv run` in a fresh landing
   worktree rebuilds the virtualenv (~40 s + disk). Budget for it; do not
   debug it.
+- **Do NOT recapture `charter` shard-timings during a landing (#5189).** When a
+  PR changes `tests/charter`'s test count, the committed `charter` durations in
+  `.github/ci-shard-timings.json` no longer match live collection, so
+  `test_charter_is_not_allowlisted_and_agrees` /
+  `test_non_allowlisted_modules_agree_with_live_collection`
+  (`tests/architectural/test_module_length_agreement.py`) drift. This is the one
+  count-pinning anchor the general "recapture a drifted count anchor" advice does
+  **not** apply to. Mission `per-pr-shard-timings-recapture-friction-01M3H7V8`
+  (#5189) deliberately removed per-PR charter recapture as landing work: per-PR
+  the drift is a non-blocking `ShardTimingsDriftWarning`, not a failure; the
+  strict exact-count gate lives only in `ci-charter-shard-recapture.yml`
+  (`schedule` + `workflow_dispatch`, no PR/push trigger → it cannot run on a PR
+  or block merge); and its `recapture-charter-shard-timings` job auto-opens the
+  fix PR on the next scheduled `main` run (~18-min in-process capture). So note
+  the drift as #5189-relieved and automation-owned in the hand-off and move on —
+  a local recapture is ~18–30 min of machine-specific measurement for a gate that
+  cannot block the PR and self-heals. Recapture still applies to *other*
+  non-allowlisted modules without dedicated automation (today only `agent`).
+- **A `docs(landing)` fold that edits a `kitty-specs/**` mission dossier reds
+  `archive freeze`.** Archived mission dossiers are frozen byte-identical
+  (`tests/architectural/test_archive_root_byte_identical.py`, the always-on
+  `archive freeze` job; this is the #4260 "rewriting archived dossiers unjudged"
+  class). If a squad flags that a *cited* archived contract now contradicts
+  shipped behavior, do **not** edit the frozen dossier — record the supersession
+  in the **live** code that cites it (the resolver docstring), which is the
+  correct place to overturn a frozen snapshot's stale claims. Reproduce the gate
+  locally before pushing any fold that touches `kitty-specs/**`.
 
-## PR-body contract (PROGRAM.md §5)
+## PR-body contract
 
 Spec Kitty PRs use a fixed body shape; an ad-hoc body (Summary/Changes/Why/…) draws a
-squad **MAJOR** and blocks merge even when the diff is perfect. The fleet squad validates
-the body with `bin/validate-pr-body.py`. Exactly five sections, in order:
+squad **MAJOR** and blocks merge even when the diff is perfect. The shape is the one in
+[`.github/PULL_REQUEST_TEMPLATE.md`](../../../.github/PULL_REQUEST_TEMPLATE.md); start from
+that template. Exactly five sections, in order:
 
 - `## Issue` — must carry a `closes #<n>` link. If no tracking issue exists, **file/claim
   one first** (a docs-gap issue counts), name the branch `issue-<n>-<slug>` (not a bare
@@ -623,8 +657,27 @@ the body with `bin/validate-pr-body.py`. Exactly five sections, in order:
   re-derived from a fresh run of it).
 - `## Deferred` — anything intentionally left for follow-up.
 
-Validate locally before opening: `bin/validate-pr-body.py` must exit 0 (also with
-`--verify-discovery --expected-head <sha>`). Note the description-length SEO gate
+The shape is defined by the template above; the internal validator
+`packs/internal/assets/validate-pr-body.py` (stdlib only; internal pack, never shipped to
+consumers) enforces it, and the fleet squad runs it. It checks the five sections in order,
+a `closes #<n>` line, a `Self-review:` block inside Tests run, runnable test commands, and
+`Discovery:` plus `Files:` in Blast radius, and it rejects a body that still carries the
+template's placeholders. Run it before opening, from a file or stdin:
+
+```
+python packs/internal/assets/validate-pr-body.py body.md
+gh pr view <n> --json body -q .body | python packs/internal/assets/validate-pr-body.py -
+```
+
+After the last rebase, prove the `Files:` list against a fresh run of the `Discovery:`
+`git grep` at the head you are landing (only a `git grep` command is ever executed):
+
+```
+python packs/internal/assets/validate-pr-body.py body.md --verify-discovery --expected-head <sha>
+```
+
+Exit 0 means valid; exit 1 prints one `section: problem` line per violation; exit 2 is a
+usage error. Note the description-length SEO gate
 (50–180 chars) is **CI-only** — run `scripts/docs/description_length_check.py` (or the
 docs SEO tests) as part of any docs blast radius.
 

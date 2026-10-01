@@ -1,0 +1,21 @@
+# C-001 requirement-ID pattern-literal allowlist (shrink-only).
+#
+# Every entry here is a documented, individually-justified exception to the
+# single-grammar-authority gate
+# (tests/architectural/test_requirement_id_grammar_single_source.py). To
+# drain an entry: remove it AND lower `baseline` by the same amount, in the
+# same edit. Entries are frozen (permanent, C-008 divergence, names a
+# follow-up ticket) or transitional (a named WP removes it).
+#
+# History: WP01 (requirement-id-grammar-01M3NRCA) landed this allowlist with
+# 3 entries / baseline: 3 -- 2 frozen divergences plus 1 transitional entry,
+# which WP04 removed (baseline 2). The 2 frozen divergences
+# (missions/_substantive.py `_FR_TABLE_ROW`, retrospective/generator.py
+# `_FR_REF_RE`) were a scope deferral made by the orchestrator in auto mode
+# (Decision Moment 01M3P07HV88QNVVKP3E2W28VB6), not a HiC ruling; the one HiC
+# ruling (01M3P2HXKASQY2ZKSEY3MAWA9H) only migrated consolidation/retention.py.
+# #5387 and #5388 routed both call sites through the grammar and drained the
+# list to 0 in the same edit. Any new entry must raise `baseline` with it.
+baseline: 0
+
+requirement_id_pattern_literals: []

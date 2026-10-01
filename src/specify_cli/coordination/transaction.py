@@ -24,6 +24,7 @@ import subprocess
 from collections.abc import Callable
 from contextlib import AbstractContextManager
 from kernel.clock import now_utc
+from kernel.git import GitCommandError, status_entries
 from pathlib import Path
 from types import TracebackType
 
@@ -38,6 +39,7 @@ from specify_cli.coordination.status_service import (
 from specify_cli.coordination.types import (
     Allowed,
     CommitReceipt,
+    PolicyVerdict,
     DESTINATION_REF_NOT_FOUND,
     GitChangeSet,
     PendingEventHandle,
@@ -45,7 +47,7 @@ from specify_cli.coordination.types import (
     Refused,
 )
 from specify_cli.coordination.workspace import CoordinationWorkspace
-from mission_runtime import CommitTarget
+from mission_runtime import CommitTarget, OwnedCheckout
 from specify_cli.core.commit_guard import GuardCapability
 from specify_cli.git.commit_helpers import (
     SafeCommitPathPolicyError,
@@ -87,6 +89,7 @@ from specify_cli.coordination.legacy_resolution import (
 from specify_cli.coordination.legacy_resolution import (
     _legacy_warning_marker_path as _legacy_warning_marker_path,
 )
+
 # WP09 (T052 / C-010): the confined-artifact orchestration helpers moved to
 # ``coordination.atomic_write`` behind a dependency-injection ``resolve`` seam so
 # ``transaction.py`` lands ≤ 1000 LOC even after the owner gains its new
@@ -121,16 +124,12 @@ def _write_confined_artifact_bytes(
     content: bytes,
 ) -> Path:
     """Write bytes, injecting this module's resolver (oracle-patchable)."""
-    return _aw_write_confined_artifact_bytes(
-        worktree_root, path, content, resolve=_resolve_confined_artifact_path
-    )
+    return _aw_write_confined_artifact_bytes(worktree_root, path, content, resolve=_resolve_confined_artifact_path)
 
 
 def _unlink_confined_artifact_path(worktree_root: Path, path: Path) -> None:
     """Unlink an artifact, injecting this module's resolver (oracle-patchable)."""
-    _aw_unlink_confined_artifact_path(
-        worktree_root, path, resolve=_resolve_confined_artifact_path
-    )
+    _aw_unlink_confined_artifact_path(worktree_root, path, resolve=_resolve_confined_artifact_path)
 
 
 # WP06 swap: the canonical builder now lives in ``status.emit`` so the
@@ -154,6 +153,90 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Transaction
 # ---------------------------------------------------------------------------
+
+
+def _feature_dir(worktree_root: Path, mission_slug: str, mid8: str) -> Path:
+    """The mission's ``kitty-specs/<slug>-<mid8>/`` directory inside ``worktree_root``."""
+    return Path(worktree_root, KITTY_SPECS_DIR, _mission_specs_dir_name(mission_slug, mid8))
+
+
+def _caller_ref_refusal(
+    *,
+    repo_root: Path,
+    mission_slug: str,
+    mid8: str,
+    destination_ref: str,
+    operation: str,
+    capability: GuardCapability,
+    owned: OwnedCheckout | None = None,
+) -> Refused | None:
+    """The coordination arm's caller-ref verdict: the ``Refused`` acquire raises, else ``None``.
+
+    ``None`` when the caller's ref is allowed OR the refusal is recoverable: a
+    protected caller ref of a mission whose meta declares this coordination branch
+    is redirected there, and a missing caller ref that IS the coordination branch
+    is left for coordination-worktree resolution to report.
+    """
+    coord_branch = CoordinationWorkspace.branch_name(mission_slug, mid8)
+    caller_change_set = GitChangeSet(
+        destination_ref=destination_ref,
+        repo_root=repo_root,
+        worktree_root=repo_root,
+        paths=(),
+        message=f"<pending: {operation}>",
+        operation=operation,
+        capability=capability,
+        mission_slug=mission_slug,
+    )
+    caller_verdict = WorkflowMutationPolicy.assert_allowed(
+        caller_change_set,
+        coord_available=True,
+        owned=owned,
+    )
+    if not isinstance(caller_verdict, Refused):
+        return None
+    explicit_coord_branch = _coordination_branch_from_meta(repo_root, mission_slug, mid8)
+    can_recover_to_coord_branch = caller_verdict.error_code == PROTECTED_BRANCH_REFUSED and explicit_coord_branch == coord_branch
+    allow_coord_resolution_to_report_missing_branch = caller_verdict.error_code == DESTINATION_REF_NOT_FOUND and destination_ref == coord_branch
+    if can_recover_to_coord_branch or allow_coord_resolution_to_report_missing_branch:
+        return None
+    return caller_verdict
+
+
+def _preflight_policy_verdict(
+    *,
+    repo_root: Path,
+    primary_root: Path | None,
+    worktree_root: Path,
+    mission_slug: str,
+    destination_ref: str,
+    status_paths: tuple[Path, Path],
+    operation: str,
+    capability: GuardCapability,
+    owned: OwnedCheckout | None = None,
+) -> PolicyVerdict:
+    """Step 4 of acquire: the pre-flight policy gate over the would-be status commit.
+
+    The ONE implementation shared by :meth:`BookkeepingTransaction._acquire_locked`
+    and the lock-free :meth:`BookkeepingTransaction.preflight_refusal` (#5385, C-001).
+    Pure apart from the policy's read-only git/config probes.
+    """
+    from specify_cli.coordination.commit_router import (
+        mission_has_coordination_branch,
+    )
+
+    change_set = GitChangeSet(
+        destination_ref=destination_ref,
+        repo_root=owned.repository_root if owned is not None else (primary_root or repo_root),
+        worktree_root=worktree_root,
+        paths=status_paths,
+        message=f"<pending: {operation}>",
+        operation=operation,
+        capability=capability,
+        mission_slug=mission_slug,
+    )
+    coord_available = mission_has_coordination_branch(repo_root, mission_slug)
+    return WorkflowMutationPolicy.assert_allowed(change_set, coord_available=coord_available, owned=owned)
 
 
 class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
@@ -192,7 +275,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # ``mypy --strict`` is satisfied because we do not annotate them
         # as ``Final`` and we never re-bind them after construction.
         self.repo_root = repo_root
-        self._primary_root: Path | None = None
+        self._owned: OwnedCheckout | None = None
         self.mission_id = mission_id
         self.mission_slug = mission_slug
         self.mid8 = mid8
@@ -246,7 +329,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         timeout: float = 30.0,
         capability: GuardCapability = GuardCapability.STANDARD,
         commit_to_primary_target: bool = False,
-        effective_root: Path | None = None,
+        owned: OwnedCheckout | None = None,
     ) -> BookkeepingTransaction:
         """Construct, lock, and run the pre-flight policy gate.
 
@@ -288,9 +371,8 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # lock context manager is held open across the lifetime of the
         # transaction object; on any setup failure below, release it before
         # propagating the domain error.
-        lock_cm = feature_status_lock(
-            effective_root or repo_root, _mission_specs_dir_name(mission_slug, mid8), timeout=timeout,
-        )
+        lock_root = owned.owned_root if owned is not None else repo_root
+        lock_cm = feature_status_lock(lock_root, _mission_specs_dir_name(mission_slug, mid8), timeout=timeout)
         try:
             lock_cm.__enter__()
         except FeatureStatusLockTimeoutError as exc:
@@ -298,7 +380,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
 
         try:
             return cls._acquire_locked(
-                repo_root=effective_root or repo_root,
+                repo_root=lock_root,
                 mission_id=mission_id,
                 mission_slug=mission_slug,
                 mid8=mid8,
@@ -308,11 +390,101 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                 lock_cm=lock_cm,
                 capability=capability,
                 commit_to_primary_target=commit_to_primary_target,
-                primary_root=repo_root if effective_root is not None else None,
+                owned=owned,
             )
         except Exception:
             lock_cm.__exit__(None, None, None)
             raise
+
+    @classmethod
+    def preflight_refusal(
+        cls,
+        *,
+        repo_root: Path,
+        mission_slug: str,
+        mid8: str,
+        destination_ref: str,
+        operation: str,
+        capability: GuardCapability = GuardCapability.STANDARD,
+        owned: OwnedCheckout | None = None,
+    ) -> Refused | None:
+        """The ``Refused`` :meth:`acquire` would raise as ``BookkeepingPolicyRefused``, else ``None``.
+
+        A lock-free probe (#5385): no feature-status lock, no coordination worktree
+        creation, no writes. It selects the write arm with the SAME classifiers
+        ``_acquire_locked`` uses and runs the SAME policy gate
+        (:func:`_preflight_policy_verdict`), so a caller can refuse up front
+        exactly what the real write would refuse later (C-001: no second rule).
+        ``repo_root`` is the primary checkout root; ``owned`` is the owned-checkout
+        carrier (``None`` for a non-owned mission), threaded into the policy gate so
+        an owned mission resolves protection through ``resolve_for_owned`` exactly as
+        its real write does.
+
+        * coordination arm: the caller-ref verdict (:func:`_caller_ref_refusal`),
+          then the gate against the redirected coordination branch. A missing
+          coordination branch is not a POLICY refusal: :meth:`acquire` does not
+          create it, it fails closed with ``BookkeepingWorktreeMissing`` when
+          resolving the coordination worktree, before its gate runs -- so the
+          probe returns ``None`` and leaves that failure to the real write;
+        * genuinely-legacy arm: ``None`` -- its destination is the operator's
+          lane HEAD, which is not knowable before the run;
+        * modern coordination-less arm: the gate against ``destination_ref`` on
+          the primary checkout.
+
+        C-001 (no second rule): the probe carries ``owned`` verbatim into
+        :func:`_preflight_policy_verdict`, so it resolves protection the same way the
+        real write does — ``owned=None`` (e.g. the consolidate ``done`` write,
+        ``done_bookkeeping._mark_wp_merged_done``, which builds an owned-less request)
+        resolves via ``resolve(repo_root).for_mission``; an owned mission resolves via
+        ``resolve_for_owned``. Arm classification stays on the primary ``repo_root``.
+        """
+        arm_root = repo_root
+        safe_mission_slug = _validate_safe_segment("mission_slug", mission_slug)
+        safe_mid8 = _validate_safe_segment("mid8", mid8)
+        effective_destination_ref = destination_ref
+        coordination_arm = not _is_legacy_mission(arm_root, safe_mission_slug, safe_mid8)
+        if not coordination_arm:
+            if _warrants_legacy_warning(arm_root, safe_mission_slug, safe_mid8):
+                return None
+            worktree_root = arm_root
+        else:
+            caller_refusal = _caller_ref_refusal(
+                repo_root=arm_root,
+                mission_slug=safe_mission_slug,
+                mid8=safe_mid8,
+                destination_ref=destination_ref,
+                operation=operation,
+                capability=capability,
+                owned=owned,
+            )
+            if caller_refusal is not None:
+                return caller_refusal
+            worktree_root = CoordinationWorkspace.worktree_path(arm_root, safe_mission_slug, safe_mid8)
+            effective_destination_ref = CoordinationWorkspace.branch_name(safe_mission_slug, safe_mid8)
+        feature_dir = _feature_dir(worktree_root, safe_mission_slug, safe_mid8)
+        events_path = feature_dir / _EVENTS_FILENAME
+        snapshot_path = feature_dir / _SNAPSHOT_FILENAME
+        verdict = _preflight_policy_verdict(
+            repo_root=arm_root,
+            primary_root=None,
+            worktree_root=worktree_root,
+            mission_slug=safe_mission_slug,
+            destination_ref=effective_destination_ref,
+            status_paths=(events_path, snapshot_path),
+            operation=operation,
+            capability=capability,
+            owned=owned,
+        )
+        if not isinstance(verdict, Refused):
+            return None
+        if coordination_arm and verdict.error_code == DESTINATION_REF_NOT_FOUND:
+            # Coordination arm: ``acquire`` resolves the coordination worktree BEFORE
+            # this gate runs and, when the coordination branch is missing, fails
+            # closed there with ``BookkeepingWorktreeMissing`` (it never creates the
+            # branch). The real write never reaches a policy refusal for it, so
+            # this is not a ``Refused`` the probe may report.
+            return None
+        return verdict
 
     @classmethod
     def _acquire_locked(
@@ -328,7 +500,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         lock_cm: AbstractContextManager[Path],
         capability: GuardCapability = GuardCapability.STANDARD,
         commit_to_primary_target: bool = False,
-        primary_root: Path | None = None,
+        owned: OwnedCheckout | None = None,
     ) -> BookkeepingTransaction:
         safe_mission_slug = _validate_safe_segment("mission_slug", mission_slug)
         safe_mid8 = _validate_safe_segment("mid8", mid8)
@@ -370,7 +542,9 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
             # introduced (C-005) — reuse it here as the routing split too,
             # rather than inventing a second classifier.
             genuinely_legacy = _warrants_legacy_warning(
-                repo_root, safe_mission_slug, safe_mid8,
+                repo_root,
+                safe_mission_slug,
+                safe_mid8,
             )
             if genuinely_legacy:
                 # Genuinely-legacy: unchanged pre-#2453 behaviour — resolve
@@ -414,36 +588,17 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                 worktree_root = repo_root
         else:
             coord_branch = CoordinationWorkspace.branch_name(safe_mission_slug, safe_mid8)
-            caller_change_set = GitChangeSet(
-                destination_ref=effective_destination_ref,
+            caller_refusal = _caller_ref_refusal(
                 repo_root=repo_root,
-                worktree_root=repo_root,
-                paths=(),
-                message=f"<pending: {operation}>",
+                mission_slug=safe_mission_slug,
+                mid8=safe_mid8,
+                destination_ref=effective_destination_ref,
                 operation=operation,
                 capability=capability,
+                owned=owned,
             )
-            caller_verdict = WorkflowMutationPolicy.assert_allowed(
-                caller_change_set,
-                coord_available=True,
-            )
-            if isinstance(caller_verdict, Refused):
-                explicit_coord_branch = _coordination_branch_from_meta(
-                    repo_root, safe_mission_slug, safe_mid8,
-                )
-                can_recover_to_coord_branch = (
-                    caller_verdict.error_code == PROTECTED_BRANCH_REFUSED
-                    and explicit_coord_branch == coord_branch
-                )
-                allow_coord_resolution_to_report_missing_branch = (
-                    caller_verdict.error_code == DESTINATION_REF_NOT_FOUND
-                    and effective_destination_ref == coord_branch
-                )
-                if not (
-                    can_recover_to_coord_branch
-                    or allow_coord_resolution_to_report_missing_branch
-                ):
-                    raise BookkeepingPolicyRefused(caller_verdict)
+            if caller_refusal is not None:
+                raise BookkeepingPolicyRefused(caller_refusal)
             if commit_to_primary_target:
                 # write-path-integrity WP02 / FR-001: the caller is committing a
                 # PRIMARY-partition planning artifact that MUST land on the
@@ -462,16 +617,13 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                 # New topology — create coord worktree on first call.
                 try:
                     worktree_root = CoordinationWorkspace.resolve(
-                        repo_root, safe_mission_slug, safe_mid8,
+                        repo_root,
+                        safe_mission_slug,
+                        safe_mid8,
                     )
                 except Exception as exc:  # noqa: BLE001 — domain error surface
-                    identity = coord_mission_dir_name(
-                        safe_mission_slug, mid8=safe_mid8
-                    )
-                    raise BookkeepingWorktreeMissing(
-                        f"Failed to resolve coordination worktree for "
-                        f"{identity}: {exc}"
-                    ) from exc
+                    identity = coord_mission_dir_name(safe_mission_slug, mid8=safe_mid8)
+                    raise BookkeepingWorktreeMissing(f"Failed to resolve coordination worktree for {identity}: {exc}") from exc
                 # Status events must be committed to the coordination branch,
                 # not the caller-supplied destination (which may be "main").
                 # Mirror the legacy path's destination_ref override (lines above).
@@ -485,34 +637,23 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # there is no sparse-checkout policy on the lane, so the files
         # are physically present and the surgical truncate rollback
         # works against the lane worktree without modification.
-        kitty_dir_name = _mission_specs_dir_name(safe_mission_slug, safe_mid8)
-        feature_dir = worktree_root / KITTY_SPECS_DIR / kitty_dir_name
+        feature_dir = _feature_dir(worktree_root, safe_mission_slug, safe_mid8)
         events_path = feature_dir / _EVENTS_FILENAME
         snapshot_path = feature_dir / _SNAPSHOT_FILENAME
 
         # 4. Build the change set and run the pre-flight policy gate.
         # This still happens before any bookkeeping write; the lock is
         # already held only to serialize first-time coord worktree setup.
-        change_set = GitChangeSet(
-            destination_ref=effective_destination_ref,
-            repo_root=primary_root or repo_root,
+        verdict = _preflight_policy_verdict(
+            repo_root=repo_root,
+            primary_root=None,
             worktree_root=worktree_root,
-            paths=(events_path, snapshot_path),
-            message=f"<pending: {operation}>",
+            mission_slug=safe_mission_slug,
+            destination_ref=effective_destination_ref,
+            status_paths=(events_path, snapshot_path),
             operation=operation,
             capability=capability,
-        )
-        from specify_cli.coordination.commit_router import (
-            mission_has_coordination_branch,
-        )
-
-        coord_available = mission_has_coordination_branch(
-            repo_root,
-            safe_mission_slug,
-        )
-        verdict = WorkflowMutationPolicy.assert_allowed(
-            change_set,
-            coord_available=coord_available,
+            owned=owned,
         )
         if isinstance(verdict, Refused):
             raise BookkeepingPolicyRefused(verdict)
@@ -544,7 +685,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
             lock_cm=lock_cm,
         )
         txn._capability = capability
-        txn._primary_root = primary_root
+        txn._owned = owned
         txn._legacy_mode = legacy_mode
         return txn
 
@@ -566,9 +707,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                 # Happy path: implicit commit if the caller did not call
                 # commit() explicitly. Then run deferred outbound.
                 if not self._committed and (self._event_ids or self._staged_paths):
-                    msg = self._explicit_commit_message or (
-                        f"chore(spec-kitty): {self.operation}"
-                    )
+                    msg = self._explicit_commit_message or (f"chore(spec-kitty): {self.operation}")
                     try:
                         self.commit(msg)
                     except BookkeepingCommitFailed:
@@ -579,9 +718,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
             else:
                 # Exception path: surgical rollback.
                 recovery_after_commit = (
-                    isinstance(exc, BookkeepingCommitFailed)
-                    and isinstance(exc.__cause__, SafeCommitRecoveryFailed)
-                    and exc.__cause__.commit_sha is not None
+                    isinstance(exc, BookkeepingCommitFailed) and isinstance(exc.__cause__, SafeCommitRecoveryFailed) and exc.__cause__.commit_sha is not None
                 )
                 if not recovery_after_commit:
                     self._rollback()
@@ -615,40 +752,36 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         if not events:
             return []
         unit_ids = [event.event_id for event in events]
-        duplicate_ids = {
-            event_id
-            for event_id in unit_ids
-            if unit_ids.count(event_id) > 1 or event_id in self._seen_event_ids
-        }
+        duplicate_ids = {event_id for event_id in unit_ids if unit_ids.count(event_id) > 1 or event_id in self._seen_event_ids}
         if duplicate_ids:
             duplicate = sorted(duplicate_ids)[0]
-            raise BookkeepingDoubleEventId(
-                f"event_id {duplicate!r} appended twice in one transaction"
-            )
+            raise BookkeepingDoubleEventId(f"event_id {duplicate!r} appended twice in one transaction")
 
         # Capture the pre-emit status.json on first event so rollback
         # restores exact bytes (not "approximately re-materialised").
         if self._pre_emit_snapshot_existed is None:
             self._pre_emit_snapshot_existed = self._snapshot_path.exists()
-            self._pre_emit_snapshot_bytes = (
-                self._snapshot_path.read_bytes()
-                if self._pre_emit_snapshot_existed
-                else None
-            )
+            self._pre_emit_snapshot_bytes = self._snapshot_path.read_bytes() if self._pre_emit_snapshot_existed else None
 
         # Ensure parent directories exist (the feature_dir may be new
         # if this is the first emission for this mission).
         self.feature_dir.mkdir(parents=True, exist_ok=True)
 
         # Append + verify readback (matches existing emit pipeline).
-        if self._legacy_mode and ".worktrees" not in self.feature_dir.parts:
-            write_contract = EventLogWriteContract.primary_checkout_append(
-                self.feature_dir
-            )
+        # C-SEAM-1: the raw ".worktrees" in parts idiom is retired in favour of
+        # the blessed shape primitive (WP06 T030), imported lazily to avoid a
+        # module-level cycle back through mission_runtime (mirrors
+        # status_service._is_coordination_worktree_path's prior lazy import).
+        from specify_cli.coordination.surface_resolver import (  # noqa: PLC0415
+            is_under_worktrees_segment,
+        )
+
+        if self._owned is not None:
+            write_contract = EventLogWriteContract.primary_checkout_append(self.feature_dir, owned=self._owned)
+        elif self._legacy_mode and not is_under_worktrees_segment(self.feature_dir):
+            write_contract = EventLogWriteContract.primary_checkout_append(self.feature_dir)
         else:
-            write_contract = EventLogWriteContract.coordination_transaction_append(
-                self.feature_dir
-            )
+            write_contract = EventLogWriteContract.coordination_transaction_append(self.feature_dir)
         append_event_stream_log(
             write_contract,
             events,
@@ -680,9 +813,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # coordination worktree. This is the write-side backstop — if the
         # output path resolves under .worktrees/ from the primary repo's
         # perspective, reject it immediately before touching the filesystem.
-        resolved_candidate = (path if path.is_absolute() else self.worktree_root / path).resolve(
-            strict=False
-        )
+        resolved_candidate = (path if path.is_absolute() else self.worktree_root / path).resolve(strict=False)
         try:
             rel_from_worktree = resolved_candidate.relative_to(self.worktree_root.resolve())
         except ValueError:
@@ -695,18 +826,12 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         try:
             resolved_path = _resolve_confined_artifact_path(self.worktree_root, path)
         except ValueError as exc:
-            raise ValueError(
-                "Refusing to write artifact outside coordination worktree "
-                "(outside worktree): "
-                f"{path}"
-            ) from exc
+            raise ValueError(f"Refusing to write artifact outside coordination worktree (outside worktree): {path}") from exc
         # Capture snapshot ONLY if we have not seen this path yet.
         # Re-writing the same path repeatedly in one transaction still
         # rolls back to the *original* pre-transaction state.
         if resolved_path not in self._snapshots:
-            self._snapshots[resolved_path] = (
-                resolved_path.read_bytes() if resolved_path.exists() else None
-            )
+            self._snapshots[resolved_path] = resolved_path.read_bytes() if resolved_path.exists() else None
 
         resolved_path = _write_confined_artifact_bytes(
             self.worktree_root,
@@ -717,9 +842,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         if resolved_path not in self._staged_paths:
             self._staged_paths.append(resolved_path)
 
-    def enroll_subprocess_byproducts(
-        self, *paths: Path, stage: bool = True
-    ) -> None:
+    def enroll_subprocess_byproducts(self, *paths: Path, stage: bool = True) -> None:
         """Enrol bytes a spec-kitty-spawned child process creates/modifies (C3/TAO-1).
 
         Call this **before** spawning the child (a gate's pytest run) with the
@@ -736,13 +859,9 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         """
         for path in paths:
             confined = _confine_path_to_worktree(self.worktree_root, path)
-            resolved_path = _resolve_confined_artifact_path(
-                self.worktree_root, confined
-            )
+            resolved_path = _resolve_confined_artifact_path(self.worktree_root, confined)
             if resolved_path not in self._byproduct_snapshots:
-                self._byproduct_snapshots[resolved_path] = (
-                    resolved_path.read_bytes() if resolved_path.exists() else None
-                )
+                self._byproduct_snapshots[resolved_path] = resolved_path.read_bytes() if resolved_path.exists() else None
             if stage and resolved_path not in self._staged_paths:
                 self._staged_paths.append(resolved_path)
 
@@ -787,10 +906,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         """
         if self._committed:
             if self._explicit_commit_receipt is None:
-                raise BookkeepingCommitFailed(
-                    "commit_idempotent(): transaction marked committed but no "
-                    "commit receipt was recorded"
-                )
+                raise BookkeepingCommitFailed("commit_idempotent(): transaction marked committed but no commit receipt was recorded")
             return self._explicit_commit_receipt
         if self._staged_paths and not self._worktree_has_pending_changes():
             receipt = self._noop_commit_receipt()
@@ -815,42 +931,33 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
             assert self._explicit_commit_receipt is not None  # noqa: S101
             return self._explicit_commit_receipt
         if self._commit_recovery_failed_after_commit:
-            raise BookkeepingCommitFailed(
-                "commit() cannot be retried: safe_commit already created a commit "
-                "but failed to restore caller staging"
-            )
+            raise BookkeepingCommitFailed("commit() cannot be retried: safe_commit already created a commit but failed to restore caller staging")
 
         if not self._staged_paths:
-            raise BookkeepingCommitFailed(
-                "commit() called with no events or artifacts to commit"
-            )
+            raise BookkeepingCommitFailed("commit() called with no events or artifacts to commit")
 
         try:
             result = safe_commit(
-                repo_root=self._primary_root or self.repo_root,
+                repo_root=self._owned.repository_root if self._owned is not None else self.repo_root,
                 worktree_root=self.worktree_root,
                 target=CommitTarget(ref=self.destination_ref),
                 message=message,
                 paths=tuple(self._staged_paths),
                 capability=self._capability,
-                effective_root=self.worktree_root if self._primary_root is not None else None,
+                owned=self._owned,
             )
         except SafeCommitRecoveryFailed as exc:
             if exc.commit_sha is None:
                 self._rollback()
             else:
                 self._commit_recovery_failed_after_commit = True
-            raise BookkeepingCommitFailed(
-                f"safe_commit recovery failed on {self.destination_ref!r}: {exc}"
-            ) from exc
+            raise BookkeepingCommitFailed(f"safe_commit recovery failed on {self.destination_ref!r}: {exc}") from exc
         except Exception as exc:  # noqa: BLE001 — wrap as domain error
             # Rollback before re-raising. ``_rollback`` is intentionally
             # tolerant: it logs but does not raise so the caller sees
             # the original commit failure, not a rollback failure.
             self._rollback()
-            raise BookkeepingCommitFailed(
-                f"safe_commit failed on {self.destination_ref!r}: {exc}"
-            ) from exc
+            raise BookkeepingCommitFailed(f"safe_commit failed on {self.destination_ref!r}: {exc}") from exc
 
         receipt = CommitReceipt(
             commit_sha=result.sha,
@@ -878,23 +985,18 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         """
         if not self._staged_paths:
             return False
-        result = subprocess.run(
-            [
-                "git",
-                "-C",
-                str(self.worktree_root),
-                "status",
-                "--porcelain",
-                "--",
-                *[str(path) for path in self._staged_paths],
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode != 0:
+        try:
+            return bool(
+                status_entries(
+                    self.worktree_root,
+                    pathspecs=[str(path) for path in self._staged_paths],
+                    untracked=None,
+                )
+            )
+        except GitCommandError:
+            # Advisory (documented above): fail open so the real ``safe_commit``
+            # path runs and surfaces the actual git error.
             return True
-        return bool(result.stdout.strip())
 
     def _noop_commit_receipt(self) -> CommitReceipt:
         """Receipt pinned at the current HEAD for an idempotent no-op commit.
@@ -913,10 +1015,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         )
         sha = head.stdout.strip()
         if head.returncode != 0 or not sha:
-            raise BookkeepingCommitFailed(
-                "commit() no-op: could not resolve HEAD in "
-                f"{self.worktree_root} to pin the already-committed transition"
-            )
+            raise BookkeepingCommitFailed(f"commit() no-op: could not resolve HEAD in {self.worktree_root} to pin the already-committed transition")
         return CommitReceipt(
             commit_sha=sha,
             committed_at=now_utc(),
@@ -950,8 +1049,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                     self._events_path.unlink(missing_ok=True)
         except OSError as exc:
             logger.error(
-                "BookkeepingTransaction rollback: truncate of %s "
-                "failed: %s",
+                "BookkeepingTransaction rollback: truncate of %s failed: %s",
                 self._events_path,
                 exc,
             )
@@ -965,7 +1063,8 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                 if self._pre_emit_snapshot_existed:
                     assert self._pre_emit_snapshot_bytes is not None  # noqa: S101
                     self._snapshot_path.parent.mkdir(
-                        parents=True, exist_ok=True,
+                        parents=True,
+                        exist_ok=True,
                     )
                     self._snapshot_path.write_bytes(
                         self._pre_emit_snapshot_bytes,
@@ -976,8 +1075,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                     self._snapshot_path.unlink(missing_ok=True)
             except OSError as exc:
                 logger.error(
-                    "BookkeepingTransaction rollback: restore of %s "
-                    "failed: %s",
+                    "BookkeepingTransaction rollback: restore of %s failed: %s",
                     self._snapshot_path,
                     exc,
                 )
@@ -988,12 +1086,8 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # worktree (C-009: no ``git checkout --``).
         restore_generated_artifact_snapshots(
             {**self._snapshots, **self._byproduct_snapshots},
-            write=lambda path, prev: _write_confined_artifact_bytes(
-                self.worktree_root, path, prev
-            ),
-            unlink=lambda path: _unlink_confined_artifact_path(
-                self.worktree_root, path
-            ),
+            write=lambda path, prev: _write_confined_artifact_bytes(self.worktree_root, path, prev),
+            unlink=lambda path: _unlink_confined_artifact_path(self.worktree_root, path),
             on_error=lambda path, exc: logger.error(
                 "BookkeepingTransaction rollback: restore of %s failed: %s",
                 path,

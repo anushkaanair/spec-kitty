@@ -24,7 +24,6 @@ Terminology note:
 
 ## Practical Usage
 
-- [Use the Dashboard](../guides/how-to/monitoring/use-dashboard.md)
 - [Non-Interactive Init](../guides/how-to/installation/non-interactive-init.md)
 
 <!-- BEGIN GENERATED -->
@@ -198,6 +197,11 @@ _Mission action commands that display prompts and instructions for agents_
 │                                            warning when spec language        │
 │                                            resembles a bulk edit but the     │
 │                                            mission is not one.               │
+│ --owned-checkout                     PATH  Not yet supported. Refused: owned │
+│                                            checkouts use 'spec-kitty next    │
+│                                            --owned-checkout' and 'spec-kitty │
+│                                            agent tasks move-task             │
+│                                            --owned-checkout' instead.        │
 │ --help                       -h            Show this message and exit.       │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -226,21 +230,25 @@ _Mission action commands that display prompts and instructions for agents_
 │                       for_review if omitted                                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --mission                TEXT  Mission slug                                  │
-│ --agent                  TEXT  Agent name (required for auto-move to         │
-│                                in_progress)                                  │
-│ --model                  TEXT  Dispatch-resolved model asserted against the  │
-│                                correlated Op record (requires                │
-│                                --invocation-id; never the frontmatter        │
-│                                recommendation)                               │
-│ --profile                TEXT  Agent profile id — a dispatch registry / Op   │
-│                                record profile or a local charter profile     │
-│                                (the same ids `agent profile show` resolves). │
-│                                When omitted, the work package's frontmatter  │
-│                                agent_profile is used.                        │
-│ --invocation-id          TEXT  Correlated Op record ULID whose mission, WP,  │
-│                                action, profile, and model are authoritative  │
-│ --help           -h            Show this message and exit.                   │
+│ --mission                 TEXT  Mission slug                                 │
+│ --agent                   TEXT  Agent name (required for auto-move to        │
+│                                 in_progress)                                 │
+│ --model                   TEXT  Dispatch-resolved model asserted against the │
+│                                 correlated Op record (requires               │
+│                                 --invocation-id; never the frontmatter       │
+│                                 recommendation)                              │
+│ --profile                 TEXT  Agent profile id — a dispatch registry / Op  │
+│                                 record profile or a local charter profile    │
+│                                 (the same ids `agent profile show`           │
+│                                 resolves). When omitted, the work package's  │
+│                                 frontmatter agent_profile is used.           │
+│ --invocation-id           TEXT  Correlated Op record ULID whose mission, WP, │
+│                                 action, profile, and model are authoritative │
+│ --owned-checkout          PATH  Not yet supported. Refused: owned checkouts  │
+│                                 use 'spec-kitty next --owned-checkout' and   │
+│                                 'spec-kitty agent tasks move-task            │
+│                                 --owned-checkout' instead.                   │
+│ --help            -h            Show this message and exit.                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -415,16 +423,20 @@ _Agent context management commands_
  Resolve canonical feature/work-package/action context for prompt execution.
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ *  --action           TEXT  Action to resolve context for (specify, plan,    │
-│                             analyze, tasks, tasks_outline, tasks_packages,   │
-│                             tasks_finalize, implement, review, accept,       │
-│                             status)                                          │
-│                             [required]                                       │
-│    --mission          TEXT  Mission slug (e.g., '020-my-mission')            │
-│    --wp-id            TEXT  Work package ID (e.g., WP01)                     │
-│    --agent            TEXT  Agent name for exact command rendering           │
-│    --json                   Output results as JSON                           │
-│    --help     -h            Show this message and exit.                      │
+│ *  --action                  TEXT  Action to resolve context for (specify,   │
+│                                    plan, analyze, tasks, tasks_outline,      │
+│                                    tasks_packages, tasks_finalize,           │
+│                                    implement, review, accept, status)        │
+│                                    [required]                                │
+│    --mission                 TEXT  Mission slug (e.g., '020-my-mission')     │
+│    --wp-id                   TEXT  Work package ID (e.g., WP01)              │
+│    --agent                   TEXT  Agent name for exact command rendering    │
+│    --json                          Output results as JSON                    │
+│    --owned-checkout          PATH  Run against an owned checkout: a linked   │
+│                                    checkout that owns this mission. Refuses  │
+│                                    the repository root checkout, lane        │
+│                                    worktrees and coordination worktrees.     │
+│    --help            -h            Show this message and exit.               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -660,8 +672,8 @@ _Mission lifecycle commands for AI agents_
 │ create               Create new mission directory structure in the project   │
 │                      root checkout.                                          │
 │ check-prerequisites  Validate mission structure and prerequisites.           │
-│ setup-plan           Scaffold implementation plan template in the project    │
-│                      root checkout.                                          │
+│ setup-plan           Scaffold an implementation plan template in the         │
+│                      repository root checkout or an owned checkout.          │
 │ accept               Perform mission acceptance workflow.                    │
 │ merge                Merge mission branch into target branch.                │
 │ finalize-tasks       Parse dependencies from tasks.md and update WP          │
@@ -827,7 +839,10 @@ _Mission lifecycle commands for AI agents_
 │                                 found/not_found/existing/ambiguous/malformed │
 │                                 state for safe specify resume                │
 │ --include-tasks                 Include tasks.md in validation               │
-│ --owned-checkout          PATH  Explicit single-branch checkout root.        │
+│ --owned-checkout          PATH  Run against an owned checkout: a linked      │
+│                                 checkout that owns this mission. Refuses the │
+│                                 repository root checkout, lane worktrees and │
+│                                 coordination worktrees.                      │
 │ --help            -h            Show this message and exit.                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -849,33 +864,33 @@ _Mission lifecycle commands for AI agents_
 │ *    mission_slug      TEXT  Mission slug (e.g., 'user-auth') [required]     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --mission-type                          TEXT               Mission type      │
+│ --mission-type                            TEXT             Mission type      │
 │                                                            (e.g.,            │
 │                                                            'documentation',  │
 │                                                            'software-dev')   │
 │ --json                                                     Output JSON       │
 │                                                            format            │
-│ --target-branch                         TEXT               Target branch     │
+│ --target-branch                           TEXT             Target branch     │
 │                                                            (defaults to      │
 │                                                            current branch)   │
-│ --friendly-name                         TEXT               Human-friendly    │
+│ --friendly-name                           TEXT             Human-friendly    │
 │                                                            mission title     │
-│ --purpose-tldr                          TEXT               One-line          │
+│ --purpose-tldr                            TEXT             One-line          │
 │                                                            stakeholder TLDR  │
 │                                                            for the mission   │
-│ --purpose-context                       TEXT               Short             │
+│ --purpose-conte…                          TEXT             Short             │
 │                                                            stakeholder-faci… │
 │                                                            paragraph for the │
 │                                                            mission           │
-│ --pr-bound             --no-pr-bound                       Mark mission as   │
+│ --pr-bound            --no-pr-bound                        Mark mission as   │
 │                                                            PR-bound (gate    │
 │                                                            fires on          │
 │                                                            merge_target_bra… │
 │                                                            [default:         │
 │                                                            no-pr-bound]      │
-│ --topology                              [single_branch|la  Create-time       │
-│                                         nes|coord|lanes_w  mission shape:    │
-│                                         ith_coord]         single_branch |   │
+│ --topology                                [single_branch|  Create-time       │
+│                                           lanes|coord|lan  mission shape:    │
+│                                           es_with_coord]   single_branch |   │
 │                                                            lanes | coord |   │
 │                                                            lanes_with_coord. │
 │                                                            Coordination-bea… │
@@ -890,28 +905,30 @@ _Mission lifecycle commands for AI agents_
 │                                                            lanes) do not.    │
 │                                                            Default:          │
 │                                                            context-derived   │
-│                                                            (#2581) — coord   │
-│                                                            on the primary    │
-│                                                            branch, with      │
-│                                                            --pr-bound, or    │
-│                                                            when explicitly   │
-│                                                            requested;        │
-│                                                            single_branch on  │
-│                                                            a non-primary     │
-│                                                            feature/fork      │
-│                                                            branch without    │
-│                                                            --pr-bound.       │
-│ --branch-strategy                       TEXT               Branch-strategy   │
+│                                                            (#2581, #2602) —  │
+│                                                            coord on the      │
+│                                                            primary branch or │
+│                                                            with --pr-bound   │
+│                                                            when coordination │
+│                                                            is reachable;     │
+│                                                            lanes otherwise.  │
+│                                                            single_branch     │
+│                                                            only when         │
+│                                                            requested         │
+│                                                            explicitly (or    │
+│                                                            via               │
+│                                                            --owned-checkout… │
+│ --branch-strate…                          TEXT             Branch-strategy   │
 │                                                            gate control      │
 │                                                            (e.g.,            │
 │                                                            'already-confirm… │
 │                                                            to bypass the     │
 │                                                            prompt)           │
-│ --start-branch                          TEXT               Create or switch  │
+│ --start-branch                            TEXT             Create or switch  │
 │                                                            to this branch    │
 │                                                            before mission    │
 │                                                            files are written │
-│ --force-recreate…                                          Delete and        │
+│ --force-recreat…                                           Delete and        │
 │                                                            recreate the      │
 │                                                            per-mission       │
 │                                                            coordination      │
@@ -922,29 +939,45 @@ _Mission lifecycle commands for AI agents_
 │                                                            Operator escape   │
 │                                                            hatch; never used │
 │                                                            by automation.    │
-│ --owned-checkout                        PATH               Explicitly        │
-│                                                            declare a         │
-│                                                            checkout root     │
-│                                                            owned by this     │
-│                                                            invocation. The   │
-│                                                            path must be the  │
-│                                                            primary checkout  │
-│                                                            or a validated    │
-│                                                            linked worktree   │
-│                                                            of the resolved   │
-│                                                            primary           │
-│                                                            repository.       │
-│ --retain-branches                                          Opt this          │
+│ --owned-checkout                          PATH             Run against an    │
+│                                                            owned checkout: a │
+│                                                            linked checkout   │
+│                                                            that owns this    │
+│                                                            mission. Refuses  │
+│                                                            the repository    │
+│                                                            root checkout,    │
+│                                                            lane worktrees    │
+│                                                            and coordination  │
+│                                                            worktrees.        │
+│ --retain-branch…                                           Opt this          │
 │                                                            mission's         │
 │                                                            branches out of   │
 │                                                            post-merge        │
 │                                                            cleanup deletion. │
-│ --retain-worktre…                                          Opt this          │
+│ --retain-worktr…                                           Opt this          │
 │                                                            mission's         │
 │                                                            worktrees out of  │
 │                                                            post-merge        │
 │                                                            cleanup deletion. │
-│ --allow-duplicat…                                          Escape hatch for  │
+│ --commit-to-tar…      --no-commit-to-…                     single_branch     │
+│                                                            only: skip the    │
+│                                                            protected-target  │
+│                                                            mission-branch    │
+│                                                            mint (#5100       │
+│                                                            FR-008) and       │
+│                                                            commit directly   │
+│                                                            onto              │
+│                                                            --target-branch,  │
+│                                                            even when it is   │
+│                                                            protected.        │
+│                                                            Persisted;        │
+│                                                            honoured through  │
+│                                                            ProtectionPolicy  │
+│                                                            for every later   │
+│                                                            write.            │
+│                                                            [default:         │
+│                                                            no-commit-to-tar… │
+│ --allow-duplica…                                           Escape hatch for  │
 │                                                            the idempotency   │
 │                                                            guard (#4033):    │
 │                                                            create a second   │
@@ -959,7 +992,7 @@ _Mission lifecycle commands for AI agents_
 │                                                            never committed)  │
 │                                                            never need this   │
 │                                                            flag.             │
-│ --help             -h                                      Show this message │
+│ --help            -h                                       Show this message │
 │                                                            and exit.         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -1191,7 +1224,8 @@ _Mission lifecycle commands for AI agents_
 ```
  Usage: spec-kitty agent mission setup-plan [OPTIONS]
 
- Scaffold implementation plan template in the project root checkout.
+ Scaffold an implementation plan template in the repository root checkout or an
+ owned checkout.
 
  This command is designed for AI agents to call programmatically.
  Creates plan.md and commits to target branch.
@@ -1207,9 +1241,13 @@ _Mission lifecycle commands for AI agents_
  ------------------------------------------------------------------
 
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --mission          TEXT  Mission slug (e.g., '020-my-mission')               │
-│ --json                   Output JSON format                                  │
-│ --help     -h            Show this message and exit.                         │
+│ --mission                 TEXT  Mission slug (e.g., '020-my-mission')        │
+│ --json                          Output JSON format                           │
+│ --owned-checkout          PATH  Run against an owned checkout: a linked      │
+│                                 checkout that owns this mission. Refuses the │
+│                                 repository root checkout, lane worktrees and │
+│                                 coordination worktrees.                      │
+│ --help            -h            Show this message and exit.                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -1634,7 +1672,7 @@ _Task workflow commands for AI agents_
 │ validate-workflow    Validate task metadata structure and workflow           │
 │                      consistency.                                            │
 │ status               Display kanban status board for all work packages in a  │
-│                      feature.                                                │
+│                      mission.                                                │
 │ list-dependents      Find all WPs that depend on a given WP (downstream      │
 │                      dependents).                                            │
 │ check-terminability  Advisory scan for work packages that can only be        │
@@ -1998,7 +2036,7 @@ _Task workflow commands for AI agents_
 ```
  Usage: spec-kitty agent tasks status [OPTIONS]
 
- Display kanban status board for all work packages in a feature.
+ Display kanban status board for all work packages in a mission.
 
  Shows a beautiful overview of work package statuses, progress metrics,
  and next steps based on dependencies.
@@ -2019,6 +2057,10 @@ _Task workflow commands for AI agents_
 │ --stale-threshold          INTEGER  Minutes of inactivity before a WP is     │
 │                                     considered stale                         │
 │                                     [default: 10]                            │
+│ --owned-checkout           PATH     Run against an owned checkout: a linked  │
+│                                     checkout that owns this mission. Refuses │
+│                                     the repository root checkout, lane       │
+│                                     worktrees and coordination worktrees.    │
 │ --help             -h               Show this message and exit.              │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

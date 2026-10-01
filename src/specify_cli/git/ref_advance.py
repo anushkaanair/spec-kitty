@@ -8,9 +8,12 @@ has the branch checked out. That worktree is left with an index/working tree
 deletions, and a plain ``git commit`` from its stale index would silently
 delete the advanced commits' files from the branch (#1826).
 
-:func:`advance_branch_ref` is the single sanctioned way for the merge
-pipeline to advance a branch ref. **Invariant: no worktree may be left
-checked out behind a ref this function advanced.** An architectural ratchet
+:func:`advance_branch_ref` is the sanctioned way for the merge pipeline to
+advance a branch ref. Safe commits use the narrower
+:func:`advance_branch_ref_for_commit`, which CAS-advances only when the target
+branch is checked out exactly in the worktree whose requested index paths the
+caller reconciles. **Invariant: no sibling worktree may be left checked out
+behind a ref either function advanced.** An architectural ratchet
 (``tests/architectural/test_merge_pipeline_ratchets.py``) enforces that no
 raw ``update-ref`` subprocess invocation exists in ``src/specify_cli``
 outside this module (AC-B3).
@@ -30,8 +33,9 @@ resting correctness on it was the latent hazard this CAS closes.
 
 from __future__ import annotations
 
+import enum
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -41,21 +45,17 @@ from pathlib import Path
 # the one layer reachable from both plumbing and application, so the malformed
 # *definition* (``decode_meta``/``MetaDecodeError``) and the VCS-lock comparator
 # (absent != present-but-null, C-005) live there and are consumed here.
+from kernel.git import GitCommandError, GitPath, StatusEntry, status_entries, tree_paths
 from kernel.meta_decode import MetaDecodeError, decode_meta
 from kernel.vcs_lock import is_vcs_lock_only_change
 
 # Basename of the mission metadata file whose VCS-lock-only changes are tolerated.
 _META_FILENAME: str = "meta.json"
 
-# Marker substring :func:`_dirty_entries` appends to an untracked/ignored entry it
-# flags as a reset-hard obstruction (as opposed to a tracked-change entry, appended
-# raw with no suffix). :func:`reset_would_obstruct_untracked` matches on this marker
-# to ask ONLY the obstruction question through :func:`_dirty_entries` -- not "is
-# anything at all dirty" -- without re-deriving the classification itself (INV-3;
-# a second module-level ``git status --porcelain``-parsing predicate is exactly the
-# regression ``tests/architectural/test_destructive_op_routing.py`` (T019) guards
-# against).
-_RESET_OBSTRUCTION_MARKER: str = "would be overwritten by reset --hard to "
+# Text appended to an untracked/ignored entry flagged as a reset-hard obstruction.
+# The verdict itself is typed (:class:`_DirtyReason`); this is display only.
+_RESET_OBSTRUCTION_NOTE: str = "would be overwritten by reset --hard to "
+_REMOVAL_NOTE: str = "untracked local file would be discarded by worktree removal"
 
 # Sentinel for the short OID displayed when a ref has no current value yet.
 _UNBORN: str = "<unborn>"
@@ -79,10 +79,39 @@ def _cas_expected_old(expected_old_sha: str | None, observed_old_sha: str) -> st
     return _ZERO_OID if candidate == _UNBORN else candidate
 
 
+def _update_branch_ref_cas(
+    repo_root: Path,
+    ref: str,
+    new_sha: str,
+    expected_old_sha: str,
+    *,
+    env: dict[str, str] | None = None,
+    message: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Perform the single canonical compare-and-swap ref write."""
+    args = ["update-ref"]
+    if message is not None:
+        args.extend(["-m", message])
+    args.extend([ref, new_sha, expected_old_sha])
+    return _run_git(repo_root, args, env=env)
+
+
 class RefAdvanceError(RuntimeError):
     """A branch-ref advance failed at the git level (non-dirty cause)."""
 
     error_code = "REF_ADVANCE_FAILED"
+
+
+class RefResyncError(RefAdvanceError):
+    """The compare-and-swap ref write SUCCEEDED but a checkout resync failed.
+
+    Unlike a plain :class:`RefAdvanceError` (e.g. a CAS refusal: ANOTHER actor
+    moved the ref), the ref now holds the value THIS caller wrote. Callers that
+    attribute ref moves (the consolidation rollback recorder) must treat it as
+    their own move. The worktree named in the message is behind its own HEAD.
+    """
+
+    error_code = "REF_RESYNC_FAILED"
 
 
 class RefRestoreError(RuntimeError):
@@ -186,28 +215,26 @@ def _list_worktrees(repo_root: Path, env: dict[str, str] | None) -> list[_Worktr
     return entries
 
 
-def _target_tree_paths(repo_root: Path, new_sha: str, env: dict[str, str] | None) -> set[str]:
+def _target_tree_paths(repo_root: Path, new_sha: str, env: dict[str, str] | None) -> frozenset[GitPath]:
     """Return tracked paths present at ``new_sha``."""
-    result = _run_git(repo_root, ["ls-tree", "-r", "--name-only", new_sha], env=env)
-    if result.returncode != 0:
-        raise RefAdvanceError(f"Could not inspect target tree {new_sha}: {result.stderr.strip() or result.stdout.strip()}")
-    return {line for line in result.stdout.splitlines() if line}
+    try:
+        return tree_paths(repo_root, new_sha, env=env)
+    except GitCommandError as exc:
+        raise RefAdvanceError(f"Could not inspect target tree {new_sha}: {exc}") from exc
 
 
-def _porcelain_path(line: str) -> str:
-    """Extract the path field from a porcelain v1 status line."""
-    path = line[3:]
-    if " -> " in path:
-        path = path.rsplit(" -> ", 1)[1]
-    return path.rstrip("/")
+def _path_obstructs_target_tree(path: GitPath, target_paths: Collection[GitPath]) -> bool:
+    """Return True when an untracked/ignored path may be clobbered by reset.
 
-
-def _path_obstructs_target_tree(path: str, target_paths: set[str]) -> bool:
-    """Return True when an untracked/ignored path may be clobbered by reset."""
-    if not path:
-        return False
-    prefix = f"{path}/"
-    return any(target == path or target.startswith(prefix) for target in target_paths)
+    A reset clobbers *path* when the target tree has that exact path, a path
+    inside it (#5392: ignored directory ``src/local data/`` and incoming
+    ``src/local data/notes.txt``), or one of its ancestors (#5400: ignored
+    ``src/store/local.txt`` and incoming file ``src/store``). Paths compare by
+    component (:meth:`GitPath.overlaps`), never as text, so ``store`` does not
+    obstruct ``storehouse`` and a path git would print quoted still matches.
+    The repository root never obstructs.
+    """
+    return any(path.overlaps(target) for target in target_paths)
 
 
 def _decode_meta_named(raw: str, *, source: str) -> dict[str, object]:
@@ -272,16 +299,61 @@ def _meta_change_is_vcs_lock_only(
     return is_vcs_lock_only_change(committed_meta, worktree_meta)
 
 
+class _DirtyReason(enum.Enum):
+    """Why :func:`_dirty_entries` reports an entry; callers decide on this, never on message text."""
+
+    TRACKED = "tracked"
+    """A staged/unstaged change against a tracked path."""
+    OBSTRUCTION = "obstruction"
+    """An untracked/ignored path a ``reset --hard`` to the target tree would overwrite."""
+    REMOVAL = "removal"
+    """An untracked file a ``worktree remove --force`` would discard."""
+
+
+def _status_for_dirty_check(worktree: Path, env: dict[str, str] | None) -> list[StatusEntry]:
+    """Tracked changes and every untracked *file* (``status.showUntrackedFiles`` ignored), plus collapsed ignored entries.
+
+    Untracked files are listed individually so a residue classifier sees
+    ``newdir/status.json`` rather than ``newdir/``. Ignored entries stay
+    collapsed (``!! .venv/``): expanding them would list every file of a build
+    tree and they need only a path-overlap test.
+    """
+    entries = list(status_entries(worktree, untracked="all", env=env))
+    entries += [entry for entry in status_entries(worktree, ignored=True, untracked="normal", env=env) if entry.is_ignored]
+    return entries
+
+
 def _dirty_entries(
     worktree: Path,
     env: dict[str, str] | None,
     *,
     new_sha: str,
-    target_paths: set[str],
+    target_paths: Collection[GitPath],
     is_residue: Callable[[str], bool] | None = None,
     treat_untracked_as_dirty: bool = False,
 ) -> list[str]:
-    """Return porcelain entries that a ``reset --hard`` would destroy.
+    """The display lines of :func:`_dirty_verdicts` (for messages; never decide on them)."""
+    verdicts = _dirty_verdicts(
+        worktree,
+        env,
+        new_sha=new_sha,
+        target_paths=target_paths,
+        is_residue=is_residue,
+        treat_untracked_as_dirty=treat_untracked_as_dirty,
+    )
+    return [line for _, line in verdicts]
+
+
+def _dirty_verdicts(
+    worktree: Path,
+    env: dict[str, str] | None,
+    *,
+    new_sha: str,
+    target_paths: Collection[GitPath],
+    is_residue: Callable[[str], bool] | None = None,
+    treat_untracked_as_dirty: bool = False,
+) -> list[tuple[_DirtyReason, str]]:
+    """Return typed ``(reason, display line)`` pairs for the entries that a ``reset --hard`` would destroy.
 
     Most untracked/ignored files survive ``git reset --hard``, but an
     untracked or ignored path that obstructs a tracked path in ``new_sha`` is
@@ -325,35 +397,53 @@ def _dirty_entries(
             exemption entirely (git-plumbing default: nothing is toolchain
             churn without an injected classifier).
     """
-    result = _run_git(worktree, ["status", "--porcelain", "--ignored"], env=env)
-    if result.returncode != 0:
-        raise RefAdvanceError(f"Could not inspect worktree state at {worktree}: {result.stderr.strip() or result.stdout.strip()}")
-    dirty: list[str] = []
-    for line in result.stdout.splitlines():
-        if not line.strip():
-            continue
-        path = _porcelain_path(line)
-        if is_residue is not None and is_residue(path):
-            continue
-        if line.startswith("??"):
-            if treat_untracked_as_dirty:
-                dirty.append(f"{line} (untracked local file would be discarded by worktree removal)")
-                continue
-            if _path_obstructs_target_tree(path, target_paths):
-                dirty.append(f"{line} ({_RESET_OBSTRUCTION_MARKER}{new_sha[:12]})")
-            continue
-        if line.startswith("!!"):
-            if _path_obstructs_target_tree(path, target_paths):
-                dirty.append(f"{line} ({_RESET_OBSTRUCTION_MARKER}{new_sha[:12]})")
-            continue
-        # A tracked ``meta.json`` whose only diff against HEAD is the claim-time
-        # VCS lock is a regenerable stamp, not destructive local state: the
-        # resync discards it and the next claim rewrites it (#2795 / C-010). A
-        # genuine meta edit still falls through and blocks (no false-open).
-        if Path(path).name == _META_FILENAME and _meta_change_is_vcs_lock_only(worktree, path, env):
-            continue
-        dirty.append(line)
+    try:
+        entries = _status_for_dirty_check(worktree, env)
+    except GitCommandError as exc:
+        raise RefAdvanceError(f"Could not inspect worktree state at {worktree}: {exc}") from exc
+    dirty: list[tuple[_DirtyReason, str]] = []
+    for entry in entries:
+        reason = _dirty_reason(
+            worktree,
+            env,
+            entry,
+            new_sha=new_sha,
+            target_paths=target_paths,
+            is_residue=is_residue,
+            treat_untracked_as_dirty=treat_untracked_as_dirty,
+        )
+        if reason is not None:
+            dirty.append(reason)
     return dirty
+
+
+def _dirty_reason(
+    worktree: Path,
+    env: dict[str, str] | None,
+    entry: StatusEntry,
+    *,
+    new_sha: str,
+    target_paths: Collection[GitPath],
+    is_residue: Callable[[str], bool] | None,
+    treat_untracked_as_dirty: bool,
+) -> tuple[_DirtyReason, str] | None:
+    """The typed verdict and display line for *entry*, or ``None`` when a reset leaves it alone (see :func:`_dirty_verdicts`)."""
+    path = str(entry.path)
+    if is_residue is not None and is_residue(path):
+        return None
+    if entry.is_untracked and treat_untracked_as_dirty:
+        return _DirtyReason.REMOVAL, f"{entry.display()} ({_REMOVAL_NOTE})"
+    if entry.is_untracked or entry.is_ignored:
+        if _path_obstructs_target_tree(entry.path, target_paths):
+            return _DirtyReason.OBSTRUCTION, f"{entry.display()} ({_RESET_OBSTRUCTION_NOTE}{new_sha[:12]})"
+        return None
+    # A tracked ``meta.json`` whose only diff against HEAD is the claim-time
+    # VCS lock is a regenerable stamp, not destructive local state: the
+    # resync discards it and the next claim rewrites it (#2795 / C-010). A
+    # genuine meta edit still falls through and blocks (no false-open).
+    if entry.path.name == _META_FILENAME and _meta_change_is_vcs_lock_only(worktree, path, env):
+        return None
+    return _DirtyReason.TRACKED, entry.display()
 
 
 def reset_would_obstruct_untracked(
@@ -374,28 +464,88 @@ def reset_would_obstruct_untracked(
 
     This is the PUBLIC seam for a caller outside this module (the ``merge/``
     layer, INV-3) to ask that obstruction question without reaching into this
-    module's private helpers. It delegates entirely to :func:`_dirty_entries` --
+    module's private helpers. It delegates entirely to :func:`_dirty_verdicts` --
     the single obstruction authority this module already reuses for
     :func:`advance_branch_ref` -- and simply asks whether any of the entries it
     returns are one it tagged as a reset-hard obstruction (``??``/``!!``
-    entries matching :data:`_RESET_OBSTRUCTION_MARKER`), ignoring tracked-change
+    entries whose typed reason is :attr:`_DirtyReason.OBSTRUCTION`), ignoring tracked-change
     entries: this seam answers only "would the reset clobber untracked/ignored
     local state", not "is the worktree dirty" in general -- callers that also
     need the tracked-change question (e.g. :func:`specify_cli.consolidation.preflight
     .is_pure_behind_head_lag`) answer it separately (``git diff --quiet``
-    against their own base). No new ``git status --porcelain``-parsing
-    predicate is introduced (T019 of
-    ``tests/architectural/test_destructive_op_routing.py``).
+    against their own base). It reads status through ``kernel.git``; no
+    porcelain parsing lives outside ``src/kernel/git/``
+    (``tests/architectural/test_git_path_listing_owner.py``).
 
     Fail-closed: any git error (non-zero exit) or unexpected exception returns
     True -- a reset whose safety could not be proven is never treated as safe.
     """
     try:
         target_paths = _target_tree_paths(repo_root, ref, env)
-        dirty = _dirty_entries(repo_root, env, new_sha=ref, target_paths=target_paths)
+        verdicts = _dirty_verdicts(repo_root, env, new_sha=ref, target_paths=target_paths)
     except Exception:
         return True
-    return any(_RESET_OBSTRUCTION_MARKER in entry for entry in dirty)
+    return any(reason is _DirtyReason.OBSTRUCTION for reason, _ in verdicts)
+
+
+def _checkouts_ready_for(
+    repo_root: Path,
+    branch: str,
+    new_sha: str,
+    env: dict[str, str] | None,
+    is_residue: Callable[[str], bool] | None,
+    *,
+    old_sha: str,
+) -> list[Path]:
+    """List worktrees with ``branch`` checked out, refusing if any is dirty.
+
+    Runs strictly BEFORE the ref moves so a refusal is atomic (nothing
+    advanced, nothing reset). Shared by :func:`advance_branch_ref` and
+    :func:`restore_branch_ref` (``resync_checkouts=True``).
+    """
+    ref = f"refs/heads/{branch}"
+    checkouts = [entry.path for entry in _list_worktrees(repo_root, env) if not entry.detached and entry.branch == ref]
+    target_paths = _target_tree_paths(repo_root, new_sha, env)
+    for worktree in checkouts:
+        dirty = _dirty_entries(
+            worktree,
+            env,
+            new_sha=new_sha,
+            target_paths=target_paths,
+            is_residue=is_residue,
+        )
+        if dirty:
+            raise RefAdvanceDirtyWorktreeError(
+                worktree_path=worktree.resolve(),
+                branch=branch,
+                old_sha=old_sha,
+                new_sha=new_sha,
+                dirty_entries=dirty,
+            )
+    return checkouts
+
+
+def _resync_checkouts(
+    checkouts: list[Path],
+    branch: str,
+    env: dict[str, str] | None,
+    *,
+    context: str,
+) -> None:
+    """Hard-reset each checkout to the (already moved) ``branch`` ref (#1826).
+
+    Raises :class:`RefResyncError` (the ref already moved) when a reset fails.
+    """
+    for worktree in checkouts:
+        reset = _run_git(worktree, ["reset", "--hard", branch], env=env)
+        if reset.returncode != 0:
+            raise RefResyncError(
+                f"{context} but "
+                f"failed to resync the checked-out worktree at {worktree}: "
+                f"{reset.stderr.strip() or reset.stdout.strip()}. "
+                f"The worktree is behind its own HEAD (#1826); repair with "
+                f"`git -C {worktree} reset --hard` once the cause is fixed."
+            )
 
 
 def advance_branch_ref(
@@ -451,10 +601,11 @@ def advance_branch_ref(
         RefAdvanceDirtyWorktreeError: a worktree with ``branch`` checked out
             holds uncommitted tracked changes (NFR-002/NFR-003); nothing was
             mutated.
-        RefAdvanceError: the worktree scan or a resync failed at the git
-            level, or the compare-and-swap ``update-ref`` failed because the
-            ref changed since it was read (fail-closed; never a 2-arg fallback
-            or a retry).
+        RefAdvanceError: the worktree scan failed at the git level, or the
+            compare-and-swap ``update-ref`` failed because the ref changed
+            since it was read (fail-closed; never a 2-arg fallback or a retry).
+        RefResyncError: the ``RefAdvanceError`` subclass raised when the ref
+            WAS advanced but a checked-out worktree could not be resynced.
     """
     ref = f"refs/heads/{branch}"
 
@@ -476,30 +627,10 @@ def advance_branch_ref(
         if ff_check.returncode != 0:
             raise RefAdvanceError(f"Could not verify fast-forward ancestry for {branch}: {ff_check.stderr.strip() or ff_check.stdout.strip()}")
 
-    checkouts = [entry.path for entry in _list_worktrees(repo_root, env) if not entry.detached and entry.branch == ref]
-    target_paths = _target_tree_paths(repo_root, new_sha, env)
-
-    # Dirty check strictly BEFORE the ref mutation and BEFORE any reset path:
-    # a refusal must be atomic (nothing advanced, nothing reset).
-    for worktree in checkouts:
-        dirty = _dirty_entries(
-            worktree,
-            env,
-            new_sha=new_sha,
-            target_paths=target_paths,
-            is_residue=is_residue,
-        )
-        if dirty:
-            raise RefAdvanceDirtyWorktreeError(
-                worktree_path=worktree.resolve(),
-                branch=branch,
-                old_sha=old_sha,
-                new_sha=new_sha,
-                dirty_entries=dirty,
-            )
+    checkouts = _checkouts_ready_for(repo_root, branch, new_sha, env, is_residue, old_sha=old_sha)
 
     expected_old = _cas_expected_old(expected_old_sha, old_sha)
-    result = _run_git(repo_root, ["update-ref", ref, new_sha, expected_old], env=env)
+    result = _update_branch_ref_cas(repo_root, ref, new_sha, expected_old, env=env)
     if result.returncode != 0:
         raise RefAdvanceError(
             f"Compare-and-swap advance of {branch!r} "
@@ -510,16 +641,12 @@ def advance_branch_ref(
             f"git: {result.stderr.strip() or result.stdout.strip()}"
         )
 
-    for worktree in checkouts:
-        reset = _run_git(worktree, ["reset", "--hard", branch], env=env)
-        if reset.returncode != 0:
-            raise RefAdvanceError(
-                f"Advanced {branch} ({old_sha[:12]} -> {new_sha[:12]}) but "
-                f"failed to resync the checked-out worktree at {worktree}: "
-                f"{reset.stderr.strip() or reset.stdout.strip()}. "
-                f"The worktree is behind its own HEAD (#1826); repair with "
-                f"`git -C {worktree} reset --hard` once the cause is fixed."
-            )
+    _resync_checkouts(
+        checkouts,
+        branch,
+        env,
+        context=f"Advanced {branch} ({old_sha[:12]} -> {new_sha[:12]})",
+    )
 
 
 def restore_branch_ref(
@@ -528,20 +655,149 @@ def restore_branch_ref(
     restored_sha: str,
     *,
     expected_current_sha: str,
+    resync_checkouts: bool = False,
+    is_residue: Callable[[str], bool] | None = None,
+    env: dict[str, str] | None = None,
 ) -> None:
     """Restore a branch ref with compare-and-swap semantics after failure.
 
     This is the rollback-only counterpart to :func:`advance_branch_ref`.
     It deliberately permits a non-fast-forward move, but only when the ref is
-    still at ``expected_current_sha``. Callers own restoration of the affected
-    checkout's index and intentionally retain worktree files for diagnosis.
+    still at ``expected_current_sha``.
+
+    By DEFAULT (``resync_checkouts=False``) callers own restoration of the
+    affected checkout's index and intentionally retain worktree files for
+    diagnosis. With ``resync_checkouts=True`` every worktree that has
+    ``branch`` checked out is dirty-checked BEFORE the ref moves (a dirty
+    checkout raises :class:`RefAdvanceDirtyWorktreeError` and nothing is
+    mutated; ``is_residue`` excludes toolchain churn exactly as in
+    :func:`advance_branch_ref`), the ref then moves under the same
+    compare-and-swap, and each checkout is hard-reset to the restored ref via
+    the shared :func:`_resync_checkouts` (HEAD == index == worktree).
     """
     ref = f"refs/heads/{branch}"
-    result = _run_git(
-        repo_root,
-        ["update-ref", ref, restored_sha, expected_current_sha],
-    )
+    checkouts: list[Path] = []
+    if resync_checkouts:
+        checkouts = _checkouts_ready_for(
+            repo_root,
+            branch,
+            restored_sha,
+            env,
+            is_residue,
+            old_sha=expected_current_sha,
+        )
+    result = _update_branch_ref_cas(repo_root, ref, restored_sha, expected_current_sha, env=env)
     if result.returncode != 0:
         raise RefRestoreError(
             f"Failed to restore {branch!r} from {expected_current_sha[:12]} to {restored_sha[:12]}: {result.stderr.strip() or result.stdout.strip()}"
         )
+    _resync_checkouts(
+        checkouts,
+        branch,
+        env,
+        context=f"Restored {branch} ({expected_current_sha[:12]} -> {restored_sha[:12]})",
+    )
+
+
+def advance_branch_ref_for_commit(
+    repo_root: Path,
+    worktree_root: Path,
+    branch: str,
+    new_sha: str,
+    *,
+    expected_old_sha: str,
+    message: str,
+    env: dict[str, str] | None = None,
+) -> None:
+    """CAS-advance a safe-commit target without resyncing unrelated paths.
+
+    This narrow seam is only for ``safe_commit``'s path-scoped index
+    transaction: after this returns, that caller reconciles the requested
+    paths itself. Unlike :func:`advance_branch_ref`, it must not hard-reset a
+    worktree, because doing so would discard unrelated staged or working-tree
+    state. Before writing, it verifies that the target ref is checked out
+    exactly in ``worktree_root``; otherwise a raw ref move could leave a
+    sibling checkout stale (#1826), or leave the caller without a checkout to
+    reconcile.
+    """
+    ref = f"refs/heads/{branch}"
+    resolved_worktree = worktree_root.resolve()
+    checkouts = [entry for entry in _list_worktrees(repo_root, env) if not entry.detached and entry.branch == ref]
+    if len(checkouts) > 1:
+        raise RefAdvanceError(f"Refusing safe-commit advance of {branch!r}: it is checked out in another worktree too (more than one worktree total).")
+    if not checkouts:
+        raise RefAdvanceError(f"Refusing safe-commit advance of {branch!r}: it is not checked out in the worktree safe_commit reconciles at {resolved_worktree}.")
+    if checkouts[0].path.resolve() != resolved_worktree:
+        raise RefAdvanceError(
+            f"Refusing safe-commit advance of {branch!r}: it is checked out in other worktree "
+            f"{checkouts[0].path.resolve()}, not the worktree safe_commit reconciles at {resolved_worktree}."
+        )
+
+    updated = _update_branch_ref_cas(
+        repo_root,
+        ref,
+        new_sha,
+        expected_old_sha,
+        env=env,
+        message=message,
+    )
+    if updated.returncode != 0:
+        detail = (updated.stderr or updated.stdout).strip()
+        raise RefAdvanceError(
+            f"Compare-and-swap safe-commit advance of {branch!r} failed: expected "
+            f"{expected_old_sha[:12]}; refusing to clobber a concurrent ref update. "
+            f"git: {detail or 'git update-ref failed'}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Spec Kitty bookkeeping refs (``refs/spec-kitty/**``)
+# ---------------------------------------------------------------------------
+
+#: Namespace of the bookkeeping refs spec-kitty records for itself (lane work
+#: tips, repo-root claim bases). They are never branches and never checked
+#: out, so the #1826 worktree-resync hazard :func:`advance_branch_ref` guards
+#: against cannot arise; they still go through this module so the AC-B3
+#: ratchet keeps every raw ``update-ref`` in one place.
+BOOKKEEPING_REF_PREFIX: str = "refs/spec-kitty/"
+
+
+class BookkeepingRefError(ValueError):
+    """A bookkeeping-ref write named a ref outside ``refs/spec-kitty/``."""
+
+    error_code = "BOOKKEEPING_REF_OUT_OF_NAMESPACE"
+
+
+def _require_bookkeeping_ref(ref: str) -> None:
+    if not ref.startswith(BOOKKEEPING_REF_PREFIX) or ref == BOOKKEEPING_REF_PREFIX:
+        raise BookkeepingRefError(
+            f"Refusing to write {ref!r}: only {BOOKKEEPING_REF_PREFIX}** bookkeeping refs are written here; branch refs go through advance_branch_ref()."
+        )
+
+
+def write_bookkeeping_ref(repo_root: Path, ref: str, sha: str) -> bool:
+    """Point the bookkeeping ref *ref* at *sha*; return ``True`` on success.
+
+    A plain (2-arg) ``git update-ref``: bookkeeping refs are single-writer
+    records owned by their caller, which decides whether a failure matters
+    (a best-effort recorder ignores ``False``; a mandatory one raises).
+
+    Raises:
+        BookkeepingRefError: *ref* is not under ``refs/spec-kitty/`` -- a
+            branch or any other namespace must never be moved through here.
+    """
+    _require_bookkeeping_ref(ref)
+    return _run_git(repo_root, ["update-ref", ref, sha]).returncode == 0
+
+
+def delete_bookkeeping_ref(repo_root: Path, ref: str) -> bool:
+    """Delete the bookkeeping ref *ref*; return ``True`` on success.
+
+    Deleting an already-absent ref succeeds (``git update-ref -d`` is a
+    no-op for a missing ref), so callers may treat this as idempotent.
+
+    Raises:
+        BookkeepingRefError: *ref* is not under ``refs/spec-kitty/``.
+    """
+    _require_bookkeeping_ref(ref)
+    return _run_git(repo_root, ["update-ref", "-d", ref]).returncode == 0

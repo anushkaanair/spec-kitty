@@ -13,7 +13,7 @@ import importlib.util
 import json
 import subprocess
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from types import ModuleType
 
@@ -45,13 +45,97 @@ _PLANTED: list[tuple[str, str]] = [
         "def test_guard_present():\n    text = Path('src/specify_cli/x.py').read_text()\n    assert 'guard(' in text\n",
     ),
     ("line-number-pin", "def test_points_at_line():\n    assert error_location() == 'emit.py:42'\n"),
+    (
+        "line-number-pin",
+        "def test_raises_at_line():\n    with pytest.raises(ValueError, match=r'emit\\.py:42'):\n        parse('x')\n",
+    ),
     ("fake-short-ulid", "def test_mission():\n    meta = {'mission_id': 'ABC123'}\n    assert load(meta).ok\n"),
+    ("fake-short-ulid", "def test_short_folded():\n    meta = {'mission_id': '01M' + '0' * 5}\n    assert load(meta).ok\n"),
     ("sleep", "def test_waits():\n    time.sleep(0.5)\n    assert done()\n"),
     ("wallclock", "def test_stamp():\n    assert stamp() <= time.time()\n"),
     ("skip-or-xfail", "@pytest.mark.xfail(reason='later')\ndef test_future():\n    assert future() == 1\n"),
+    ("skip-or-xfail", "@pytest.mark.skip(reason='later')\ndef test_marked_skip():\n    assert future() == 1\n"),
+    ("skip-or-xfail", "@pytest.mark.skipif(flaky_today(), reason='flaky')\ndef test_cond_skip():\n    assert future() == 1\n"),
+    ("skip-or-xfail", "def test_runtime_skip():\n    pytest.skip('not today')\n    assert future() == 1\n"),
+    ("skip-or-xfail", "def test_runtime_xfail():\n    pytest.xfail('known')\n    assert future() == 1\n"),
+    (
+        "skip-or-xfail",
+        "@pytest.mark.parametrize('n', [1, pytest.param(2, marks=pytest.mark.xfail)])\ndef test_param_xfail(n):\n    assert n == 1\n",
+    ),
+    (
+        "literal-source-scan",
+        "def test_open_reads_src():\n    with open('src/specify_cli/x.py') as fh:\n        text = fh.read()\n    assert 'guard(' in text\n",
+    ),
+    (
+        "literal-source-scan",
+        "def test_joined_src_path():\n    text = (Path(__file__).resolve().parents[2] / 'src' / 'specify_cli' / 'x.py').read_text()\n    assert 'guard(' in text\n",
+    ),
+    (
+        "literal-source-scan",
+        "def test_first_statement_is_a_call():\n    check('src/specify_cli/x.py')\n    text = open('fixture.txt').read()\n    assert 'guard(' in text\n",
+    ),
     ("vague-name", "def test_basic():\n    assert total([1]) == 1\n"),
+    ("no-assertion", "def _build():\n    return 1\n\n\ndef test_calls_a_helper_that_checks_nothing():\n    _build()\n"),
     ("provenance-tokens", 'def test_wp03_gate():\n    """T012: pins FR-004."""\n    assert gate() == 1\n'),
 ]
+
+#: Look-alikes a detector must leave alone: (flag code, test source).
+_NOT_FLAGGED: list[tuple[str, str]] = [
+    ("fake-short-ulid", "def test_real():\n    meta = {'mission_id': '01M' + '0' * 23}\n    assert load(meta).ok\n"),
+    ("fake-short-ulid", "def test_real2():\n    assert load(mission_id='01K3N7ZQ8X1V2B3C4D5E6F7G8H').ok\n"),
+    ("line-number-pin", 'def test_doc():\n    """Regression for emit.py:42."""\n    assert run() == 1\n'),
+    ("line-number-pin", "def test_msg():\n    assert run() == 1, 'see emit.py:42'\n"),
+    # The oracle lives in a module helper the test calls.
+    ("no-assertion", "def _refused(result):\n    assert result.exit_code == 2\n\n\ndef test_rejects_bad_input():\n    _refused(run('x'))\n"),
+    ("no-assertion", "def _validate(doc):\n    with pytest.raises(ValueError, match='x'):\n        load(doc)\n\n\ndef test_rejects_doc():\n    _validate('x')\n"),
+    # The contract is that the call does not raise, stated in the name or docstring.
+    ("no-assertion", "def test_empty_log_does_not_raise():\n    reduce([])\n"),
+    ("no-assertion", 'def test_refusing_shape_state():\n    """Must not raise on a refusing-shape state."""\n    reduce([])\n'),
+    # #5353 slice 3: a parametrize id that merely contains the word "skipped" is data, not a skip.
+    (
+        "skip-or-xfail",
+        "@pytest.mark.parametrize(('outcome', 'color'), [('pass', 'green'), ('skipped: drain off', 'yellow')])\n"
+        "def test_drill_outcome_color(outcome, color):\n    assert paint(outcome) == color\n",
+    ),
+    ("skip-or-xfail", "def test_label_mentions_skip():\n    assert label() == 'pytest.skip(x) is not called'\n"),
+    ("skip-or-xfail", "@pytest.mark.skipif(sys.platform == 'win32', reason='posix only')\ndef test_posix_only():\n    assert posix() == 1\n"),
+    # #5353 slice 3: a comment naming src/ plus a fixture read is not a source scan.
+    (
+        "literal-source-scan",
+        "def test_local_full_copy_source_absent_preserves_pre_existing_operator_templates(tmp_path):\n"
+        "    # Deliberately do NOT create src/charter/offering/templates -- the source is absent.\n"
+        "    preserved = tmp_path / '.kittify' / 'templates' / 'x.md'\n"
+        "    survived = preserved.is_file() and preserved.read_text(encoding='utf-8') == 'operator'\n"
+        "    diagnostics = run_init(tmp_path)\n"
+        "    assert survived\n"
+        "    assert 'not package-owned' in diagnostics\n",
+    ),
+    (
+        "literal-source-scan",
+        "def test_reads_fixture_not_source(tmp_path):\n    text = (tmp_path / 'fixture.txt').read_text()\n    assert 'guard(' in text\n",
+    ),
+    (
+        "literal-source-scan",
+        "def test_reads_tests_fixture():\n    text = Path('tests/fixtures/sample.py').read_text()\n    assert 'guard(' in text\n",
+    ),
+    (
+        "literal-source-scan",
+        "def test_parses_source_structurally():\n"
+        "    tree = ast.parse(Path('src/specify_cli/x.py').read_text())\n"
+        "    assert 'guard' in [n.name for n in ast.walk(tree) if hasattr(n, 'name')]\n",
+    ),
+    (
+        "literal-source-scan",
+        "def test_src_only_in_prose(tmp_path):\n"
+        '    """Mirrors src/specify_cli/x.py."""\n'
+        "    text = (tmp_path / 'fixture.txt').read_text()\n"
+        "    assert 'guard(' in text, 'see src/specify_cli/x.py'\n",
+    ),
+]
+
+
+def _planted_name(source: str) -> str:
+    return next(line.split("(")[0].removeprefix("def ") for line in source.splitlines() if line.startswith("def test"))
 
 
 @pytest.fixture(scope="module")
@@ -91,9 +175,17 @@ def test_planted_weak_test_is_flagged_and_clean_control_is_not(scan: ModuleType,
 
     flags = _flags_by_test(_run(scan, tmp_path, "--no-git"))
 
-    planted_name = next(line.split("(")[0].removeprefix("def ") for line in source.splitlines() if line.startswith("def "))
-    assert code in flags[planted_name]
+    assert code in flags[_planted_name(source)]
     assert "test_total_adds_line_items" not in flags
+
+
+@pytest.mark.parametrize(("code", "source"), _NOT_FLAGGED, ids=[_planted_name(source) for _, source in _NOT_FLAGGED])
+def test_look_alike_is_not_flagged(scan: ModuleType, tmp_path: Path, code: str, source: str) -> None:
+    _write(tmp_path, "tests/billing/test_planted.py", source)
+
+    flags = _flags_by_test(_run(scan, tmp_path, "--no-git"))
+
+    assert code not in flags.get(_planted_name(source), [])
 
 
 def test_files_are_ranked_by_score_within_their_domain(scan: ModuleType, tmp_path: Path) -> None:
@@ -126,12 +218,7 @@ def test_rerun_keeps_a_ledger_a_squad_already_filled_in(scan: ModuleType, tmp_pa
 
 @pytest.mark.git_repo
 def test_since_scores_only_tests_changed_after_the_revision(scan: ModuleType, tmp_path: Path) -> None:
-    def git(*args: str) -> None:
-        subprocess.run(["git", "-C", str(tmp_path), *args], check=True, capture_output=True)
-
-    git("init", "-q")
-    git("config", "user.email", "t@example.com")
-    git("config", "user.name", "t")
+    git = _git_repo(tmp_path)
     _write(tmp_path, "tests/billing/test_old.py", "def test_old():\n    build_report()\n\ndef test_edited():\n    build_report()\n")
     git("add", ".")
     git("commit", "-qm", "base")
@@ -145,3 +232,43 @@ def test_since_scores_only_tests_changed_after_the_revision(scan: ModuleType, tm
     assert set(_flags_by_test(out)) == {"test_edited", "test_new"}
     files = {f["file"]: f for f in json.loads((out / "files.json").read_text(encoding="utf-8"))}
     assert files["tests/billing/test_new.py"]["added_by"].endswith("WP02 add billing tests")
+
+
+def _git_repo(root: Path) -> Callable[..., None]:
+    def git(*args: str) -> None:
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+
+    git("init", "-q")
+    git("config", "user.email", "t@example.com")
+    git("config", "user.name", "t")
+    return git
+
+
+@pytest.mark.git_repo
+def test_provenance_follows_a_rename_back_to_the_commit_that_added_the_file(scan: ModuleType, tmp_path: Path) -> None:
+    git = _git_repo(tmp_path)
+    _write(tmp_path, "tests/billing/test_a.py", _CLEAN_TEST)
+    git("add", ".")
+    git("commit", "-qm", "add billing")
+    git("mv", "tests/billing/test_a.py", "tests/billing/test_b.py")
+    git("commit", "-qm", "rename")
+
+    out = _run(scan, tmp_path)
+
+    files = {f["file"]: f for f in json.loads((out / "files.json").read_text(encoding="utf-8"))}
+    assert files["tests/billing/test_b.py"]["added_by"].endswith("add billing")
+
+
+@pytest.mark.git_repo
+def test_provenance_follows_a_move_in_from_outside_the_scanned_root(scan: ModuleType, tmp_path: Path) -> None:
+    git = _git_repo(tmp_path)
+    _write(tmp_path, "tests/legacy/test_a.py", _CLEAN_TEST)
+    git("add", ".")
+    git("commit", "-qm", "add legacy")
+    git("mv", "tests/legacy", "tests/billing")
+    git("commit", "-qm", "move legacy to billing")
+
+    out = _run(scan, tmp_path, "--paths", "tests/billing")
+
+    files = {f["file"]: f for f in json.loads((out / "files.json").read_text(encoding="utf-8"))}
+    assert files["tests/billing/test_a.py"]["added_by"].endswith("add legacy")

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
+from runtime.next.run_index import FEATURE_RUNS_FILENAME
 from specify_cli.core.constants import WORKTREES_DIR
 
 _NEXT_INTERNAL_RUNTIME_OWNER = "next/_internal_runtime"
@@ -137,16 +138,6 @@ STATE_SURFACES: tuple[StateSurface, ...] = (
         creation_trigger="spec-kitty init or upgrade",
     ),
     StateSurface(
-        name="dashboard_control",
-        path_pattern=".kittify/.dashboard",
-        root=StateRoot.PROJECT,
-        format=StateFormat.TEXT,
-        authority=AuthorityClass.LOCAL_RUNTIME,
-        git_class=GitClass.IGNORED,
-        owner_module="dashboard lifecycle",
-        creation_trigger="spec-kitty dashboard start",
-    ),
-    StateSurface(
         name="workspace_context",
         path_pattern=".kittify/workspaces/<feature>-<WP>.json",
         root=StateRoot.PROJECT,
@@ -213,7 +204,7 @@ STATE_SURFACES: tuple[StateSurface, ...] = (
     ),
     StateSurface(
         name="runtime_feature_index",
-        path_pattern=".kittify/runtime/feature-runs.json",
+        path_pattern=f".kittify/runtime/{FEATURE_RUNS_FILENAME}",
         root=StateRoot.PROJECT,
         format=StateFormat.JSON,
         authority=AuthorityClass.LOCAL_RUNTIME,

@@ -2,7 +2,7 @@
 title: Read-side placement-seam classification ledger
 description: "Per-site verdicts (migrate-fail-loud / stay-lenient / sanction-infra) for every production call site that bypasses PlacementSeam.read_dir(kind)."
 doc_status: active
-updated: '2026-07-28'
+updated: '2026-09-30'
 audience: docs/context/audience/internal/system-architect.md
 type: reference
 related:
@@ -10,6 +10,12 @@ related:
 ---
 
 # Read-side placement-seam classification ledger
+
+> **When you need this page.** If your change reads a mission directory
+> through one of the older kind-blind path helpers instead of
+> `PlacementSeam.read_dir(kind)`, `tests/architectural/test_no_read_side_bypass.py`
+> checks the call site against this ledger. Find (or add) the row for your
+> site and follow its verdict. The rest of the page is the per-site record.
 
 `PlacementSeam.read_dir(kind)` (`src/mission_runtime/resolution.py:1404`, which
 delegates to `resolve_artifact_surface` at `:1705`) is the one kind-aware,
@@ -438,11 +444,6 @@ row here and its descriptor in the gate.
 | `src/specify_cli/cli/commands/reconcile.py` | `reconcile_mission_dossier` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( root , mission_slug )` |
 | `src/specify_cli/cli/commands/retrospect.py` | `_canonical_events_path` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( repo_root , mission_slug )` |
 | `src/specify_cli/cli/commands/retrospect.py` | `summary_cmd` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( resolved_project , mission_slug )` |
-| `src/specify_cli/dashboard/scanner.py` | `_resolve_identity_primary_first` | `resolve_planning_read_dir` | `primary_dir = resolve_planning_read_dir (` |
-| `src/specify_cli/dashboard/scanner.py` | `_resolve_planning_dir_primary_first` | `resolve_planning_read_dir` | `candidate = resolve_planning_read_dir (` |
-| `src/specify_cli/dossier/api.py` | `DossierAPIHandler.handle_dossier_overview` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( self . repo_root , mission_slug )` |
-| `src/specify_cli/dossier/api.py` | `DossierAPIHandler.handle_dossier_snapshot_export` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( self . repo_root , mission_slug )` |
-| `src/specify_cli/dossier/api.py` | `DossierAPIHandler._load_dossier` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( self . repo_root , mission_slug )` |
 | `src/specify_cli/retrospective/summary.py` | `_read_proposal_events` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( project_path , mission_slug )` |
 | `src/specify_cli/retrospective/tracer_writer.py` | `_local_staging_path` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( repo_root , mission_slug )` |
 | `src/specify_cli/status/aggregate.py` | `MissionStatus._find_meta_path` | `candidate_feature_dir_for_mission` | `candidate_feature_dir_for_mission ( repo_root , mission_slug )` |
@@ -464,7 +465,7 @@ sanction of the same call (`_COORD_WRITE_BY_DESIGN`); full routing needs
 gate-owner work (teach that gate the seam idiom, re-token its allow-list,
 transfer `COORD_AUTHORITY_WRITE_FLOOR`) outside this WP's charter, so it is
 allow-listed here instead of routed or left an unexplained offender — tracked
-at <https://github.com/Priivacy-ai/spec-kitty/issues/3055>. This moves the
+at <https://github.com/spec-kitty/spec-kitty/issues/3055>. This moves the
 primitive's `migrate-fail-loud` count `1 → 0` and `stay-lenient` `7 → 8`
 (files `6 → 7`), which is why § "Live census summary" below now declares
 `Total = 8`, not the previously-declared `7`.
@@ -568,7 +569,7 @@ Per-disposition counts: **migrate-fail-loud = 1**, **stay-lenient = 7**,
 | `cli/commands/mission_type.py:238` | `current_cmd` | stay-lenient | raise (propagates `ActionContextError`) | `project_root` (`get_project_root_or_exit()`) | n/a | Own comment: mirrors `close_cmd`/`decision.py`; shares the identical existence-probe shape needing the structured-error contract. |
 | `cli/commands/mission_type.py:582` | `close_cmd` | stay-lenient | raise (propagates `ActionContextError`) | `repo_root = _resolve_primary_repo_root(project_root)` | n/a | Own comment: pinned tests require an unresolvable/ambiguous handle to raise the structured error, never a silent "not found" or wrong pick; both `read_dir(kind)` legs are lenient by design and would swallow it. |
 | `context/resolver.py:191` | `resolve_context` | stay-lenient | degrade (catches `ActionContextError`, translates to `FeatureNotFoundError`) | `repo_root` (caller-supplied, main-repo-anchored) | n/a | Own comment: exists to canonicalize the caller's HANDLE to a directory NAME, not to read a PRIMARY-partition artifact off the returned dir; re-routing would over-claim a single funnel over the `*_feature_dir_for_mission` primitives beyond what the gate enforces. |
-| `decisions/emit.py:71` | `_mission_dir` | ~~stay-lenient (WP08 allow-list)~~ **ROUTED** (write-side WP02 → `read_dir(STATUS_STATE)`; no longer a live `resolve_feature_dir_for_mission` site — see supersession note above) | raise (`STATUS_STATE` is fail-loud-appropriate) | `repo_root` (param, passed through) | `STATUS_STATE` | Feeds `_events_path` → the shared `status.events.jsonl` coord-authoritative surface (the same file decision-point events append into). Originally classified `migrate-fail-loud`; WP08 (T039, reconciliation item #5) found `test_resolution_authority_gates.py`'s (since deleted) coord-authority gate PERMANENTLY sanctions this exact call as a legitimate coord-owned write (`_COORD_WRITE_BY_DESIGN`) — routing is directory-identical (WP04 reviewer-verified) but needs gate-owner work (teach that gate the seam idiom, re-token its allow-list, transfer `COORD_AUTHORITY_WRITE_FLOOR`) outside this WP's charter. Allow-listed per the WP08 prompt's escape hatch rather than routed unilaterally or left an unexplained offender; tracked at <https://github.com/Priivacy-ai/spec-kitty/issues/3055>. |
+| `decisions/emit.py:71` | `_mission_dir` | ~~stay-lenient (WP08 allow-list)~~ **ROUTED** (write-side WP02 → `read_dir(STATUS_STATE)`; no longer a live `resolve_feature_dir_for_mission` site — see supersession note above) | raise (`STATUS_STATE` is fail-loud-appropriate) | `repo_root` (param, passed through) | `STATUS_STATE` | Feeds `_events_path` → the shared `status.events.jsonl` coord-authoritative surface (the same file decision-point events append into). Originally classified `migrate-fail-loud`; WP08 (T039, reconciliation item #5) found `test_resolution_authority_gates.py`'s (since deleted) coord-authority gate PERMANENTLY sanctions this exact call as a legitimate coord-owned write (`_COORD_WRITE_BY_DESIGN`) — routing is directory-identical (WP04 reviewer-verified) but needs gate-owner work (teach that gate the seam idiom, re-token its allow-list, transfer `COORD_AUTHORITY_WRITE_FLOOR`) outside this WP's charter. Allow-listed per the WP08 prompt's escape hatch rather than routed unilaterally or left an unexplained offender; tracked at <https://github.com/spec-kitty/spec-kitty/issues/3055>. |
 | `lanes/recovery.py:781` | `reconcile_status` | stay-lenient | raise | `repo_root` (param) | n/a | Own comment: "KEEP coord-aware (C-001 / #2155 analog): this `feature_dir` feeds `emit_status_transition_transactional` below — a STATUS-WRITE leg. The status event log lives on the coordination worktree for coord-topology missions, so this MUST stay on the coord-aware resolver — never route it." |
 | `widen/state.py:63` | `WidenPendingStore.__init__` | stay-lenient (ambiguous — reviewer confirm) | raise | `repo_root` (constructor param) | n/a | No protective comment; `widen-pending.jsonl`'s partition (PRIMARY vs COORD) is not established anywhere else in the module, and the store's own "a missing file is equivalent to an empty store — never raises" invariant would be broken by a `read_dir(kind)` swap that CAN raise on a deleted coord branch for a COORD-partition kind. Defaulted lenient pending a bespoke kind decision (not a reason to skip classifying, per T012's vacuity guard). |
 
@@ -654,7 +655,7 @@ sat outside every gate's view rather than merely outside one table.
 
 **This section previously claimed the primary primitive was "policed by
 nothing".  That claim was false and is what manufactured
-[#3014](https://github.com/Priivacy-ai/spec-kitty/issues/3014).** It was policed
+[#3014](https://github.com/spec-kitty/spec-kitty/issues/3014).** It was policed
 on the **anchoring axis** by
 `tests/architectural/test_resolution_authority_gates.py` (the retired-floor
 gate WP01 rewrote; see that mission's own ledger) until that file was deleted
@@ -789,9 +790,9 @@ consumed this row) · `rationale`.
 | file | symbol(s) | sites | family | verdict | kind | cluster | rationale |
 |---|---|---|---|---|---|---|---|
 | `coordination/status_transition.py` | `candidate_feature_dir_for_mission`, `resolve_planning_read_dir` | 3 (:606, :623, :1259) | mixed | migrate-fail-loud (all 3) | `PRIMARY_METADATA` (:606, :623 — `_canonical_primary_feature_dir`'s create-window/malformed-meta degrade branches, which want the topology-blind PRIMARY anchor, not a coord read); `LANE_STATE` (:1259) | WP06 | :606/:623 compute the transaction-identity **primary anchor** for the status write path (not a STATUS read) — `PRIMARY_METADATA` is the correct, behavior-preserving target (never raises, matching the existing degrade contract verbatim). Not one of the 3 FR-003-named sanctioned modules, so this is a regular migrate site despite its proximity to the status machinery. |
-| `dashboard/scanner.py` | `resolve_planning_read_dir` | 2 (:423, :461) | kind-aware | **stay-lenient** | n/a (`PRIMARY_METADATA`, `TASKS_INDEX` already declared, but kept lenient by doctrine) | WP06 | Named explicitly in research.md's hard-cases list; both sites already catch `(ValueError, MissionSelectorAmbiguous)` with an explicit "the dashboard scan must never crash" comment. Kept lenient module-wide. |
+| `dashboard/scanner.py` (removed, #5530) | `resolve_planning_read_dir` | 2 (:423, :461) | kind-aware | **stay-lenient** | n/a (`PRIMARY_METADATA`, `TASKS_INDEX` already declared, but kept lenient by doctrine) | WP06 | Named explicitly in research.md's hard-cases list; both sites already catch `(ValueError, MissionSelectorAmbiguous)` with an explicit "the dashboard scan must never crash" comment. Kept lenient module-wide. |
 | `decisions/service.py` | `resolve_planning_read_dir` | 1 (:173) | kind-aware | migrate-fail-loud | `STATUS_STATE` | WP06 | Decision-log companion `status.events.jsonl` read — explicitly documented as needing to "agree with where `emit.py` writes" (the permanent coord-authority write target); a genuine functional read, fail-loud-appropriate (a stale/deleted coord branch here is a real split-brain risk, not tolerable). |
-| `dossier/api.py` | `candidate_feature_dir_for_mission` | 3 (:227, :397, :435) | kind-blind | **stay-lenient** (all 3; ambiguous — reviewer confirm) | n/a | WP06 | Every site feeds `dossier.snapshot.load_snapshot`, which reads a `.kittify/dossiers/<slug>/snapshot-latest.json` cache file — not a `MissionArtifactKind`-mapped artifact. The API already treats "not found" as an expected outcome (`error_response(..., 404)`), not an exception; these are external/SaaS-facing read endpoints (`SnapshotExportResponse` docstring: "SaaS import-compatible") that should not start raising `CoordinationBranchDeleted` for a mission whose coord branch was later consolidated away (a plausible steady state post-merge). |
+| `dossier/api.py` (removed, #5530) | `candidate_feature_dir_for_mission` | 3 (:227, :397, :435) | kind-blind | **stay-lenient** (all 3; ambiguous — reviewer confirm) | n/a | WP06 | Every site feeds `dossier.snapshot.load_snapshot`, which reads a `.kittify/dossiers/<slug>/snapshot-latest.json` cache file — not a `MissionArtifactKind`-mapped artifact. The API already treats "not found" as an expected outcome (`error_response(..., 404)`), not an exception; these are external/SaaS-facing read endpoints (`SnapshotExportResponse` docstring: "SaaS import-compatible") that should not start raising `CoordinationBranchDeleted` for a mission whose coord branch was later consolidated away (a plausible steady state post-merge). |
 | `retrospective/summary.py` | `candidate_feature_dir_for_mission` | 1 (:220) | kind-blind | **stay-lenient** | n/a (`STATUS_STATE`) | WP06 | Own docstring: "Returns (0, 0, 0) on any error, including missing slug, missing log, or corrupt lines" — an explicitly resilient summary-statistics reader, named in the WP06 diagnostic cluster. |
 | `retrospective/writer.py` | — | 0 real (grep hit only) | n/a | no-site | n/a | WP06 | Grep hit at `:55` is a docstring cross-reference to `resolve_planning_read_dir`; zero `ast.Call` sites. |
 | `review/cycle.py` | `resolve_planning_read_dir` | 1 (:49) | kind-aware | migrate-fail-loud | `WORK_PACKAGE_TASK` | WP06 | Docstring already documents this site as having "retir[ed] the kind-blind `candidate_feature_dir_for_mission` fold" historically (#2646/#2697/#2275) — this is the final swap from the lenient kind-aware resolver to the seam. |

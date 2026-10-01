@@ -18,7 +18,7 @@ from collections.abc import Sequence
 from specify_cli.status.models import Lane, StatusEvent, actor_identity_str
 from specify_cli.status.work_package_lifecycle import GENERIC_IMPLEMENTATION_ACTORS, _actor_key
 
-__all__ = ["latest_implementer_actor"]
+__all__ = ["is_latest_implementer", "latest_implementer_actor"]
 
 _IMPLEMENTING_LANES: frozenset[str] = frozenset({Lane.CLAIMED.value, Lane.IN_PROGRESS.value})
 _REVIEWER_SOURCE_LANES: frozenset[str] = frozenset({Lane.FOR_REVIEW.value, Lane.IN_REVIEW.value, Lane.APPROVED.value})
@@ -32,6 +32,8 @@ def _is_reviewer_rework_verdict(event: StatusEvent) -> bool:
     check and so uses a deliberately NARROWER lane set (``to == planned`` only,
     sources ``for_review``/``in_review``). A future change to "what counts as a
     reviewer verdict" must be weighed against both. (#5196)
+    The retrospective and hollow-review signal reads a third variant:
+    ``review.rejection_signal.is_documented_review_rejection`` (#2267).
     """
     return Lane(event.from_lane).value in _REVIEWER_SOURCE_LANES and bool(event.review_ref)
 
@@ -58,3 +60,21 @@ def latest_implementer_actor(events: Sequence[StatusEvent], wp_id: str) -> str |
         actor = actor_identity_str(event.actor)
         return actor or None
     return None
+
+
+def is_latest_implementer(latest: str | None, actor: object) -> bool:
+    """Whether ``actor`` is the WP's implementer of record ``latest``.
+
+    ``latest`` is the result of :func:`latest_implementer_actor`. ``None``, empty,
+    or a generic placeholder ``latest`` names no implementer and admits nothing;
+    otherwise the two are compared through the tool-scoped ``_actor_key``
+    projection (compact and dict-shaped actors of one tool compare equal). A
+    requester that projects to no key is never the implementer. (#5377)
+    """
+    if not latest:
+        return False
+    latest_key = _actor_key(latest)
+    if latest_key is None or latest_key in GENERIC_IMPLEMENTATION_ACTORS:
+        return False
+    requester_key = _actor_key(actor)
+    return requester_key is not None and requester_key == latest_key

@@ -8,14 +8,14 @@ import os
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from kernel.clock import now_utc_stamp
+from kernel.git import GitCommandError, GitPath, StatusEntry, changed_paths
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from charter.encoding_recovery import recover as _recover_encoding
 from kernel.paths import to_posix
 from specify_cli.core.agent_config import get_auto_commit_default
-from specify_cli.core.owned_mission import effective_root_kwargs
 from specify_cli.core.paths import load_meta_fail_closed, read_target_branch_from_meta
 from specify_cli.decisions.models import DecisionStatus
 from specify_cli.decisions.store import load_index
@@ -28,7 +28,7 @@ from specify_cli.task_utils import (
     LANES,
     WorkPackage,
     get_lane_from_frontmatter,
-    git_status_lines,
+    git_status_entries,
     run_git,
     split_frontmatter,
 )
@@ -59,6 +59,9 @@ from .summary_core import (
     build_work_package_state,
     evaluate_path_conventions,
 )
+
+if TYPE_CHECKING:
+    from mission_runtime import OwnedCheckout
 from specify_cli.status_lanes import has_operator_provenance, is_acceptable_ending
 
 logger = logging.getLogger(__name__)
@@ -160,14 +163,6 @@ _ACTIONABLE_LANE_BLOCKER_HINTS = {
 }
 
 
-def _porcelain_dirty_path(line: str) -> str:
-    """Return the path component from a git porcelain v1 status line."""
-    path = line[3:].strip()
-    if " -> " in path:
-        path = path.split(" -> ", 1)[1].strip()
-    return path
-
-
 def _is_accept_pipeline_own_write(path: str, *, mission_slug: str) -> bool:
     """True when *path* is one of the accept pipeline's own convergence writes.
 
@@ -226,7 +221,7 @@ def _encoding_backup_scope_prefix(
     repo_root: Path,
     feature: str,
     *,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> str | None:
     """The posix-relative ``<primary-feature-dir>/`` prefix a backup must fall under.
 
@@ -249,7 +244,7 @@ def _encoding_backup_scope_prefix(
     an unexpected shape for the PRIMARY anchor this seam returns, but never
     silently treated as a match.
     """
-    feature_dir = _planning_read_dir(repo_root, feature, effective_root=effective_root)
+    feature_dir = _planning_read_dir(repo_root, feature, owned=owned)
     try:
         relative = feature_dir.relative_to(repo_root)
     except ValueError:
@@ -295,7 +290,7 @@ def _is_own_encoding_backup_write(path: str, *, feature_dir_prefix: str | None) 
     return normalized.endswith(_ENCODING_BACKUP_SUFFIX)
 
 
-def _mission_routes_through_coordination(repo_root: Path, feature: str, *, effective_root: Path | None = None) -> bool:
+def _mission_routes_through_coordination(repo_root: Path, feature: str, *, owned: OwnedCheckout | None = None) -> bool:
     """True when ``feature`` routes through coordination under its STORED topology.
 
     FR-008 / FR-005: the accept dirty-tree gate is topology-aware. Read the WP02
@@ -321,7 +316,7 @@ def _mission_routes_through_coordination(repo_root: Path, feature: str, *, effec
         routes_through_coordination,
     )
 
-    if effective_root is None:
+    if owned is None:
         return routes_through_coordination(resolve_topology(repo_root, feature))
 
     from specify_cli.acceptance.execution_context import declared_home_surface
@@ -331,18 +326,18 @@ def _mission_routes_through_coordination(repo_root: Path, feature: str, *, effec
             repo_root,
             feature,
             MissionArtifactKind.ACCEPTANCE_MATRIX,
-            effective_root=effective_root,
+            owned=owned,
         )
         is TopologySurface.COORD
     )
 
 
 def _accept_dirty_gate(
-    git_dirty_raw: list[str],
+    git_dirty_raw: Sequence[StatusEntry],
     *,
     repo_root: Path,
     feature: str,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> list[str]:
     """Compute the accept dirty set: accept-owned exclusion + FR-008 coord residue.
 
@@ -389,31 +384,33 @@ def _accept_dirty_gate(
     """
     from specify_cli.coordination.coherence import is_self_bookkeeping_churn
 
-    encoding_backup_prefix = _encoding_backup_scope_prefix(repo_root, feature, effective_root=effective_root)
+    encoding_backup_prefix = _encoding_backup_scope_prefix(repo_root, feature, owned=owned)
 
     git_dirty = [
-        line
-        for line in git_dirty_raw
-        if not _is_accept_pipeline_own_write(_porcelain_dirty_path(line), mission_slug=feature)
-        and not _is_own_encoding_backup_write(_porcelain_dirty_path(line), feature_dir_prefix=encoding_backup_prefix)
-        and not is_self_bookkeeping_churn(_porcelain_dirty_path(line))
+        entry
+        for entry in git_dirty_raw
+        if not _is_accept_pipeline_own_write(str(entry.path), mission_slug=feature)
+        and not _is_own_encoding_backup_write(str(entry.path), feature_dir_prefix=encoding_backup_prefix)
+        and not is_self_bookkeeping_churn(str(entry.path))
     ]
-    return _filter_coordination_residue(
+    remaining = _filter_coordination_residue(
         git_dirty,
         repo_root=repo_root,
         feature=feature,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     )
+    # ``git_dirty`` is operator-facing display text; it is never parsed back.
+    return [entry.display() for entry in remaining]
 
 
 def _filter_coordination_residue(
-    dirty_lines: list[str],
+    dirty_entries: Sequence[StatusEntry],
     *,
     repo_root: Path,
     feature: str,
-    effective_root: Path | None = None,
-) -> list[str]:
-    """Drop coordination-residue dirty lines when the mission routes through coord.
+    owned: OwnedCheckout | None = None,
+) -> list[StatusEntry]:
+    """Drop coordination-residue dirty entries when the mission routes through coord.
 
     FR-008 convergence on the ``mission.py`` reference pattern: only when
     :func:`routes_through_coordination` holds does
@@ -432,10 +429,10 @@ def _filter_coordination_residue(
     if not _mission_routes_through_coordination(
         repo_root,
         feature,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     ):
-        return dirty_lines
-    return [line for line in dirty_lines if not is_coord_residue_churn(_porcelain_dirty_path(line), mission_slug=feature)]
+        return list(dirty_entries)
+    return [entry for entry in dirty_entries if not is_coord_residue_churn(str(entry.path), mission_slug=feature)]
 
 
 #: Canonical "not ready" wording for a failed host readiness verdict
@@ -738,7 +735,7 @@ class AcceptanceResult:
         }
 
 
-def _iter_work_packages(repo_root: Path, feature: str, *, effective_root: Path | None = None) -> Iterable[WorkPackage]:
+def _iter_work_packages(repo_root: Path, feature: str, *, owned: OwnedCheckout | None = None) -> Iterable[WorkPackage]:
     """Iterate over work packages in flat tasks/ directory layout.
 
     Pre-3.0 missions (lane-directory layout) are hard-rejected with
@@ -752,7 +749,7 @@ def _iter_work_packages(repo_root: Path, feature: str, *, effective_root: Path |
     feature_path = _wp_tasks_read_dir(
         repo_root,
         feature,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     )
     tasks_dir = feature_path / "tasks"
     if not tasks_dir.exists():
@@ -795,10 +792,6 @@ def _read_text_strict(path: Path) -> str:
         return path.read_text(encoding="utf-8-sig")
     except UnicodeDecodeError as exc:
         raise ArtifactEncodingError(path, exc) from exc
-
-
-def _read_file(path: Path) -> str:
-    return _read_text_strict(path) if path.exists() else ""
 
 
 def _check_needs_clarification(files: Sequence[Path]) -> list[str]:
@@ -896,7 +889,13 @@ def _approved_lane_source_roots(
     nothing. Missing or corrupt ``lanes.json`` yields no roots at all: the
     check then behaves exactly as it did before this change rather than
     guessing at a topology.
+
+    The planning (repo-root) lane has no worktree of its own (#5100): its work
+    lands in the write checkout, which the check already reads, so it
+    contributes no extra root and is never passed to
+    :func:`predict_lane_worktree`, which refuses it.
     """
+    from specify_cli.lanes.compute import is_planning_lane
     from specify_cli.lanes.persistence import CorruptLanesError, read_lanes_json
     from specify_cli.lanes.worktree_allocator import predict_lane_worktree
 
@@ -913,7 +912,7 @@ def _approved_lane_source_roots(
     roots: list[Path] = []
     for lane in manifest.lanes:
         lane_wps = set(getattr(lane, "wp_ids", ()) or ())
-        if not lane_wps or not lane_wps <= accepted_wps:
+        if is_planning_lane(lane) or not lane_wps or not lane_wps <= accepted_wps:
             continue
         candidate, _lane_branch = predict_lane_worktree(repo_root, manifest.mission_slug, lane.lane_id)
         if candidate.is_dir():
@@ -1028,7 +1027,7 @@ def _write_recovered_artifact(path: Path, text: str) -> Path:
     return backup_path
 
 
-def normalize_feature_encoding(repo_root: Path, feature: str, *, effective_root: Path | None = None) -> list[Path]:
+def normalize_feature_encoding(repo_root: Path, feature: str, *, owned: OwnedCheckout | None = None) -> list[Path]:
     """Recover mission-artifact encoding to UTF-8 via the canonical detector.
 
     Every rewritten artifact is backed up (original bytes, ``<name>.bak``)
@@ -1051,7 +1050,7 @@ def normalize_feature_encoding(repo_root: Path, feature: str, *, effective_root:
     feature_dir = _planning_read_dir(
         repo_root,
         feature,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     )
     if not feature_dir.exists():
         return []
@@ -1077,7 +1076,7 @@ def normalize_feature_encoding(repo_root: Path, feature: str, *, effective_root:
     return rewritten
 
 
-def _resolve_git_context(repo_root: Path) -> tuple[str | None, Path, Path, list[str]]:
+def _resolve_git_context(repo_root: Path) -> tuple[str | None, Path, Path, tuple[StatusEntry, ...]]:
     """Collect branch, worktree root, primary repo root, and dirty files."""
     branch: str | None = None
     try:
@@ -1099,9 +1098,11 @@ def _resolve_git_context(repo_root: Path) -> tuple[str | None, Path, Path, list[
         primary_repo_root = repo_root
 
     try:
-        git_dirty = git_status_lines(repo_root)
-    except TaskCliError:
-        git_dirty = []
+        git_dirty = git_status_entries(repo_root)
+    except TaskCliError as exc:
+        # Fail closed: an unreadable working tree cannot be proven clean, so it must
+        # never satisfy the clean-tree readiness gate as an empty dirty set.
+        raise AcceptanceError(f"Cannot verify a clean working tree: git status failed: {exc}") from exc
 
     return branch, worktree_root, primary_repo_root, git_dirty
 
@@ -1135,7 +1136,7 @@ def _status_read_feature_dir(
     feature: str,
     feature_dir: Path,
     *,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> Path:
     """Return canonical status read path for acceptance lane validation.
 
@@ -1154,10 +1155,10 @@ def _status_read_feature_dir(
     """
     from specify_cli.missions._read_path_resolver import resolve_handle_to_read_path
 
-    if effective_root is not None:
+    if owned is not None:
         from mission_runtime import MissionArtifactKind, placement_seam
 
-        owned_status: Path = placement_seam(repo_root, feature, effective_root=effective_root).read_dir(MissionArtifactKind.STATUS_STATE)
+        owned_status: Path = placement_seam(repo_root, feature, owned=owned).read_dir(MissionArtifactKind.STATUS_STATE)
         return owned_status
     status_dir = resolve_handle_to_read_path(repo_root, feature)
     return status_dir if status_dir.exists() else feature_dir
@@ -1182,7 +1183,7 @@ def _accept_planning_artifact_kinds() -> dict[str, Any]:
     }
 
 
-def _planning_read_dir(repo_root: Path, feature: str, *, effective_root: Path | None = None) -> Path:
+def _planning_read_dir(repo_root: Path, feature: str, *, owned: OwnedCheckout | None = None) -> Path:
     """Return the PRIMARY mission dir the accept gate reads planning artifacts from.
 
     FR-002 (#2085): the accept gate's PLANNING reads (spec/plan/tasks/research/
@@ -1226,12 +1227,12 @@ def _planning_read_dir(repo_root: Path, feature: str, *, effective_root: Path | 
     read_dir: Path = placement_seam(
         repo_root,
         feature,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     ).read_dir(kinds[_spec_file()])
     return read_dir
 
 
-def _wp_tasks_read_dir(repo_root: Path, feature: str, *, effective_root: Path | None = None) -> Path:
+def _wp_tasks_read_dir(repo_root: Path, feature: str, *, owned: OwnedCheckout | None = None) -> Path:
     """Return the PRIMARY mission dir the accept gate reads WP tasks from.
 
     Closeout N+1 (debbie §3): the accept gate's WP-task iteration
@@ -1271,7 +1272,7 @@ def _wp_tasks_read_dir(repo_root: Path, feature: str, *, effective_root: Path | 
     read_dir: Path = placement_seam(
         repo_root,
         feature,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     ).read_dir(MissionArtifactKind.WORK_PACKAGE_TASK)
     return read_dir
 
@@ -1281,7 +1282,7 @@ def _primary_anchor_feature_dir(
     feature: str,
     read_dir: Path,
     *,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> Path:
     """Return the primary-checkout mission dir anchoring ``AcceptanceSummary``.
 
@@ -1319,7 +1320,7 @@ def _primary_anchor_feature_dir(
     primary_candidate: Path = placement_seam(
         repo_root,
         feature,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     ).read_dir(MissionArtifactKind.PRIMARY_METADATA)
     if primary_candidate.exists():
         return primary_candidate
@@ -1331,7 +1332,7 @@ def _primary_anchor_feature_dir(
     )
 
     try:
-        resolved = resolve_mission(feature, effective_root or repo_root)
+        resolved = resolve_mission(feature, owned.owned_root if owned is not None else repo_root)
     except (AmbiguousHandleError, MissionNotFoundError):
         return read_dir
     resolved_primary: Path = resolved.feature_dir
@@ -1385,7 +1386,7 @@ def collect_feature_summary(
     *,
     strict_metadata: bool = True,
     mutate_matrix: bool = True,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> AcceptanceSummary:
     # WP09/FR-001 (kind-correct): ``_primary_anchor_feature_dir`` only needs
     # the coord-aware existence/identity read described in its own docstring
@@ -1393,9 +1394,8 @@ def collect_feature_summary(
     # the ``PRIMARY_METADATA`` home, not a specific artifact's content.
     from mission_runtime import MissionArtifactKind, placement_seam
 
-    scope = effective_root_kwargs(effective_root)
-    read_feature_dir = placement_seam(repo_root, feature, **scope).read_dir(MissionArtifactKind.PRIMARY_METADATA)
-    feature_dir = _primary_anchor_feature_dir(repo_root, feature, read_feature_dir, **scope)
+    read_feature_dir = placement_seam(repo_root, feature, owned=owned).read_dir(MissionArtifactKind.PRIMARY_METADATA)
+    feature_dir = _primary_anchor_feature_dir(repo_root, feature, read_feature_dir, owned=owned)
     tasks_dir = feature_dir / "tasks"
     if not feature_dir.exists():
         raise AcceptanceError(f"Mission directory not found: {feature_dir}")
@@ -1411,12 +1411,12 @@ def collect_feature_summary(
 
     branch, worktree_root, primary_repo_root, git_dirty_raw = _resolve_git_context(repo_root)
 
-    status_feature_dir = _status_read_feature_dir(repo_root, feature, feature_dir, **scope)
+    status_feature_dir = _status_read_feature_dir(repo_root, feature, feature_dir, owned=owned)
     git_dirty = _accept_dirty_gate(
         git_dirty_raw,
         repo_root=repo_root,
         feature=feature,
-        **scope,
+        owned=owned,
     )
 
     lanes: dict[str, list[str]] = {lane: [] for lane in LANES}
@@ -1439,7 +1439,7 @@ def collect_feature_summary(
 
     expected_wp_ids: list[str] = []
     canceled_wps: list[dict[str, str]] = []
-    for wp in _iter_work_packages(repo_root, primary_slug, **scope):
+    for wp in _iter_work_packages(repo_root, primary_slug, owned=owned):
         wp_id = wp.work_package_id or wp.path.stem
         expected_wp_ids.append(wp_id)
 
@@ -1481,7 +1481,7 @@ def collect_feature_summary(
     # (status.events.jsonl) and below (acceptance-matrix via _check_lane_gates) stay on
     # the coord-aware status_feature_dir (C-002). The single status_feature_dir variable
     # is split per-partition WITHOUT renaming it (additive: a new planning_read_dir).
-    planning_read_dir = _planning_read_dir(repo_root, primary_slug, **scope)
+    planning_read_dir = _planning_read_dir(repo_root, primary_slug, owned=owned)
 
     unchecked_tasks = _find_unchecked_tasks(planning_read_dir / _tasks_file())
     needs_clarification = _check_needs_clarification(
@@ -1543,7 +1543,7 @@ def collect_feature_summary(
         skipped_checks,
         blocked_checks,
         mutate_matrix=mutate_matrix,
-        **scope,
+        owned=owned,
     )
     normalized_unchecked_tasks = _normalized_unchecked_tasks(unchecked_tasks, lanes, all_packages_acceptable=all_packages_acceptable)
     recommended_fix_order = _build_recommended_fix_order(
@@ -1669,6 +1669,14 @@ def _stamp_acceptance_record(
         raise AcceptanceError(f"Acceptance matrix lock timed out while recording acceptance: {exc}") from exc
 
 
+def _staged_paths(repo_root: Path, rel_path: str) -> tuple[GitPath, ...]:
+    """Staged paths under *rel_path*; a git failure is a :class:`TaskCliError` (guard: never "nothing staged")."""
+    try:
+        return changed_paths(repo_root, cached=True, renames=True, pathspecs=[rel_path])
+    except GitCommandError as exc:
+        raise TaskCliError(str(exc)) from exc
+
+
 def _commit_acceptance_meta(
     summary: AcceptanceSummary,
     actor_name: str,
@@ -1729,9 +1737,7 @@ def _commit_acceptance_meta(
     # sweep in any unrelated files the operator had pre-staged before running
     # ``accept``; the explicit ``-- <meta>`` pathspec commits only the
     # acceptance metadata and leaves the operator's staged work untouched.
-    status = run_git(["diff", "--cached", "--name-only", "--", meta_rel], cwd=repo_root, check=True)
-    staged_files = [line.strip() for line in status.stdout.splitlines() if line.strip()]
-    if not staged_files:
+    if not _staged_paths(repo_root, meta_rel):
         return parent_commit, None, False
 
     run_git(["commit", "-m", f"Accept {mission_slug}", "--", meta_rel], cwd=repo_root, check=True)
@@ -1752,9 +1758,7 @@ def _commit_acceptance_meta(
                 _history[-1]["accept_commit"] = accept_commit
             write_meta(summary.feature_dir, _meta)
             run_git(["add", meta_rel], cwd=repo_root, check=True)
-            commit_status = run_git(["diff", "--cached", "--name-only", "--", meta_rel], cwd=repo_root, check=True)
-            commit_staged_files = [line.strip() for line in commit_status.stdout.splitlines() if line.strip()]
-            if commit_staged_files:
+            if _staged_paths(repo_root, meta_rel):
                 run_git(
                     ["commit", "-m", f"Record acceptance commit for {mission_slug}", "--", meta_rel],
                     cwd=repo_root,
@@ -1834,8 +1838,14 @@ def _build_acceptance_instructions(
     mode: AcceptanceMode,
     branch: str,
     is_integration_branch: bool,
+    *,
+    landed_by_consolidate: bool = False,
 ) -> tuple[list[str], list[str]]:
-    """Build human-readable next-step and cleanup instruction lists."""
+    """Build human-readable next-step and cleanup instruction lists.
+
+    ``landed_by_consolidate``: *branch* is a protected single_branch Mission's minted
+    branch, which ``spec-kitty consolidate`` lands on the target and then removes.
+    """
     instructions: list[str] = []
     cleanup_instructions: list[str] = []
 
@@ -1865,10 +1875,24 @@ def _build_acceptance_instructions(
 
     if summary.worktree_root != summary.primary_repo_root:
         cleanup_instructions.append(f"After merging, remove the worktree: `git worktree remove {summary.worktree_root}`")
-    if not is_integration_branch:
-        cleanup_instructions.append(f"Delete the feature branch when done: `git branch -d {branch}`")
+    if landed_by_consolidate:
+        cleanup_instructions.append(
+            f"`spec-kitty consolidate` lands the Mission branch `{branch}` onto its target branch and removes it; there is nothing to delete by hand."
+        )
+    elif not is_integration_branch:
+        cleanup_instructions.append(f"Delete the Mission branch when done: `git branch -d {branch}`")
 
     return instructions, cleanup_instructions
+
+
+def _consolidate_lands_branch(summary: AcceptanceSummary, branch: str, target_branch: str | None) -> bool:
+    """True when *branch* is the minted branch of a protected single_branch Mission."""
+    if not target_branch or branch == target_branch:
+        return False
+    from specify_cli.lanes.single_branch_landing import minted_branch_from_meta
+    from specify_cli.mission_metadata import load_meta_or_empty
+
+    return minted_branch_from_meta(load_meta_or_empty(summary.feature_dir), target_branch) == branch
 
 
 def perform_acceptance(
@@ -1902,7 +1926,8 @@ def perform_acceptance(
     _target_branch = _target_branch_for_feature(summary.feature_dir)
     is_integration_branch = branch == _target_branch or (_target_branch is None and branch in _WELL_KNOWN_INTEGRATION_BRANCHES)
 
-    instructions, cleanup_instructions = _build_acceptance_instructions(summary, mode, branch, is_integration_branch)
+    landed_by_consolidate = _consolidate_lands_branch(summary, branch, _target_branch)
+    instructions, cleanup_instructions = _build_acceptance_instructions(summary, mode, branch, is_integration_branch, landed_by_consolidate=landed_by_consolidate)
 
     notes: list[str] = []
     if accept_commit:

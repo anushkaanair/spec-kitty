@@ -20,6 +20,7 @@ from specify_cli.retrospective.generator import (
     _detect_arbiter_overrides,
     _detect_force_overrides,
     _detect_implementation_cycles,
+    _detect_lane_friction,
     _is_arbiter_event,
     _is_force_override_event,
 )
@@ -79,6 +80,45 @@ class TestForceOverrideDetection:
             },
         ]
         assert _detect_force_overrides(events) == {"WP03": 2}
+
+    def test_documented_rejection_force_is_excluded(self) -> None:
+        """#2267: the --force a documented rejection requires is no guard bypass."""
+        events = [
+            {
+                "wp_id": "WP07",
+                "actor": "reviewer",
+                "force": True,
+                "from_lane": "in_review",
+                "to_lane": "planned",
+                "review_ref": "review-cycle://m/WP07/review-cycle-1.md",
+                "event_id": "f7",
+            },
+            {
+                "wp_id": "WP07",
+                "actor": "user",
+                "force": True,
+                "from_lane": "for_review",
+                "to_lane": "in_progress",
+                "review_ref": "force-override",
+                "event_id": "f8",
+            },
+        ]
+        assert _detect_force_overrides(events) == {"WP07": 1}
+
+    @pytest.mark.parametrize("marker", ["action-review-claim", "workflow-review-claim"])
+    def test_review_claim_force_is_excluded(self, marker: str) -> None:
+        """#2267: a reviewer's forced for_review -> in_progress claim is the review path."""
+        event = {
+            "wp_id": "WP08",
+            "actor": "reviewer",
+            "force": True,
+            "from_lane": "for_review",
+            "to_lane": "in_progress",
+            "review_ref": marker,
+            "event_id": "f9",
+        }
+        assert _detect_force_overrides([event]) == {}
+        assert _detect_lane_friction([event]) == {}
 
     def test_no_op_force_is_excluded(self) -> None:
         """force=True with from_lane == to_lane carries no signal."""
@@ -330,7 +370,39 @@ class TestImplementationCycleDetection:
                 "event_id": "i4",
             },
         ]
-        assert _detect_implementation_cycles(events) == {"WP02": 3}
+        # Three entries, none explained by a documented rejection: two re-entries.
+        assert _detect_implementation_cycles(events) == {"WP02": 2}
+
+    def test_reentry_after_documented_rejection_is_expected(self) -> None:
+        """#2267: a documented rejection licenses the next re-entry."""
+        ref = "review-cycle://m/WP04/review-cycle-1.md"
+        events = [
+            {"wp_id": "WP04", "actor": "a", "from_lane": "planned", "to_lane": "in_progress"},
+            {"wp_id": "WP04", "actor": "r", "from_lane": "for_review", "to_lane": "planned", "force": True, "review_ref": ref},
+            {"wp_id": "WP04", "actor": "a", "from_lane": "planned", "to_lane": "in_progress"},
+        ]
+        assert _detect_implementation_cycles(events) == {}
+
+    def test_sentinel_review_ref_does_not_license(self) -> None:
+        """A ``force-override`` sentinel is no feedback: the re-entry is undocumented."""
+        events = [
+            {"wp_id": "WP05", "actor": "a", "from_lane": "planned", "to_lane": "in_progress"},
+            {"wp_id": "WP05", "actor": "u", "from_lane": "for_review", "to_lane": "planned", "force": True, "review_ref": "force-override"},
+            {"wp_id": "WP05", "actor": "a", "from_lane": "planned", "to_lane": "in_progress"},
+        ]
+        assert _detect_implementation_cycles(events) == {"WP05": 1}
+
+    def test_rejection_into_in_progress_consumes_its_licence(self) -> None:
+        """An in_review -> in_progress rejection is the re-entry; it licenses nothing later."""
+        ref = "review-cycle://m/WP06/review-cycle-1.md"
+        events = [
+            {"wp_id": "WP06", "actor": "a", "from_lane": "planned", "to_lane": "in_progress"},
+            {"wp_id": "WP06", "actor": "r", "from_lane": "in_review", "to_lane": "in_progress", "review_ref": ref},
+            {"wp_id": "WP06", "actor": "a", "from_lane": "in_progress", "to_lane": "blocked"},
+            {"wp_id": "WP06", "actor": "u", "from_lane": "blocked", "to_lane": "planned", "force": True},
+            {"wp_id": "WP06", "actor": "a", "from_lane": "planned", "to_lane": "in_progress"},
+        ]
+        assert _detect_implementation_cycles(events) == {"WP06": 1}
 
     def test_finalize_tasks_excluded(self) -> None:
         events = [

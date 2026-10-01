@@ -14,7 +14,6 @@ from charter.encoding_recovery import CP1252_CODEC
 
 __all__ = [
     "sanitize_markdown_text",
-    "sanitize_file",
     "detect_problematic_characters",
     "PROBLEMATIC_CHARS",
 ]
@@ -81,14 +80,11 @@ PROBLEMATIC_CHARS = {
 _PROBLEMATIC_PATTERN = re.compile("[" + "".join(re.escape(char) for char in PROBLEMATIC_CHARS) + "]")
 
 
-def sanitize_markdown_text(text: str, *, preserve_utf8: bool = False) -> str:  # noqa: ARG001
-    """Sanitize markdown text by replacing problematic characters.
+def sanitize_markdown_text(text: str) -> str:
+    """Sanitize markdown text by replacing every problematic character.
 
     Args:
         text: The markdown text to sanitize
-        preserve_utf8: If True, only replace characters that cause encoding issues.
-                      If False (default), replace all problematic characters for
-                      maximum compatibility.
 
     Returns:
         Sanitized text with problematic characters replaced

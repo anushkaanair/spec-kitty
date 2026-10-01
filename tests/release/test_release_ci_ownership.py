@@ -20,7 +20,6 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
 CONVERGENCE_MAP = ROOT / "docs" / "convergence" / "interim-ci-producer.md"
 RELEASE_CHECKLIST = ROOT / "RELEASE_CHECKLIST.md"
-DOCS_REFERENCE_INDEX = ROOT / "docs" / "development" / "reference" / "index.md"
 DRIFT_WORKFLOW = "check-spec-kitty-events-alignment.yml"
 DRIFT_SCRIPT = Path("scripts/release/check_shared_package_drift.py")
 COMPATIBILITY_MANIFEST = Path(".kittify/release/shared-package-compatibility.json")
@@ -118,8 +117,12 @@ def test_shared_package_drift_preserves_candidate_trust_and_skip_policy() -> Non
     prepare, verify = jobs["prepare-candidate-metadata"], jobs["verify-drift"]
     assert prepare["name"] == "Prepare candidate package metadata"
     assert verify["name"] == "Verify shared package drift"
-    policy = "${{ !contains(github.event.pull_request.labels.*.name, 'pr:deferred') && !contains(github.event.pull_request.labels.*.name, 'pr:skip-ci') }}"
-    assert prepare["if"] == verify["if"] == policy
+    skip_policy = "!contains(github.event.pull_request.labels.*.name, 'pr:deferred') && !contains(github.event.pull_request.labels.*.name, 'pr:skip-ci')"
+    # prepare is the root job, so it also carries the fork guard (tests/ci/test_fork_guard.py);
+    # verify needs it and skips with it.
+    fork_guard = "(github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')"
+    assert prepare["if"] == f"${{{{ {fork_guard} && {skip_policy} }}}}"
+    assert verify["if"] == f"${{{{ {skip_policy} }}}}"
     assert verify["needs"] == ["prepare-candidate-metadata"]
     checkout = next(step for step in verify["steps"] if step.get("uses", "").startswith("actions/checkout@"))
     assert checkout["with"]["ref"] == "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.sha }}"
@@ -132,7 +135,7 @@ def test_shared_package_drift_preserves_candidate_trust_and_skip_policy() -> Non
     triggers = workflow[True]
     assert set(triggers) == {"pull_request", "push", "schedule", "workflow_dispatch"}
     for event in ("pull_request", "push"):
-        assert triggers[event]["branches"] == ["main", "develop", "2.x"]
+        assert triggers[event]["branches"] == ["main"]
         assert set(triggers[event]["paths"]) == {
             "pyproject.toml",
             "uv.lock",
@@ -433,11 +436,6 @@ def test_docs_pages_deploys_only_from_promotion_repo_and_fails_transient_setup_e
     assert build_job["needs"] == ["pages"]
     assert build_job["if"] == "needs.pages.outputs.configured == 'true' && needs.pages.result == 'success'"
     assert deploy_job["if"] == "github.repository == 'spec-kitty/spec-kitty' && github.ref == 'refs/heads/main' && needs.build.result == 'success'"
-
-    publication_policy = DOCS_REFERENCE_INDEX.read_text(encoding="utf-8")
-    assert "intentionally deployed from the promotion-only" in publication_policy
-    assert "does not claim the custom domain" in publication_policy
-    assert "controller's promotion loop" in publication_policy
 
 
 @pytest.mark.parametrize("name", sorted(RESTORED_WORKFLOWS))

@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help dev-setup lint format-check typecheck test-fast test-full convergence-census ci-parity test-quality-scan
+.PHONY: help dev-setup lint format-check format-check-files docs-lint typecheck test-fast test-full convergence-census ci-parity test-quality-scan
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -19,6 +19,16 @@ lint: ## Run ruff linter
 # runs this target locally (#558).
 format-check: ## Run ruff formatter check on the whole repo (issue #473's gate)
 	uv run --frozen ruff format --check .
+
+# Per-file check that honors the [tool.ruff.format].exclude ratchet (#5301):
+# an explicitly-passed path is checked even when excluded, unless
+# --force-exclude is given. Usage: make format-check-files FILES="a.py b.py"
+format-check-files: ## Run ruff formatter check on explicit paths, honoring the format-exclude ratchet
+	uv run --frozen ruff format --check --force-exclude $(FILES)
+
+docs-lint: ## Spell-check docs (typos + scoped US spelling) and check the changelog [Unreleased] style
+	uv run --frozen python -m scripts.docs.check_spelling
+	uv run --frozen python -m scripts.docs.check_changelog_style
 
 convergence-census: ## Fetch upstream and report convergence dispositions
 	git fetch old
@@ -74,12 +84,18 @@ test-full: ## Run everything: one parallel pass + serial marker passes
 	env -u FORCE_COLOR NO_COLOR=1 PWHEADLESS=1 uv run --frozen pytest tests/ \
 	  -m "$(PARALLEL_UNSAFE_MARKERS)" -n auto --dist loadfile -p no:cacheprovider -q || echo parallel >> $(TEST_FULL_STATUS)
 	# Serial passes: the two parallel-unsafe marker families run serially under
-	# -n0 (--timeout guards a hung fork/process from stalling the lane
-	# indefinitely).
+	# -n0. The per-test timeout that guards a hung fork/process from stalling a
+	# lane indefinitely is no longer passed here: since #3143 it is set once, in
+	# pytest.ini (`timeout = 240`, `timeout_method` unset -> signal on this POSIX
+	# runner). The previously explicit `--timeout=240 --timeout-method=signal`
+	# was byte-for-byte redundant with that default on Linux/macOS and actively
+	# Windows-hostile (forcing the SIGALRM-only signal method where no SIGALRM
+	# exists), so it was dropped in favour of the single authority. These passes
+	# stay serial (-n0) for the stress/timing reasons above, not for the timeout.
 	env -u FORCE_COLOR NO_COLOR=1 PWHEADLESS=1 uv run --frozen pytest tests/ \
-	  -m "stress and not windows_ci" -n0 --timeout=240 --timeout-method=signal -q || echo stress >> $(TEST_FULL_STATUS)
+	  -m "stress and not windows_ci" -n0 -q || echo stress >> $(TEST_FULL_STATUS)
 	env -u FORCE_COLOR NO_COLOR=1 PWHEADLESS=1 uv run --frozen pytest tests/ \
-	  -m timing -n0 --timeout=240 --timeout-method=signal -q || echo timing >> $(TEST_FULL_STATUS)
+	  -m timing -n0 -q || echo timing >> $(TEST_FULL_STATUS)
 	@if [ -s $(TEST_FULL_STATUS) ]; then \
 	  echo "test-full: FAILED passes: $$(tr '\n' ' ' < $(TEST_FULL_STATUS))"; \
 	  rm -f $(TEST_FULL_STATUS); exit 1; fi

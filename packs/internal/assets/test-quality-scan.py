@@ -11,7 +11,8 @@ The flags are heuristics, not verdicts. A flagged test is a candidate for a
 human or agent read against the Test Desiderata; an unflagged test is not
 proven good. Codes map to the review rubric in the procedure:
 
-    no-assertion         R1 vacuous: no assert, no raises, no assert-like call
+    no-assertion         R1 vacuous: no assert, no raises, no assert-like call, no
+                         call to an asserting helper, no stated does-not-raise contract
     weak-only-assert     R1 vacuous: the only assert is ``True`` or ``x is not None``
     type-only-assert     R1 vacuous: the only assert is isinstance/callable/hasattr
     broad-raises         R1 vacuous: ``pytest.raises(Exception)``
@@ -87,15 +88,16 @@ WEIGHTS: dict[str, int] = {
 DEEP_DOMAINS = frozenset({"specify_cli"})
 
 _ASSERT_LIKE_CALL = re.compile(r"assert_|\.assert|expect|check_|_assert|verify")
+_NO_RAISE_CONTRACT = re.compile(r"\b(does|do|must|should|will)\s*n[o']?t\s+raise\b|\bno\s+(exception|error)\s+(is\s+)?raised\b", re.IGNORECASE)
 _MOCK_CALL = re.compile(r"(^|\.)(patch|patch\.object|MagicMock|Mock|AsyncMock|create_autospec)$")
 _INTERNAL_TARGET = re.compile(r"(specify_cli|charter|runtime|mission_runtime|kernel|glossary)\.")
 _INTERACTION = re.compile(
     r"\.(assert_called|assert_called_once|assert_called_with|assert_called_once_with"
     r"|assert_not_called|assert_any_call|assert_has_calls)\b|\.call_count\b|\.call_args"
 )
-_SOURCE_READ = re.compile(r"(read_text|open)\(.*\)")
+_SOURCE_READ_ATTRS = frozenset({"read_text", "read_bytes", "open"})
 _SOURCE_PATH = re.compile(r"src/|Path\(.*(specify_cli|charter|runtime)")
-_SUBSTRING_ASSERT = re.compile(r"\bassert\b.*(\bin\b|\bnot in\b)")
+_SOURCE_PACKAGES = frozenset({"specify_cli", "charter", "runtime", "kernel", "glossary", "mission_runtime"})
 _PLATFORM_GUARD = re.compile(r"skipif\(.*(platform|sys\.|win|shutil\.which|os\.name|environ)")
 _WALLCLOCK = re.compile(r"(datetime\.now|datetime\.utcnow|time\.time)\(\)")
 _FROZEN_CLOCK = re.compile(r"freeze|monkeypatch|clock")
@@ -104,7 +106,9 @@ _BROAD_RAISES = re.compile(r"pytest\.raises\((Exception|BaseException)\)")
 _PRIVATE_ATTR = re.compile(r"\b[a-z_]+\._[a-z][a-z0-9_]*\b(?!\()")
 _PRIVATE_ATTR_NOISE = ("self.", "monkeypatch", "mock", "os.", "sys.", "pytest", "tmp_path", "capsys", "re.", "json.")
 _VAGUE_NAME = re.compile(r"test_?\d*|test_(it_works|basic|smoke|misc|foo|bar|simple|ok|works)")
-_FAKE_ULID = re.compile(r"mission_id[\"']?\s*[:=]\s*[\"'][0-9A-Z]{1,20}[\"']")
+_ULID = re.compile(r"[0-9A-HJKMNP-TV-Z]{26}")
+#: A folded ``"0" * n`` longer than this cannot be a 26-character ULID anyway.
+_MAX_FOLD_REPEAT = 64
 _PROVENANCE = re.compile(r"\b(WP\d{2}|FR-\d{3}|NFR-\d{3}|T\d{3}|#\d{3,5})\b|_(wp|fr|t)\d{2,3}(_|$)|_issue_?\d{3,5}")
 
 
@@ -159,11 +163,38 @@ def iter_tests(tree: ast.Module) -> list[tuple[str, ast.FunctionDef | ast.AsyncF
     return found
 
 
-def _oracle_flags(fn: ast.FunctionDef | ast.AsyncFunctionDef, call_names: list[str]) -> list[str]:
+def _has_oracle(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """Whether ``fn`` asserts, or checks with ``pytest.raises`` / ``pytest.fail``, anywhere in its body."""
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Assert):
+            return True
+        if isinstance(node, ast.Call) and re.search(r"(^|\.)(raises|fail)$", ast.unparse(node.func)):
+            return True
+    return False
+
+
+def asserting_helpers(tree: ast.Module) -> frozenset[str]:
+    """Names of non-test functions and methods in ``tree`` that carry an oracle of their own.
+
+    A test whose only check is a call to one of these is not vacuous: the
+    helper asserts on its behalf.
+    """
+    return frozenset(
+        node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef) and not node.name.startswith("test") and _has_oracle(node)
+    )
+
+
+def _states_no_raise_contract(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """The test says its contract is that the call does not raise."""
+    return bool(_NO_RAISE_CONTRACT.search(f"{fn.name.replace('_', ' ')}\n{ast.get_docstring(fn) or ''}"))
+
+
+def _oracle_flags(fn: ast.FunctionDef | ast.AsyncFunctionDef, call_names: list[str], helpers: frozenset[str] = frozenset()) -> list[str]:
     """Flags about whether the test can fail at all (R1)."""
     asserts = [n for n in ast.walk(fn) if isinstance(n, ast.Assert)]
     raises = [n for n in ast.walk(fn) if isinstance(n, ast.With | ast.AsyncWith) and any("raises" in ast.unparse(i.context_expr) for i in n.items)]
-    if not asserts and not raises and not any(_ASSERT_LIKE_CALL.search(c) for c in call_names):
+    checked_by_call = any(_ASSERT_LIKE_CALL.search(c) or c.rsplit(".", 1)[-1] in helpers for c in call_names)
+    if not asserts and not raises and not checked_by_call and not _states_no_raise_contract(fn):
         return ["no-assertion"]
     if len(asserts) != 1 or raises:
         return []
@@ -192,28 +223,184 @@ def _coupling_flags(fn: ast.FunctionDef | ast.AsyncFunctionDef, calls: list[ast.
 
 
 def _text_flags(fn: ast.FunctionDef | ast.AsyncFunctionDef, seg: str) -> list[str]:
-    """Flags read off the test's source text (R4, R6, R7, R9, skips)."""
+    """Flags read off the test's source text or, for R6 and R7, its AST (R4, R6, R7, R9, skips)."""
     checks = (
-        (
-            "literal-source-scan",
-            _SOURCE_READ.search(seg) and _SOURCE_PATH.search(seg) and _SUBSTRING_ASSERT.search(seg) and "ast.parse" not in seg,
-        ),
-        ("line-number-pin", _LINE_PIN.search(seg)),
+        ("literal-source-scan", _scans_source_literally(fn)),
+        ("line-number-pin", _asserts_line_pin(fn)),
         ("broad-raises", _BROAD_RAISES.search(seg)),
-        ("fake-short-ulid", _FAKE_ULID.search(seg)),
+        ("fake-short-ulid", _has_fake_ulid(fn)),
         ("sleep", "time.sleep(" in seg),
         ("wallclock", _WALLCLOCK.search(seg) and not _FROZEN_CLOCK.search(seg)),
-        ("skip-or-xfail", re.search(r"pytest\.(skip|xfail)\(", seg) or _unguarded_skip(fn)),
+        ("skip-or-xfail", _skips_or_xfails(fn)),
     )
     return [code for code, hit in checks if hit]
 
 
-def _unguarded_skip(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    for decorator in fn.decorator_list:
-        text = ast.unparse(decorator)
-        if re.search(r"xfail|skip", text) and not _PLATFORM_GUARD.search(text):
+def _asserts_line_pin(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True when a ``file.py:NN`` literal is part of an oracle, not prose (R6).
+
+    Counts an assert's test expression (never its message) and a
+    ``pytest.raises(..., match=...)`` pattern. Docstrings, comments and
+    assertion messages cite locations for the reader and are not pins.
+    """
+    oracles: list[ast.expr] = []
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Assert):
+            oracles.append(node.test)
+        elif isinstance(node, ast.With | ast.AsyncWith):
+            oracles.extend(_raises_match_patterns(node))
+    return any(_mentions_line(oracle) for oracle in oracles)
+
+
+def _raises_match_patterns(node: ast.With | ast.AsyncWith) -> list[ast.expr]:
+    calls = [item.context_expr for item in node.items if isinstance(item.context_expr, ast.Call)]
+    return [kw.value for call in calls if ast.unparse(call.func).endswith("raises") for kw in call.keywords if kw.arg == "match"]
+
+
+def _mentions_line(expr: ast.expr) -> bool:
+    return any(isinstance(n, ast.Constant) and isinstance(n.value, str) and _LINE_PIN.search(n.value) for n in ast.walk(expr))
+
+
+def _fold_str(node: ast.expr) -> str | None:
+    """Constant-fold a string expression built from literals, ``+`` and ``* int``.
+
+    Returns ``None`` for anything else, so an unfoldable value is never judged.
+    """
+    if isinstance(node, ast.Constant):
+        return node.value if isinstance(node.value, str) else None
+    if not isinstance(node, ast.BinOp):
+        return None
+    if isinstance(node.op, ast.Add):
+        left, right = _fold_str(node.left), _fold_str(node.right)
+        return None if left is None or right is None else left + right
+    if isinstance(node.op, ast.Mult):
+        folded = _fold_repeat(node.left, node.right)
+        return folded if folded is not None else _fold_repeat(node.right, node.left)
+    return None
+
+
+def _fold_repeat(text_node: ast.expr, count_node: ast.expr) -> str | None:
+    text = _fold_str(text_node)
+    count = count_node.value if isinstance(count_node, ast.Constant) else None
+    if text is None or not isinstance(count, int) or isinstance(count, bool) or not 0 <= count <= _MAX_FOLD_REPEAT:
+        return None
+    return text * count
+
+
+def _mission_id_values(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[ast.expr]:
+    """Every expression the test binds to a ``mission_id`` (kwarg, dict key, assignment)."""
+    values: list[ast.expr] = []
+    for node in ast.walk(fn):
+        if isinstance(node, ast.keyword) and node.arg == "mission_id":
+            values.append(node.value)
+        elif isinstance(node, ast.Dict):
+            values.extend(v for k, v in zip(node.keys, node.values, strict=True) if isinstance(k, ast.Constant) and k.value == "mission_id")
+        elif isinstance(node, ast.Assign):
+            values.extend(node.value for target in node.targets if _names_mission_id(target))
+        elif isinstance(node, ast.AnnAssign) and node.value is not None and _names_mission_id(node.target):
+            values.append(node.value)
+    return values
+
+
+def _names_mission_id(target: ast.expr) -> bool:
+    return (isinstance(target, ast.Name) and target.id == "mission_id") or (isinstance(target, ast.Attribute) and target.attr == "mission_id")
+
+
+def _has_fake_ulid(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True when a ``mission_id`` folds to a string that is not a 26-character ULID (R7)."""
+    folded = (_fold_str(value) for value in _mission_id_values(fn))
+    return any(text is not None and not _ULID.fullmatch(text) for text in folded)
+
+
+_SKIP_CALLS = frozenset({"pytest.skip", "pytest.xfail"})
+_SKIP_MARKERS = frozenset({"skip", "skipif", "xfail"})
+
+
+def _skips_or_xfails(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True for a real ``pytest.skip()``/``xfail()`` call or an unguarded marker.
+
+    Matches on the AST, so a string such as ``"skipped: drain off"`` (a
+    parametrize id, an expected outcome) is data, not a skip. A ``skipif``
+    whose condition is a platform or tool guard is not flagged.
+    """
+    if any(isinstance(n, ast.Call) and ast.unparse(n.func) in _SKIP_CALLS for n in ast.walk(fn)):
+        return True
+    return any(_unguarded_marker(decorator) for decorator in fn.decorator_list)
+
+
+def _unguarded_marker(decorator: ast.expr) -> bool:
+    """A ``pytest.mark.skip|skipif|xfail`` inside the decorator (``pytest.param(marks=...)`` included)."""
+    markers = {n.attr for n in ast.walk(decorator) if isinstance(n, ast.Attribute) and n.attr in _SKIP_MARKERS and ast.unparse(n.value).endswith("mark")}
+    if markers == {"skipif"}:
+        return not _PLATFORM_GUARD.search(ast.unparse(decorator))
+    return bool(markers)
+
+
+def _scans_source_literally(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """True when the test reads text under ``src/`` and asserts a substring of it (R4).
+
+    Judged on the AST, so a ``src/`` named only in a comment, docstring or
+    assertion message does not count, and neither does a read of a fixture file.
+    A test that parses the source with ``ast`` is structural, not a literal scan.
+    """
+    reads = any(isinstance(n, ast.Call) and _is_read_call(n) for n in ast.walk(fn))
+    return reads and _names_source_path(fn) and _asserts_substring(fn) and not _parses_ast(fn)
+
+
+def _is_read_call(call: ast.Call) -> bool:
+    func = call.func
+    return (isinstance(func, ast.Attribute) and func.attr in _SOURCE_READ_ATTRS) or (isinstance(func, ast.Name) and func.id == "open")
+
+
+def _names_source_path(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    """A live string literal or ``Path(...)`` argument that points under ``src/``."""
+    skip = _prose_nodes(fn)
+    for node in ast.walk(fn):
+        if node in skip:
+            continue
+        if isinstance(node, ast.Constant) and isinstance(node.value, str) and "src/" in node.value:
+            return True
+        if isinstance(node, ast.Call) and ast.unparse(node.func).endswith("Path") and _SOURCE_PATH.search(ast.unparse(node)):
+            return True
+        if isinstance(node, ast.BinOp) and _is_src_join(node):
             return True
     return False
+
+
+def _join_parts(node: ast.expr) -> list[str | None]:
+    """Left-to-right operands of a ``/`` chain: the string value, or ``None`` for a non-literal."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        return [*_join_parts(node.left), *_join_parts(node.right)]
+    return [node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None]
+
+
+def _is_src_join(node: ast.BinOp) -> bool:
+    """True for a ``... / "src" / "<package>" ...`` path-join chain."""
+    parts = _join_parts(node)
+    return any(a == "src" and b in _SOURCE_PACKAGES for a, b in zip(parts, parts[1:], strict=False))
+
+
+def _prose_nodes(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> set[ast.AST]:
+    """String constants that are prose for the reader: the docstring and assertion messages."""
+    prose: set[ast.AST] = set()
+    first = fn.body[0] if fn.body else None
+    if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) and isinstance(first.value.value, str):
+        prose.update(ast.walk(first))
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Assert) and node.msg is not None:
+            prose.update(ast.walk(node.msg))
+    return prose
+
+
+def _asserts_substring(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(
+        isinstance(n, ast.Assert) and any(isinstance(c, ast.Compare) and any(isinstance(op, ast.In | ast.NotIn) for op in c.ops) for c in ast.walk(n.test))
+        for n in ast.walk(fn)
+    )
+
+
+def _parses_ast(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
+    return any(isinstance(n, ast.Call) and ast.unparse(n.func) == "ast.parse" for n in ast.walk(fn))
 
 
 def _shape_flags(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
@@ -231,13 +418,16 @@ def _shape_flags(fn: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     return flags
 
 
-def flags_for(fn: ast.FunctionDef | ast.AsyncFunctionDef, lines: list[str]) -> list[str]:
-    """Return every flag code the test function trips, in rubric order."""
+def flags_for(fn: ast.FunctionDef | ast.AsyncFunctionDef, lines: list[str], helpers: frozenset[str] = frozenset()) -> list[str]:
+    """Return every flag code the test function trips, in rubric order.
+
+    ``helpers`` names the module's own asserting helpers (see :func:`asserting_helpers`).
+    """
     seg = "\n".join(lines[fn.lineno - 1 : fn.end_lineno])
     calls = [n for n in ast.walk(fn) if isinstance(n, ast.Call)]
     call_names = [ast.unparse(c.func) for c in calls]
     return [
-        *_oracle_flags(fn, call_names),
+        *_oracle_flags(fn, call_names, helpers),
         *_coupling_flags(fn, calls, seg),
         *_text_flags(fn, seg),
         *_shape_flags(fn),
@@ -258,13 +448,14 @@ def scan_file(repo: Path, rel: str, only: set[str] | None) -> tuple[FileRow, lis
         row.flags = {"unparseable": 1}
         return row, []
     lines = source.splitlines()
+    helpers = asserting_helpers(tree)
     counts: Counter[str] = Counter()
     rows: list[TestRow] = []
     for name, fn in iter_tests(tree):
         if only is not None and name not in only:
             continue
         row.tests += 1
-        flags = flags_for(fn, lines)
+        flags = flags_for(fn, lines, helpers)
         if flags:
             rows.append(TestRow(file=rel, line=fn.lineno, test=name, flags=flags, score=score(flags)))
             counts.update(flags)
@@ -324,23 +515,52 @@ def _changed_names(old_source: str, new_source: str) -> set[str]:
 
 
 def attach_provenance(repo: Path, files: dict[str, FileRow], roots: list[str]) -> None:
-    """Fill ``added``/``added_by``/``last_touched`` from one ``git log`` pass.
+    """Fill ``added``/``added_by``/``last_touched`` from one ``git log -M`` pass.
 
-    On a shallow clone the oldest reachable commit stands in for "added".
+    The log runs newest first, so the newest commit sets ``last_touched`` and the
+    oldest one wins ``added``. Renames are followed: a rename maps the old path
+    onto the file's current path, so older commits keep counting toward it. The
+    log covers each root's top-level directory, so a move in from a sibling
+    directory (``tests/merge`` to ``tests/consolidation``) reads as a rename, not
+    an add. On a shallow clone the oldest reachable commit stands in for "added".
     """
-    log = git(repo, "log", "--format=@@%h\t%as\t%s", "--name-only", "--no-renames", "--", *roots)
+    log = git(repo, "log", "-M", "--format=@@%h\t%as\t%s", "--name-status", "--", *_log_scope(roots))
+    alias: dict[str, str] = {}
     commit: tuple[str, str, str] | None = None
     for line in log.splitlines():
         if line.startswith("@@"):
             sha, date, subject = (line[2:].split("\t", 2) + ["", ""])[:3]
             commit = (sha, date, subject)
             continue
-        row = files.get(line.strip())
+        path = _current_path(line, alias)
+        row = files.get(path) if path else None
         if row is None or commit is None:
             continue
         if row.last_touched is None:
             row.last_touched = commit[1]
         row.added, row.added_by = commit[1], f"{commit[0]} {commit[2][:90]}"
+
+
+def _log_scope(roots: list[str]) -> list[str]:
+    """The top-level directory of each relative root, so cross-directory renames pair up."""
+    scope = {Path(root).parts[0] if Path(root).parts and not Path(root).is_absolute() else root for root in roots}
+    return sorted(scope)
+
+
+def _current_path(status_line: str, alias: dict[str, str]) -> str | None:
+    """Resolve a ``--name-status`` row to the path the file has today.
+
+    ``alias`` maps an older path to its current one; a rename row records the
+    mapping for the older commits still to come.
+    """
+    parts = status_line.split("\t")
+    if len(parts) < 2:
+        return None
+    if parts[0].startswith("R") and len(parts) == 3:
+        current = alias.get(parts[2], parts[2])
+        alias[parts[1]] = current
+        return current
+    return alias.get(parts[-1], parts[-1])
 
 
 def render_summary(files: list[FileRow], top: int) -> str:

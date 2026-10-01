@@ -23,7 +23,8 @@ PH-1; contract ``gate-execution-context.md`` C1..C7):
   surface is never forced through a HEAD read it does not need.
 * **GEC-3 / C3 — Total resolution.** The four ``CoordState`` answers are supplied by
   the consumed WP02 resolver: ``DELETED`` raises ``CoordinationBranchDeleted``;
-  ``EMPTY`` / ``UNMATERIALIZED`` resolve primary and **stamp** ``PRIMARY``;
+  ``UNMATERIALIZED`` raises ``CoordinationWorktreeUnmaterialized`` (#4959);
+  ``EMPTY`` resolves primary and **stamps** ``PRIMARY``;
   ``MATERIALIZED`` resolves coord. This module never re-derives that classifier.
 * **GEC-5 / C2 — A stamp is not permission.** :meth:`GateExecutionContext.surface_cannot_hold`
   refuses (cannot-evaluate) when a kind whose declared home is ``COORD`` is judged
@@ -52,11 +53,11 @@ from pathlib import Path
 from mission_runtime import (
     MissionArtifactKind,
     MissionResolver,
+    OwnedCheckout,
     TopologySurface,
     declared_read_surface,
     resolve_artifact_surface,
 )
-from specify_cli.core.owned_mission import effective_root_kwargs
 
 
 class LifecyclePhase(enum.IntEnum):
@@ -198,7 +199,7 @@ class GateExecutionContext:
         """GEC-5 / C2: a stamp is not permission.
 
         When the kind's ``declared_home`` is ``COORD`` but this context's surface
-        was stamped ``PRIMARY`` (the ``EMPTY`` / ``UNMATERIALIZED`` create-window
+        was stamped ``PRIMARY`` (the ``EMPTY`` create-window
         substitution), the surface is *visible* but not *authoritative*: it cannot
         hold the coord-homed fact. Returns cannot-evaluate rather than letting the
         gate read an empty primary and pass by default (#2885). Returns ``None``
@@ -234,7 +235,7 @@ def declared_home_surface(
     kind: MissionArtifactKind,
     *,
     resolver: MissionResolver | None = None,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> TopologySurface:
     """The surface a ``kind`` authoritatively belongs to under the STORED topology.
 
@@ -265,7 +266,7 @@ def declared_home_surface(
     """
     return declared_read_surface(
         repo_root, mission_slug, kind, resolver=resolver,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     )
 
 
@@ -315,7 +316,7 @@ def build_gate_execution_context(
     phase: LifecyclePhase,
     ref: str,
     resolver: MissionResolver | None = None,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> GateExecutionContext:
     """The ONE construction door for a :class:`GateExecutionContext` (GEC-1).
 
@@ -323,7 +324,8 @@ def build_gate_execution_context(
     (:func:`mission_runtime.resolve_artifact_surface`) — never an ambient
     ``repo_root`` / cwd — so the four ``CoordState`` answers are total by
     construction (C3): ``DELETED`` propagates ``CoordinationBranchDeleted``,
-    ``EMPTY`` / ``UNMATERIALIZED`` resolve primary stamped ``PRIMARY``, and
+    ``UNMATERIALIZED`` propagates ``CoordinationWorktreeUnmaterialized`` (#4959),
+    ``EMPTY`` resolves primary stamped ``PRIMARY``, and
     ``MATERIALIZED`` resolves coord. The caller-asserted ``ref`` is the reference
     point the surface is expected to be at; GEC-2 agreement is verified separately
     and lazily by :meth:`GateExecutionContext.assert_at_ref` (C5), keeping this door
@@ -335,7 +337,7 @@ def build_gate_execution_context(
     """
     resolved = resolve_artifact_surface(
         repo_root, mission_slug, kind, resolver=resolver,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     )
     return GateExecutionContext(
         surface=resolved.path,

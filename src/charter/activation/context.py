@@ -114,11 +114,6 @@ _LOGGER = logging.getLogger(__name__)
 
 
 BOOTSTRAP_ACTIONS: frozenset[str] = frozenset({"specify", "plan", "implement", "review"})
-#: WP05 (IC-05, display prose-consumer re-point): the display call-sites
-#: consume the shared ``charter.bundle.CHARTER_MD`` constant rather than
-#: re-declaring the ``"charter.md"`` filename locally (Sonar S1192 pre-emption
-#: the earlier local ``CHARTER_FILENAME = "charter.md"`` duplicate is retired).
-NONE_LABEL = "(none)"
 
 
 def _action_node_declared(bundle: _ActionDoctrineBundle, action: str) -> bool:
@@ -259,10 +254,10 @@ def build_charter_context(
     #     projection are read from it, never parsed out of ``charter.md``);
     #     ``charter.md`` contributes prose only.
     #   * It is deliberately **NOT an authority-presence gate**. Those are
-    #     FR-003/004/006 (dashboard / analysis / the ``--json``
-    #     ``project_charter.present`` signal). FR-003
-    #     (``resolve_project_charter_presence``, dashboard) and FR-004
-    #     (``analysis_report._charter_path``) prefer ``charter.yaml`` and fall
+    #     FR-003/004/006 (the retired dashboard, analysis, the ``--json``
+    #     ``project_charter.present`` signal). FR-003 left with the bundled
+    #     dashboard (#5530); FR-004
+    #     (``analysis_report._charter_path``) prefers ``charter.yaml`` and falls
     #     back to ``charter.md`` when ``charter.yaml`` has not been compiled
     #     yet -- restored md-fallback (landing-fold fix), not a yaml-only
     #     signal. FR-006 (``_project_charter_json_block``, the ``--json``

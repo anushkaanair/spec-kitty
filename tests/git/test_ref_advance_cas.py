@@ -147,7 +147,9 @@ def test_advance_fails_closed_when_ref_moves_between_read_and_write(
     def _move_ref_once(args: list[str]) -> None:
         # Fire just before the CAS write: simulate a concurrent writer that has
         # advanced the ref since ``advance_branch_ref`` read ``old_sha``.
-        if args and args[0] == "ls-tree" and _ref_value(repo, "target") == old_sha:
+        # ``worktree list`` is the first ``_run_git`` call after the FF precheck
+        # (the tree/status listings run through ``kernel.git``, outside the spy).
+        if args and args[0] == "worktree" and _ref_value(repo, "target") == old_sha:
             _git(repo, "update-ref", "refs/heads/target", concurrent_sha, old_sha)
 
     recorded = spy_run_git(_move_ref_once)
@@ -194,3 +196,158 @@ def test_advance_without_expected_old_falls_back_to_observed_value(
     assert update_refs == [["update-ref", "refs/heads/target", new_sha, old_sha]], (
         f"the interim default must still issue a 3-arg CAS on the observed old value, got {update_refs!r}"
     )
+
+
+def test_commit_advance_uses_parent_cas_without_hard_resync(
+    tmp_path: Path,
+    spy_run_git: Callable[[Callable[[list[str]], None] | None], list[list[str]]],
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    old_sha = _commit(repo, "a.txt", "one", "c0")
+    _git(repo, "branch", "target", old_sha)
+    new_sha = _commit(repo, "a.txt", "two", "c1")
+    _git(repo, "checkout", "--quiet", "target")
+
+    recorded = spy_run_git(None)
+
+    ref_advance.advance_branch_ref_for_commit(
+        repo,
+        repo,
+        "target",
+        new_sha,
+        expected_old_sha=old_sha,
+        message="safe commit",
+    )
+
+    assert _ref_value(repo, "target") == new_sha
+    assert _update_ref_argvs(recorded) == [["update-ref", "-m", "safe commit", "refs/heads/target", new_sha, old_sha]]
+    assert not any(args[:2] == ["reset", "--hard"] for args in recorded)
+
+
+def test_commit_advance_fails_closed_when_parent_ref_moves_before_cas(
+    tmp_path: Path,
+    spy_run_git: Callable[[Callable[[list[str]], None] | None], list[list[str]]],
+) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    old_sha = _commit(repo, "a.txt", "one", "c0")
+    _git(repo, "branch", "target", old_sha)
+    _git(repo, "branch", "concurrent", old_sha)
+    _git(repo, "branch", "candidate", old_sha)
+
+    _git(repo, "checkout", "--quiet", "concurrent")
+    concurrent_sha = _commit(repo, "rival.txt", "rival", "concurrent")
+    _git(repo, "checkout", "--quiet", "candidate")
+    new_sha = _commit(repo, "mine.txt", "mine", "candidate")
+    _git(repo, "checkout", "--quiet", "target")
+
+    def move_target_before_cas(args: list[str]) -> None:
+        if args and args[0] == "update-ref":
+            _git(repo, "update-ref", "refs/heads/target", concurrent_sha, old_sha)
+
+    recorded = spy_run_git(move_target_before_cas)
+
+    with pytest.raises(RefAdvanceError):
+        ref_advance.advance_branch_ref_for_commit(
+            repo,
+            repo,
+            "target",
+            new_sha,
+            expected_old_sha=old_sha,
+            message="safe commit",
+        )
+
+    assert _ref_value(repo, "target") == concurrent_sha
+    advance_writes = [args for args in _update_ref_argvs(recorded) if args[-2:] == [new_sha, old_sha]]
+    assert advance_writes == [["update-ref", "-m", "safe commit", "refs/heads/target", new_sha, old_sha]]
+
+
+def test_commit_advance_refuses_a_second_checked_out_target_worktree(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    old_sha = _commit(repo, "a.txt", "one", "c0")
+    _git(repo, "branch", "target", old_sha)
+    _git(repo, "branch", "candidate", old_sha)
+    _git(repo, "checkout", "--quiet", "candidate")
+    new_sha = _commit(repo, "candidate.txt", "candidate", "candidate")
+    _git(repo, "checkout", "--quiet", "target")
+
+    other_worktree = tmp_path / "other-worktree"
+    _git(repo, "worktree", "add", "--quiet", "--detach", str(other_worktree), old_sha)
+    _git(other_worktree, "symbolic-ref", "HEAD", "refs/heads/target")
+
+    checkouts = [line for line in _git(repo, "worktree", "list", "--porcelain").splitlines() if line == "branch refs/heads/target"]
+    assert len(checkouts) == 2, "test setup must expose two worktrees on the target branch"
+
+    with pytest.raises(RefAdvanceError, match="other worktree"):
+        ref_advance.advance_branch_ref_for_commit(
+            repo,
+            repo,
+            "target",
+            new_sha,
+            expected_old_sha=old_sha,
+            message="safe commit",
+        )
+
+    assert _ref_value(repo, "target") == old_sha
+
+
+def test_commit_advance_refuses_when_target_is_not_checked_out_in_reconciled_worktree(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    old_sha = _commit(repo, "a.txt", "one", "c0")
+    _git(repo, "branch", "target", old_sha)
+    _git(repo, "branch", "candidate", old_sha)
+    _git(repo, "checkout", "--quiet", "candidate")
+    new_sha = _commit(repo, "candidate.txt", "candidate", "candidate")
+
+    with pytest.raises(RefAdvanceError, match="not checked out"):
+        ref_advance.advance_branch_ref_for_commit(
+            repo,
+            repo,
+            "target",
+            new_sha,
+            expected_old_sha=old_sha,
+            message="safe commit",
+        )
+
+    assert _ref_value(repo, "target") == old_sha
+
+
+def test_resync_failure_after_a_successful_cas_raises_ref_resync_error(
+    tmp_path: Path,
+    spy_run_git: Callable[[Callable[[list[str]], None] | None], list[list[str]]],
+) -> None:
+    """Slice-10 F1: the ref MOVED (our CAS won) but the checkout resync failed.
+
+    The caller must be able to tell this from a CAS refusal (another actor moved
+    the ref): :class:`RefResyncError` is a :class:`RefAdvanceError` subclass, the
+    ref is at ``new_sha`` and the message still names the resync repair.
+    """
+    from specify_cli.git.ref_advance import RefResyncError
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _init_repo(repo)
+    old_sha = _commit(repo, "a.txt", "one", "c0")
+    _git(repo, "checkout", "-q", "-b", "target")
+    new_sha = _commit(repo, "a.txt", "two", "c1")
+    _git(repo, "update-ref", "refs/heads/target", old_sha, new_sha)
+    _git(repo, "reset", "-q", "--hard", "target")
+
+    def _lock_index_on_cas(args: list[str]) -> None:
+        if args and args[0] == "update-ref":
+            (repo / ".git" / "index.lock").write_text("", encoding="utf-8")
+
+    spy_run_git(_lock_index_on_cas)
+
+    with pytest.raises(RefResyncError, match="failed to resync") as raised:
+        advance_branch_ref(repo, "target", new_sha, expected_old_sha=old_sha)
+
+    assert isinstance(raised.value, RefAdvanceError)
+    assert _ref_value(repo, "target") == new_sha, "the CAS succeeded: the ref moved"

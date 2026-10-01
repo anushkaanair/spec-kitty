@@ -1,10 +1,13 @@
 ---
 title: WP & Op Schema Model — Formalising Work-Package and Op Records
 description: 'Idea + grounding to formalise WP files and the Op record via code-owned models/schemas; the model is ~60-70% already shipped, so the win is a narrow hash/field-eviction fix.'
-doc_status: grounded
-updated: '2026-07-16'
+doc_status: draft
+updated: '2026-09-30'
+audience: docs/context/audience/internal/system-architect.md
 ---
 # WP & Op Schema Model
+
+> **Status update (2026-09-30).** Parked idea, written against the 3.2.x milestone. The 3.x line has closed and 3.3.x was retired, so any "deferred to 3.3.x" routing below needs re-triage. The active cycle is 4.0.0 — see the [4.0.0 roadmap](../4-0-0-milestone-roadmap.md).
 
 | Field | Value |
 |---|---|
@@ -13,7 +16,7 @@ updated: '2026-07-16'
 | Author | Operator (via Spec Kitty session `SK_DESIGN`) |
 | Branch | `design/wp-op-schema-model` (isolated worktree) |
 | Grounds against | model-first doctrine schema precedent, degodding roadmap, mission-type→doctrine migration, Op record schema v2 |
-| Related | [model-first-schema-generation.md](model-first-schema-generation.md), `src/specify_cli/invocation/record.py`, `src/specify_cli/core/wps_manifest.py`, `src/specify_cli/task_metadata_validation.py` |
+| Related | [model-first-schema-generation.md](https://github.com/spec-kitty/spec-kitty/blob/main/docs/archive/plans/investigations/model-first-schema-generation.md), `src/specify_cli/invocation/record.py`, `src/specify_cli/core/wps_manifest.py`, `src/specify_cli/task_metadata_validation.py` |
 
 > **This is an idea note, not a decision.** It captures intent verbatim from the
 > originating session and frames the research questions. It is deliberately
@@ -100,7 +103,7 @@ Op from an ungoverned ad-hoc edit.
   `status/*`, `dependency_parser.py`, …). A single code-owned model is exactly
   the kind of consolidation the degodding roadmap favours (one authority, ports
   over scattered parsing).
-- **Precedent exists.** [Model-first schema generation](model-first-schema-generation.md)
+- **Precedent exists.** [Model-first schema generation](https://github.com/spec-kitty/spec-kitty/blob/main/docs/archive/plans/investigations/model-first-schema-generation.md)
   already made **Pydantic models the single source of truth for all 10 doctrine
   YAML schemas**, with `scripts/generate_schemas.py --check` as a drift gate.
   This idea extends that proven pattern from *doctrine* artefacts to *execution*

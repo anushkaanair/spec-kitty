@@ -28,6 +28,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from kernel.git import GitPath, StatusEntry
 from specify_cli.cli.commands.agent.tasks import (
     _filter_runtime_state_paths,
     _validate_ready_for_review,
@@ -35,10 +36,7 @@ from specify_cli.cli.commands.agent.tasks import (
 from specify_cli.dossier.snapshot import save_snapshot
 from specify_cli.dossier.models import MissionDossierSnapshot
 from specify_cli.status.models import Lane, StatusEvent
-from specify_cli.status.preflight import (
-    filter_dossier_snapshots,
-    is_dossier_snapshot,
-)
+from specify_cli.status.preflight import is_dossier_snapshot
 from specify_cli.status.store import append_event
 from tests.lane_test_utils import (
     lane_branch_name,
@@ -85,30 +83,26 @@ def test_is_dossier_snapshot_rejects_unrelated_paths(candidate: str) -> None:
     assert is_dossier_snapshot(candidate) is False
 
 
-def test_filter_dossier_snapshots_strips_only_snapshots() -> None:
-    """``filter_dossier_snapshots`` removes snapshots and preserves everything else."""
+def test_is_dossier_snapshot_filter_strips_only_snapshots() -> None:
+    """Filtering with ``is_dossier_snapshot`` removes snapshots and preserves everything else."""
     paths = [
         "src/foo.py",
         ".kittify/dossiers/foo/snapshot-latest.json",
         "kitty-specs/x/.kittify/dossiers/x/snapshot-latest.json",
         "README.md",
     ]
-    assert filter_dossier_snapshots(paths) == ["src/foo.py", "README.md"]
+    assert [p for p in paths if not is_dossier_snapshot(p)] == ["src/foo.py", "README.md"]
 
 
 def test_filter_runtime_state_paths_drops_dossier_snapshot() -> None:
     """The shared porcelain filter must drop dossier snapshots (belt-and-suspenders)."""
-    porcelain = "\n".join(
-        [
-            " M src/foo.py",
-            "?? kitty-specs/x/.kittify/dossiers/x/snapshot-latest.json",
-            " M README.md",
-        ]
+    entries = (
+        StatusEntry(xy=" M", path=GitPath.parse("src/foo.py")),
+        StatusEntry(xy="??", path=GitPath.parse("kitty-specs/x/.kittify/dossiers/x/snapshot-latest.json")),
+        StatusEntry(xy=" M", path=GitPath.parse("README.md")),
     )
-    filtered = _filter_runtime_state_paths(porcelain)
-    assert "snapshot-latest.json" not in filtered
-    assert "src/foo.py" in filtered
-    assert "README.md" in filtered
+    filtered = {str(entry.path) for entry in _filter_runtime_state_paths(entries)}
+    assert filtered == {"src/foo.py", "README.md"}
 
 
 # ---------------------------------------------------------------------------

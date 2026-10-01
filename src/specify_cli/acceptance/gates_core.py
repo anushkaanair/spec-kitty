@@ -34,12 +34,11 @@ from typing import TYPE_CHECKING, Any
 
 from mission_runtime import TopologySurface
 from specify_cli.acceptance.execution_context import GateSurfaceRefMismatch
-from specify_cli.core.owned_mission import effective_root_kwargs
 from specify_cli.core.subtask_rows import iter_unchecked_subtask_rows
 from specify_cli.status_lanes import is_acceptable_ending
-from specify_cli.task_utils import run_git
 
 if TYPE_CHECKING:
+    from mission_runtime import OwnedCheckout
     from specify_cli.acceptance.execution_context import (
         CannotEvaluate,
         GateExecutionContext,
@@ -244,7 +243,33 @@ def _resolve_lanes_manifest_or_stop(
         return None
 
 
+def _wp_kinds_for_manifest(repo_root: Path, mission_slug: str) -> Mapping[str, Any]:
+    """Build the WP id -> :class:`WorkProductKind` index :func:`has_code_wps` needs.
+
+    #5100 T020 / plan fold B3: the ONE place this module derives WP kinds,
+    reusing the canonical normalized-WP index (:func:`build_normalized_wp_index`)
+    rather than re-parsing frontmatter -- so this can never drift from what
+    ``resolve_workspace_for_wp`` itself classifies a WP as.
+
+    #5100 WP04 cycle-2 fix (review issue 2, mirrors
+    ``consolidation/executor.py::_run_has_code_wps``'s identical fix): ONLY
+    an EXPLICIT frontmatter ``execution_mode`` (``mode_source ==
+    "frontmatter"``) is trusted as a "code" signal. A WP with no
+    ``execution_mode`` normalizes via bare-default inference
+    (``mode_source == "inferred_legacy"``, defaulting to ``code_change``
+    when the body carries no signal at all) -- trusting that default here
+    would flip a genuinely lane-planning-only legacy mission's branch gate
+    into "has code" from a WP that never claimed to be one.
+    """
+    from specify_cli.ownership.models import WorkProductKind
+    from specify_cli.workspace.context import build_normalized_wp_index
+
+    index = build_normalized_wp_index(repo_root, mission_slug)
+    return {wp_id: WorkProductKind(entry.metadata.execution_mode) for wp_id, entry in index.items() if entry.mode_source == "frontmatter"}
+
+
 def _evaluate_branch_gate(
+    repo_root: Path,
     lanes_manifest: Any,
     feature_dir: Path,
     branch: str | None,
@@ -252,13 +277,13 @@ def _evaluate_branch_gate(
     skipped_checks: list[AcceptanceCheckDiagnostic],
     blocked_checks: list[AcceptanceCheckDiagnostic],
 ) -> bool:
-    """Target-branch mismatch + allowed-branch + planning-only gate.
+    """Target-branch mismatch + allowed-branch + no-code gate.
 
     Returns ``True`` when the caller should continue on to the acceptance
-    matrix evaluation, ``False`` when it should stop (blocked or a
-    planning-artifact-only mission, which never carries a matrix).
+    matrix evaluation, ``False`` when it should stop (blocked, or a mission
+    with no code WPs -- which never carries a matrix).
     """
-    from specify_cli.lanes.compute import is_planning_artifact_only
+    from specify_cli.lanes.compute import mission_has_code as _mission_has_code_fn
 
     from specify_cli import acceptance as _acceptance_pkg
 
@@ -274,9 +299,18 @@ def _evaluate_branch_gate(
         )
         return False
 
-    planning_artifact_only = is_planning_artifact_only(lanes_manifest)
+    # #5100 T020 / plan fold B3: the "no code" claims below use the WP-kind
+    # question (has_code_wps), never the lane-shape ``is_planning_artifact_only``
+    # -- a single_branch repo-root lane can hold CODE WPs, which the lane-shape
+    # predicate alone cannot see (it stays lane-based, unchanged, for its own
+    # other callers).
+    # #5100 WP04 cycle-3 fix (review issue 1): delegates to
+    # ``lanes.compute.mission_has_code`` (has_code_lanes floor OR has_code_wps),
+    # so a legacy lanes/coord mission's per-WP frontmatter ambiguity can never
+    # flip this to "no code" the way the bare kind check alone did.
+    mission_has_code = _mission_has_code_fn(lanes_manifest, _wp_kinds_for_manifest(repo_root, feature_dir.name))
     allowed_branches = {lanes_manifest.target_branch}
-    if not planning_artifact_only:
+    if mission_has_code:
         allowed_branches.add(lanes_manifest.mission_branch)
 
     if branch is None or branch not in allowed_branches:
@@ -292,7 +326,7 @@ def _evaluate_branch_gate(
         )
         return False
 
-    if planning_artifact_only:
+    if not mission_has_code:
         _append_skipped_lane_checks(
             skipped_checks,
             reason="planning_artifact-only missions do not produce acceptance-matrix.json",
@@ -308,7 +342,7 @@ def _acceptance_gate_context(
     feature_dir: Path,
     *,
     branch: str | None = None,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> GateExecutionContext:
     """Build the ACCEPT-phase :class:`GateExecutionContext` for the acceptance matrix.
 
@@ -316,8 +350,9 @@ def _acceptance_gate_context(
     T017): it resolves the surface through the WP02 total resolver
     (:func:`mission_runtime.resolve_artifact_surface`) so the four ``CoordState``
     answers are total by construction — ``DELETED`` raises ``CoordinationBranchDeleted``
-    (C3 fail-loud), ``EMPTY`` / ``UNMATERIALIZED`` stamp ``PRIMARY`` (the create
-    window), ``MATERIALIZED`` stamps ``COORD``. The gate is then handed the surface
+    (C3 fail-loud), ``UNMATERIALIZED`` raises ``CoordinationWorktreeUnmaterialized``
+    (#4959; :func:`_evaluate_acceptance_matrix` turns it into cannot-evaluate, #5399),
+    ``EMPTY`` stamps ``PRIMARY`` (the create window), ``MATERIALIZED`` stamps ``COORD``. The gate is then handed the surface
     (never an ambient ``repo_root`` / cwd), and every verdict/refusal it emits names
     the returned ``surface_kind`` + ``ref`` (C6). ``ref`` prefers the caller-observed
     currently-checked-out ``branch`` (GEC-2 / C5's reference point — see
@@ -331,25 +366,58 @@ def _acceptance_gate_context(
     """
     from mission_runtime import MissionArtifactKind
 
-    from specify_cli import acceptance as _acceptance_pkg
     from specify_cli.acceptance.execution_context import (
         LifecyclePhase,
         build_gate_execution_context,
     )
 
-    # ``_target_branch_for_feature`` is resolved off the live ``specify_cli.acceptance``
-    # namespace at call time (not a top-level import) so the WP01 characterization
-    # monkeypatch of ``read_target_branch_from_meta`` stays visible — see the module
-    # docstring's cross-module note.
-    ref = branch or _acceptance_pkg._target_branch_for_feature(feature_dir) or "HEAD"
-    scope: dict[str, Any] = effective_root_kwargs(effective_root)
+    ref = _acceptance_gate_ref(feature_dir, branch)
     return build_gate_execution_context(
         repo_root,
         feature_dir.name,
         MissionArtifactKind.ACCEPTANCE_MATRIX,
         phase=LifecyclePhase.ACCEPT,
         ref=ref,
-        **scope,
+        owned=owned,
+    )
+
+
+def _acceptance_gate_ref(feature_dir: Path, branch: str | None) -> str:
+    """The reference point the acceptance-matrix gate context is built against.
+
+    The caller-observed ``branch`` first, then the mission target branch, then
+    ``HEAD`` — shared by :func:`_acceptance_gate_context` and the #5399
+    unmaterialized-coord refusal so both name the same ``ref`` (C6).
+    ``_target_branch_for_feature`` is resolved off the live
+    ``specify_cli.acceptance`` namespace at call time (not a top-level import) so
+    the WP01 characterization monkeypatch of ``read_target_branch_from_meta``
+    stays visible.
+    """
+    from specify_cli import acceptance as _acceptance_pkg
+
+    return branch or _acceptance_pkg._target_branch_for_feature(feature_dir) or "HEAD"
+
+
+def _unmaterialized_coord_cannot_evaluate(exc: Exception, ref: str) -> CannotEvaluate:
+    """#5399: the cannot-evaluate outcome for an unmaterialized coordination worktree.
+
+    #4959 made the placement seam raise ``CoordinationWorktreeUnmaterialized`` when
+    the mission's coordination branch exists but its worktree was never checked
+    out. The acceptance matrix is homed on that COORD surface, so the gate has no
+    authoritative surface to judge: it refuses (fail closed, GEC-5 / C2) naming the
+    unmaterialized COORD home and carrying the exception's remediation text, never
+    a pass and never a raw traceback.
+    """
+    from specify_cli.acceptance.execution_context import (
+        CannotEvaluate,
+        CannotEvaluateReason,
+    )
+
+    return CannotEvaluate(
+        reason=CannotEvaluateReason.SURFACE_CANNOT_HOLD_FACT,
+        detail=f"coordination worktree is not materialized ({getattr(exc, 'error_code', type(exc).__name__)}): {exc}",
+        surface_kind=TopologySurface.COORD,
+        ref=ref,
     )
 
 
@@ -436,8 +504,9 @@ def _acceptance_matrix_read_dir(repo_root: Path, feature_dir: Path) -> Path:
     mission's stored topology routes through coordination AND that surface is
     materialised (``MATERIALIZED``); otherwise it resolves the primary mission dir
     AFFIRMATIVELY (AH-2) — so flat / ``SINGLE_BRANCH`` / ``LANES`` and the ``EMPTY``
-    / ``UNMATERIALIZED`` create window read exactly where they do today
-    (regression-preserving). A ``DELETED`` coordination branch raises
+    create window read exactly where they do today (regression-preserving); an
+    ``UNMATERIALIZED`` coord worktree raises ``CoordinationWorktreeUnmaterialized``
+    (#4959). A ``DELETED`` coordination branch raises
     :class:`CoordinationBranchDeleted` (C3 "fail loud"): a deleted coord branch
     carries unmerged acceptance state, so accept must refuse, not silently pass on a
     stale surface.
@@ -450,13 +519,13 @@ def _matrix_surface_cannot_hold(
     repo_root: Path,
     feature_dir: Path,
     *,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> CannotEvaluate | None:
     """GEC-5 / C2: refuse when the coord-homed matrix is judged on a PRIMARY stamp.
 
     A stamp is not permission: when the acceptance matrix's declared home is
     ``COORD`` (a coordination-routing mission) but the resolved surface came back
-    stamped ``PRIMARY`` — the ``EMPTY`` / ``UNMATERIALIZED`` create-window
+    stamped ``PRIMARY`` — the ``EMPTY`` create-window
     substitution — the coordination surface is not materialised, so the primary
     surface cannot hold the coord-homed matrix. Returns the distinguishable
     cannot-evaluate outcome (naming its surface + ref) rather than reading an empty
@@ -476,12 +545,11 @@ def _matrix_surface_cannot_hold(
 
     from mission_runtime import MissionArtifactKind
 
-    scope: dict[str, Any] = effective_root_kwargs(effective_root)
     home = declared_home_surface(
         repo_root,
         feature_dir.name,
         MissionArtifactKind.ACCEPTANCE_MATRIX,
-        **scope,
+        owned=owned,
     )
     return context.surface_cannot_hold(home)
 
@@ -637,7 +705,7 @@ def _evaluate_acceptance_matrix(
     *,
     mutate_matrix: bool,
     branch: str | None = None,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> Path | None:
     """Read/enforce/validate the acceptance matrix once the branch gate passed.
 
@@ -667,15 +735,21 @@ def _evaluate_acceptance_matrix(
     missing matrix file, or a lock-acquisition timeout).
     """
     from specify_cli.acceptance.matrix import read_acceptance_matrix
+    from specify_cli.coordination.surface_resolver import CoordinationWorktreeUnmaterialized
 
-    scope = effective_root_kwargs(effective_root)
-    context = _acceptance_gate_context(repo_root, feature_dir, branch=branch, **scope)
+    try:
+        context = _acceptance_gate_context(repo_root, feature_dir, branch=branch, owned=owned)
+    except CoordinationWorktreeUnmaterialized as exc:
+        # #5399: keep #4959's raise at the context build; the gate refuses cleanly.
+        unmaterialized = _unmaterialized_coord_cannot_evaluate(exc, _acceptance_gate_ref(feature_dir, branch))
+        _record_matrix_cannot_evaluate(unmaterialized, activity_issues, skipped_checks, blocked_checks)
+        return None
     ref_mismatch = _assert_ref_agreement(context)
     if ref_mismatch is not None:
         _record_ref_mismatch_cannot_evaluate(ref_mismatch, activity_issues, skipped_checks, blocked_checks)
         return None
 
-    cannot = _matrix_surface_cannot_hold(context, repo_root, feature_dir, **scope)
+    cannot = _matrix_surface_cannot_hold(context, repo_root, feature_dir, owned=owned)
     if cannot is not None:
         _record_matrix_cannot_evaluate(cannot, activity_issues, skipped_checks, blocked_checks)
         return None
@@ -740,7 +814,7 @@ def _check_lane_gates(
     blocked_checks: list[AcceptanceCheckDiagnostic],
     *,
     mutate_matrix: bool = True,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> LaneGateOutcome:
     """Enforce lane-based acceptance gates and acceptance matrix.
 
@@ -759,15 +833,22 @@ def _check_lane_gates(
         return LaneGateOutcome()
 
     blocked_before = len(blocked_checks)
-    should_continue = _evaluate_branch_gate(lanes_manifest, feature_dir, branch, activity_issues, skipped_checks, blocked_checks)
+    should_continue = _evaluate_branch_gate(repo_root, lanes_manifest, feature_dir, branch, activity_issues, skipped_checks, blocked_checks)
     if not should_continue:
-        from specify_cli.lanes.compute import is_planning_artifact_only
-
         # The bypass is granted only when the branch gate stopped at its
-        # planning-only branch; a planning-only mission the branch gate
-        # BLOCKED (target mismatch, wrong branch) gets no skip reason.
+        # no-code branch; a mission the branch gate BLOCKED for another
+        # reason (target mismatch, wrong branch) gets no skip reason -- and
+        # never needs the has_code_wps read at all (short-circuits before
+        # it, so a blocked-before-lanes-resolved manifest never needs a
+        # ``.lanes`` attribute).
         branch_gate_blocked = len(blocked_checks) > blocked_before
-        if is_planning_artifact_only(lanes_manifest) and not branch_gate_blocked:
+        if branch_gate_blocked:
+            return LaneGateOutcome()
+
+        from specify_cli.lanes.compute import mission_has_code as _mission_has_code_fn
+
+        mission_has_code = _mission_has_code_fn(lanes_manifest, _wp_kinds_for_manifest(repo_root, feature_dir.name))
+        if not mission_has_code:
             return LaneGateOutcome(skip_reason=PLANNING_ARTIFACT_ONLY_SKIP_REASON)
         return LaneGateOutcome()
 
@@ -779,13 +860,9 @@ def _check_lane_gates(
         blocked_checks,
         mutate_matrix=mutate_matrix,
         branch=branch,
-        **effective_root_kwargs(effective_root),
+        owned=owned,
     )
     return LaneGateOutcome(matrix_dir=matrix_dir)
-
-
-def _git_ref_exists(repo_root: Path, ref: str) -> bool:
-    return bool(run_git(["rev-parse", "--verify", "--quiet", ref], cwd=repo_root, check=False).returncode == 0)
 
 
 __all__: list[str] = []

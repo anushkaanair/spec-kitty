@@ -306,7 +306,7 @@ def lint_report_path(repo_root: Path) -> Path:
     """Return the canonical path of the repo-global charter-lint decay report.
 
     The lint engine writes ``<repo_root>/.kittify/lint-report.json``; the
-    dashboard tile and the dossier stager read it back. This accessor is the
+    dossier stager reads it back. This accessor is the
     single source of truth for that location — no caller should re-compose the
     ``.kittify`` / filename literals by hand (#2628 SSOT fold).
     """
@@ -361,53 +361,6 @@ def is_worktree_context(path: Path) -> bool:
             break
 
     return False
-
-
-def resolve_with_context(start: Path | None = None) -> tuple[Path | None, bool]:
-    """
-    Resolve project root and detect worktree context in one call.
-
-    Args:
-        start: Starting directory for search (defaults to current working directory)
-
-    Returns:
-        Tuple of (project_root, is_worktree)
-        - project_root: Path to repo root or None if not found
-        - is_worktree: True if executing from within .worktrees/
-
-    Examples:
-        >>> # From main repo
-        >>> root, in_worktree = resolve_with_context()
-        >>> assert in_worktree is False
-
-        >>> # From worktree
-        >>> root, in_worktree = resolve_with_context(Path(".worktrees/my-feature"))
-        >>> assert in_worktree is True
-    """
-    current = (start or Path.cwd()).resolve()
-    root = locate_project_root(current)
-    in_worktree = is_worktree_context(current)
-    return root, in_worktree
-
-
-def check_broken_symlink(path: Path) -> bool:
-    """
-    Check if a path is a broken symlink (symlink pointing to non-existent target).
-
-    This helper is useful for graceful error handling when dealing with
-    worktree symlinks that may become invalid.
-
-    Args:
-        path: Path to check
-
-    Returns:
-        True if path is a broken symlink, False otherwise
-
-    Note:
-        A broken symlink returns True for is_symlink() but False for exists().
-        Always check is_symlink() before exists() to detect this condition.
-    """
-    return path.is_symlink() and not path.exists()
 
 
 class WorkspaceRootNotFound(Exception):
@@ -540,14 +493,29 @@ def get_main_repo_root(current_path: Path) -> Path:
     return current_path.resolve()
 
 
-class StatusReadUnsupported(RuntimeError):
-    """Raised when a status command does not support detached-worktree invocation.
+class CommitToTargetMetaError(RuntimeError):
+    """Raised when ``meta.json``'s ``commit_to_target`` value is present but not a bool.
 
-    Commands that require comparison across worktrees (or that have an explicit
-    constraint against detached-worktree reads) should call
-    ``assert_worktree_supported()`` at their entry point.  The error message
-    names the command and describes the constraint so the operator can act.
+    (WP08 / #5100 FR-008, T034.) Mirrors ``read_retention_from_meta``'s
+    ``isinstance(value, bool)`` discipline -- a malformed value is never
+    coerced by truthiness (``bool("false")`` is ``True``, the exact class of
+    bug this guards against). It intentionally does NOT reuse retention's
+    "malformed -> treated as retaining (fail-closed)" WARN-and-continue shape:
+    retention has one safe default direction (retain is always the harmless
+    guess), but ``commit_to_target`` has none -- guessing ``True`` silently
+    skips the #5100 protective mission-branch mint onto a protected target,
+    while guessing ``False`` re-mints a branch the operator may have
+    deliberately opted out of. With no safe default, the fail-closed answer is
+    to raise loudly rather than silently pick a side.
     """
+
+    def __init__(self, raw_value: object) -> None:
+        self.raw_value = raw_value
+        super().__init__(
+            f"meta.json 'commit_to_target' must be a JSON boolean; got "
+            f"{raw_value!r} ({type(raw_value).__name__}). Fix or remove the "
+            "field -- it is never truthiness-coerced."
+        )
 
 
 class MissionMetaReadError(GuardedReadError, RuntimeError):
@@ -579,32 +547,6 @@ class MissionMetaReadError(GuardedReadError, RuntimeError):
         # Populate the GuardedReadError envelope path (contracts/error-envelope.md).
         # Set only ``path`` — ``reason`` would override the crafted __str__ message.
         self.path = str(meta_path)
-
-
-def _is_detached_worktree(start: Path | None = None) -> bool:
-    """Return True when the current working directory is inside a git worktree.
-
-    A git worktree has a ``.git`` *file* (not directory) whose content starts
-    with ``gitdir:`` and points to ``<main>/.git/worktrees/<name>`` — the
-    canonical .git/worktrees topology.  Submodules and separate-git-dir clones
-    also produce a ``.git`` file, but they do *not* use the worktrees topology,
-    so this function correctly excludes them.
-
-    Args:
-        start: Starting directory (defaults to ``Path.cwd()``).
-
-    Returns:
-        True when running inside a worktree, False otherwise.
-    """
-    cwd = (start or Path.cwd()).resolve()
-    for ancestor in [cwd, *cwd.parents]:
-        git_marker = ancestor / ".git"
-        if git_marker.is_file():
-            return _read_worktree_gitdir(git_marker) is not None
-        if git_marker.is_dir():
-            # Main repo .git directory — not a worktree
-            return False
-    return False
 
 
 def get_status_read_root(start: Path | None = None) -> Path:
@@ -659,30 +601,6 @@ def get_status_read_root(start: Path | None = None) -> Path:
             return ancestor
     # Fallback: defer to existing main-repo resolver (very rare path).
     return get_main_repo_root(cwd)
-
-
-def assert_worktree_supported(command_name: str, start: Path | None = None) -> None:
-    """Raise with a clear diagnostic when the current context is a detached
-    worktree and the command does not support that context.
-
-    As of WP05 this helper exists but is NOT called by any active command — all
-    read-only status commands work correctly from both worktrees and the main
-    checkout after the ``get_status_read_root()`` routing fix.  This function is
-    available for future commands that genuinely cannot serve from a detached
-    worktree (e.g., cross-worktree comparison commands).
-
-    Args:
-        command_name: Human-readable name of the subcommand (used in the error).
-        start: Starting directory override (defaults to ``Path.cwd()``).
-
-    Raises:
-        StatusReadUnsupported: When invoked from a detached worktree.
-    """
-    if _is_detached_worktree(start):
-        raise StatusReadUnsupported(
-            f"command '{command_name}' does not support detached-worktree invocation. "
-            f"Run from the primary checkout or document the constraint."
-        )
 
 
 def load_meta_fail_closed(feature_dir: Path) -> dict[str, Any] | None:
@@ -796,6 +714,42 @@ def read_retention_from_meta(
     if not data:
         return None, None
     return data.get("retain_branches"), data.get("retain_worktrees")
+
+
+def read_commit_to_target(meta: dict[str, Any] | None) -> bool:
+    """Read the ``commit_to_target`` override from an already-loaded meta dict.
+
+    Mirrors :func:`read_retention_from_meta`'s field-level pattern (WP08 /
+    #5100 FR-008, T034), but operates on the caller's already-loaded
+    ``meta.json`` mapping rather than doing its own I/O -- ``mission
+    create``'s create-time mint decision (:mod:`specify_cli.core.mission_creation`)
+    already holds the in-progress ``meta`` dict before it is written to disk,
+    and re-reading from a not-yet-committed file would answer the wrong
+    question.
+
+    Args:
+        meta: The parsed ``meta.json`` mapping, or ``None`` (field-absent
+            case, e.g. a mission that predates this field).
+
+    Returns:
+        ``False`` when the field is absent (the default: no override, so a
+        protected-target single_branch mission mints a mission branch).
+        ``True`` only when the raw value is the JSON boolean ``true``.
+
+    Raises:
+        CommitToTargetMetaError: The field is present but not a real
+            ``bool`` (fail-closed -- never truthiness-coerced; see the error
+            class docstring for why this raises rather than warns, unlike
+            :func:`read_retention_from_meta`'s per-field resolver).
+    """
+    if not meta:
+        return False
+    raw = meta.get("commit_to_target")
+    if raw is None:
+        return False
+    if not isinstance(raw, bool):
+        raise CommitToTargetMetaError(raw)
+    return raw
 
 
 def get_feature_target_branch(repo_root: Path, mission_slug: str) -> str:
@@ -1170,14 +1124,10 @@ __all__ = [
     "locate_project_root",
     "lint_report_path",
     "is_worktree_context",
-    "resolve_with_context",
-    "check_broken_symlink",
     "get_main_repo_root",
     "resolve_canonical_root",
     "WorkspaceRootNotFound",
     "get_status_read_root",
-    "StatusReadUnsupported",
-    "assert_worktree_supported",
     "MissionMetaReadError",
     "load_meta_fail_closed",
     "read_target_branch_from_meta",

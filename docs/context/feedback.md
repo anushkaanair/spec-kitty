@@ -83,5 +83,5 @@ How-to: [Give feedback on Spec Kitty](../guides/how-to/collaboration/give-feedba
 | **Context** | Feedback |
 | **Status** | candidate |
 | **Applicable to** | `3.x` |
-| **Avoid** | sanitising, escaping |
+| **Avoid** | sanitizing, escaping |
 | **Related terms** | [Feedback Survey](#feedback-survey), [Feedback Submission](#feedback-submission) |

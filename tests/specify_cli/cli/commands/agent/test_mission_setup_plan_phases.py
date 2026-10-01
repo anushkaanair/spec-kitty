@@ -5,7 +5,7 @@ The pre-decomposition ``setup_plan`` was a 507-LOC monolith; WP06 split it into
 the SaaS auth refusal + boundary preflight gates, feature-dir resolution, the
 spec gate, the plan-template scaffold, the plan-commit branch, the documentation
 wiring no-op, and the result emitter. The relocated planning-commit helpers
-(``_kind_for_artifact``, ``_artifact_absent_at_placement``, etc.) keep their
+(``_kind_for_artifact``, ``_print_artifact_unchanged``, etc.) keep their
 existing coverage via ``test_kind_for_artifact.py`` and
 ``test_agent_mission_commit_to_branch.py``; the end-to-end command stays pinned
 by ``test_agent_feature.py``, ``test_mission_planning_entry.py`` and the WP01
@@ -444,9 +444,7 @@ def test_setup_plan_uses_single_loaded_meta_snapshot_when_file_changes_after_rea
     # authority, so ``resolve_mission_type_context`` fails closed without this.
     kittify_dir = tmp_path / ".kittify"
     kittify_dir.mkdir(parents=True, exist_ok=True)
-    (kittify_dir / "config.yaml").write_text(
-        "mission_type_activations:\n  - software-dev\n", encoding="utf-8"
-    )
+    (kittify_dir / "config.yaml").write_text("mission_type_activations:\n  - software-dev\n", encoding="utf-8")
     template_src = tmp_path / "configured-plan.md"
     template_src.write_text("CONFIGURED PLAN", encoding="utf-8")
     load_calls = 0
@@ -527,9 +525,7 @@ def test_setup_plan_resolves_template_context_from_primary_planning_surface(
     # authority, so ``resolve_mission_type_context`` fails closed without this.
     kittify_dir = tmp_path / ".kittify"
     kittify_dir.mkdir(parents=True, exist_ok=True)
-    (kittify_dir / "config.yaml").write_text(
-        "mission_type_activations:\n  - software-dev\n", encoding="utf-8"
-    )
+    (kittify_dir / "config.yaml").write_text("mission_type_activations:\n  - software-dev\n", encoding="utf-8")
     template_src = tmp_path / "configured-plan.md"
     template_src.write_text("CONFIGURED PLAN", encoding="utf-8")
     configured_calls: list[tuple[str, Path, ResolvedMissionType]] = []
@@ -805,9 +801,7 @@ def test_documentation_wiring_runs_both_documentation_phases(monkeypatch: pytest
     assert generators == [generator]
 
 
-def test_documentation_wiring_on_coord_husk_writes_gap_analysis_to_primary(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_documentation_wiring_on_coord_husk_writes_gap_analysis_to_primary(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """T024 (WP04 review, WP08 T039 nice-to-have): a documentation mission whose
     coordination worktree is a HUSK (materialised, no ``meta.json``) still
     anchors ``gap-analysis.md`` on the PRIMARY dir, never the husk.
@@ -836,23 +830,18 @@ def test_documentation_wiring_on_coord_husk_writes_gap_analysis_to_primary(
 
     captured: dict[str, object] = {}
 
-    def _capture_gap_analysis(
-        primary_dir_arg: Path, *args: object, **kwargs: object
-    ) -> str:
+    def _capture_gap_analysis(primary_dir_arg: Path, *args: object, **kwargs: object) -> str:
         captured["primary_dir_arg"] = primary_dir_arg
         return "gap-analysis.md"
 
     monkeypatch.setattr(seam, "_run_documentation_gap_analysis", _capture_gap_analysis)
     monkeypatch.setattr(seam, "_detect_and_configure_generators", lambda *a, **k: [])
 
-    gap, _generators = seam._run_documentation_wiring(
-        mission_slug, tmp_path, target_branch="main", json_output=True
-    )
+    gap, _generators = seam._run_documentation_wiring(mission_slug, tmp_path, target_branch="main", json_output=True)
 
     assert gap == "gap-analysis.md"
     assert captured["primary_dir_arg"] == primary_dir, (
-        "gap-analysis.md's write target must be the PRIMARY dir, never the "
-        f"coord husk {coord_dir} — got {captured['primary_dir_arg']}"
+        f"gap-analysis.md's write target must be the PRIMARY dir, never the coord husk {coord_dir} — got {captured['primary_dir_arg']}"
     )
     assert captured["primary_dir_arg"] != coord_dir
 
@@ -1019,6 +1008,160 @@ def test_build_result_is_side_effect_free(monkeypatch: pytest.MonkeyPatch, tmp_p
     assert outcome.payload["mission_dir"] == outcome.payload["feature_dir"]
 
 
+# ---------------------------------------------------------------------------
+# _emit_spec_plan_phase_events: the R-touching residue (review cycle 1
+# issue 3). ``resolve_canonical_root``/``get_main_repo_root`` must never be
+# consulted on the owned arm -- the lock root resolves from the fact
+# (owned.repository_root) directly.
+# ---------------------------------------------------------------------------
+
+
+def _mint_owned_for_setup_plan(tmp_path: Path, *, slug: str = "001-docs") -> Any:
+    from mission_runtime import MissionTopology, OwnedCheckout
+
+    repo = tmp_path / "repo"
+    owned_root = tmp_path / "owned"
+    mission_dir = owned_root / "kitty-specs" / slug
+    repo.mkdir(parents=True, exist_ok=True)
+    mission_dir.mkdir(parents=True, exist_ok=True)
+    return OwnedCheckout._mint(
+        repository_root=repo,
+        owned_root=owned_root,
+        mission_dir=mission_dir,
+        mission_slug=slug,
+        topology=MissionTopology.SINGLE_BRANCH,
+        write_branch="codex/owned",
+    )
+
+
+def test_emit_spec_plan_phase_events_owned_arm_never_touches_r(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Owned arm: no lifecycle-event emission call ever resolves a repo root
+    via ``get_main_repo_root`` -- pinned with a raising monkeypatch. Confirms
+    the review-cycle-1 issue-3 residue (``status/lifecycle_events.py:340``,
+    ``_repo_root_for_lifecycle_log`` -> ``resolve_canonical_root``) is closed
+    for the owned path.
+    """
+    import specify_cli.core.paths as paths_module
+
+    fact = _mint_owned_for_setup_plan(tmp_path)
+    spec_file = fact.mission_dir / "spec.md"
+    spec_file.parent.mkdir(parents=True, exist_ok=True)
+    spec_file.write_text("# Spec\n", encoding="utf-8")
+
+    debug_calls: list[tuple[object, ...]] = []
+    monkeypatch.setattr(seam.logger, "debug", lambda *a, **k: debug_calls.append(a))
+    monkeypatch.setattr(
+        paths_module,
+        "get_main_repo_root",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("owned arm must never call get_main_repo_root")),
+    )
+
+    seam._emit_spec_plan_phase_events(fact.mission_dir, "001-docs", spec_file, fact.owned_root, owned=fact)
+
+    assert not debug_calls, f"a lifecycle emission swallowed an exception (get_main_repo_root was reached): {debug_calls}"
+
+
+# ---------------------------------------------------------------------------
+# _resolve_setup_plan_scope: focused tests for the T046 campsite extraction
+# (review cycle 1 issue 7) -- non-owned arm, owned arm, refusal, no-root exit.
+# ---------------------------------------------------------------------------
+
+_OWNED_CHECKOUT_MODULE = "specify_cli.cli.commands._owned_checkout.resolve_owned_or_adopt"
+
+
+def _patch_scope_environment(monkeypatch: pytest.MonkeyPatch, project_root: Path | None) -> list[Path]:
+    """Patch the ``mission`` shim seams the scope resolver reads; return the preflight-root log."""
+    from specify_cli.cli.commands.agent import mission as _mission
+
+    preflight_roots: list[Path] = []
+    monkeypatch.setattr(_mission, "locate_project_root", lambda *a, **k: project_root)
+    monkeypatch.setattr(_mission, "_enforce_git_preflight", lambda root, **k: preflight_roots.append(root))
+    return preflight_roots
+
+
+def test_resolve_setup_plan_scope_non_owned_arm(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from specify_cli.cli.commands.agent import mission as _mission
+
+    preflight_roots = _patch_scope_environment(monkeypatch, tmp_path)
+    feature_dir = tmp_path / "kitty-specs" / "001-plain"
+    monkeypatch.setattr("specify_cli.cli.commands._owned_checkout.resolve_owned_or_adopt", lambda *a, **k: None)
+    monkeypatch.setattr(seam, "_resolve_setup_plan_feature_dir", lambda root, feature, *, json_output: feature_dir)
+    monkeypatch.setattr(_mission, "_show_branch_context", lambda root, slug, json_output: ("main", "release"))
+
+    scope = seam._resolve_setup_plan_scope("001-plain", True)
+
+    assert scope.owned is None
+    assert scope.repo_root == tmp_path
+    assert scope.feature_dir == feature_dir
+    assert scope.mission_slug == "001-plain"
+    assert scope.target_branch == "release"
+    assert scope.git_root == tmp_path
+    assert preflight_roots == [tmp_path]
+
+
+def test_resolve_setup_plan_scope_owned_arm_uses_the_fact(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from specify_cli.cli.commands.agent import mission as _mission
+
+    fact = _mint_owned_for_setup_plan(tmp_path)
+    # The fact's write branch differs from the mission's landing branch (a #5100 protected-target mint).
+    (fact.mission_dir / "meta.json").write_text('{"target_branch": "main", "mission_branch": "codex/owned"}', encoding="utf-8")
+    preflight_roots = _patch_scope_environment(monkeypatch, fact.repository_root)
+    monkeypatch.setattr("specify_cli.cli.commands._owned_checkout.resolve_owned_or_adopt", lambda *a, **k: fact)
+
+    def _forbidden(*_a: object, **_k: object) -> None:
+        raise AssertionError("owned arm must not use the repository-root resolvers")
+
+    monkeypatch.setattr(seam, "_resolve_setup_plan_feature_dir", _forbidden)
+    monkeypatch.setattr(_mission, "_show_branch_context", _forbidden)
+
+    scope = seam._resolve_setup_plan_scope("001-docs", True, owned_claim=fact.owned_root)
+
+    assert scope.owned is fact
+    assert scope.repo_root == fact.repository_root
+    assert scope.feature_dir == fact.mission_dir
+    assert scope.mission_slug == fact.mission_slug
+    assert scope.target_branch == "main"  # the landing branch, read from the fact's own mission meta
+    assert fact.write_branch == "codex/owned"
+    assert scope.git_root == fact.owned_root
+    assert preflight_roots == [fact.owned_root]
+
+
+def test_resolve_setup_plan_scope_refusal_renders_result_error_envelope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import json
+
+    from mission_runtime import ActionContextError, OwnedRefusalCode
+
+    _patch_scope_environment(monkeypatch, tmp_path)
+
+    def _refuse(*_a: object, **_k: object) -> None:
+        raise ActionContextError(OwnedRefusalCode.OWNED_BRANCH_REFUSED, "wrong branch")
+
+    monkeypatch.setattr("specify_cli.cli.commands._owned_checkout.resolve_owned_or_adopt", _refuse)
+
+    with pytest.raises(typer.Exit) as exc_info:
+        seam._resolve_setup_plan_scope("001-docs", True, owned_claim=tmp_path / "p")
+
+    assert exc_info.value.exit_code == 1
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["result"] == "error"
+    assert payload["phase_complete"] is False
+    assert payload["error_code"] == OwnedRefusalCode.OWNED_BRANCH_REFUSED.value
+    assert payload["error"] == "wrong branch"
+
+
+@pytest.mark.parametrize("json_output", [True, False])
+def test_resolve_setup_plan_scope_missing_project_root_exits(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], json_output: bool) -> None:
+    _patch_scope_environment(monkeypatch, None)
+
+    with pytest.raises(typer.Exit) as exc_info:
+        seam._resolve_setup_plan_scope(None, json_output)
+
+    assert exc_info.value.exit_code == 1
+    assert seam.PROJECT_ROOT_NOT_FOUND_MESSAGE in capsys.readouterr().out
+
+
 def test_warn_commit_failed_recipe_names_to_branch(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     """The manual-fallback recipe printed when an
     auto-commit fails must name --to-branch with the real destination
@@ -1035,3 +1178,187 @@ def test_warn_commit_failed_recipe_names_to_branch(capsys: pytest.CaptureFixture
     )
     output = re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out)
     assert "--to-branch kitty/mission-demo-lane-a" in output
+
+
+# ---------------------------------------------------------------------------
+# WP05 (requirement-id-grammar-01M3NRCA, T025): _evaluate_requirement_id_gate
+# / _spec_requirement_id_warnings / requirement_id_warnings wiring.
+# ---------------------------------------------------------------------------
+
+
+def test_evaluate_requirement_id_gate_refuses_malformed_declared_id(tmp_path: Path) -> None:
+    feature_dir = tmp_path / "001-demo"
+    feature_dir.mkdir()
+    spec_file = feature_dir / "spec.md"
+    spec_file.write_text("# Spec\n\n| C-007-mission | x | y |\n", encoding="utf-8")
+
+    outcome, message = seam._evaluate_requirement_id_gate(spec_file, feature_dir, "001-demo")
+
+    assert outcome is not None
+    assert outcome.exit_code == 1
+    assert outcome.render_kind == "error"
+    assert outcome.payload["error_code"] == seam.SPEC_REQUIREMENT_IDS_INVALID
+    invalid_ids = outcome.payload["invalid_requirement_ids"]
+    assert isinstance(invalid_ids, list)
+    assert invalid_ids[0]["token"] == "C-007-mission"
+    assert message is not None
+    assert "C-007-mission" in message
+
+
+def test_evaluate_requirement_id_gate_passes_corrected_spec(tmp_path: Path) -> None:
+    feature_dir = tmp_path / "001-demo"
+    feature_dir.mkdir()
+    spec_file = feature_dir / "spec.md"
+    spec_file.write_text("# Spec\n\n| C-007 | x | y |\n", encoding="utf-8")
+
+    outcome, message = seam._evaluate_requirement_id_gate(spec_file, feature_dir, "001-demo")
+
+    assert outcome is None
+    assert message is None
+
+
+def test_evaluate_spec_gate_refuses_malformed_declared_id_when_committed_and_substantive(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    feature_dir = tmp_path / "001-demo"
+    feature_dir.mkdir()
+    spec_file = feature_dir / "spec.md"
+    spec_file.write_text("# Spec\n\n| C-007-mission | x | y |\n", encoding="utf-8")
+    monkeypatch.setattr("specify_cli.missions._substantive.is_committed", lambda *a, **k: True)
+    monkeypatch.setattr("specify_cli.missions._substantive.is_substantive", lambda *a, **k: True)
+
+    outcome, message = seam._evaluate_spec_gate(
+        spec_file,
+        feature_dir,
+        "001-demo",
+        tmp_path,
+        target_branch="main",
+        current_branch="main",
+    )
+
+    assert outcome is not None
+    assert outcome.exit_code == 1
+    assert outcome.render_kind == "error"
+    assert outcome.payload["error_code"] == seam.SPEC_REQUIREMENT_IDS_INVALID
+    assert message is not None
+
+
+def test_evaluate_spec_gate_still_passes_when_committed_substantive_and_well_formed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Positive control: the pre-existing ``# real`` case (:136-152) stays
+    green unchanged -- no declared IDs at all is still a pass."""
+    feature_dir = tmp_path / "001-demo"
+    feature_dir.mkdir()
+    spec_file = feature_dir / "spec.md"
+    spec_file.write_text("# real", encoding="utf-8")
+    monkeypatch.setattr("specify_cli.missions._substantive.is_committed", lambda *a, **k: True)
+    monkeypatch.setattr("specify_cli.missions._substantive.is_substantive", lambda *a, **k: True)
+
+    outcome, message = seam._evaluate_spec_gate(
+        spec_file,
+        feature_dir,
+        "001-demo",
+        tmp_path,
+        target_branch="main",
+        current_branch="main",
+    )
+
+    assert outcome is None
+    assert message is None
+
+
+def test_requirement_id_gate_message_escapes_the_rule_text() -> None:
+    """Rich markup escaping: ``_render_requirement_id_gate_message`` must
+    escape ``[...]``-shaped content in a token/rule before it reaches rich
+    markup rendering.
+
+    ``grammar.RULE_TEXT`` (``"<kind>-<digits>[<lowercase letter>]"``) is NOT
+    a usable fixture for this: ``<lowercase letter>`` inside the brackets
+    contains characters (``<``, ``>``, a space) that rich's own tag grammar
+    never matches, so ``rich.markup.escape`` leaves it byte-for-byte
+    unchanged -- asserting its presence in the rendered message passes
+    whether or not ``escape`` is called at all (vacuous). ``[bold]`` IS a
+    tag rich's grammar matches, so it round-trips through ``escape`` as
+    ``\\[bold]`` (a leading backslash, escape only ever needs to guard the
+    opening bracket). Constructing the ``invalid_ids`` dict directly (rather
+    than routing text through the grammar's declared-lead capture, whose
+    charset ``[A-Za-z0-9_.-]`` cannot itself produce bracket characters)
+    isolates the escaping behaviour of the renderer from the grammar."""
+    invalid_ids: list[dict[str, object]] = [
+        {"line": 3, "token": "FR-001", "rule": "use [bold]this[/bold] format"},
+    ]
+
+    message = seam._render_requirement_id_gate_message(invalid_ids)
+
+    assert "\\[bold]this\\[/bold]" in message
+    assert "[bold]this[/bold]" not in message
+
+
+def test_spec_requirement_id_warnings_absent_file_returns_empty(tmp_path: Path) -> None:
+    assert seam._spec_requirement_id_warnings(tmp_path / "missing-spec.md") == []
+
+
+def test_spec_requirement_id_warnings_returns_one_dict_per_prose_token(tmp_path: Path) -> None:
+    spec_file = tmp_path / "spec.md"
+    spec_file.write_text("# Spec\n\n## User Scenarios\nsee FR-099 here.\n", encoding="utf-8")
+
+    warnings = seam._spec_requirement_id_warnings(spec_file)
+
+    assert len(warnings) == 1
+    assert warnings[0]["token"] == "FR-099"
+
+
+def test_build_setup_plan_result_carries_requirement_id_warnings(tmp_path: Path) -> None:
+    outcome = seam._build_setup_plan_result(
+        plan_file=tmp_path / "plan.md",
+        spec_file=tmp_path / "spec.md",
+        feature_dir=tmp_path,
+        mission_slug="001-demo",
+        plan_is_substantive=True,
+        plan_blocked_reason=None,
+        plan_commit_result=None,
+        gap_analysis_path=None,
+        generators_detected=[],
+        target_branch="main",
+        current_branch="main",
+    )
+
+    assert outcome.payload["requirement_id_warnings"] == []
+
+
+def test_build_setup_plan_result_default_empty_and_passes_through_warnings(tmp_path: Path) -> None:
+    outcome = seam._build_setup_plan_result(
+        plan_file=tmp_path / "plan.md",
+        spec_file=tmp_path / "spec.md",
+        feature_dir=tmp_path,
+        mission_slug="001-demo",
+        plan_is_substantive=True,
+        plan_blocked_reason=None,
+        plan_commit_result=None,
+        gap_analysis_path=None,
+        generators_detected=[],
+        target_branch="main",
+        current_branch="main",
+        requirement_id_warnings=[{"token": "FR-099", "line": 4, "message": "msg"}],
+    )
+
+    assert outcome.payload["requirement_id_warnings"] == [{"token": "FR-099", "line": 4, "message": "msg"}]
+
+
+def test_emit_result_human_prints_requirement_id_warning_line(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    seam._emit_setup_plan_result(
+        plan_file=tmp_path / "plan.md",
+        spec_file=tmp_path / "spec.md",
+        feature_dir=tmp_path,
+        mission_slug="001-demo",
+        plan_is_substantive=True,
+        plan_blocked_reason=None,
+        plan_commit_result=None,
+        gap_analysis_path=None,
+        generators_detected=[],
+        target_branch="main",
+        current_branch="main",
+        json_output=False,
+        requirement_id_warnings=[{"token": "FR-099", "line": 4, "message": "looks like a requirement ID"}],
+    )
+    output = capsys.readouterr().out
+    assert "Warning" in output
+    assert "FR-099" in output
+    assert "line 4" in output

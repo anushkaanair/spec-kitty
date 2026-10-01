@@ -1,20 +1,21 @@
 ---
-title: 2.x Implementation Mapping
-description: '2.x implementation mapping (C4 level 4): the historical link from architecture components to the code that realizes them, preserved beneath the living model.'
+title: Implementation Mapping (living)
+description: 'Living implementation mapping (C4 level 4): where each architecture concept lives in the source tree today. A derived view of the enforced module map.'
 doc_status: active
-updated: '2026-09-06'
+updated: '2026-10-01'
+audience: docs/context/audience/internal/system-architect.md
 related:
 - docs/architecture/00_landscape/README.md
 - docs/architecture/04_implementation_mapping/code-patterns.md
 - docs/architecture/05_ownership_map.md
 ---
-# 2.x Implementation Mapping
+# Implementation Mapping (living)
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | Living (derived view; the enforced pair wins on conflict) |
 | Date | 2026-03-04 |
-| Last Updated | 2026-03-25 |
+| Last Updated | 2026-09-30 |
 | Scope | Maps C4 architecture views and doctrine stack to current codebase |
 | Parent | [System Landscape](../00_landscape/README.md) |
 | Related ADRs | `2026-03-25-1-glossary-type-ownership` |
@@ -44,16 +45,16 @@ implementation aligns with or diverges from the target architecture.
 
 ## Level 0 — System Landscape → Codebase Modules
 
-The landscape defines 8 domain containers. All 8 exist in the current codebase
-as Python modules within a single-process CLI application.
+The landscape's domain containers all exist in the current codebase as Python
+modules within a single-process CLI application. The main ones map as follows.
 
 | Landscape Container | Primary Codebase Location | Package | Notes |
 |---|---|---|---|
 | **Control Plane** | `src/specify_cli/cli/` | `specify_cli` | Typer-based CLI. Single user entry point for all commands. |
 | **Kitty-core** | `src/specify_cli/core/`, `mission.py`, `mission_v1/`, `missions/`, `template/`, `runtime/` | `specify_cli` | Planning pipeline (specify→plan→tasks). The next-action loop itself lives at `src/runtime/next/_internal_runtime/` (`specify_cli/next` is gone). |
 | **Event Store** | `src/specify_cli/status/` | `specify_cli` | JSONL event logs (`store.py`), reducer (`reducer.py`), WP frontmatter, `meta.json`. Filesystem-only today. |
-| **Orchestration** | `src/specify_cli/orchestrator_api/`, `merge/`, `post_merge/`, `lanes/`, `workspace/`, `tracker/` | `specify_cli` | Lifecycle engine, worktree management, merge execution, tracker projection. (The former local `sync/` transport was retired in the convergence; tracker projection now flows from `status/emit.py`.) |
-| **Dashboard** | `src/specify_cli/dashboard/` | `specify_cli` | Playwright-based local browser kanban. Read-only against Event Store. |
+| **Orchestration** | `src/specify_cli/orchestrator_api/`, `consolidation/`, `post_merge/`, `lanes/`, `workspace/`, `tracker/` | `specify_cli` | Lifecycle engine, worktree management, lane consolidation, tracker projection. (The former local `sync/` transport was retired in the convergence; tracker projection now flows from `status/emit.py`.) |
+| **Dashboard** | None in the CLI (the former `specify_cli.dashboard` package was removed, #5530) | external | The container now lives outside the CLI. Interim read path: `spec-kitty agent tasks status` and `orchestrator-api mission-state`. Replacement UIs, in their own repository, will consume the planned Mission Status Read API (#5528; [ADR 2026-10-01-2](../../adr/4.x/2026-10-01-2-mission-status-read-api-and-dashboard-extraction.md), proposed). |
 | **Agent Tool Connectors** | `packs/built-in/missions/mission-steps/*/*/prompt.md` (source) → deployed as `.claude/`, `.codex/`, `.amazonq/`, etc. | `charter` (offering source), `specify_cli` (deployment) | Current connector is a rendered markdown prompt template. One "adapter" per agent. Source templates live under `packs/built-in/missions/`; doctrine code lives at `src/charter/offering/`. |
 | **Skills Installer** | `src/specify_cli/skills/` | `specify_cli` | Deployment bridge introduced in mission 055. `SkillRegistry` discovers canonical skills from `src/charter/offering/skills/`; `ManagedSkillManifest` tracks installed files by hash for drift detection; `installer.py` and `verifier.py` deploy skills into agent directories alongside command templates during `spec-kitty init`. |
 | **Doctrine** | doctrine code at `src/charter/offering/` (models/repository/validation per kind, `drg/`, `artifact_kinds.py`, `schemas/`) + `src/charter/offering/skills/` (canonical skill packs); pack content at `packs/built-in/` | `charter` (the former standalone `doctrine` package was absorbed here in the convergence) | JSON Schema validation, Pydantic models, repository pattern. Skill packs deployed from `src/charter/offering/skills/`. |
@@ -63,7 +64,7 @@ as Python modules within a single-process CLI application.
 
 The governance layer lives in the **`charter` package** (`src/charter/`), which
 absorbed the former standalone `doctrine` package at `src/charter/offering/` in
-the convergence (`src/doctrine.py` remains only as a deprecation shim). The
+the convergence (the top-level `doctrine` deprecation shim module was removed, #805). The
 documented layer chain is
 **`kernel <- charter <- {glossary, runtime, mission_runtime} <- specify_cli`**:
 
@@ -112,7 +113,7 @@ vars are sanctioned by design.
 | External Actor | Current Boundary Surface | Implementation |
 |---|---|---|
 | **Human In Charge** | CLI commands, interview prompts | `src/specify_cli/cli/commands/` (Typer command groups) |
-| **Human In Charge** (read) | Dashboard kanban | `src/specify_cli/dashboard/server.py` → local browser |
+| **Human In Charge** (read) | Lane status board | `spec-kitty agent tasks status` (bundled browser dashboard removed, #5530) |
 | **Agent Tools** | Command template prompts | `.claude/commands/`, `.codex/prompts/`, etc. (12 agent directories) |
 | **External Trackers** | Optional status projection | `src/specify_cli/tracker/` (feature-gated; the local `sync/` transport was retired in the convergence) |
 | **Project Repository** | Filesystem read/write | `kitty-specs/`, `.kittify/`, `status.events.jsonl`, WP frontmatter |
@@ -123,7 +124,7 @@ vars are sanctioned by design.
 |---|---|
 | Host-owned authority is non-negotiable | ✅ All state mutations go through `status/emit.py` — agents cannot bypass |
 | Agent Tools are external | ✅ Agents receive rendered prompts; they do not call `specify_cli` directly |
-| Dashboard is read-only | ✅ `dashboard/` reads frontmatter/events only; no write path exists |
+| Dashboard is read-only | ✅ No dashboard ships in the CLI; the read surfaces (`agent tasks status`, `orchestrator-api mission-state`) have no write path |
 | Tracker integration is optional | ✅ Tracker modules are feature-gated; system works without them |
 | Repository is canonical state | ✅ All persistence is filesystem-based; no external state authority |
 
@@ -181,14 +182,16 @@ Agent calls: spec-kitty charter context --action implement
 This sub-loop runs at every execution boundary (Principle 5). First invocation
 returns depth-2 (full bootstrap); subsequent calls return depth-1 (compact).
 
-### Loop D: Visibility (Dashboard ← Event Store)
+### Loop D: Visibility (Status read ← Event Store)
 
 ```
-User runs: spec-kitty dashboard
-  → src/specify_cli/dashboard/server.py (starts local server)
-  → src/specify_cli/dashboard/scanner.py (reads kitty-specs/ frontmatter)
-  → Browser renders kanban (read-only)
+User runs: spec-kitty agent tasks status [--json]
+  → reduces status.events.jsonl for the Mission
+  → prints the lane board (read-only)
 ```
+
+The bundled browser dashboard was removed (#5530). A replacement UI will
+read through the planned Mission Status Read API (#5528) from its own repository.
 
 ### Loop E: External Projection (Orchestration → Tracker)
 
@@ -224,7 +227,6 @@ Orchestration lifecycle event triggers:
 | **WP Lifecycle Engine** | `status/transitions.py` | 16-pair transition matrix, guard conditions |
 | **Target-Line Router** | `mission_runtime/lifecycle_phase.py`, `core/` | Phase resolution, target branch routing |
 | **Tracker Connector Gateway** | `tracker/` | External tracker API adapters (the former `sync/` runtime coordinator was retired in the convergence) |
-| **Kanban View** | `dashboard/` | `server.py`, `scanner.py`, `templates/`, `static/` |
 | **Doctrine Catalog Loader** | `src/charter/offering/service.py` | `DoctrineService` — lazy aggregation facade |
 | **Schema Validation Gate** | `src/charter/offering/*/validation.py`, `src/charter/offering/schemas/` | JSON Schema + Pydantic validation |
 | **Glossary Hook Coordinator** | `src/charter/offering/missions/glossary_hook.py`, `src/glossary/` | Glossary checks during mission execution |
@@ -418,7 +420,7 @@ update and a valid fixture update.
 | Non-software-dev mission parity | 🟡 Partial | `documentation`, `plan`, `research` missions have action directories but thinner indexes than `software-dev`. |
 | Event Store behind interface contract | 🟡 Partial | `store.py`/`reducer.py` provide the interface pattern. Not yet formally abstracted for alternative backends (Phase 3). |
 | Control Plane as swappable surface | 🔴 Conceptual | CLI is tightly coupled. No interface abstraction exists yet for TUI/web alternatives |
-| Dashboard as independent read surface | 🟡 Partial | Functionally independent. Reads filesystem directly rather than through Event Store interface |
+| Dashboard as independent read surface | 🟡 Partial | The bundled dashboard was removed (#5530); no UI ships in the CLI. Target: a Mission Status Read API in the `specify_cli` layer (overview and detail granularities); replacement UIs live outside the CLI ([ADR 2026-10-01-2](../../adr/4.x/2026-10-01-2-mission-status-read-api-and-dashboard-extraction.md), proposed) |
 
 ---
 
@@ -440,9 +442,13 @@ architecture:
    markdown template. There is no formal `Connector` interface that alternative
    dispatch mechanisms (SDK, shell, remote API) could implement.
 
-4. **Dashboard reads filesystem directly:** Rather than querying through
-   the Event Store interface, `dashboard/scanner.py` reads WP frontmatter files
-   directly. This works but bypasses the Event Store abstraction.
+4. **No single status read contract yet:** The former bundled dashboard's
+   `dashboard/scanner.py` read WP frontmatter files directly, bypassing the
+   Event Store abstraction; it was removed (#5530). The
+   orchestrator-api reads (`mission-state`, `list-ready`) and `agent tasks status`
+   each reduce the event log again, and do not all use the same reducer. The fix is
+   one Mission Status Read API that every display and external consumer reads
+   through ([ADR 2026-10-01-2](../../adr/4.x/2026-10-01-2-mission-status-read-api-and-dashboard-extraction.md), proposed).
 
 These are not bugs — they reflect the natural state of a system evolving toward
 its target architecture. The landscape document establishes where the boundaries
@@ -466,9 +472,9 @@ expected shapes.
 
 - System Landscape: `../00_landscape/README.md`
 - Architectural Principles: `../00_landscape/README.md#architectural-principles`
-- System Context: `../01_context/README.md`
-- Container View: `../02_containers/README.md`
-- Component View: `../03_components/README.md`
+- System Context (living): [`../diagrams/01_context/README.md`](../diagrams/01_context/README.md)
+- Container View (living): [`../diagrams/02_containers/README.md`](../diagrams/02_containers/README.md)
+- Component View (living): [`../diagrams/03_components/README.md`](../diagrams/03_components/README.md)
+- Frozen 2.x C4 snapshot: `../01_context/`, `../02_containers/`, `../03_components/`
 - Code Patterns Catalog: [code-patterns.md](code-patterns.md)
-- Doctrine Stack Domain Model: `../03_components/README.md#doctrine-stack-domain-model`
-- Doctrine governance ADR: `../adr/2026-02-23-1-doctrine-artifact-governance-model.md`
+- Doctrine governance ADR: [`docs/adr/2.x/2026-02-23-1-doctrine-artifact-governance-model.md`](../../adr/2.x/2026-02-23-1-doctrine-artifact-governance-model.md)

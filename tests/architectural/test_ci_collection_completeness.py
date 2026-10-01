@@ -362,7 +362,7 @@ def test_the_baseline_reach_checker_does_not_fire_on_prose() -> None:
         ("always() && github.event_name == 'push'", True),
         ("always() && github.event_name == 'pull_request'", False),
         ("always() && github.event_name != 'pull_request'", True),
-        ("needs.fast-tests-cli.result == 'success'", True),
+        ("needs.tests-e2e.result == 'success'", True),
         ("needs.kernel-tests.result != 'failure'", True),
         (
             "${{ (always()) && "
@@ -393,6 +393,19 @@ def test_job_runs_under_honours_an_active_group() -> None:
     )
     assert gc.job_runs_under(
         condition, event_name=gc.PUSH_EVENT, active_groups=frozenset({"cli"}),
+    )
+
+
+def test_fork_guard_holds_on_the_core_repository() -> None:
+    """The fork guard is modelled for upstream ``main``: a push still runs the job."""
+    guard = (
+        "(github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request'"
+        " || github.event_name == 'workflow_dispatch') && needs.changes.outputs.cli == 'true'"
+    )
+    assert gc.job_runs_under(guard, event_name=gc.PUSH_EVENT, active_groups=frozenset({"cli"}))
+    assert not gc.job_runs_under(guard, event_name=gc.PUSH_EVENT, active_groups=frozenset())
+    assert not gc.job_runs_under(
+        "github.repository == 'someone/spec-kitty'", event_name=gc.PUSH_EVENT, active_groups=frozenset(),
     )
 
 

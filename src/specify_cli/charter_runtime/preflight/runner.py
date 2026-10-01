@@ -54,6 +54,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from kernel.git import GitCommandError, status_entries
 from specify_cli.charter_runtime.freshness import compute_freshness
 from specify_cli.charter_runtime.preflight.ambient_warning import dedupe_warnings
 
@@ -61,6 +62,7 @@ from .result import CharterPreflightCheck, CharterPreflightResult, CheckState
 
 if TYPE_CHECKING:  # pragma: no cover — used only for type hints.
     from specify_cli.charter_runtime.freshness import CharterFreshness
+    from specify_cli.charter_runtime.preflight.references_refresh import ReferencesRefreshOutcome
 
 __all__ = ["SYNTHESIZED_DRG_LAYER", "run_charter_preflight"]
 
@@ -168,7 +170,7 @@ def run_charter_preflight(
         auto_refresh: When ``True`` AND the worktree has no uncommitted
             generated artifacts, attempt the safe refresh sequence.
         allow_missing_charter: Treat a canonically missing charter stack as
-            advisory. Dashboard, next, and implement enable this for projects
+            advisory. ``next`` and ``implement`` enable this for projects
             that have no charter source or synced bundle and whose synthesized
             layer is either absent or built-in-only. Stale, invalid, or other
             partial state still fails closed.
@@ -176,7 +178,7 @@ def run_charter_preflight(
             itself does not change behaviour based on ``strict`` — the CLI
             wrapper translates ``passed=False`` + ``strict=True`` into exit
             code 1.  Kept in the signature so callers (``spec-kitty next``,
-            ``implement``, dashboard) can forward their own ``strict``
+            ``implement``) can forward their own ``strict``
             config without an extra branch.
 
     Returns:
@@ -390,7 +392,7 @@ def _advisory_missing_charter_result(
 
     #3971: the ``warnings`` list is de-duplicated at birth
     (:func:`ambient_warning.dedupe_warnings`) so every consumer — the stderr
-    seam, the dashboard's persisted banner, the JSON contract — receives a
+    seam, the JSON contract — receives a
     duplicate-free list without each having to re-filter.
     """
     return CharterPreflightResult(
@@ -474,7 +476,7 @@ def _detect_dirty_artifacts(repo_root: Path) -> tuple[bool, list[str], str | Non
     Implements the binding detection mechanism documented in
     ``contracts/charter-preflight-json.md`` §"Detection mechanism": a
     single ``git status --porcelain`` invocation scoped to the two
-    directories we care about, parsed line-by-line.
+    directories we care about, read through ``kernel.git``.
 
     Failure-mode handling:
 
@@ -484,51 +486,34 @@ def _detect_dirty_artifacts(repo_root: Path) -> tuple[bool, list[str], str | Non
     * ``returncode != 0`` → ``error_reason`` =
       ``"git status failed (exit N): <first stderr line>"``;
       ``is_dirty=False``.
-    * Non-empty stdout → ``is_dirty=True``; ``dirty_paths`` lists every
-      pathname reported (path component starts at column 4 in porcelain
-      v1 output).
+    * Any status entry → ``is_dirty=True``; ``dirty_paths`` lists every
+      path reported (read from NUL-delimited ``-z`` output via
+      :func:`kernel.git.status_entries`, so a quoted path is exact).
     """
     try:
-        result = subprocess.run(
-            [
-                "git",
-                "status",
-                "--porcelain",
-                "--",
-                *_DIRTY_SCOPE_PATHS,
-            ],
-            cwd=repo_root,
-            capture_output=True,
-            text=True,
+        entries = status_entries(
+            repo_root,
+            pathspecs=_DIRTY_SCOPE_PATHS,
+            untracked=None,
             timeout=_GIT_STATUS_TIMEOUT_SECS,
-            check=False,
         )
-    except FileNotFoundError:
-        return False, [], "git CLI not available; cannot determine worktree cleanliness"
-    except subprocess.TimeoutExpired:
-        return False, [], "git status timed out; cannot determine worktree cleanliness"
-
-    if result.returncode != 0:
-        stderr_first = ""
-        if result.stderr:
-            stderr_first = result.stderr.splitlines()[0] if result.stderr.splitlines() else ""
+    except GitCommandError as exc:
+        # Advisory probe (module contract: MUST NOT raise): report why the
+        # cleanliness could not be determined instead of blocking the runner.
+        if exc.timed_out:
+            return False, [], "git status timed out; cannot determine worktree cleanliness"
+        if exc.not_run:
+            return False, [], "git CLI not available; cannot determine worktree cleanliness"
+        stderr_first = exc.stderr.splitlines()[0] if exc.stderr.splitlines() else ""
         return (
             False,
             [],
-            f"git status failed (exit {result.returncode}): {stderr_first}".rstrip(": "),
+            f"git status failed (exit {exc.returncode}): {stderr_first}".rstrip(": "),
         )
 
-    if not result.stdout.strip():
+    if not entries:
         return False, [], None
-
-    dirty_paths: list[str] = []
-    for raw_line in result.stdout.splitlines():
-        # Porcelain v1: ``XY <path>`` where ``XY`` is exactly two status
-        # chars + a space.  Slicing at index 3 is the documented contract.
-        if len(raw_line) <= 3:
-            continue
-        dirty_paths.append(raw_line[3:].strip())
-    return True, dirty_paths, None
+    return True, [str(entry.path) for entry in entries], None
 
 
 # ---------------------------------------------------------------------------
@@ -550,7 +535,7 @@ def _refresh_timeout_secs() -> float:
     return value
 
 
-def refresh_references_if_needed(repo_root: Path, cause: str) -> bool:
+def refresh_references_if_needed(repo_root: Path, cause: str) -> ReferencesRefreshOutcome:
     """References-parity extension point (T019 install / WP06 implement, #2777).
 
     Delegates to :func:`specify_cli.charter_runtime.preflight.
@@ -569,17 +554,15 @@ def refresh_references_if_needed(repo_root: Path, cause: str) -> bool:
             references-parity signal.
 
     Returns:
-        ``True`` iff a targeted ``generate`` was attempted (i.e. *cause*
-        named the references-parity layer) — the caller uses this to decide
-        whether ``charter.yaml``'s derived catalog may have just changed and
-        the synthesis manifest needs re-stamping (MAJOR-1, WP06 rejection
-        cycle 1) before the post-refresh freshness recompute. ``False`` for
-        a non-references-parity cause (true no-op, nothing to re-stamp).
+        A :class:`~specify_cli.charter_runtime.preflight.references_refresh.
+        ReferencesRefreshOutcome`: ``attempted`` iff *cause* named the
+        references-parity layer; ``succeeded``/``detail`` report the targeted
+        ``generate`` subprocess's actual outcome, so :func:`_attempt_auto_refresh`
+        can tell "nothing to re-stamp" from "generate ran and failed".
     """
     from .references_refresh import refresh_references_if_needed as _refresh_references
 
-    result: bool = _refresh_references(repo_root, cause)
-    return result
+    return _refresh_references(repo_root, cause)
 
 
 def _attempt_auto_refresh(
@@ -620,14 +603,18 @@ def _attempt_auto_refresh(
        this branch.
     4. ``refresh_references_if_needed`` (WP06, #2777) — a targeted
        ``spec-kitty charter generate``, gated on the references-parity
-       cause. When it fires, step 5 (below) re-runs ``synthesize`` once
-       more to re-stamp the manifest against generate's rewritten
-       ``charter.yaml`` — see that step's own comment for why.
+       cause. When it fires and succeeds, step 5 (below) re-runs
+       ``synthesize`` once more to re-stamp the manifest against
+       generate's rewritten ``charter.yaml`` — see that step's own comment
+       for why. When it fires and FAILS, we stop immediately — the manifest
+       restamp is skipped rather than run over content ``generate`` failed
+       to reconcile.
 
-    On any non-zero exit, we stop, surface the failing command's first
-    stderr line via ``blocked_reason``, and mark
-    ``auto_refresh_applied=True`` so callers know an attempt was made
-    even when it failed.
+    On any non-zero exit — including the targeted generate above — we
+    stop, surface the failing command's first stderr line (or, for the
+    generate step, :func:`references_refresh._extract_failure_detail`'s
+    excerpt) via ``blocked_reason``, and mark ``auto_refresh_applied=True``
+    so callers know an attempt was made even when it failed.
     """
     is_dirty, dirty_paths, dirty_error = _detect_dirty_artifacts(repo_root)
 
@@ -730,11 +717,22 @@ def _attempt_auto_refresh(
     # only fires when the ORIGINAL stale-cause set actually named that
     # layer.
     stale_cause = ",".join(sorted({c.name for c in initial_checks if c.state not in _PASS_STATES}))
-    references_refreshed = refresh_references_if_needed(repo_root, cause=stale_cause)
+    refresh_outcome = refresh_references_if_needed(repo_root, cause=stale_cause)
 
-    if references_refreshed:
-        # MAJOR-1 (WP06 rejection cycle 1): `generate` rewrites
-        # `charter.yaml`'s derived catalog but — unlike `synthesize` — never
+    if refresh_outcome.attempted and not refresh_outcome.succeeded:
+        # A failed targeted `generate` must not be masked behind a manifest
+        # restamp: fail closed like every other step in this sequence, since
+        # restamping over unreconciled content would hide the failure.
+        return CharterPreflightResult(
+            passed=False,
+            checks=initial_checks,
+            auto_refresh_applied=True,
+            auto_refresh_actions=actions,
+            blocked_reason=f"references-parity refresh failed: {refresh_outcome.detail}",
+        )
+
+    if refresh_outcome.attempted and refresh_outcome.succeeded:
+        # `generate` rewrites `charter.yaml`'s derived catalog but — unlike `synthesize` — never
         # re-stamps the synthesis manifest's `bundle_content_hash` itself.
         # Left alone, the freshness recompute below would then see
         # stored_hash (pre-generate) != current_hash (post-generate) and

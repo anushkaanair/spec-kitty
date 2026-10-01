@@ -21,6 +21,7 @@ See also:
   - ADR ``docs/adr/3.x/2026-06-07-1-execution-state-canonical-surface.md``
   - Contract ``kitty-specs/execution-state-canonical-surface-01KTG6P9/contracts/mission_runtime_api.md``
 """
+
 from __future__ import annotations
 
 import ast
@@ -71,6 +72,22 @@ _PUBLIC_SURFACE = sorted(
         # mission_runtime/mission_resolver_port.py for the full rationale.
         "MissionResolver",
         "MissionTopology",
+        # owned-checkout-lifecycle-authority-01M3M2ZB WP01 (FR-001/C-003): the
+        # validated ownership fact for an owned checkout, plus its error-code
+        # registry — the runtime and specify_cli layers consume both from the
+        # package root only.
+        "OwnedCheckout",
+        "OwnedRefusalCode",
+        # owned-checkout-lifecycle-authority WP12 (FR-025): the topology-agnostic
+        # claim-commit authority every review path shares, plus its typed error.
+        # MR-1/MR-2 forbid submodule imports, so both live on the package root.
+        "ClaimCommitUnresolved",
+        "claim_commit_for_wp",
+        # #5100 WP04 (T020b): the SINGLE_BRANCH-manifest fail-closed writer
+        # guard, promoted off module-private status onto the root once the
+        # review path (``agent/workflow.py``) became its first real src/
+        # caller (tests/architectural/test_no_dead_symbols.py).
+        "assert_topology_matches_manifest",
         # issue-matrix-partition-integrity followups (#5222/F2): the ONE typed
         # refusal ``read_issue_matrix_ref_content`` raises, promoted onto the
         # root so review/doctor consumers of
@@ -90,12 +107,24 @@ _PUBLIC_SURFACE = sorted(
         # root public symbol because ``ResolvedSurface.surface_kind`` stamps it and
         # consumers read the stamp.
         "TopologySurface",
+        # single-branch-topology-honesty-01M3M22V WP03 (#5100 IC-02): the
+        # StructuredError-style typed refusal the two lane-manifest writer
+        # chokepoints raise (wired in a later work package of this mission) --
+        # promoted onto the root so a caller catches it by type instead of a
+        # bare ``RuntimeError``, same precedent as ``IssueMatrixRefReadError``
+        # above.
+        "TopologyManifestMismatch",
         # coord-read-fail-closed landing (#5001): the basename->kind classifier
         # map itself, re-exported so ``specify_cli.coordination.surface_resolver``
         # can invert it (kind -> basenames) without reaching into the
         # ``mission_runtime.artifacts`` submodule directly (MR-1/MR-2).
         "_MISSION_FILE_KIND_BY_BASENAME",
         "classify_topology",
+        # single-branch-topology-honesty (#5100 FR-013 / #2602, squad N7): the
+        # runtime reading of a mission with NO stored topology -- never a
+        # derived ``single_branch``. ``specify_cli.migration.backfill_topology``
+        # consumes it via the package root.
+        "unstamped_runtime_topology",
         # coord-commit-integrity SURFACE A (#5): the ONE topology-guarded coord-read
         # helper both gates_core._acceptance_matrix_read_dir and accept._coord_
         # worktree_root consume — a package-root public symbol, so it is pinned here.
@@ -113,6 +142,12 @@ _PUBLIC_SURFACE = sorted(
         # independently reimplementing it inline — a package-root public
         # symbol, so it is pinned here.
         "declared_read_surface",
+        # owned-checkout-lifecycle-authority WP04 (review cycle 2, F4): the ONE
+        # canonical handle-canonicalisation authority (slug / mid8 / full
+        # mission-id forms) resolution.py and specify_cli.task_utils.support
+        # both consume, instead of each keeping a private copy -- a
+        # package-root public symbol, so it is pinned here.
+        "handle_names_mission",
         "is_primary_artifact_kind",
         # owned-ssot-3862 item A: the SINGLE enum-based single_branch predicate
         # the owned-placement arms (resolution.py) and the owned checkout
@@ -120,6 +155,14 @@ _PUBLIC_SURFACE = sorted(
         # of each restating a raw ``"single_branch"`` meta string or a second
         # enum comparison — a package-root public symbol, so it is pinned here.
         "is_single_branch",
+        # single_branch write-ref single authority (#5100 fold): the pure rule
+        # (stored single_branch + meta.mission_branch, else target_branch) and
+        # its repository-reading shell. Every write-branch site (implement's
+        # planning commit, the owned-checkout preflight, workspace resolution,
+        # the context resolver, the orchestrator API) routes through them
+        # instead of re-deriving from meta.json / lanes.json.
+        "single_branch_write_ref",
+        "resolve_single_branch_write_ref",
         # lifecycle-gate-execution-context-01KY72GQ WP11 (IC-07a): the
         # self-bookkeeping allowlist predicate ``is_self_bookkeeping_path`` (gate-
         # read-surface-completion WP05 / FR-003) was retired onto the canonical
@@ -198,7 +241,6 @@ class TestMissionRuntimeSurface:
 
         assert list(mission_runtime.__all__) == _PUBLIC_SURFACE
 
-
     def test_no_external_submodule_imports(self, evaluable: EvaluableArchitecture) -> None:
         """pytestarch rule: nothing imports mission_runtime internals directly.
 
@@ -238,10 +280,7 @@ def _is_internal_submodule_import(module_name: str) -> bool:
     and ``mission_runtime.resolution`` (and any future internal submodule) are
     bypass imports when referenced from outside the package.
     """
-    return (
-        module_name.startswith("mission_runtime.")
-        and module_name != "mission_runtime"
-    )
+    return module_name.startswith("mission_runtime.") and module_name != "mission_runtime"
 
 
 def _collect_type_checking_linenos(tree: ast.AST) -> set[int]:
@@ -251,10 +290,7 @@ def _collect_type_checking_linenos(tree: ast.AST) -> set[int]:
         if not isinstance(node, ast.If):
             continue
         test = node.test
-        is_type_checking = (
-            (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING")
-            or (isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING")
-        )
+        is_type_checking = (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or (isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING")
         if is_type_checking:
             for child in ast.walk(node):
                 if hasattr(child, "lineno"):
@@ -344,12 +380,8 @@ def test_ast_scan_catches_injected_violation(tmp_path: pathlib.Path) -> None:
         encoding="utf-8",
     )
     violations = scan_for_internal_imports([bad_file])
-    assert len(violations) == 1, (
-        f"Expected exactly 1 violation, got {len(violations)}: {violations}"
-    )
-    assert "mission_runtime.resolution" in violations[0], (
-        f"Expected 'mission_runtime.resolution' in violation, got: {violations[0]}"
-    )
+    assert len(violations) == 1, f"Expected exactly 1 violation, got {len(violations)}: {violations}"
+    assert "mission_runtime.resolution" in violations[0], f"Expected 'mission_runtime.resolution' in violation, got: {violations[0]}"
 
 
 def test_ast_scan_allows_package_root_import(tmp_path: pathlib.Path) -> None:
@@ -365,9 +397,7 @@ def test_ast_scan_allows_package_root_import(tmp_path: pathlib.Path) -> None:
         encoding="utf-8",
     )
     violations = scan_for_internal_imports([good_file])
-    assert not violations, (
-        f"Package-root import should not be flagged, got: {violations}"
-    )
+    assert not violations, f"Package-root import should not be flagged, got: {violations}"
 
 
 def test_ast_scan_ignores_type_checking_imports(tmp_path: pathlib.Path) -> None:
@@ -390,6 +420,4 @@ def test_ast_scan_ignores_type_checking_imports(tmp_path: pathlib.Path) -> None:
         encoding="utf-8",
     )
     violations = scan_for_internal_imports([safe_file])
-    assert not violations, (
-        f"TYPE_CHECKING imports should not be flagged, got: {violations}"
-    )
+    assert not violations, f"TYPE_CHECKING imports should not be flagged, got: {violations}"

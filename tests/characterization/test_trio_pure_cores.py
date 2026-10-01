@@ -15,7 +15,7 @@ Targets (CC19-37, all currently pure/deterministic given controlled inputs):
 * ``acceptance._check_lane_gates``              (CC19; I/O collaborators mocked)
 * ``acceptance.collect_feature_summary``        (CC25; wiring, collaborators mocked)
 * ``workflow._resolve_review_context``          (CC37; subprocess/git mocked)
-* ``workflow._resolve_review_feedback_context`` / ``_has_prior_rejection``
+* ``workflow_cores.resolve_review_feedback_context`` / ``has_prior_rejection``
   (the rejection/rewind/resume paths feeding review-context)
 
 Marker: unit only (no subprocess, no real git -- filesystem use is confined
@@ -38,10 +38,10 @@ from specify_cli.cli.commands.agent import workflow as workflow_module
 from specify_cli.cli.commands.agent.tasks_transition_core import (
     is_review_rejection_edge,
 )
-from specify_cli.cli.commands.agent.workflow import (
-    _has_prior_rejection,
-    _resolve_review_context,
-    _resolve_review_feedback_context,
+from specify_cli.cli.commands.agent.workflow import _resolve_review_context
+from specify_cli.cli.commands.agent.workflow_cores import (
+    has_prior_rejection as _has_prior_rejection,
+    resolve_review_feedback_context as _resolve_review_feedback_context,
 )
 from specify_cli.review.cycle import create_rejected_review_cycle
 from specify_cli.status import Lane, StatusEvent
@@ -328,7 +328,7 @@ class TestCheckLaneGates:
             lambda _fd: SimpleNamespace(target_branch="feat/target", mission_branch="kitty/mission-x"),
         )
         monkeypatch.setattr(acceptance_module, "read_target_branch_from_meta", lambda _fd: None)
-        monkeypatch.setattr("specify_cli.lanes.compute.is_planning_artifact_only", lambda _m: False)
+        monkeypatch.setattr("specify_cli.lanes.compute.mission_has_code", lambda _m, _k: True)
         activity_issues: list[str] = []
         skipped: list[AcceptanceCheckDiagnostic] = []
         blocked: list[AcceptanceCheckDiagnostic] = []
@@ -344,7 +344,7 @@ class TestCheckLaneGates:
             lambda _fd: SimpleNamespace(target_branch="feat/target", mission_branch="kitty/mission-x"),
         )
         monkeypatch.setattr(acceptance_module, "read_target_branch_from_meta", lambda _fd: None)
-        monkeypatch.setattr("specify_cli.lanes.compute.is_planning_artifact_only", lambda _m: False)
+        monkeypatch.setattr("specify_cli.lanes.compute.mission_has_code", lambda _m, _k: True)
         activity_issues: list[str] = []
 
         acceptance_module._check_lane_gates(tmp_path, tmp_path, None, activity_issues, [], [])
@@ -357,7 +357,7 @@ class TestCheckLaneGates:
             lambda _fd: SimpleNamespace(target_branch="feat/target", mission_branch="kitty/mission-x"),
         )
         monkeypatch.setattr(acceptance_module, "read_target_branch_from_meta", lambda _fd: None)
-        monkeypatch.setattr("specify_cli.lanes.compute.is_planning_artifact_only", lambda _m: True)
+        monkeypatch.setattr("specify_cli.lanes.compute.mission_has_code", lambda _m, _k: False)
 
         def _fail_if_called(_fd: Path) -> Any:
             raise AssertionError("read_acceptance_matrix must not be called for planning-artifact-only missions")
@@ -383,7 +383,7 @@ class TestCheckLaneGates:
             lambda _fd: SimpleNamespace(target_branch="feat/target", mission_branch="kitty/mission-x"),
         )
         monkeypatch.setattr(acceptance_module, "read_target_branch_from_meta", lambda _fd: None)
-        monkeypatch.setattr("specify_cli.lanes.compute.is_planning_artifact_only", lambda _m: False)
+        monkeypatch.setattr("specify_cli.lanes.compute.mission_has_code", lambda _m, _k: True)
         monkeypatch.setattr("specify_cli.acceptance.matrix.read_acceptance_matrix", lambda _fd: None)
         activity_issues: list[str] = []
         skipped: list[AcceptanceCheckDiagnostic] = []
@@ -404,7 +404,7 @@ class TestCheckLaneGates:
             lambda _fd: SimpleNamespace(target_branch="feat/target", mission_branch="kitty/mission-x"),
         )
         monkeypatch.setattr(acceptance_module, "read_target_branch_from_meta", lambda _fd: None)
-        monkeypatch.setattr("specify_cli.lanes.compute.is_planning_artifact_only", lambda _m: False)
+        monkeypatch.setattr("specify_cli.lanes.compute.mission_has_code", lambda _m, _k: True)
         monkeypatch.setattr("specify_cli.acceptance.matrix.read_acceptance_matrix", lambda _fd: matrix)
         monkeypatch.setattr("specify_cli.acceptance.matrix.validate_matrix_evidence", lambda _m: evidence_errors or [])
         # WP02 (accept-fails-closed): the gate now persists the recomputed
@@ -581,9 +581,9 @@ class TestResolveReviewContext:
         monkeypatch.setattr(workflow_module, "_workflow_placement_seam", lambda *_a, **_k: _seam_stub(tmp_path / "kitty-specs" / "trio-mission"))
         monkeypatch.setattr("specify_cli.lanes.persistence.read_lanes_json", lambda _fd: None)
 
+        monkeypatch.setattr("mission_runtime.claim_commit_for_wp", lambda _mission_dir, _wp_id: "abc1234def")
+
         def _fake_run(args: list[str], **_kw: Any) -> SimpleNamespace:
-            if args[1] == "log":
-                return _cp(0, "abc1234def\x00Move WP01 to in_progress\n")
             if args[1] == "rev-list":
                 return _cp(0, "3")
             raise AssertionError(f"unexpected git invocation: {args}")
@@ -604,7 +604,12 @@ class TestResolveReviewContext:
         monkeypatch.setattr(workflow_module, "resolve_workspace_for_wp", lambda *_a, **_k: _repo_root_workspace(wp_id="WP01"))
         monkeypatch.setattr(workflow_module, "_workflow_placement_seam", lambda *_a, **_k: _seam_stub(tmp_path / "kitty-specs" / "trio-mission"))
         monkeypatch.setattr("specify_cli.lanes.persistence.read_lanes_json", lambda _fd: None)
-        monkeypatch.setattr(workflow_module.subprocess, "run", lambda *_a, **_k: _cp(0, ""))
+        from mission_runtime import ClaimCommitUnresolved
+
+        def _unresolved(_mission_dir: Path, wp_id: str) -> str:
+            raise ClaimCommitUnresolved(wp_id, "no_claim_event")
+
+        monkeypatch.setattr("mission_runtime.claim_commit_for_wp", _unresolved)
 
         ctx = _resolve_review_context(workspace_path, tmp_path, "trio-mission", "WP01", "")
 
@@ -618,12 +623,8 @@ class TestResolveReviewContext:
         monkeypatch.setattr(workflow_module, "_workflow_placement_seam", lambda *_a, **_k: _seam_stub(tmp_path / "kitty-specs" / "trio-mission"))
         monkeypatch.setattr("specify_cli.lanes.persistence.read_lanes_json", lambda _fd: None)
 
-        def _fake_run(args: list[str], **_kw: Any) -> SimpleNamespace:
-            if args[1] == "log":
-                return _cp(0, "abc1234def\x00Start WP01 implementation\n")
-            return _cp(1, "")
-
-        monkeypatch.setattr(workflow_module.subprocess, "run", _fake_run)
+        monkeypatch.setattr("mission_runtime.claim_commit_for_wp", lambda _mission_dir, _wp_id: "abc1234def")
+        monkeypatch.setattr(workflow_module.subprocess, "run", lambda *_a, **_k: _cp(1, ""))
 
         ctx = _resolve_review_context(workspace_path, tmp_path, "trio-mission", "WP01", "")
 

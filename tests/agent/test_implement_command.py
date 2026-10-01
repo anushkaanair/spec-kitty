@@ -430,7 +430,7 @@ class TestImplementCommand:
                 return_value="kitty/mission-010-feature-01ABCDEF",
             ),
             patch(
-                "specify_cli.cli.commands.implement.ProtectionPolicy.resolve",
+                "specify_cli.cli.commands.implement.ProtectionPolicy.resolve_for_mission",
                 return_value=mock_policy,
             ) as mock_resolver,
             patch(
@@ -484,7 +484,7 @@ class TestImplementCommand:
 
         mock_commit_planning.assert_called_once()
         # NFR-003: the resolver must have been invoked (not vacuous)
-        assert mock_resolver.called, "ProtectionPolicy.resolve must be invoked for the protection decision"
+        assert mock_resolver.called, "ProtectionPolicy.resolve_for_mission must be invoked for the protection decision"
 
     def test_implement_status_emit_uses_transport_execution_mode(self, tmp_path: Path) -> None:
         feature_dir = tmp_path / "kitty-specs" / "010-feature"
@@ -603,6 +603,9 @@ class TestImplementCommand:
                 lane_wp_ids=["WP02"],
                 resolution_kind="repo_root",
                 exists=True,
+                # #5100: ResolvedWorkspace.status_execution_mode, read alongside
+                # resolution_kind by every status emit path.
+                status_execution_mode="direct_repo",
             )
             mock_create_lane_workspace.return_value = MagicMock(
                 workspace_path=tmp_path,

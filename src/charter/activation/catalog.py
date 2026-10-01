@@ -13,6 +13,7 @@ from ruamel.yaml.error import YAMLError
 from charter.offering.artifact_kinds import ArtifactKind
 from charter.offering.pack_paths import built_in_dir
 from charter.offering.shared.scoping import applies_to_languages_match, normalize_languages
+from charter.offering.yaml_utils import parse_shipped_yaml
 from kernel.paths import get_package_asset_root as _get_package_asset_root
 
 __all__ = [
@@ -23,9 +24,6 @@ __all__ = [
 
 
 _log = logging.getLogger(__name__)
-
-
-DEFAULT_TEMPLATE_SET = "software-dev-default"
 
 
 @dataclass(frozen=True)
@@ -204,11 +202,6 @@ def resolve_doctrine_root() -> Path:
     raise FileNotFoundError("Cannot locate doctrine root. Ensure doctrine assets are packaged.")
 
 
-# Backward-compatible alias for existing private callers.
-def _resolve_doctrine_root() -> Path:
-    return resolve_doctrine_root()
-
-
 def _load_yaml_id_catalog(
     directory: Path,
     pattern: str,
@@ -243,9 +236,13 @@ def _extract_artifact_id(
     active_languages: list[str] | tuple[str, ...] | None,
     yaml: object,
 ) -> str | None:
-    """Return the artifact ID from a single YAML file, or None to skip."""
+    """Return the artifact ID from a single YAML file, or None to skip.
+
+    The catalog reads only shipped built-in directories, so each file is parsed
+    at most once per change (#5526).
+    """
     try:
-        data = yaml.load(path.read_text(encoding="utf-8")) or {}  # type: ignore[attr-defined]
+        data = parse_shipped_yaml(path, lambda p: yaml.load(p.read_text(encoding="utf-8")), variant="safe-text") or {}  # type: ignore[attr-defined]
     except (OSError, YAMLError, TypeError):
         return None
     if isinstance(data, dict) and not applies_to_languages_match(
@@ -348,15 +345,6 @@ def _load_yaml_id_catalog_with_presence(
         active_languages,
     )
     return ids, present
-
-
-def _load_template_sets(doctrine_root: Path) -> set[str]:
-    """Load available template set IDs.
-
-    Template set IDs are derived from bundled missions as ``{mission}-default``.
-    """
-    template_sets, _ = _load_template_sets_with_presence(doctrine_root)
-    return template_sets
 
 
 def _load_template_sets_with_presence(_doctrine_root: Path) -> tuple[set[str], bool]:

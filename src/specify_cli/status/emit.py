@@ -85,6 +85,7 @@ from .locking import feature_status_lock
 from .transition_pipeline import PreparedTransition, prepare_transition
 
 if TYPE_CHECKING:
+    from mission_runtime import OwnedCheckout
     from specify_cli.core.dependency_graph import DependencyReadiness
 
 logger = logging.getLogger(__name__)
@@ -155,10 +156,8 @@ def _generate_ulid() -> str:
 # ---------------------------------------------------------------------------
 #
 # Per FR-032, the status domain stays free of coordination-layer concerns.
-# These helpers are pure: ``build_status_event`` mints a StatusEvent in
-# memory (ULID, ISO timestamp, Lane coercion) with no I/O;
-# ``append_event_jsonl`` performs a single-line JSONL append with no
-# commit and no materialization.
+# ``build_status_event`` is pure: it mints a StatusEvent in memory (ULID, ISO
+# timestamp, Lane coercion) with no I/O.
 #
 # Workflow call sites compose ``build_status_event`` + the coordination
 # transaction's ``append_event`` (which calls into store + reducer).
@@ -232,26 +231,6 @@ def build_status_event(  # noqa: PLR0913 -- pass-through to a dataclass construc
     )
 
 
-def append_event_jsonl(events_path: Path, event: StatusEvent) -> None:
-    """Append a single :class:`StatusEvent` to a JSONL event log.
-
-    Pure I/O: writes one canonical JSON line. Does not materialize,
-    does not commit, does not fan out. The caller is responsible for
-    holding any required lock.
-
-    Args:
-        events_path: Path to the ``status.events.jsonl`` file. Parent
-            directories are created on demand.
-        event: The :class:`StatusEvent` to append.
-    """
-    # Delegate to the canonical store implementation so the wire format
-    # stays consistent (sorted keys, trailing newline, etc.). The store
-    # accepts the feature_dir, not the events_path directly.
-    feature_dir = events_path.parent
-    feature_dir.mkdir(parents=True, exist_ok=True)
-    _store.append_event_verified(feature_dir, event)
-
-
 def build_claim_policy_metadata(
     shell_pid: int,
     shell_pid_created_at: str,
@@ -316,7 +295,7 @@ def _derive_from_lane(feature_dir: Path, wp_id: str, *, snapshot: StatusSnapshot
     return cast(str, Lane.GENESIS)
 
 
-def _declared_dependencies(planning_feature_dir: Path, wp_id: str) -> tuple[str, ...]:
+def _declared_dependencies(planning_feature_dir: Path, wp_id: str, *, owned: OwnedCheckout | None = None) -> tuple[str, ...]:
     """The ``dependencies`` a WP prompt file declares on the PRIMARY planning surface.
 
     WP files are authored on the primary checkout (``cli/commands/implement.py::
@@ -363,7 +342,14 @@ def _declared_dependencies(planning_feature_dir: Path, wp_id: str) -> tuple[str,
     # canonicalizer's `meta.json`-exists short-circuit returns the handle
     # unchanged), so dropping the "already anchored" fast path costs nothing
     # beyond a redundant resolve.
-    if planning_feature_dir.parent.name == KITTY_SPECS_DIR:
+    if owned is not None:
+        # owned-checkout-lifecycle-authority WP13 (review cycle 3 MEDIUM-2, declared
+        # out-of-map edit): the fact is the single internal representation of the
+        # owned mission. Its ``mission_dir`` IS the primary planning home; re-anchoring
+        # through ``resolve_canonical_root`` would send the read to the repository
+        # root and take WP ``dependencies`` from R's (absent or stale) copy.
+        planning_feature_dir = owned.mission_dir
+    elif planning_feature_dir.parent.name == KITTY_SPECS_DIR:
         try:
             primary_root = resolve_canonical_root(planning_feature_dir)
         except WorkspaceRootNotFound:
@@ -406,7 +392,13 @@ def _coerce_declared_dependencies(raw: object, *, wp_id: str, wp_file: Path) -> 
     raise TransitionError(f"Cannot resolve the declared dependencies of {wp_id}: {wp_file} declares a malformed `dependencies` value ({raw!r})")
 
 
-def _resolve_dependency_readiness(planning_feature_dir: Path, wp_id: str, snapshot: StatusSnapshot) -> DependencyReadiness:
+def _resolve_dependency_readiness(
+    planning_feature_dir: Path,
+    wp_id: str,
+    snapshot: StatusSnapshot,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> DependencyReadiness:
     """The shells' dependency verdict (FR-013): declared deps x reduced write surface.
 
     Called INSIDE the lock/transaction with the snapshot the shell already
@@ -422,9 +414,13 @@ def _resolve_dependency_readiness(planning_feature_dir: Path, wp_id: str, snapsh
     refuses only ``planned -> claimed`` / ``claimed -> in_progress``, ``force``
     + actor + reason still overrides, and ``-> blocked``, ``-> canceled`` and
     the review edges are never affected by a corrupt planning artifact.
+
+    ``owned``: the validated owned-checkout fact, when the caller holds one --
+    declared dependencies are then read from ``owned.mission_dir`` (P), never
+    re-anchored to the repository root. ``None`` keeps the legacy behaviour.
     """
     try:
-        declared = _declared_dependencies(planning_feature_dir, wp_id)
+        declared = _declared_dependencies(planning_feature_dir, wp_id, owned=owned)
     except TransitionError as exc:
         logger.warning("Dependency readiness of %s is unresolvable; refusing the guarded entry edges: %s", wp_id, exc)
         return unresolvable_readiness(wp_id, str(exc))
@@ -687,20 +683,50 @@ def _flat_subtasks_dir_resolver(
     repo_root: Path | None,
     mission_slug: str,
     *,
-    effective_root: Path | None = None,  # noqa: ARG001 -- deliberately dropped; see D-1 in design-notes/WP02-pipeline.md
+    # review cycle 2 HIGH-1: typed ``object`` rather than ``OwnedCheckout`` --
+    # the value is dropped by design (D-1) and never read, so importing
+    # ``mission_runtime`` here just to spell its concrete type is unnecessary
+    # coupling. Importing it (even under TYPE_CHECKING) triggered a
+    # mypy --strict --explicit-package-bases no-redef on the ``_store``/
+    # ``_reducer`` aliases a few lines above once the reviewer's full
+    # 54-file caller-set invocation exposed the cycle the WP-file-only
+    # invocation missed.
+    owned: object | None = None,  # noqa: ARG001 -- deliberately dropped; see D-1 in design-notes/WP02-pipeline.md
 ) -> Path:
     """The flat shell's subtask-gate resolver: today's observable behaviour.
 
-    Before the pipeline promotion the flat/primary shells never passed
-    ``request.effective_root`` to ``resolve_subtasks_gate_dir`` while the
-    transactional ``_prepare_event`` did. The pipeline threads it; this
-    adapter preserves the flat shell's behaviour verbatim (D-1 in
-    ``design-notes/WP02-pipeline.md``) until WP06 adjudicates the parity.
+    Before the pipeline promotion the flat/primary shells never passed an
+    owned-checkout argument to ``resolve_subtasks_gate_dir`` while the
+    transactional ``_prepare_event`` did. The pipeline threads the ``owned``
+    fact; this adapter preserves the flat shell's behaviour verbatim (D-1 in
+    ``design-notes/WP02-pipeline.md``) until WP06 adjudicates the parity --
+    the flat shell still never threads it to the subtasks-gate resolver.
     """
     from specify_cli.missions._read_path_resolver import resolve_subtasks_gate_dir  # noqa: PLC0415
 
     resolved: Path = resolve_subtasks_gate_dir(feature_dir, repo_root, mission_slug)
     return resolved
+
+
+def _repo_root_for_lane_head(feature_dir: Path, repo_root: Path | None) -> Path | None:
+    """Resolve the canonical repo root the lane-head probe should run against (FR-001).
+
+    Prefers an explicit *repo_root* (the request's own, when the caller
+    supplied one); otherwise resolves it from *feature_dir* the same way
+    ``_declared_dependencies`` already does at :func:`resolve_canonical_root`
+    (line ~349) -- function-local import so this stays off the status
+    package's cold-import path. ``None`` on ``WorkspaceRootNotFound`` (the
+    probe itself treats a missing repo root as "no stamp", never a raise).
+    """
+    if repo_root is not None:
+        return repo_root
+    from specify_cli.workspace.root_resolver import WorkspaceRootNotFound, resolve_canonical_root  # noqa: PLC0415
+
+    try:
+        canonical: Path = resolve_canonical_root(feature_dir)
+    except WorkspaceRootNotFound:
+        return None
+    return canonical
 
 
 def _has_legacy_overrides(legacy: dict[str, Any]) -> bool:
@@ -822,8 +848,6 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
     repo_root: Path | None = None,
     policy_metadata: dict[str, Any] | None = None,
     review_result: Any = None,
-    ensure_sync_daemon: bool = True,
-    sync_dossier: bool = True,  # noqa: ARG001 -- 3.2.6 compatibility; fan-out retired by #677
     fan_out: bool = True,
     refresh_projection: bool = True,
 ) -> StatusEvent:
@@ -857,10 +881,6 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
         repo_root: Repository root for SaaS fan-out (optional).
         policy_metadata: Orchestrator policy metadata dict (optional).
         review_result: Structured ReviewResult for in_review -> * transitions (optional).
-        ensure_sync_daemon: If False, emit SaaS events without starting the local sync daemon.
-        sync_dossier: Deprecated 3.2.6 compatibility keyword. Accepted as a
-            no-op because the permanently-empty dossier fan-out registry was
-            retired by issue #677.
         fan_out: When False, step 7 (SaaS + resolved-binding fan-out) is
             skipped and the persisted event is returned as-is. The coord
             fallback arm uses this to fan out only after its commit succeeds
@@ -941,6 +961,8 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
         readiness = _resolve_dependency_readiness(canonical_feature_dir, request.wp_id, snapshot)
 
         # Step 4: the status-owned pipeline (validate + build; pure).
+        from .lane_head import probe_lane_head  # noqa: PLC0415
+
         prepared = prepare_transition(
             request=request,
             feature_dir=canonical_feature_dir,
@@ -949,6 +971,8 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
             from_lane=from_lane,
             readiness=readiness,
             resolve_subtasks_dir=_flat_subtasks_dir_resolver,
+            lane_head_probe=probe_lane_head,
+            repo_root=_repo_root_for_lane_head(canonical_feature_dir, request.repo_root),
         )
         if prepared.event is None:
             return _collapse_alias_in_place(
@@ -976,7 +1000,6 @@ def emit_status_transition(  # NOSONAR — central orchestration hub; 15 of 20 p
             request_mission_slug,
             request.repo_root,
             policy_metadata=request.policy_metadata,
-            ensure_sync_daemon=ensure_sync_daemon,
         )
         if prepared.annotation is not None:
             _resolved_binding_fan_out(prepared.annotation, request_mission_slug, request.repo_root)
@@ -1045,6 +1068,8 @@ def _prepare_batch(
     (D-2); operator decision 2026-09-07 reinstated it (mission-review
     DRIFT-3). The rule lives in the pipeline as a policy knob, not here.
     """
+    from .lane_head import probe_lane_head  # noqa: PLC0415
+
     built: list[tuple[StatusEvent, PreparedTransition, TransitionRequest]] = []
     batch_started_at = now_utc()
     for request in requests:
@@ -1058,6 +1083,8 @@ def _prepare_batch(
             at=(batch_started_at + timedelta(microseconds=len(built))).isoformat(),
             resolve_subtasks_dir=_flat_subtasks_dir_resolver,
             default_workspace_context=False,
+            lane_head_probe=probe_lane_head,
+            repo_root=_repo_root_for_lane_head(feature_dir, request.repo_root),
         )
         if prepared.event is None:
             continue
@@ -1069,8 +1096,6 @@ def _prepare_batch(
 def emit_status_transition_batch(
     requests: list[TransitionRequest],
     *,
-    ensure_sync_daemon: bool = True,
-    sync_dossier: bool = True,  # noqa: ARG001 -- 3.2.6 compatibility; fan-out retired by #677
     fan_out: bool = True,
     refresh_projection: bool = True,
 ) -> list[StatusEvent]:
@@ -1083,9 +1108,7 @@ def emit_status_transition_batch(
     derivation, every per-request :func:`prepare_transition`, the single
     atomic append, the materialize and the lane mirrors; fan-out follows the
     release. The full sequence is validated before any write -- a refused
-    member persists nothing. ``sync_dossier`` remains an accepted no-op
-    keyword for 3.2.6 callers after retirement of the permanently-empty
-    dossier fan-out registry in issue #677; ``fan_out=False`` skips step 7 for
+    member persists nothing. ``fan_out=False`` skips step 7 for
     the coord fallback arm (FR-008). ``refresh_projection=False`` skips the
     F-3 projection refresh (see :func:`emit_status_transition`'s docstring
     for why the coord fallback's flat shell needs this independent flag).
@@ -1145,7 +1168,6 @@ def emit_status_transition_batch(
                 mission_slug,
                 request.repo_root,
                 policy_metadata=request.policy_metadata,
-                ensure_sync_daemon=ensure_sync_daemon,
             )
         # #5181: paired with its own request (never the flattened `annotations`
         # list above) so each annotation's fan-out reads ITS OWN request's
@@ -1481,7 +1503,6 @@ def _saas_fan_out(
     repo_root: Path | None,
     *,
     policy_metadata: dict[str, Any] | None = None,
-    ensure_sync_daemon: bool = True,
 ) -> None:
     """Conditionally fan out a SaaS telemetry event via the registered handlers.
 
@@ -1533,7 +1554,6 @@ def _saas_fan_out(
         # time so SaaS persists Event.occurred_at = StatusEvent.at, not the
         # sync-emission clock (Rule R-T-01 in spec-kitty-events).
         metadata=WPStatusChangeMetadata.from_status_event(event, policy_metadata=policy_metadata),
-        ensure_daemon=ensure_sync_daemon,
         # The emitting checkout root, so the Zeitgeist bridge resolves relay
         # credentials from it instead of the process cwd (#125).
         repo_root=repo_root,

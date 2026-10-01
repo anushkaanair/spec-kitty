@@ -93,6 +93,7 @@ from specify_cli.consolidation.config import MergeStrategy, load_merge_config
 # Re-imported here (and re-exported via ``__all__``) so the public surface and
 # every importer stay byte-stable (FR-003, C-008, INV-8).
 from specify_cli.consolidation._constants import (
+    GLOBAL_MERGE_LOCK_ID,
     HollowReviewWarnings,
     LINEAR_HISTORY_REJECTION_TOKENS,
     MissionBranchBlocker,
@@ -225,14 +226,18 @@ from specify_cli.consolidation.push_preflight import (
     _enforce_target_branch_sync_preflight,
     _target_branch_sync_payload,
 )
+from specify_cli.consolidation.rollback import rollback_to_snapshot
 from specify_cli.consolidation.state import (
     abort_git_merge,
+    acquire_merge_lock,
     clear_state,
     has_active_consolidation,
     load_state,
+    read_merge_lock_owner,
     release_merge_lock_if_owned,
 )
 from specify_cli.consolidation.workspace import get_merge_workspace_path
+from specify_cli.coordination.transaction_errors import BookkeepingPolicyRefused
 from specify_cli.post_merge.retrospective_terminus import run_retrospective_postcondition
 from specify_cli.task_utils import TaskCliError, find_repo_root
 
@@ -404,6 +409,117 @@ def _teardown_coordination_for_abort(
     teardown_coordination_topology(*abort_teardown_args, persist=False)
 
 
+_GLOBAL_MERGE_LOCK = GLOBAL_MERGE_LOCK_ID
+_ABORT_NO_SNAPSHOT_NOTICE = (
+    "[yellow]Notice:[/yellow] no pre-mutation snapshot was recorded for this consolidation (older record); aborting without restoring branches."
+)
+_ABORT_KEPT_RECORD_MESSAGE = (
+    "[red]Kept the consolidation record[/red] so nothing is lost; resolve the branches named above, then re-run `spec-kitty consolidate --abort`."
+)
+
+
+def _abort_hold_global_lock_or_exit(repo_root: Path, state: ConsolidationState) -> None:
+    """Hold the global consolidation lock for the abort, or refuse (exit 1) while another mission's merge is live.
+
+    Built from the public lock API only (no second lock path). A lock we already
+    own, a provably-dead owner's lock and a legacy unowned lock do not block: the
+    trailing owner-gated release in ``_dispatch_abort`` reclaims or leaves them.
+
+    Decision (review cycle 1, item 3): a dead owner's lock or a legacy *unowned*
+    lock (no owner token to attribute it to any mission) does not refuse; the
+    restore then runs without the lock. A legacy unowned lock predates owner
+    tokens, so there is no mission whose liveness could be checked here, and
+    refusing would leave the operator unable to abort at all. A record with no
+    snapshot moves no refs, so it never takes (or is refused by) the lock.
+    """
+    if not state.pre_mutation_refs:
+        return
+    if acquire_merge_lock(_GLOBAL_MERGE_LOCK, repo_root, owner_token=state.mission_id):
+        return
+    owner = read_merge_lock_owner(_GLOBAL_MERGE_LOCK, repo_root)
+    if owner is not None and owner != state.mission_id and has_active_consolidation(repo_root, owner):
+        console.print(
+            "[red]Error:[/red] another mission's consolidation holds the merge lock and is still active; "
+            "refusing to abort (nothing was restored or cleared). Finish or abort that consolidation first."
+        )
+        raise typer.Exit(1)
+
+
+def _abort_restore_or_keep_record(repo_root: Path, state: ConsolidationState) -> bool:
+    """Restore the pre-mutation snapshot BEFORE the record is cleared (#5318 / FR-005).
+
+    Returns ``True`` when the caller may proceed with the cleanup (fully restored,
+    or an older record with no snapshot, which keeps today's behaviour), ``False``
+    when the record must be kept because a branch could not be restored or a
+    verified landing was kept (FR-011). Restoration is the single rollback
+    authority's job; this helper only decides what ``--abort`` does with its report.
+    """
+    if not state.pre_mutation_refs:
+        console.print(_ABORT_NO_SNAPSHOT_NOTICE)
+        return True
+    report = rollback_to_snapshot(repo_root, state, target_branch=state.target_branch)
+    console.print(report.render(), markup=False, highlight=False)
+    return bool(report.fully_restored)
+
+
+def _abort_exit_keeping_record(repo_root: Path, state: ConsolidationState) -> None:
+    """Release the lock this abort took, tell the operator the record was kept, and exit 1."""
+    release_merge_lock_if_owned(_GLOBAL_MERGE_LOCK, repo_root, owner_token=state.mission_id)
+    console.print(_ABORT_KEPT_RECORD_MESSAGE)
+    raise typer.Exit(1)
+
+
+def _abort_merge_workspace(repo_root: Path, state: ConsolidationState) -> bool:
+    """Abort a git merge left in THIS mission's own merge workspace; ``True`` when one was aborted.
+
+    T015/#4754: a git-level merge abort is only ever legitimate when active
+    spec-kitty consolidate state exists for THIS mission, and only scoped to that
+    mission's own merge workspace (``.kittify/runtime/merge/<mission_id>/workspace/``)
+    -- NEVER ``repo_root``: a MERGE_HEAD in ``repo_root`` is always the operator's
+    OWN in-progress merge and must never be touched.
+    """
+    if not has_active_consolidation(repo_root, state.mission_id):
+        return False
+    workspace_path = get_merge_workspace_path(state.mission_id, repo_root)
+    return workspace_path.exists() and bool(abort_git_merge(workspace_path))
+
+
+def _abort_success_line(resolved: str | None, *, restored: bool, resume_seeded: bool = False) -> str:
+    if restored:
+        commits = "snapshot commits (snapshot taken when this record was resumed)" if resume_seeded else "pre-consolidation commits"
+        return f"[green]Aborted[/green] consolidation for {resolved}. Branches restored to their {commits}; state and workspace cleaned up."
+    return f"[green]Aborted[/green] merge for {resolved}. State and workspace cleaned up."
+
+
+def _abort_lock_restore_clear(repo_root: Path, resolved: str | None, state_entry: tuple[str | None, ConsolidationState]) -> tuple[bool, bool]:
+    """Lock -> scratch merge workspace -> restore -> clear/teardown (post-tasks finding 7).
+
+    Returns ``(git_merge_aborted, cleared)``.
+
+    Exits 1 (record kept) when the restore is incomplete. Any exception releases the lock this
+    abort took (owner-gated) before propagating, so a failed abort never leaves ``__global_merge__``
+    owned by a record that still has remaining WPs.
+    """
+    active_state = state_entry[1]
+    _abort_hold_global_lock_or_exit(repo_root, active_state)
+    try:
+        git_merge_aborted = _abort_merge_workspace(repo_root, active_state)
+        # The merge workspace is spec-kitty-owned scratch (state.json survives its cleanup). Clean it
+        # BEFORE the restore so a snapshotted branch checked out mid-merge cannot make the restore refuse.
+        _cleanup_merge_workspaces_for_state(repo_root, mission_slug=resolved, state_entry=state_entry)
+        if not _abort_restore_or_keep_record(repo_root, active_state):
+            _abort_exit_keeping_record(repo_root, active_state)
+        cleared = _clear_merge_state_for_mission(repo_root, resolved)
+        if state_entry[0]:
+            cleared = clear_state(repo_root, state_entry[0]) or cleared
+        cleared = clear_state(repo_root, active_state.mission_id) or cleared
+        _teardown_coordination_for_abort(repo_root, resolved, state_entry)
+    except BaseException:
+        release_merge_lock_if_owned(_GLOBAL_MERGE_LOCK, repo_root, owner_token=active_state.mission_id)
+        raise
+    return git_merge_aborted, cleared
+
+
 def _dispatch_abort(repo_root: Path, mission: str | None) -> None:
     """Handle ``merge --abort``: clear state, locks, legacy files, git merge, coord."""
     from contextlib import suppress
@@ -416,34 +532,10 @@ def _dispatch_abort(repo_root: Path, mission: str | None) -> None:
         resolved = state_entry[1].mission_slug
 
     if state_entry is not None:
-        # T015/#4754: a git-level merge abort is only ever legitimate when
-        # active spec-kitty consolidate state exists for THIS mission, and only
-        # scoped to that mission's own merge workspace
-        # (.kittify/runtime/merge/<mission_id>/workspace/) -- NEVER
-        # repo_root. The merge pipeline runs `git merge` exclusively inside
-        # spec-kitty-owned worktrees (the ephemeral lane-consolidation tmp worktree,
-        # unconditionally cleaned up on exit, and the persisted
-        # conflict-resolution workspace); a MERGE_HEAD in repo_root is
-        # always the operator's OWN in-progress merge and must never be
-        # touched. Detected/aborted BEFORE workspace cleanup below so the
-        # message reflects what actually happened (FR-006) rather than
-        # racing the force-removal that follows.
-        git_merge_aborted = False
-        _, active_state = state_entry
-        if has_active_consolidation(repo_root, active_state.mission_id):
-            workspace_path = get_merge_workspace_path(active_state.mission_id, repo_root)
-            if workspace_path.exists():
-                git_merge_aborted = abort_git_merge(workspace_path)
-
-        cleared = _clear_merge_state_for_mission(repo_root, resolved)
-        source_key, active_state = state_entry
-        if source_key:
-            cleared = clear_state(repo_root, source_key) or cleared
-        cleared = clear_state(repo_root, active_state.mission_id) or cleared
-        _cleanup_merge_workspaces_for_state(repo_root, mission_slug=resolved, state_entry=state_entry)
-        _teardown_coordination_for_abort(repo_root, resolved, state_entry)
+        active_state = state_entry[1]
+        git_merge_aborted, cleared = _abort_lock_restore_clear(repo_root, resolved, state_entry)
         if cleared:
-            console.print(f"[green]Aborted[/green] merge for {resolved}. State and workspace cleaned up.")
+            console.print(_abort_success_line(resolved, restored=bool(active_state.pre_mutation_refs), resume_seeded=bool(active_state.resume_seeded_refs)))
         else:
             console.print(f"[yellow]No active merge state found for {resolved}.[/yellow] Workspace cleaned up.")
         if git_merge_aborted:
@@ -468,7 +560,7 @@ def _dispatch_abort(repo_root: Path, mission: str | None) -> None:
     # mission's canonical id) — ``None`` when no state was resolved, in which
     # case only a provably-dead lock is reclaimable, never a live one.
     _abort_owner_token = state_entry[1].mission_id if state_entry is not None else None
-    _lock_outcome = release_merge_lock_if_owned("__global_merge__", repo_root, owner_token=_abort_owner_token)
+    _lock_outcome = release_merge_lock_if_owned(_GLOBAL_MERGE_LOCK, repo_root, owner_token=_abort_owner_token)
     if _lock_outcome in ("released_owned", "released_stale"):
         console.print("[green]Removed merge lock.[/green]")
     elif _lock_outcome == "left_live":
@@ -585,6 +677,8 @@ def _run_real_merge(
     skip_review_artifact_check: bool = False,
     skip_note: str | None = None,
     skip_lanes: bool = False,
+    attest_canceled_superseded: tuple[str, ...] = (),
+    attest_reason: str | None = None,
 ) -> None:
     """Run the real lane-based merge + post-merge retrospective / next-step hints."""
     try:
@@ -601,6 +695,8 @@ def _run_real_merge(
             skip_review_artifact_check=skip_review_artifact_check,
             skip_note=skip_note,
             skip_lanes=skip_lanes,
+            attest_canceled_superseded=attest_canceled_superseded,
+            attest_reason=attest_reason,
         )
     except SparseCheckoutPreflightError as exc:
         # WP05/T020: surface sparse-checkout preflight as a user-facing error and
@@ -609,6 +705,13 @@ def _run_real_merge(
         raise typer.Exit(1) from exc
     except (MissingLanesError, CorruptLanesError) as exc:
         console.print(f"[red]Error:[/red] {exc}")
+        raise typer.Exit(1) from exc
+    except BookkeepingPolicyRefused as exc:
+        # #5385: a policy refusal that escapes the executor (the rollback door has
+        # already restored what the run moved) is an operator-facing refusal, not
+        # a crash -- render the policy's own code, message and remedy.
+        console.print(f"[red]Error:[/red] Bookkeeping policy refused consolidation: {exc.verdict.error_code}: {exc.verdict.message}")
+        console.print(f"  Next step: {exc.verdict.next_step}")
         raise typer.Exit(1) from exc
     except CoordinationTeardownError as exc:
         # #3926: the merge itself landed; only the coord triple did not come
@@ -764,9 +867,25 @@ def consolidate(
             "still refuses before any mutation."
         ),
     ),
+    attest_canceled_superseded: list[str] | None = typer.Option(
+        None,
+        "--attest-canceled-superseded",
+        help=(
+            "Operator attestation (repeatable, one WP id each): the named canceled WP's "
+            "content is absent or superseded, verified by hand. Lifts a mixed-lane REFUSE "
+            "whose attribution evidence can never appear later; never lifts a FAIL. "
+            "Requires --attest-reason; recorded durably in the status event log."
+        ),
+    ),
+    attest_reason: str | None = typer.Option(
+        None,
+        "--attest-reason",
+        help="What you checked, recorded with --attest-canceled-superseded (required with it).",
+    ),
 ) -> None:
     """Consolidate a lane-based mission into its target branch."""
     del context_token, keep_workspace
+    attested_wps = _validated_attestation_flags(attest_canceled_superseded, attest_reason)
 
     # #2959 escape hatch — a skip is never silent: refuse it without a reason
     # BEFORE any merge work runs, so the evidence record always carries a note.
@@ -903,6 +1022,13 @@ def consolidate(
         )
 
     if dry_run:
+        if attested_wps and not json_output:
+            # FR-012: a dry run records nothing and its forecast does not evaluate
+            # mixed-lane attribution — say so instead of dropping the flags silently.
+            console.print(
+                "[yellow]Note:[/yellow] --attest-canceled-superseded is not applied with --dry-run: "
+                "nothing is recorded, and the forecast does not evaluate mixed-lane attribution."
+            )
         # WP06 (#2057): the dry-run preview + payload build lives in the
         # ``forecast`` seam. Behavior + JSON key set preserved byte-for-byte
         # (FR-001, FR-004); ``run_dry_run_forecast`` terminates the dry-run path.
@@ -943,6 +1069,8 @@ def consolidate(
         skip_review_artifact_check=skip_review_artifact_check,
         skip_note=note,
         skip_lanes=skip_lanes,
+        attest_canceled_superseded=attested_wps,
+        attest_reason=attest_reason if attested_wps else None,
     )
     # Inline Feedback Survey (WP06): after a successful real merge only.
     # ``_run_real_merge`` raises ``typer.Exit`` on failure, so this is skipped
@@ -955,6 +1083,31 @@ def consolidate(
         json_output=json_output,
         mission_type=mission_type_for(repo_root, resolved_mission),
     )
+
+
+def _validated_attestation_flags(wp_ids: object, reason: object) -> tuple[str, ...]:
+    """CLI-boundary check for FR-012's flags, BEFORE any merge work runs.
+
+    ``--attest-canceled-superseded`` without a non-blank ``--attest-reason`` is
+    refused (exit 2) so the attestation always records why. ``--attest-reason``
+    alone is inert: warn, never fail (mirrors ``--note``).
+
+    Like :func:`_clean_mission_option`, a direct Python call of ``consolidate()``
+    that omits these parameters passes the unresolved ``typer.Option``
+    sentinel; anything that is not a list of strings / a string is treated as
+    "not supplied" rather than iterated.
+    """
+    if not isinstance(wp_ids, (list, tuple)):
+        wp_ids = ()
+    if not isinstance(reason, str):
+        reason = None
+    requested = tuple(dict.fromkeys(wp.strip() for wp in wp_ids if isinstance(wp, str) and wp.strip()))
+    if requested and not (reason and reason.strip()):
+        console.print('[red]Error:[/red] --attest-canceled-superseded requires --attest-reason "<what you checked>" so the attestation records why.')
+        raise typer.Exit(2)
+    if reason and reason.strip() and not requested:
+        console.print("[yellow]Note:[/yellow] --attest-reason has no effect without --attest-canceled-superseded.")
+    return requested
 
 
 # ─────────────────────────────────────────────────────────────────────────────

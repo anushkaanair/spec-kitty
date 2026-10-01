@@ -29,7 +29,8 @@ from __future__ import annotations
 from specify_cli.core.constants import KITTY_SPECS_DIR
 import logging
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from kernel.clock import now_utc, now_utc_iso, timedelta
 from pathlib import Path
@@ -50,6 +51,7 @@ from specify_cli.coordination.transaction import (
     BookkeepingTransaction,
     BookkeepingWorktreeMissing,
 )
+from specify_cli.coordination.types import Refused
 from specify_cli.lanes._git import branch_exists as _branch_exists
 from specify_cli.lanes.branch_naming import (
     coord_mission_dir_name as _seam_coord_mission_dir_name,
@@ -83,7 +85,7 @@ from specify_cli.workspace import canonicalize_feature_dir, delete_context
 
 if TYPE_CHECKING:
     from specify_cli.core.dependency_graph import DependencyReadiness
-    from specify_cli.core.owned_mission import OwnedMission
+    from mission_runtime import OwnedCheckout
 
 _logger = logging.getLogger(__name__)
 
@@ -98,7 +100,13 @@ class _TransactionIdentity:
     meta_exists: bool
     coordination_branch: str | None
     transaction_meta_exists: bool
-    primary_root: Path | None = None
+    # WP06 T030 (out-of-map hunk (a), declared under WP06's T030 subtask):
+    # threaded so the transaction target's read contract can carry the
+    # validated fact (hunk (c) below). WP07 (T033) deleted the sibling
+    # ``primary_root`` field -- this is the ONE owned carrier;
+    # ``identity.owned.repository_root`` replaces every former
+    # ``identity.primary_root`` read.
+    owned: OwnedCheckout | None = None
 
 
 def _repo_root_for_feature(feature_dir: Path, repo_root: Path | None) -> Path:
@@ -398,6 +406,27 @@ def _coord_feature_dir(coord_worktree: Path, mission_slug: str, mid8: str) -> Pa
     return feature_dir
 
 
+@contextmanager
+def coord_status_lock(repo_root: Path, coord_feature_dir: Path) -> Iterator[Path]:
+    """Hold the mission status lock (L1) that guards a coord-resident status log.
+
+    The ONE definition of the lock the coord arm holds across emit -> commit
+    (:func:`_emit_on_coord_then_commit`): keyed on the coord feature dir's name
+    under *repo_root*'s git common dir, bounded by
+    ``BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS`` (read at call time). The commit
+    router takes it through this helper when it commits a coord-resident status
+    log, so it can never sweep a transition's appended-but-uncommitted row
+    (#5353). Re-entrant per thread. A timeout raises
+    :class:`~specify_cli.status.locking.FeatureStatusLockTimeoutError`.
+    """
+    with feature_status_lock(
+        repo_root,
+        coord_feature_dir.name,
+        timeout=BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS,
+    ) as held:
+        yield held
+
+
 def _capture_coord_tail(coord_feature_dir: Path, pre_emit_event_size: int) -> EventStream:
     """Read this operation's appended rows while its status lock is held."""
     events_path = coord_feature_dir / _EVENTS_FILENAME
@@ -414,7 +443,6 @@ def _fan_out_committed_coord_tail(
     *,
     mission_slug: str,
     repo_root: Path | None,
-    ensure_sync_daemon: bool,
     coord_feature_dir: Path | None = None,
 ) -> None:
     """Announce only the rows captured for the successful coord commit.
@@ -435,7 +463,6 @@ def _fan_out_committed_coord_tail(
             mission_slug,
             repo_root,
             policy_metadata=event.policy_metadata,
-            ensure_sync_daemon=ensure_sync_daemon,
         )
     for annotation in stream.annotations:
         _emit._resolved_binding_fan_out(annotation, mission_slug, repo_root)
@@ -453,7 +480,6 @@ def _emit_on_coord_then_commit(
     *,
     emit: Callable[[Path], _CoordEmitResult],
     repo_root: Path | None,
-    ensure_sync_daemon: bool,
 ) -> tuple[_CoordEmitResult, Path]:
     """The coord fallback arm shared by the single and batch doors (FR-004 row 7).
 
@@ -477,11 +503,7 @@ def _emit_on_coord_then_commit(
     # kitty-specs/fsm-write-path-integrity-01M1TZV6/spec.md and
     # design-notes/WP01-lock-rules.md for why this L1-across-git take is
     # accepted (rollback-safety) and bounded instead of eliminated.
-    with feature_status_lock(
-        identity.repo_root,
-        coord_fd.name,
-        timeout=BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS,
-    ):
+    with coord_status_lock(identity.repo_root, coord_fd):
         pre_size, pre_status = _snapshot_coord_status_artifacts(coord_fd)
         committed = False
         try:
@@ -511,7 +533,6 @@ def _emit_on_coord_then_commit(
         stream,
         mission_slug=mission_slug,
         repo_root=repo_root,
-        ensure_sync_daemon=ensure_sync_daemon,
         coord_feature_dir=coord_fd,
     )
     return result, coord_fd
@@ -521,8 +542,6 @@ def _fallback_emit_single(
     identity: _TransactionIdentity,
     request: TransitionRequest,
     mission_slug: str,
-    *,
-    ensure_sync_daemon: bool,
 ) -> StatusEvent:
     """Single-event non-transactional fallback (FR-004 rows 7-8).
 
@@ -534,13 +553,14 @@ def _fallback_emit_single(
     """
 
     def _primary() -> StatusEvent:
-        event = _emit.emit_status_transition(request, ensure_sync_daemon=ensure_sync_daemon)
+        event = _emit.emit_status_transition(request)
         _tombstone_lane_workspace_context_on_cancel(
             repo_root=identity.repo_root,
             mission_slug=mission_slug,
             read_feature_dir=identity.feature_dir,
             event=event,
         )
+        _clear_claim_base_on_terminal(repo_root=identity.repo_root, mission_slug=mission_slug, event=event)
         return event
 
     def _coord(coord_worktree: Path) -> StatusEvent:
@@ -553,7 +573,6 @@ def _fallback_emit_single(
             # projection (a rolled-back event) on a commit failure.
             event: StatusEvent = _emit.emit_status_transition(
                 replace(request, feature_dir=coord_fd, mission_dir=None),
-                ensure_sync_daemon=ensure_sync_daemon,
                 fan_out=False,
                 refresh_projection=False,
             )
@@ -565,7 +584,6 @@ def _fallback_emit_single(
             coord_worktree,
             emit=_flat_shell,
             repo_root=request.repo_root,
-            ensure_sync_daemon=ensure_sync_daemon,
         )
         _tombstone_lane_workspace_context_on_cancel(
             repo_root=identity.repo_root,
@@ -573,6 +591,7 @@ def _fallback_emit_single(
             read_feature_dir=coord_fd,
             event=event,
         )
+        _clear_claim_base_on_terminal(repo_root=identity.repo_root, mission_slug=mission_slug, event=event)
         return event
 
     return _emit_via_non_transactional_fallback(identity, mission_slug, primary_emit=_primary, coord_emit=_coord)
@@ -582,8 +601,6 @@ def _fallback_emit_batch(
     identity: _TransactionIdentity,
     requests: list[TransitionRequest],
     mission_slug: str,
-    *,
-    ensure_sync_daemon: bool,
 ) -> list[StatusEvent]:
     """Same-WP batch non-transactional fallback (FR-004 rows 7-8).
 
@@ -591,11 +608,23 @@ def _fallback_emit_batch(
     committed tail out with the batch's emitting checkout root (the batch is
     ONE lifecycle operation on one mission/WP, so ``requests[0].repo_root``
     is the checkout every member emits from).
+
+    WP02 review cycle 2 nit: neither arm here calls
+    ``_clear_claim_base_on_terminal`` (unlike :func:`_fallback_emit_single`'s
+    two arms and :func:`emit_status_transition_transactional`'s in-transaction
+    arm). That is intentional, not an oversight -- the ONE production caller
+    of the batch door (``work_package_lifecycle.start_implementation_status``)
+    only ever chains ``planned -> claimed -> in_progress`` or
+    ``claimed -> in_progress``, i.e. exclusively non-terminal ``to_lane``
+    members. A terminal hop (``done`` / ``canceled``) never reaches this
+    function today, so there is no terminal event here to clear the ref for.
+    If a future caller starts batching a terminal hop, add the same
+    ``_clear_claim_base_on_terminal(event=...)`` call per member here.
     """
 
     def _primary() -> list[StatusEvent]:
         # Local annotation re-narrows the cross-module (``Any``) emit result.
-        events: list[StatusEvent] = _emit.emit_status_transition_batch(requests, ensure_sync_daemon=ensure_sync_daemon)
+        events: list[StatusEvent] = _emit.emit_status_transition_batch(requests)
         return events
 
     def _coord(coord_worktree: Path) -> list[StatusEvent]:
@@ -603,7 +632,6 @@ def _fallback_emit_batch(
             # B1 fix: same reasoning as _fallback_emit_single's _flat_shell.
             events: list[StatusEvent] = _emit.emit_status_transition_batch(
                 [replace(req, feature_dir=coord_fd, mission_dir=None) for req in requests],
-                ensure_sync_daemon=ensure_sync_daemon,
                 fan_out=False,
                 refresh_projection=False,
             )
@@ -615,7 +643,6 @@ def _fallback_emit_batch(
             coord_worktree,
             emit=_flat_shell,
             repo_root=requests[0].repo_root,
-            ensure_sync_daemon=ensure_sync_daemon,
         )
         return events
 
@@ -893,29 +920,28 @@ def _identity_for_request(request: TransitionRequest) -> _TransactionIdentity:
     # #1737 / F-007: anchor the transaction identity on the CWD-invariant
     # canonical primary feature dir resolved through the facade, instead of
     # trusting the (CWD-dependent, existence-gated) canonicalize redirect alone.
-    primary_root = None
-    if request.effective_root is not None:
+    primary_root: Path | None = None
+    # WP07/FR-003: the collapsed validated ownership fact. When present, this
+    # function performs ZERO re-validation -- neither resolve_owned_mission
+    # nor resolve_ownership_claim runs, and _repo_root_for_feature is never
+    # called for the owned checkout's root.
+    fact: OwnedCheckout | None = request.owned
+    if fact is not None:
         from mission_runtime import ActionContextError  # noqa: PLC0415
-        from specify_cli.core.owned_mission import resolve_owned_mission  # noqa: PLC0415
 
-        owned = request.owned_mission
-        if owned is not None:
-            # #3866: the caller threaded the validated value object — reuse it
-            # instead of re-deriving ownership (claim resolve + mission resolve
-            # + git branch probes) per event. A cheap identity guard fails
-            # closed on a threaded object that does not describe this request;
-            # it is never silently re-resolved, which would hide the caller bug
-            # and re-pay the derivation this field exists to skip.
-            if owned.root != request.effective_root or owned.slug != mission_slug:
-                raise ActionContextError(
-                    "OWNED_MISSION_PATH_REFUSED",
-                    "Threaded owned mission does not match the request's checkout or mission.",
-                )
-            primary_root = owned.primary
-        else:
-            primary_root = _repo_root_for_feature(raw_feature_dir, request.repo_root)
-            owned = resolve_owned_mission(primary_root, request.effective_root, mission_slug)
-        feature_dir, repo_root = owned.directory, owned.root
+        # #3866 / FR-003: the caller already validated ownership -- reuse the
+        # fact instead of re-deriving it (claim resolve + mission resolve +
+        # git branch probes) per event. A cheap identity guard fails closed on
+        # a fact that does not describe this request; it is never silently
+        # re-resolved, which would hide the caller bug and re-pay the
+        # derivation this field exists to skip.
+        if mission_slug != fact.mission_slug:
+            raise ActionContextError(
+                "OWNED_MISSION_PATH_REFUSED",
+                "Threaded owned checkout does not match the request's mission.",
+            )
+        primary_root = fact.repository_root
+        feature_dir, repo_root = fact.mission_dir, fact.owned_root
     else:
         canonical_feature_dir = canonicalize_feature_dir(raw_feature_dir)
         interim_repo_root = _repo_root_for_feature(canonical_feature_dir, request.repo_root)
@@ -963,7 +989,7 @@ def _identity_for_request(request: TransitionRequest) -> _TransactionIdentity:
         coordination_branch=coord_branch,
     )
     transaction_dir_name = _transaction_dir_name(mission_slug, effective_mid8)
-    if request.effective_root is not None:
+    if fact is not None:
         from mission_runtime import MissionArtifactKind, resolve_placement_only
 
         assert primary_root is not None
@@ -971,7 +997,7 @@ def _identity_for_request(request: TransitionRequest) -> _TransactionIdentity:
             primary_root,
             mission_slug,
             kind=MissionArtifactKind.STATUS_STATE,
-            effective_root=request.effective_root,
+            owned=fact,
         ).ref
     else:
         destination_ref = _resolve_write_target(repo_root, mission_slug, coord_branch)
@@ -984,7 +1010,7 @@ def _identity_for_request(request: TransitionRequest) -> _TransactionIdentity:
         meta_exists=meta_exists,
         coordination_branch=coord_branch,
         transaction_meta_exists=(feature_dir.parent / transaction_dir_name / "meta.json").exists(),
-        primary_root=primary_root,
+        owned=fact,
     )
 
 
@@ -994,13 +1020,13 @@ def _resolve_transaction_entry(request: TransitionRequest, mission_slug: str) ->
     ONE place decides whether a request may take the ``BookkeepingTransaction``
     path (FR-007 / decision Q5 parity, data-model §5 S-2): the batch door used
     to skip the owned-mission refusal the single door applied, so an
-    ``effective_root`` request could silently degrade to the non-transactional
+    owned request could silently degrade to the non-transactional
     fallback. An owned mission (#1737) requires the transaction; refusing it
     here makes the divergence structurally impossible.
     """
     identity = _identity_for_request(request)
     topology_available = _transaction_topology_available(identity, mission_slug)
-    if request.effective_root is not None and not topology_available:
+    if identity.owned is not None and not topology_available:
         from mission_runtime import ActionContextError  # noqa: PLC0415
 
         raise ActionContextError("OWNED_TRANSACTION_UNAVAILABLE", "Owned mission requires transactional status metadata.")
@@ -1017,23 +1043,23 @@ def _acquire_status_transaction(
     """The ONE ``BookkeepingTransaction.acquire`` shape for every door (contract §2 step 1).
 
     * ``repo_root`` anchors the lock/worktree on the PRIMARY root for an owned
-      mission (``identity.primary_root``) and on the mission's own root
-      otherwise; ``effective_root`` is the owned checkout in the former case
-      and omitted (``None``) in the latter.
+      mission (``identity.owned.repository_root``) and on the mission's own
+      root otherwise; ``owned`` is the validated fact in the former case and
+      omitted (``None``) in the latter.
     * WP04/FR-004: ``acquire`` requires ``str`` for its lock/path management.
       For a legacy mission (``identity.mission_id is None``) the explicit
       ``f"legacy-{slug}"`` string is the transaction-lock identifier ONLY --
       it is never written into any ``mission_id`` event field.
     """
     return BookkeepingTransaction.acquire(
-        repo_root=identity.primary_root or identity.repo_root,
+        repo_root=identity.owned.repository_root if identity.owned is not None else identity.repo_root,
         mission_id=identity.mission_id or f"legacy-{mission_slug}",
         mission_slug=mission_slug,
         mid8=identity.mid8,
         destination_ref=identity.destination_ref,
         operation=operation,
         capability=capability,
-        effective_root=identity.repo_root if identity.primary_root is not None else None,
+        owned=identity.owned,
     )
 
 
@@ -1054,7 +1080,6 @@ def _defer_fan_out(
     *,
     mission_slug: str,
     repo_root: Path | None,
-    ensure_sync_daemon: bool,
 ) -> None:
     """Step 7 of the transactional shell: fan-out fires only after commit success."""
     if prepared.annotation is not None:
@@ -1064,7 +1089,6 @@ def _defer_fan_out(
         event,
         mission_slug=mission_slug,
         repo_root=repo_root,
-        ensure_sync_daemon=ensure_sync_daemon,
     )
     # F-3: register the projection refresh as a post-commit deferred outbound
     # (never called synchronously inside the transaction) -- the shared choke
@@ -1296,6 +1320,24 @@ def _read_contract_from_transaction_target(
     mission_slug: str,
 ) -> EventLogReadContract:
     """Resolve the read-only contract for the transaction write target."""
+    # WP06 T030 (out-of-map hunk (c)): an owned identity never falls into the
+    # _is_under_worktree shape arm below -- this is the site that produced
+    # O6 (status/bootstrap.py:151 -> read_events_transactional -> a
+    # primary_checkout contract on a .worktrees path).
+    #
+    # Review-cycle-1 fix (out-of-map hunk (d)): the shortcut is further gated
+    # on the fact's topology NOT routing through coordination. P's own local
+    # partition never carries the coordination log for a LANES_WITH_COORD /
+    # COORD mission, so taking this shortcut there would silently misroute
+    # the read. An owned identity is single_branch by construction today
+    # (core.owned_mission.LIFECYCLE_OWNED_TOPOLOGIES) -- this gate is inert
+    # until a later WP threads a NEXT_OWNED_TOPOLOGIES fact through the
+    # transition pipeline and lifts that placement refusal (forward note,
+    # reviewer-renata, review cycle 1).
+    from mission_runtime import routes_through_coordination  # noqa: PLC0415
+
+    if identity.owned is not None and not routes_through_coordination(identity.owned.topology):
+        return EventLogReadContract.primary_checkout(identity.feature_dir, owned=identity.owned)
     if not _transaction_topology_available(identity, mission_slug):
         # #1900 / FR-001: the worktree-context read is the blessed seam shape
         # predicate (_is_under_worktree → is_under_worktrees_segment), not a raw
@@ -1347,7 +1389,7 @@ def read_events_transactional(
     feature_dir: Path,
     mission_slug: str,
     repo_root: Path | None = None,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> list[StatusEvent]:
     """Read status events from the same target transactional writes use."""
     identity = _identity_for_request(
@@ -1358,7 +1400,7 @@ def read_events_transactional(
             to_lane=Lane.PLANNED,
             actor="status-read",
             repo_root=repo_root,
-            effective_root=effective_root,
+            owned=owned,
         )
     )
     return _read_events_from_transaction_target(identity, mission_slug)
@@ -1430,6 +1472,30 @@ def _lane_wp_ids_all_terminal(work_packages: dict[str, dict[str, Any]], wp_ids: 
     return True
 
 
+def _clear_claim_base_on_terminal(
+    *,
+    repo_root: Path,
+    mission_slug: str,
+    event: StatusEvent | None,
+) -> None:
+    """Clear a repo-root-lane WP's claim-base ref once it reaches ``done``/
+    ``canceled`` (WP02/T007). This is the ONE terminal-transition call site
+    into :func:`specify_cli.lanes.claim_base.on_wp_terminal` -- WP07 extends
+    that same hook to also clear the lane-tip ref, so a second terminal call
+    site is never added here. No-op when *event* is ``None`` (the legacy
+    alias-collapse no-op arm) or the transition did not land on a terminal
+    lane. ``on_wp_terminal`` itself is a no-op for a WP that never had a
+    claim-base ref (a lane WP, or a WP claimed before this ref existed), so
+    this call is safe to make unconditionally for every terminal transition.
+    """
+    if event is None or not is_terminal(str(event.to_lane)):
+        return
+
+    from specify_cli.lanes.claim_base import on_wp_terminal  # noqa: PLC0415
+
+    on_wp_terminal(repo_root, mission_slug, event.wp_id)
+
+
 def _tombstone_lane_workspace_context_on_cancel(
     *,
     repo_root: Path,
@@ -1476,10 +1542,44 @@ def _tombstone_lane_workspace_context_on_cancel(
     delete_context(repo_root, workspace_name)
 
 
+def status_write_refusal(
+    request: TransitionRequest,
+    *,
+    capability: GuardCapability = GuardCapability.STANDARD,
+    operation: str | None = None,
+) -> Refused | None:
+    """The policy ``Refused`` the transactional door would raise for ``request``, else ``None``.
+
+    A pure probe (#5385): it takes the door's own entry
+    (:func:`_resolve_transaction_entry` -- identity, write target and topology
+    decision) and asks :meth:`BookkeepingTransaction.preflight_refusal` with the
+    exact acquire shape :func:`_acquire_status_transaction` uses. The
+    non-transactional fallback never consults the policy, so it yields ``None``.
+    No lock, no worktree creation, no writes.
+    """
+    mission_slug = request.mission_slug or request._legacy_mission_slug
+    if mission_slug is None or request.wp_id is None:
+        raise TypeError("status write refusal probe requires mission_slug and wp_id")
+    identity, topology_available = _resolve_transaction_entry(request, mission_slug)
+    if not topology_available:
+        return None
+    # WP07/T033: the owned root rides the ``owned`` carrier, never a bare path.
+    # ``preflight_refusal`` threads it into the policy gate, so an owned mission
+    # resolves protection via ``resolve_for_owned`` exactly as its real write does.
+    return BookkeepingTransaction.preflight_refusal(
+        repo_root=identity.repo_root,
+        mission_slug=mission_slug,
+        mid8=identity.mid8,
+        destination_ref=identity.destination_ref,
+        operation=operation or f"status transition {request.wp_id}",
+        capability=capability,
+        owned=identity.owned,
+    )
+
+
 def emit_status_transition_transactional(
     request: TransitionRequest,
     *,
-    ensure_sync_daemon: bool = True,
     operation: str | None = None,
     capability: GuardCapability = GuardCapability.STANDARD,
 ) -> StatusEvent:
@@ -1508,7 +1608,6 @@ def emit_status_transition_transactional(
             identity,
             request,
             mission_slug,
-            ensure_sync_daemon=ensure_sync_daemon,
         )
 
     with _acquire_status_transaction(
@@ -1524,7 +1623,9 @@ def emit_status_transition_transactional(
         # come from the WP file on the primary planning surface.
         snapshot = _emit._reduce_write_surface(txn.feature_dir)
         from_lane = str(_emit._derive_from_lane(txn.feature_dir, request.wp_id, snapshot=snapshot))
-        readiness = _emit._resolve_dependency_readiness(identity.feature_dir, request.wp_id, snapshot)
+        readiness = _emit._resolve_dependency_readiness(identity.feature_dir, request.wp_id, snapshot, owned=identity.owned)
+        from specify_cli.status.lane_head import probe_lane_head  # noqa: PLC0415
+
         prepared = prepare_transition(
             request=request,
             feature_dir=txn.feature_dir,
@@ -1532,6 +1633,8 @@ def emit_status_transition_transactional(
             mission_id=identity.mission_id,
             from_lane=from_lane,
             readiness=readiness,
+            lane_head_probe=probe_lane_head,
+            repo_root=_repo_root_for_feature(txn.feature_dir, request.repo_root),
         )
         if prepared.event is None:
             return _collapse_alias_in_transaction(
@@ -1550,7 +1653,6 @@ def emit_status_transition_transactional(
             event,
             mission_slug=mission_slug,
             repo_root=request.repo_root,
-            ensure_sync_daemon=ensure_sync_daemon,
         )
         _tombstone_lane_workspace_context_on_cancel(
             repo_root=identity.repo_root,
@@ -1558,6 +1660,20 @@ def emit_status_transition_transactional(
             read_feature_dir=txn.feature_dir,
             event=event,
         )
+        # WP02 review cycle 2 nit: this clear runs INSIDE the transaction
+        # body, i.e. before BookkeepingTransaction's own commit lands at the
+        # `with` block's __exit__ -- the same in-body placement
+        # _tombstone_lane_workspace_context_on_cancel uses immediately above.
+        # A rollback after this point (the coord commit fails) therefore
+        # leaves the claim-base ref cleared even though the terminal event
+        # never durably landed. That window is deliberately accepted, not
+        # overlooked: record_claim_base is idempotent-by-absence (a
+        # resumed/rolled-back WP just gets a fresh claim base recorded on its
+        # next repo-root workspace resolution), and a missing ref makes the
+        # for_review gate REFUSE rather than pass vacuously (Issue-1-item-d,
+        # _evaluate_repo_root_lane_gate) -- so the failure direction of this
+        # window is fail-closed, never a false pass.
+        _clear_claim_base_on_terminal(repo_root=identity.repo_root, mission_slug=mission_slug, event=event)
         return event
 
 
@@ -1593,8 +1709,7 @@ def emit_inner_state_changed_transactional(
     repo_root: Path | None = None,
     operation: str | None = None,
     capability: GuardCapability = GuardCapability.STANDARD,
-    effective_root: Path | None = None,
-    owned_mission: OwnedMission | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> InnerStateChanged:
     """Persist AND commit one off-axis ``InnerStateChanged`` annotation (FR-007).
 
@@ -1644,14 +1759,15 @@ def emit_inner_state_changed_transactional(
         wp_id=wp_id,
         actor=actor,
         repo_root=repo_root,
-        effective_root=effective_root,
-        # #3866: thread the caller's validated value object so the identity
-        # derivation below does not re-run ``resolve_owned_mission``.
-        owned_mission=owned_mission,
+        # #3866: thread the caller's validated fact so the identity
+        # derivation below does not re-run the ownership claim.
+        owned=owned,
     )
+    # All three owned checks below key on ``identity.owned``, which
+    # ``_identity_for_request`` sets from the threaded fact.
     identity = _identity_for_request(request)
 
-    if effective_root is not None and not identity.transaction_meta_exists:
+    if identity.owned is not None and not identity.transaction_meta_exists:
         from mission_runtime import ActionContextError
 
         raise ActionContextError("OWNED_TRANSACTION_UNAVAILABLE", "Owned annotation requires transactional status metadata.")
@@ -1667,7 +1783,7 @@ def emit_inner_state_changed_transactional(
             repo_root=repo_root,
         )
 
-    if effective_root is None and identity.coordination_branch is None and not _lanes_annotation_transaction_available(identity, mission_slug):
+    if identity.owned is None and identity.coordination_branch is None and not _lanes_annotation_transaction_available(identity, mission_slug):
         return _uncommitted_emit()
 
     annotation = _annotate(
@@ -1678,8 +1794,7 @@ def emit_inner_state_changed_transactional(
         event_id=_emit._generate_ulid(),
     )
     # The acquire shape is the shared one (``_acquire_status_transaction``):
-    # ``identity.primary_root`` is set exactly when ``effective_root`` was
-    # supplied, so the owned checkout threads through identically here.
+    # ``identity.owned`` threads the owned checkout through identically here.
     try:
         with _acquire_status_transaction(
             identity,
@@ -1695,7 +1810,7 @@ def emit_inner_state_changed_transactional(
             if hosted_posture.ledger_posture(txn.repo_root).enabled:
                 txn.defer_outbound(_deferred_execution_projection_refresh(txn.feature_dir, txn.repo_root))
     except BookkeepingWorktreeMissing:
-        if effective_root is not None:
+        if identity.owned is not None:
             raise
         # #3460: the coord worktree could not be materialized (e.g. a declared
         # ``coordination_branch`` that was deleted or never created). This
@@ -1708,13 +1823,12 @@ def emit_inner_state_changed_transactional(
 def emit_status_transition_batch_transactional(
     requests: list[TransitionRequest],
     *,
-    ensure_sync_daemon: bool = True,
     operation: str | None = None,
     capability: GuardCapability = GuardCapability.STANDARD,
 ) -> list[StatusEvent]:
     """The batch transactional door: steps 2-5 per request under ONE acquisition (FR-018).
 
-    Applies the owned-mission refusal and the ``effective_root`` acquisition
+    Applies the owned-mission refusal and the owned-checkout acquisition
     exactly as the single door (FR-007 / Q5 parity) through the shared
     :func:`_resolve_transaction_entry` / :func:`_acquire_status_transaction`
     preamble. Failure policy (C-007, all-or-nothing): a member targeting
@@ -1742,7 +1856,6 @@ def emit_status_transition_batch_transactional(
             identity,
             requests,
             mission_slug,
-            ensure_sync_daemon=ensure_sync_daemon,
         )
 
     with _acquire_status_transaction(
@@ -1756,7 +1869,7 @@ def emit_status_transition_batch_transactional(
         # (FR-013) with the declared deps from the primary WP file.
         snapshot = _emit._reduce_write_surface(txn.feature_dir)
         from_lane = str(_emit._derive_from_lane(txn.feature_dir, first.wp_id, snapshot=snapshot))
-        readiness = _emit._resolve_dependency_readiness(identity.feature_dir, first.wp_id, snapshot)
+        readiness = _emit._resolve_dependency_readiness(identity.feature_dir, first.wp_id, snapshot, owned=identity.owned)
         built = _prepare_batch_in_transaction(
             requests,
             first_feature_dir_raw=first_feature_dir_raw,
@@ -1773,6 +1886,9 @@ def emit_status_transition_batch_transactional(
         # to the completed start operation.
         txn.append_events([row for prepared, event, _request in built for row in _durability_unit(prepared, event)])
 
+        # No _clear_claim_base_on_terminal call in this loop: see the
+        # rationale on _fallback_emit_batch above -- this door's one caller
+        # never batches a terminal to_lane.
         for prepared, event, request in built:
             _defer_fan_out(
                 txn,
@@ -1780,7 +1896,6 @@ def emit_status_transition_batch_transactional(
                 event,
                 mission_slug=mission_slug,
                 repo_root=request.repo_root,
-                ensure_sync_daemon=ensure_sync_daemon,
             )
 
         return [event for _prepared, event, _request in built]
@@ -1818,6 +1933,8 @@ def _prepare_batch_in_transaction(
     ``design-notes/WP06-convergence.md``). Any refusal raises before the
     caller appends anything.
     """
+    from specify_cli.status.lane_head import probe_lane_head  # noqa: PLC0415
+
     first = requests[0]
     first_feature_dir = canonicalize_feature_dir(first_feature_dir_raw)
     built: list[tuple[PreparedTransition, StatusEvent, TransitionRequest]] = []
@@ -1841,6 +1958,8 @@ def _prepare_batch_in_transaction(
             from_lane=from_lane,
             readiness=readiness,
             at=(started_at + timedelta(microseconds=len(built))).isoformat(),
+            lane_head_probe=probe_lane_head,
+            repo_root=_repo_root_for_feature(feature_dir, request.repo_root),
         )
         from_lane = prepared.resolved_lane
         if prepared.event is not None:

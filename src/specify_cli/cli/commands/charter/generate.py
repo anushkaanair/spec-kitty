@@ -26,7 +26,12 @@ import specify_cli.cli.commands.charter as _charter_pkg
 __all__ = ["generate"]
 
 
-def _build_doctrine_service_with_org_layer(repo_root: Path) -> Any:
+def _build_doctrine_service_with_org_layer(
+    repo_root: Path,
+    *,
+    interview: Any = None,
+    prefer_interview: bool = False,
+) -> Any:
     """Return an activation-filtered ``DoctrineService`` for charter generation.
 
     FR-002/FR-008 unification (charter-sole-door-bypass-closure-01KZ3WAA
@@ -44,10 +49,14 @@ def _build_doctrine_service_with_org_layer(repo_root: Path) -> Any:
     a bare ``except Exception: pass`` that silently degraded to an
     unfiltered service on ANY failure, not just the "not yet available"
     case it was written for).
+
+    #4614 / FR-011: *interview* / *prefer_interview* are forwarded so a
+    regenerate resolves the doctrine references under the SAME re-derived
+    languages ``compile_charter`` stamps into ``catalog.languages``.
     """
     from charter.activation.doctrine_service_builder import build_activation_aware_doctrine_service
 
-    return build_activation_aware_doctrine_service(repo_root)
+    return build_activation_aware_doctrine_service(repo_root, interview=interview, prefer_interview=prefer_interview)
 
 
 def _is_inside_git_worktree(repo_root: Path) -> bool:
@@ -365,6 +374,21 @@ def _load_interview_for_generate(
     return interview_data, "interview", resolved_mission_type or interview_data.mission
 
 
+def _structured_error_fields(error: Exception) -> dict[str, Any] | None:
+    """Machine-readable ``--json`` error keys carried by *error*, if it has any.
+
+    The whole-kind fail-closed exit (no catalog written) hands ``--json``
+    consumers the same ``unresolved_references`` records a successful run
+    reports, so a CI probe need not parse the message to learn which ids were
+    unresolved.
+    """
+    from charter.activation.compiler import WholeKindUnresolvedError
+
+    if isinstance(error, WholeKindUnresolvedError):
+        return {"unresolved_references": error.unresolved_records}
+    return None
+
+
 @charter_app.command()
 def generate(
     mission_type: str | None = typer.Option(None, "--mission-type", help="Mission type for template-set defaults"),
@@ -486,13 +510,26 @@ def generate(
         # record (`_user_profile_reference`) and non-doctrine answers
         # (testing/quality/deployment prose); it is no longer read for
         # activation selection.
+        #
+        # #4614 / FR-011: keyed on the EFFECTIVE interview source (not the raw
+        # ``--from-interview`` flag). Only an interview actually loaded from
+        # ``answers.yaml`` may re-derive ``catalog.languages``; the ``defaults``
+        # source (``--no-from-interview``) stays compiled-first. The two agree
+        # today (``--from-interview`` with no answers fails closed), but the
+        # source is the value that describes what was really loaded.
+        rederive_languages = interview_source == "interview"
         compiled = compile_charter(
             mission=resolved_mission,
             interview=interview_data,
             template_set=template_set,
             repo_root=repo_root,
-            doctrine_service=_build_doctrine_service_with_org_layer(repo_root),
+            doctrine_service=_build_doctrine_service_with_org_layer(
+                repo_root,
+                interview=interview_data,
+                prefer_interview=rederive_languages,
+            ),
             pack_context=PackContext.from_config(repo_root),
+            rederive_languages=rederive_languages,
         )
         bundle_result = write_compiled_charter(
             charter_dir,
@@ -537,6 +574,10 @@ def generate(
 
         if json_output:
             local_support_files = [reference.source_path for reference in compiled.references if reference.kind == "local_support"]
+            # `unresolved_references` is the machine-readable form of the
+            # unresolved-reference conditions `diagnostics` carries as prose
+            # (#5257). Always present, even as `[]`; `diagnostics` stays a flat
+            # list[str]. See contracts/charter-generate-json-diagnostics.md.
             print(
                 json.dumps(
                     {
@@ -553,6 +594,7 @@ def generate(
                         "library_files": local_support_files,
                         "files_written": files_written,
                         "diagnostics": diagnostics,
+                        "unresolved_references": list(compiled.unresolved_reference_records),
                     },
                     indent=2,
                 )
@@ -582,7 +624,7 @@ def generate(
         _emit_error(console, json_output=json_output, message=str(e))
         raise typer.Exit(code=1) from e
     except (FileExistsError, TaskCliError, ValueError, RuntimeError) as e:
-        _emit_error(console, json_output=json_output, message=str(e))
+        _emit_error(console, json_output=json_output, message=str(e), extra=_structured_error_fields(e))
         raise typer.Exit(code=1) from e
     except Exception as e:
         _emit_error(console, json_output=json_output, message=str(e), unexpected=True)

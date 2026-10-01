@@ -29,13 +29,14 @@ the parity contract); interception pins live in
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Any, NoReturn
 
 import typer
 
-from mission_runtime import MissionArtifactKind, MissionTopology, placement_seam
+from kernel.git import StatusEntry
+from mission_runtime import MissionArtifactKind, MissionTopology, OwnedCheckout, placement_seam
 from specify_cli.agent_tasks_ports import Render
 from specify_cli.coordination.surface_authority import (
     Refuse,
@@ -44,13 +45,15 @@ from specify_cli.coordination.surface_authority import (
 )
 from specify_cli.cli.commands.agent.tasks_outline import TaskIdResolutionOutcome, TaskIdResult
 from specify_cli.cli.commands.agent.tasks_parsing_validation import (
+    LaneSpecsDiffUnreadableError,
     _validate_ready_for_review as _seam_validate_ready_for_review,
 )
 from specify_cli.cli.selector_resolution import resolve_mission_handle
 from specify_cli.coordination.coherence import is_coord_residue_churn
 from specify_cli.core.constants import KITTY_SPECS_DIR, is_occurrence_map_path
-from specify_cli.core.vcs.git import git_diff_names_checked, merge_base_changed_files
+from specify_cli.core.vcs.git import git_diff_names_checked, merge_base_changed_files_checked
 from specify_cli.mission_metadata import resolve_mission_identity
+from specify_cli.review.dirty_classifier import status_entry_paths
 from specify_cli.missions._read_path_resolver import MissionSelectorAmbiguous
 from specify_cli.status import is_dossier_snapshot as _is_dossier_snapshot
 
@@ -119,34 +122,30 @@ _RUNTIME_STATE_DENY_LIST: tuple[str, ...] = (".spec-kitty/", ".kittify/")
 # (single policy — see ``specify_cli.status.preflight``), it must be filtered
 # from any preflight that bypasses ``.gitignore`` so the writer's update does
 # not self-block the next ``move-task`` transition.
-def _filter_runtime_state_paths(porcelain_output: str) -> str:
-    """Strip lines whose path falls under spec-kitty's own runtime-state dirs.
+def _filter_runtime_state_paths(entries: Iterable[StatusEntry]) -> tuple[StatusEntry, ...]:
+    """Drop status entries whose path falls under spec-kitty's own runtime-state dirs.
 
-    Input is the raw ``git status --porcelain`` output. Each line has the
-    format ``XY path`` where ``XY`` is a two-character status code followed by
-    a single space. A ``startswith`` check against the fixed deny-list is
+    Input is the typed ``kernel.git.status_entries`` result (never rendered
+    porcelain text). A ``startswith`` check against the fixed deny-list is
     used intentionally (C-003): no regex, no glob expansion, no fuzzy match.
 
-    Dossier ``snapshot-latest.json`` paths are also stripped here per the
+    Dossier ``snapshot-latest.json`` paths are also dropped here per the
     EXCLUDE ownership policy (C-006); the snapshot writer must never
     self-block a transition.
 
-    Returns a newline-joined string with deny-listed entries removed. Lines
-    whose path is OUTSIDE the deny list are preserved verbatim so the
-    downstream guard still blocks on genuine drift (C-004).
+    A rename/copy entry names two paths and is dropped only when BOTH are
+    deny-listed, so moving a file out of (or into) a real deliverable path
+    still surfaces as genuine drift.
+
+    Returns the kept entries in their original order. Entries whose path is
+    OUTSIDE the deny list are preserved so the downstream guard still blocks
+    on genuine drift (C-004).
     """
-    kept: list[str] = []
-    for line in porcelain_output.splitlines():
-        if not line.strip():
-            continue
-        # git status --porcelain format: first 3 chars are "XY " status prefix.
-        path_part = line[3:] if len(line) > 3 else line.strip()
-        if any(path_part.startswith(prefix) for prefix in _RUNTIME_STATE_DENY_LIST):
-            continue
-        if _is_dossier_snapshot(path_part):
-            continue
-        kept.append(line)
-    return "\n".join(kept)
+
+    def _is_runtime_state(path: str) -> bool:
+        return any(path.startswith(prefix) for prefix in _RUNTIME_STATE_DENY_LIST) or _is_dossier_snapshot(path)
+
+    return tuple(entry for entry in entries if not all(_is_runtime_state(path) for path in status_entry_paths(entry)))
 
 
 def _emit_sparse_session_warning(repo_root: Path, command: str) -> None:
@@ -363,7 +362,7 @@ def _output_error(
         _tasks.console.print(f"[red]Error:[/red] {error_message}")
 
 
-def _protected_branch_status_commit_error(branch: str, repo_root: Path, command: str) -> str | None:
+def _protected_branch_status_commit_error(branch: str, repo_root: Path, command: str, mission_slug: str | None = None) -> str | None:
     """Refuse a planning-kind status commit onto a protected primary (#2300).
 
     The map-requirements REFUSE arm (and the move-task no-coord-route fallback):
@@ -382,9 +381,9 @@ def _protected_branch_status_commit_error(branch: str, repo_root: Path, command:
     """
     from specify_cli.cli.commands.agent import tasks as _tasks
 
-    # ProtectionPolicy.resolve is the sole I/O boundary (FR-007/NFR-003):
-    # config+hatch reads happen once; is_protected() is I/O-free.
-    primary_protected = _tasks.ProtectionPolicy.resolve(repo_root).is_protected(branch)
+    # ProtectionPolicy.resolve_for_mission is the sole I/O boundary (FR-007/NFR-003):
+    # config+hatch+meta reads happen once; is_protected() is I/O-free.
+    primary_protected = _tasks.ProtectionPolicy.resolve_for_mission(repo_root, mission_slug).is_protected(branch)
     verdict = resolve_surface_authority(
         topology=MissionTopology.SINGLE_BRANCH,
         primary_target=branch,
@@ -451,9 +450,9 @@ def _skip_target_branch_commit(repo_root: Path, mission_slug: str, target_branch
     # mission ever reaches the protection resolve (no policy I/O on flat missions).
     if not _tasks._coord_topology_active(repo_root, mission_slug):
         return False
-    # ProtectionPolicy.resolve is the sole I/O boundary (FR-007/NFR-003):
-    # config+hatch reads happen once; is_protected() is I/O-free.
-    primary_protected = _tasks.ProtectionPolicy.resolve(repo_root).is_protected(target_branch)
+    # ProtectionPolicy.resolve_for_mission is the sole I/O boundary (FR-007/NFR-003):
+    # config+hatch+meta reads happen once; is_protected() is I/O-free.
+    primary_protected = _tasks.ProtectionPolicy.resolve_for_mission(repo_root, mission_slug).is_protected(target_branch)
     verdict = resolve_surface_authority(
         topology=MissionTopology.COORD,
         primary_target=target_branch,
@@ -504,7 +503,7 @@ def _check_unchecked_subtasks(
     wp_id: str,
     _force: bool,
     *,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> list[str]:
     """Return *wp_id*'s incomplete subtask ids, read from the reduced snapshot.
 
@@ -542,15 +541,13 @@ def _check_unchecked_subtasks(
 
     # Write path: keep main-repo-root resolution so canonical serialization
     # pins to the primary checkout regardless of where the operator stands.
-    main_repo_root = _tasks.get_main_repo_root(repo_root)
+    # An owned run reads the repository root off the validated fact instead
+    # (WP16: no resolver consultation on the owned arm).
+    main_repo_root = owned.repository_root if owned is not None else _tasks.get_main_repo_root(repo_root)
     # WP04 / FR-006: the authored WP roster is TASKS_INDEX and therefore lives
     # on the primary partition. Dynamic completion is STATUS_STATE and follows
     # the topology-routed status surface instead.
-    feature_dir = placement_seam(
-        main_repo_root, mission_slug, effective_root=effective_root
-    ).read_dir(
-        MissionArtifactKind.TASKS_INDEX
-    )
+    feature_dir = placement_seam(main_repo_root, mission_slug, owned=owned).read_dir(MissionArtifactKind.TASKS_INDEX)
     if not (feature_dir / "tasks").is_dir():
         return []
     from specify_cli.core.subtask_rows import (
@@ -561,10 +558,8 @@ def _check_unchecked_subtasks(
     roster = authored_subtask_roster(feature_dir, wp_id)
     if not roster:
         return []
-    if effective_root is not None:
-        status_dir = placement_seam(
-            main_repo_root, mission_slug, effective_root=effective_root
-        ).read_dir(MissionArtifactKind.STATUS_STATE)
+    if owned is not None:
+        status_dir = placement_seam(main_repo_root, mission_slug, owned=owned).read_dir(MissionArtifactKind.STATUS_STATE)
     else:
         from specify_cli.coordination import resolve_status_surface
 
@@ -579,7 +574,7 @@ def _validate_ready_for_review(
     force: bool,
     target_lane: str = "for_review",
     *,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
     workspace_override: object | None = None,
     review_base_ref: str | None = None,
     check_kitty_specs: bool = True,
@@ -604,7 +599,7 @@ def _validate_ready_for_review(
         wp_id,
         force,
         target_lane=target_lane,
-        effective_root=effective_root,
+        owned=owned,
         workspace_override=workspace_override,
         review_base_ref=review_base_ref,
         check_kitty_specs=check_kitty_specs,
@@ -682,7 +677,7 @@ def _filter_by_planning_tip_content(
     """Drop candidates byte-identical to the planning-branch tip (FR-007 / #2274).
 
     Compares the candidates against the planning tip through the canonical
-    ``vcs.git`` seam — the same seam pass 1 uses (``merge_base_changed_files``)
+    ``vcs.git`` seam — the same seam pass 1 uses (``merge_base_changed_files_checked``)
     rather than a hand-rolled ``git diff`` subprocess. A candidate that does not
     appear in ``git diff <base_branch> HEAD -- kitty-specs/`` is byte-identical
     to the planning tip (e.g. after a planning-branch rebase that brought no
@@ -706,7 +701,7 @@ def _list_wp_branch_mission_specs_changes(worktree_path: Path, base_branch: str)
 
     Uses a two-pass strategy (FR-007 / #2274):
 
-    1. Merge-base history diff: ``merge_base_changed_files(worktree_path,
+    1. Merge-base history diff: ``merge_base_changed_files_checked(worktree_path,
        base_branch, pathspec="kitty-specs/")`` (mission merge-base-diff-ssot-01KX44SD
        / FR-003) identifies candidate paths touched on the lane branch since
        the merge-base with ``base_branch``.
@@ -718,12 +713,17 @@ def _list_wp_branch_mission_specs_changes(worktree_path: Path, base_branch: str)
     """
     from specify_cli.cli.commands.agent import tasks as _tasks
 
-    changed = merge_base_changed_files(worktree_path, base_branch, pathspec=f"{KITTY_SPECS_DIR}/")
+    changed = merge_base_changed_files_checked(worktree_path, base_branch, pathspec=f"{KITTY_SPECS_DIR}/")
+    if changed is None:
+        # Guard: an unreadable diff must refuse, never pass (FR-013 fail-closed).
+        raise LaneSpecsDiffUnreadableError(
+            f"Cannot verify {KITTY_SPECS_DIR}/ lane hygiene: the merge-base diff of this lane "
+            f"against '{base_branch}' could not be read (unresolvable base ref, no merge-base, or git failure)."
+        )
 
     seen: set[str] = set()
     candidates: list[str] = []
-    for raw in changed:
-        path = raw.strip()
+    for path in changed:
         if not path or not path.startswith(f"{KITTY_SPECS_DIR}/"):
             continue
         if path in seen:

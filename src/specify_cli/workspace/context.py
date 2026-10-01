@@ -20,12 +20,12 @@ import json
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from specify_cli.core.atomic import atomic_write
 from kernel.git_topology import GitTopologyError, git_toplevel
 from specify_cli.lanes.branch_naming import worktree_dir_name, worktree_path as _seam_worktree_path
-from mission_runtime import MissionArtifactKind, placement_seam
+from mission_runtime import MissionArtifactKind, OwnedCheckout, placement_seam, resolve_single_branch_write_ref, routes_through_coordination
 from specify_cli.ownership.inference import infer_execution_mode, score_execution_mode_signals
 from specify_cli.ownership.models import WorkProductKind
 from specify_cli.ownership.workspace_strategy import create_planning_workspace
@@ -34,10 +34,23 @@ from specify_cli.ownership.workspace_strategy import create_planning_workspace
 # so the status facade is not yet initialized here — importing from it would cycle.
 from specify_cli.status.wp_metadata import WPMetadata, read_authored_wp_frontmatter
 
+if TYPE_CHECKING:
+    # WP01 campsite split: type-only -- the runtime import lives inside
+    # ``_resolve_workspace_for_wp_impl`` (mirrors the module's existing
+    # lazy-import style) to avoid a module-level cross-package import.
+    from specify_cli.lanes.models import ExecutionLane
+
 
 #: Operator recovery command named by workspace husk resolution errors
 #: (NFR-003, #1833). Pinned by tests — keep in sync with the doctor command.
 WORKSPACE_HUSK_RECOVERY_COMMAND = "spec-kitty doctor workspaces --fix"
+
+#: ``ResolvedWorkspace.resolution_kind`` for an owned single_branch mission's
+#: workspace (owned-checkout-lifecycle-authority WP05, FR-006/FR-011): the
+#: owned checkout itself. This is a ``serialized_keys`` value (it surfaces as
+#: ``resolution_kind`` in ``context resolve --json``) — name it once here and
+#: never retype the literal (Sonar S1192).
+_OWNED_CHECKOUT_KIND = "owned_checkout"
 
 
 class WorkspaceResolutionError(RuntimeError):
@@ -213,6 +226,36 @@ class ResolvedWorkspace:
     context: WorkspaceContext | None = None
 
     @property
+    def runs_in_checkout_root(self) -> bool:
+        """True when this workspace IS a checkout root, never a lane worktree.
+
+        Both a ``repo_root`` resolution (the primary checkout) and an
+        ``owned_checkout`` resolution (owned-checkout-lifecycle-authority WP05)
+        point at a whole checkout, CWD-invariant and never a ``.worktrees/``
+        entry. Downstream consumers that branch on ``resolution_kind ==
+        "repo_root"`` to mean "a checkout root, not a lane worktree" should use
+        this instead, so they treat the owned kind the same way.
+        """
+        return self.resolution_kind in ("repo_root", _OWNED_CHECKOUT_KIND)
+
+    @property
+    def status_execution_mode(self) -> str:
+        """The status-event ``execution_mode`` stamp for this resolution (#5100 R-10).
+
+        ``"direct_repo"`` when this workspace resolves to a checkout root
+        (:attr:`runs_in_checkout_root` -- a ``repo_root`` planning-artifact /
+        single_branch repo-root-lane WP, or an ``owned_checkout`` WP), else
+        ``"worktree"``. This is
+        the SINGLE derivation every status-emit call site uses; it replaces
+        three previously copied ``"direct_repo" if ... else "worktree"``
+        one-liners (``implement.py``, ``agent/workflow.py``,
+        ``agent/workflow_executor.py``) and the hardcoded ``"worktree"``
+        literals at the orchestrator-api and ``move-task`` call sites, so the
+        stamp can never drift from ``resolution_kind`` at any of them.
+        """
+        return "direct_repo" if self.runs_in_checkout_root else "worktree"
+
+    @property
     def exists(self) -> bool:
         """Return True when the resolved worktree is an actual git worktree on disk.
 
@@ -221,11 +264,12 @@ class ResolvedWorkspace:
         through to the primary repository. Note git worktrees carry a ``.git``
         *file* (not directory), so this checks entry existence, not type.
         The ``.git``-marker requirement applies to lane workspaces only; a
-        ``repo_root`` resolution points at the primary checkout itself.
+        checkout-root resolution (``repo_root`` or ``owned_checkout``) points
+        at a whole checkout and exists whenever the path exists.
         """
         if not self.worktree_path.exists():
             return False
-        if self.resolution_kind != "lane_workspace":
+        if self.runs_in_checkout_root:
             return True
         return (self.worktree_path / ".git").exists()
 
@@ -236,6 +280,8 @@ class ResolvedWorkspace:
         Husks must be treated as absent-but-blocked: callers should surface a
         structured error (see :func:`husk_resolution_error`) instead of
         silently recreating a worktree on top — recreation hides the anomaly.
+        An owned checkout is never a husk (it is not a git worktree of the
+        repository root at all).
         """
         return self.resolution_kind == "lane_workspace" and self.worktree_path.exists() and not (self.worktree_path / ".git").exists()
 
@@ -554,8 +600,32 @@ def _find_wp_file(tasks_dir: Path, wp_id: str) -> Path | None:
     return next(iter(sorted(tasks_dir.glob(f"{wp_id}*.md"))), None)
 
 
-def _normalized_feature_cache_key(repo_root: Path, mission_slug: str) -> tuple[str, str]:
-    return (str(repo_root.resolve()), mission_slug)
+def _normalized_feature_cache_key(tasks_dir: Path, mission_slug: str) -> tuple[str, str]:
+    """Cache key for the WP-metadata caches, keyed on the **resolved read
+    tasks dir** (FR-019) — never on ``repo_root`` alone, or the same mission
+    slug in two checkouts (the repository root and an owned checkout) would
+    share one entry within a single process.
+    """
+    return (str(tasks_dir.resolve()), mission_slug)
+
+
+def _wp_tasks_dir(
+    repo_root: Path,
+    mission_slug: str,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> Path:
+    """The WP ``tasks/`` directory a WP-metadata lookup reads from.
+
+    read-side-placement-seam-migration WP07: named via the seam authority
+    instead of the kind-blind ``resolve_planning_read_dir``; behavior-
+    identical since ``WORK_PACKAGE_TASK`` is PRIMARY-partition (no fail-loud
+    arm reachable here). ``owned`` (owned-checkout-
+    lifecycle-authority WP05) route the read through the owned checkout
+    instead of the repository root.
+    """
+    seam = placement_seam(repo_root, mission_slug, owned=owned)
+    return seam.read_dir(MissionArtifactKind.WORK_PACKAGE_TASK) / "tasks"
 
 
 def _normalized_feature_snapshot(tasks_dir: Path) -> tuple[tuple[str, int], ...]:
@@ -627,19 +697,21 @@ def _normalize_wp_file(wp_file: Path, mission_slug: str) -> NormalizedWorkPackag
 def build_normalized_wp_index(
     repo_root: Path,
     mission_slug: str,
+    *,
+    owned: OwnedCheckout | None = None,
 ) -> dict[str, NormalizedWorkPackage]:
     """Load and normalize mission WP metadata once per process.
 
     Normalization is intentionally read-only. Missing ``execution_mode`` values
     for supported historical missions are inferred in memory so downstream
-    callers share one canonical classification result.
+    callers share one canonical classification result. ``owned``
+    (owned-checkout-lifecycle-authority WP05, FR-019) routes
+    the read through the owned checkout; every cache is keyed on the resolved
+    ``tasks_dir``, not on ``repo_root``, so the same mission slug in two
+    checkouts never shares one entry.
     """
-    cache_key = _normalized_feature_cache_key(repo_root, mission_slug)
-    # read-side-placement-seam-migration WP07: names WORK_PACKAGE_TASK through
-    # the seam authority instead of the kind-blind ``resolve_planning_read_dir``.
-    # WORK_PACKAGE_TASK is PRIMARY-partition, so this is behavior-identical to
-    # the prior resolver — no fail-loud arm is reachable here.
-    tasks_dir = placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.WORK_PACKAGE_TASK) / "tasks"
+    tasks_dir = _wp_tasks_dir(repo_root, mission_slug, owned=owned)
+    cache_key = _normalized_feature_cache_key(tasks_dir, mission_slug)
     snapshot = _normalized_feature_snapshot(tasks_dir)
     cached = _FEATURE_WP_METADATA_CACHE.get(cache_key)
     if cached is not None and _FEATURE_WP_METADATA_SNAPSHOT_CACHE.get(cache_key) == snapshot:
@@ -678,22 +750,24 @@ def get_normalized_wp(
     repo_root: Path,
     mission_slug: str,
     wp_id: str,
+    *,
+    owned: OwnedCheckout | None = None,
 ) -> NormalizedWorkPackage:
-    """Return the normalized metadata entry for a work package."""
-    cache_key = _normalized_feature_cache_key(repo_root, mission_slug)
-    entry = build_normalized_wp_index(repo_root, mission_slug).get(wp_id)
-    if entry is None:
-        error = _FEATURE_WP_METADATA_ERROR_CACHE.get(cache_key, {}).get(wp_id)
-        if error is not None:
-            raise error
-        raise ValueError(
-            f"Work package {wp_id} was not found under "
-            # read-side-placement-seam-migration WP07: named via the seam
-            # authority (WORK_PACKAGE_TASK, PRIMARY-partition — no fail-loud
-            # arm reachable) instead of ``resolve_planning_read_dir``.
-            f"{placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.WORK_PACKAGE_TASK) / 'tasks'}"
-        )
-    return entry
+    """Return the normalized metadata entry for a work package.
+
+    ``owned`` (owned-checkout-lifecycle-authority WP05):
+    forwarded to :func:`build_normalized_wp_index` so an owned checkout's
+    tasks dir is read, never the repository root's.
+    """
+    entry = build_normalized_wp_index(repo_root, mission_slug, owned=owned).get(wp_id)
+    if entry is not None:
+        return entry
+    tasks_dir = _wp_tasks_dir(repo_root, mission_slug, owned=owned)
+    cache_key = _normalized_feature_cache_key(tasks_dir, mission_slug)
+    error = _FEATURE_WP_METADATA_ERROR_CACHE.get(cache_key, {}).get(wp_id)
+    if error is not None:
+        raise error
+    raise ValueError(f"Work package {wp_id} was not found under {tasks_dir}")
 
 
 def resolve_workspace_for_wp(
@@ -703,16 +777,27 @@ def resolve_workspace_for_wp(
     *,
     write_intent: bool = False,
     current_cwd: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> ResolvedWorkspace:
     """Resolve the real workspace/branch contract for a work package.
 
     Resolution order:
+    0. An owned single_branch mission (``owned`` set, non-coordination
+       topology) -> the owned checkout itself (owned-checkout-lifecycle-
+       authority WP05, FR-006/FR-011)
     1. Normalize WP metadata and execution mode once per process
     2. planning_artifact -> repository root
-    3. Existing lane workspace context for code_change
-    4. `lanes.json` lane mapping for code_change
+    3. `lanes.json` repo-root lane (single_branch, #5100 M8) -- BEFORE the
+       persisted context lookup, so a stale context record can never shadow it
+    4. Existing lane workspace context for code_change
+    5. `lanes.json` lane mapping for code_change
 
     The returned path may not exist yet; callers can inspect `.exists`.
+
+    A fact whose ``mission_slug`` differs from the ``mission_slug`` argument
+    raises ``ValueError`` naming both. Only a validated fact produces the
+    ``owned_checkout`` kind (no fact means no validated topology or target
+    proof).
 
     Seam-B checkout-identity (write-path-integrity WP03, #3128 / FR-005). This is
     the single WP-mutation chokepoint that ``implement`` and ``review`` both
@@ -720,23 +805,34 @@ def resolve_workspace_for_wp(
     checkout-identity refusal keys on **explicit write-intent, never action-name**
     (C-007): only the true ``implement`` / ``review`` WP-write call sites pass
     ``write_intent=True``. When set, and the resolved workspace is a real lane
-    worktree the invoking checkout does not own, this raises
+    worktree (or, for an owned mission, the owned checkout itself) the invoking
+    checkout does not own, this raises
     :class:`~mission_runtime.checkout_identity.CheckoutIdentityError` (a distinct
     exception NOT subclassing ``ActionContextError``). Reads (``write_intent``
     left ``False``), planning writes resolving to the primary checkout, and the
     mission's own worktrees are never refused. The comparison is pure-path — no
-    git subprocess is invoked (NFR-004). ``current_cwd`` defaults to the process
-    CWD; it is injectable for tests.
+    git subprocess is invoked (NFR-004). For an owned call the identity gate's
+    ``primary_root`` is the fact's own ``repository_root`` (never
+    ``get_main_repo_root``, so the owned arm makes no git call at all).
+    ``current_cwd`` defaults to the process CWD; it is injectable for tests.
     """
-    resolved = _resolve_workspace_for_wp_impl(repo_root, mission_slug, wp_id)
+    if owned is not None and owned.mission_slug != mission_slug:
+        raise ValueError(f"owned fact is for mission {owned.mission_slug!r} but resolve_workspace_for_wp was called with mission_slug {mission_slug!r}")
+    resolved = _resolve_workspace_for_wp_impl(repo_root, mission_slug, wp_id, owned=owned)
     if write_intent:
         from mission_runtime import enforce_checkout_identity
-        from specify_cli.core.paths import get_main_repo_root
+
+        if owned is not None:
+            primary_root = owned.repository_root
+        else:
+            from specify_cli.core.paths import get_main_repo_root
+
+            primary_root = get_main_repo_root(repo_root)
 
         enforce_checkout_identity(
             current_cwd=current_cwd if current_cwd is not None else Path.cwd(),
             workspace_path=resolved.worktree_path,
-            primary_root=get_main_repo_root(repo_root),
+            primary_root=primary_root,
             resolution_kind=resolved.resolution_kind,
             mission_slug=mission_slug,
             wp_id=wp_id,
@@ -744,114 +840,261 @@ def resolve_workspace_for_wp(
     return resolved
 
 
-def _resolve_workspace_for_wp_impl(
+def _lane_worktree_anchor(repo_root: Path, owned: OwnedCheckout | None) -> Path:
+    """The repository root that lane / coordination worktree paths compose under.
+
+    Lane and coordination worktrees live under the repository root checkout,
+    never under an owned checkout ``P`` (owned-checkout-lifecycle-authority
+    WP05, review cycle 1, HIGH-1). For an owned coordination-topology mission
+    this is ``owned.repository_root``, regardless of whatever ``repo_root``
+    the caller happened to pass (``next`` passes ``P``); for a non-owned
+    mission it is the caller's ``repo_root`` unchanged.
+    """
+    return owned.repository_root if owned is not None else repo_root
+
+
+def _planning_surface_root(repo_root: Path, owned: OwnedCheckout | None) -> Path:
+    """The checkout a planning-lane / ``planning_artifact`` WP resolves to.
+
+    The mission's planning surface IS the owned checkout for an owned
+    mission (owned-checkout-lifecycle-authority WP05, review cycle 1,
+    HIGH-1) — never the repository root, and never whatever ``repo_root``
+    the caller happened to pass.
+    """
+    return owned.owned_root if owned is not None else repo_root
+
+
+def _resolve_planning_artifact_arm(
     repo_root: Path,
     mission_slug: str,
     wp_id: str,
-) -> ResolvedWorkspace:
-    """Resolve the ResolvedWorkspace for a WP (pure resolution, no identity gate).
+    normalized_wp: NormalizedWorkPackage,
+    execution_mode: WorkProductKind,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> ResolvedWorkspace | None:
+    """Resolve a ``planning_artifact`` WP to the repo-root ``lane-planning`` lane.
 
-    The Seam-B checkout-identity refusal is layered on by the public
-    :func:`resolve_workspace_for_wp` wrapper so every one of this function's
-    early-return arms is gated identically without duplicating the check.
+    Returns ``None`` when ``execution_mode`` is not ``PLANNING_ARTIFACT``, so
+    the caller falls through to the next arm. WP01 campsite split (behaviour-
+    preserving) out of ``_resolve_workspace_for_wp_impl``.
     """
-    normalized_wp = get_normalized_wp(repo_root, mission_slug, wp_id)
-    execution_mode = WorkProductKind(normalized_wp.metadata.execution_mode or WorkProductKind.CODE_CHANGE)
+    if execution_mode != WorkProductKind.PLANNING_ARTIFACT:
+        return None
 
-    if execution_mode == WorkProductKind.PLANNING_ARTIFACT:
-        # planning_artifact WPs are first-class lane-owned entities assigned to
-        # "lane-planning".  That lane resolves to the main repository checkout.
-        # We still call create_planning_workspace() for the path, but we now
-        # populate lane_id so the ResolvedWorkspace contract is uniform.
-        from specify_cli.lanes.compute import PLANNING_LANE_ID
-        from specify_cli.lanes.persistence import read_lanes_json
+    # planning_artifact WPs are first-class lane-owned entities assigned to
+    # "lane-planning".  That lane resolves to the main repository checkout
+    # (or, for an owned coordination-topology mission, the owned checkout
+    # itself — the mission's planning surface, review cycle 1 HIGH-1).
+    # We still call create_planning_workspace() for the path, but we now
+    # populate lane_id so the ResolvedWorkspace contract is uniform.
+    from specify_cli.lanes.compute import PLANNING_LANE_ID
+    from specify_cli.lanes.persistence import read_lanes_json
 
-        planning_workspace = create_planning_workspace(
-            mission_slug=mission_slug,
-            wp_code=wp_id,
-            owned_files=list(normalized_wp.metadata.owned_files),
-            repo_root=repo_root,
-        )
-        # Try to populate lane_wp_ids from lanes.json if available.
-        # lanes.json is a PRIMARY-partition artifact (LANE_STATE kind).
-        # read-side-placement-seam-migration WP07: named via the seam
-        # authority instead of the kind-blind ``resolve_planning_read_dir``;
-        # behavior-identical since LANE_STATE is PRIMARY-partition (no
-        # fail-loud arm reachable here).
-        lane_wp_ids: list[str] = []
-        lanes_read_dir = placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.LANE_STATE)
-        lanes_manifest = read_lanes_json(lanes_read_dir)
-        if lanes_manifest is not None:
-            planning_lane = lanes_manifest.lane_for_wp(wp_id)
-            if planning_lane is not None:
-                lane_wp_ids = list(planning_lane.wp_ids)
-
-        return ResolvedWorkspace(
-            mission_slug=mission_slug,
-            wp_id=wp_id,
-            execution_mode=execution_mode.value,
-            mode_source=normalized_wp.mode_source,
-            resolution_kind="repo_root",
-            workspace_name=f"{mission_slug}-{PLANNING_LANE_ID}",
-            worktree_path=planning_workspace,
-            branch_name=None,
-            lane_id=PLANNING_LANE_ID,
-            lane_wp_ids=lane_wp_ids,
-            context=None,
-        )
-
-    context = find_context_for_wp(repo_root, mission_slug, wp_id)
-    if context is not None:
-        worktree_path = repo_root / context.worktree_path
-        return ResolvedWorkspace(
-            mission_slug=mission_slug,
-            wp_id=wp_id,
-            execution_mode=execution_mode.value,
-            mode_source=normalized_wp.mode_source,
-            resolution_kind="lane_workspace",
-            workspace_name=worktree_path.name,
-            worktree_path=worktree_path,
-            branch_name=context.branch_name,
-            lane_id=context.lane_id,
-            lane_wp_ids=list(context.lane_wp_ids),
-            context=context,
-        )
-
+    planning_workspace = create_planning_workspace(
+        mission_slug=mission_slug,
+        wp_code=wp_id,
+        owned_files=list(normalized_wp.metadata.owned_files),
+        repo_root=_planning_surface_root(repo_root, owned),
+    )
+    # Try to populate lane_wp_ids from lanes.json if available.
     # lanes.json is a PRIMARY-partition artifact (LANE_STATE kind).
-    # read-side-placement-seam-migration WP07: named via the seam authority
-    # instead of the kind-blind ``resolve_planning_read_dir``; behavior-
-    # identical since LANE_STATE is PRIMARY-partition (no fail-loud arm
-    # reachable here).
-    lanes_read_dir = placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.LANE_STATE)
+    # read-side-placement-seam-migration WP07: named via the seam
+    # authority instead of the kind-blind ``resolve_planning_read_dir``;
+    # behavior-identical since LANE_STATE is PRIMARY-partition (no
+    # fail-loud arm reachable here).
+    lane_wp_ids: list[str] = []
+    lanes_read_dir = placement_seam(repo_root, mission_slug, owned=owned).read_dir(MissionArtifactKind.LANE_STATE)
+    lanes_manifest = read_lanes_json(lanes_read_dir)
+    if lanes_manifest is not None:
+        planning_lane = lanes_manifest.lane_for_wp(wp_id)
+        if planning_lane is not None:
+            lane_wp_ids = list(planning_lane.wp_ids)
+
+    return ResolvedWorkspace(
+        mission_slug=mission_slug,
+        wp_id=wp_id,
+        execution_mode=execution_mode.value,
+        mode_source=normalized_wp.mode_source,
+        resolution_kind="repo_root",
+        workspace_name=f"{mission_slug}-{PLANNING_LANE_ID}",
+        worktree_path=planning_workspace,
+        branch_name=None,
+        lane_id=PLANNING_LANE_ID,
+        lane_wp_ids=lane_wp_ids,
+        context=None,
+    )
+
+
+def _resolve_context_arm(
+    repo_root: Path,
+    mission_slug: str,
+    wp_id: str,
+    normalized_wp: NormalizedWorkPackage,
+    execution_mode: WorkProductKind,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> ResolvedWorkspace | None:
+    """Resolve a WP to its already-persisted lane :class:`WorkspaceContext`.
+
+    Returns ``None`` when no context is persisted yet, so the caller falls
+    through to the ``lanes.json`` arms. WP01 campsite split (behaviour-
+    preserving) out of ``_resolve_workspace_for_wp_impl``. The context
+    registry lives under the repository root, never the owned checkout, and
+    the context's relative ``worktree_path`` is joined under
+    :func:`_lane_worktree_anchor` (review cycle 1, HIGH-1).
+    """
+    lane_anchor = _lane_worktree_anchor(repo_root, owned)
+    context = find_context_for_wp(lane_anchor, mission_slug, wp_id)
+    if context is None:
+        return None
+    worktree_path = lane_anchor / context.worktree_path
+    return ResolvedWorkspace(
+        mission_slug=mission_slug,
+        wp_id=wp_id,
+        execution_mode=execution_mode.value,
+        mode_source=normalized_wp.mode_source,
+        resolution_kind="lane_workspace",
+        workspace_name=worktree_path.name,
+        worktree_path=worktree_path,
+        branch_name=context.branch_name,
+        lane_id=context.lane_id,
+        lane_wp_ids=list(context.lane_wp_ids),
+        context=context,
+    )
+
+
+def _resolve_repo_root_lane_arm(
+    repo_root: Path,
+    mission_slug: str,
+    wp_id: str,
+    normalized_wp: NormalizedWorkPackage,
+    execution_mode: WorkProductKind,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> ResolvedWorkspace | None:
+    """Resolve a WP whose ``lanes.json`` lane is a repo-root lane (#5100 M8).
+
+    Checked BEFORE the persisted :class:`WorkspaceContext` arm (plan fold M8):
+    a single_branch repo-root lane can hold CODE work packages (unlike the
+    planning-only ``lane-planning`` lane every other topology carries), and a
+    stale context record left over from before the mission adopted
+    single_branch -- or from an unrelated prior run -- must never shadow this
+    routing. Returns ``None`` when ``lanes.json`` is absent, the WP has no
+    lane, or its lane is not a repo-root lane, so the caller falls through to
+    the existing context / code-lane arms unchanged.
+
+    The resolved ``branch_name`` follows the contract's resolve table
+    (``contracts/single-branch-execution.md``): the mission's recorded
+    ``meta.mission_branch`` when its STORED topology is ``single_branch`` (a
+    protected-target mint, IC-05), else the manifest's ``target_branch`` --
+    via :func:`mission_runtime.resolve_single_branch_write_ref`. ``worktree_path`` is the
+    mission's planning surface (:func:`_planning_surface_root`): the repository
+    root checkout, or the owned checkout for an owned coordination-topology
+    mission (an owned single_branch mission never reaches this arm -- it is
+    dispatched to :func:`_owned_checkout_workspace` first). For an owned
+    mission the write branch is the validated fact's own ``target_branch``
+    (already the #5100 write branch -- see ``owned_mission.expected_write_branch``).
+    """
+    from specify_cli.lanes.compute import PLANNING_LANE_ID, is_repo_root_lane
+    from specify_cli.lanes.persistence import read_lanes_json
+
+    lanes_read_dir = placement_seam(repo_root, mission_slug, owned=owned).read_dir(MissionArtifactKind.LANE_STATE)
+    lanes_manifest = read_lanes_json(lanes_read_dir)
+    if lanes_manifest is None:
+        return None
+    lane = lanes_manifest.lane_for_wp(wp_id)
+    if lane is None or not is_repo_root_lane(lane):
+        return None
+
+    worktree_path = _planning_surface_root(repo_root, owned)
+    # The write branch comes from the ONE mission_runtime rule over meta.json
+    # (stored single_branch + meta.mission_branch, else the target branch) --
+    # never from ``lanes.json.mission_branch``, which is a stale copy after a
+    # protected landing clears the meta field, and which names the
+    # integration branch (not the write branch) for a lanes/coord mission
+    # whose code WP happens to sit in ``lane-planning``.
+    branch_name = owned.write_branch if owned is not None else resolve_single_branch_write_ref(repo_root, mission_slug, lanes_manifest.target_branch)
+    return ResolvedWorkspace(
+        mission_slug=mission_slug,
+        wp_id=wp_id,
+        execution_mode=execution_mode.value,
+        mode_source=normalized_wp.mode_source,
+        resolution_kind="repo_root",
+        workspace_name=f"{mission_slug}-{PLANNING_LANE_ID}",
+        worktree_path=worktree_path,
+        branch_name=branch_name,
+        lane_id=PLANNING_LANE_ID,
+        lane_wp_ids=list(lane.wp_ids),
+        context=None,
+    )
+
+
+def _resolve_planning_lane_arm(
+    repo_root: Path,
+    mission_slug: str,
+    wp_id: str,
+    normalized_wp: NormalizedWorkPackage,
+    execution_mode: WorkProductKind,
+    lane: ExecutionLane,
+    target_branch: str,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> ResolvedWorkspace | None:
+    """Resolve a WP whose ``lanes.json`` lane is ``lane-planning``.
+
+    Returns ``None`` when ``lane`` is not the planning lane, so the caller
+    falls through to the code-lane arm. WP01 campsite split (behaviour-
+    preserving) out of ``_resolve_workspace_for_wp_impl``.
+    """
     from specify_cli.lanes.branch_naming import lane_branch_name
     from specify_cli.lanes.compute import PLANNING_LANE_ID, is_planning_lane
-    from specify_cli.lanes.persistence import require_lanes_json, resolve_lanes_dir
 
-    lanes_manifest = require_lanes_json(lanes_read_dir)
-    lane = lanes_manifest.lane_for_wp(wp_id)
-    if lane is None:
-        raise ValueError(f"{wp_id} resolved to execution_mode={execution_mode.value!r} but is not assigned to any lane in {resolve_lanes_dir(lanes_read_dir)}")
+    # lane-planning resolves to the mission's planning surface: the primary
+    # checkout for a non-owned mission, or the owned checkout itself for an
+    # owned coordination-topology mission (review cycle 1, HIGH-1) — never a
+    # .worktrees/ path.
+    if not is_planning_lane(lane):
+        return None
+    return ResolvedWorkspace(
+        mission_slug=mission_slug,
+        wp_id=wp_id,
+        execution_mode=execution_mode.value,
+        mode_source=normalized_wp.mode_source,
+        resolution_kind="repo_root",
+        workspace_name=f"{mission_slug}-{PLANNING_LANE_ID}",
+        worktree_path=_planning_surface_root(repo_root, owned),
+        branch_name=lane_branch_name(mission_slug, PLANNING_LANE_ID, target_branch=target_branch),
+        lane_id=PLANNING_LANE_ID,
+        lane_wp_ids=list(lane.wp_ids),
+        context=None,
+    )
 
-    # lane-planning resolves to the main repository checkout, not a .worktrees/ path.
-    if is_planning_lane(lane):
-        target_branch = lanes_manifest.target_branch
-        return ResolvedWorkspace(
-            mission_slug=mission_slug,
-            wp_id=wp_id,
-            execution_mode=execution_mode.value,
-            mode_source=normalized_wp.mode_source,
-            resolution_kind="repo_root",
-            workspace_name=f"{mission_slug}-{PLANNING_LANE_ID}",
-            worktree_path=repo_root,
-            branch_name=lane_branch_name(mission_slug, PLANNING_LANE_ID, planning_base_branch=target_branch),
-            lane_id=PLANNING_LANE_ID,
-            lane_wp_ids=list(lane.wp_ids),
-            context=None,
-        )
+
+def _resolve_code_lane_arm(
+    repo_root: Path,
+    mission_slug: str,
+    wp_id: str,
+    normalized_wp: NormalizedWorkPackage,
+    execution_mode: WorkProductKind,
+    lane: ExecutionLane,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> ResolvedWorkspace:
+    """Resolve a WP to its ``lanes.json`` code-change lane worktree.
+
+    The final, always-non-``None`` arm: every WP that reaches this point has
+    a code lane assigned. WP01 campsite split (behaviour-preserving) out of
+    ``_resolve_workspace_for_wp_impl``.
+    """
+    from specify_cli.lanes.branch_naming import code_lane_branch_name
 
     # Route the COMPOSE (not just the .worktrees join) through the seam so no
     # name-guess survives the assign-then-join indirection (FR-005, WP09 ratchet).
     # Lane naming is keyed on the creation input alone (WP07, FR-002/PD-1).
+    # The anchor is the repository root, never a caller-supplied ``repo_root``
+    # that may name the owned checkout (review cycle 1, HIGH-1).
+    lane_anchor = _lane_worktree_anchor(repo_root, owned)
     workspace_name = worktree_dir_name(mission_slug, lane_id=lane.lane_id)
     return ResolvedWorkspace(
         mission_slug=mission_slug,
@@ -860,12 +1103,119 @@ def _resolve_workspace_for_wp_impl(
         mode_source=normalized_wp.mode_source,
         resolution_kind="lane_workspace",
         workspace_name=workspace_name,
-        worktree_path=_seam_worktree_path(repo_root, mission_slug, lane_id=lane.lane_id),
-        branch_name=lane_branch_name(mission_slug, lane.lane_id),
+        worktree_path=_seam_worktree_path(lane_anchor, mission_slug, lane_id=lane.lane_id),
+        branch_name=code_lane_branch_name(mission_slug, lane.lane_id),
         lane_id=lane.lane_id,
         lane_wp_ids=list(lane.wp_ids),
         context=None,
     )
+
+
+def _owned_checkout_workspace(repo_root: Path, owned: OwnedCheckout, wp_id: str) -> ResolvedWorkspace:
+    """The owned single_branch arm (owned-checkout-lifecycle-authority WP05, FR-006/FR-011).
+
+    Applies to BOTH ``code_change`` and ``planning_artifact`` WPs: the
+    mission's planning surface *is* the owned checkout, so there is no
+    separate planning-lane sub-arm here (unlike the non-owned/coordination
+    arms). Does not consult ``find_context_for_wp`` — that reads the
+    repository root's ``.kittify/workspaces`` contexts, which describe lane
+    worktrees, not the owned checkout. No git subprocess (NFR-002): every
+    input is already a resolved path on the fact or read from disk via the
+    placement seam.
+    """
+    normalized_wp = get_normalized_wp(repo_root, owned.mission_slug, wp_id, owned=owned)
+    execution_mode = WorkProductKind(normalized_wp.metadata.execution_mode or WorkProductKind.CODE_CHANGE)
+    return ResolvedWorkspace(
+        mission_slug=owned.mission_slug,
+        wp_id=wp_id,
+        execution_mode=execution_mode.value,
+        mode_source=normalized_wp.mode_source,
+        resolution_kind=_OWNED_CHECKOUT_KIND,
+        workspace_name=owned.owned_root.name,
+        worktree_path=owned.owned_root,
+        branch_name=owned.write_branch,
+        lane_id=None,
+        lane_wp_ids=[],
+        context=None,
+    )
+
+
+def _resolve_workspace_for_wp_impl(
+    repo_root: Path,
+    mission_slug: str,
+    wp_id: str,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> ResolvedWorkspace:
+    """Resolve the ResolvedWorkspace for a WP (pure resolution, no identity gate).
+
+    The Seam-B checkout-identity refusal is layered on by the public
+    :func:`resolve_workspace_for_wp` wrapper so every one of this function's
+    early-return arms is gated identically without duplicating the check.
+
+    Dispatch: an owned single_branch mission (``owned`` set and the fact's
+    topology does not route through coordination — LANES cannot be minted
+    owned) resolves through :func:`_owned_checkout_workspace` and never
+    reaches the other arms. Everything else (non-owned, or an owned
+    coordination-topology mission reachable only through ``next``) reads as a
+    short dispatch over the per-arm helpers (WP01 campsite split), in today's
+    precedence order: planning_artifact kind -> lanes.json repo-root lane
+    (#5100 M8) -> persisted context -> lanes.json planning lane -> code lane.
+    The repo-root-lane arm runs BEFORE the persisted context lookup so a stale
+    context record can never shadow it. ``owned`` is threaded into every arm's
+    WP-index and ``lanes.json`` reads so a coordination-topology owned mission
+    reads from the owned checkout; the lane/context arms additionally anchor
+    every filesystem path they compose on the fact (``owned.repository_root``
+    for lane/coordination worktrees, ``owned.owned_root`` for the planning
+    surface) rather than the caller-supplied ``repo_root`` (review cycle 1,
+    HIGH-1 — ``next`` passes ``P``, which must never become the lane-worktree
+    anchor). The arm order is behaviour — do not reorder.
+    """
+    if owned is not None and not routes_through_coordination(owned.topology):
+        return _owned_checkout_workspace(repo_root, owned, wp_id)
+
+    normalized_wp = get_normalized_wp(repo_root, mission_slug, wp_id, owned=owned)
+    execution_mode = WorkProductKind(normalized_wp.metadata.execution_mode or WorkProductKind.CODE_CHANGE)
+
+    planning_artifact_workspace = _resolve_planning_artifact_arm(repo_root, mission_slug, wp_id, normalized_wp, execution_mode, owned=owned)
+    if planning_artifact_workspace is not None:
+        return planning_artifact_workspace
+
+    repo_root_lane_workspace = _resolve_repo_root_lane_arm(repo_root, mission_slug, wp_id, normalized_wp, execution_mode, owned=owned)
+    if repo_root_lane_workspace is not None:
+        return repo_root_lane_workspace
+
+    context_workspace = _resolve_context_arm(repo_root, mission_slug, wp_id, normalized_wp, execution_mode, owned=owned)
+    if context_workspace is not None:
+        return context_workspace
+
+    # lanes.json is a PRIMARY-partition artifact (LANE_STATE kind).
+    # read-side-placement-seam-migration WP07: named via the seam authority
+    # instead of the kind-blind ``resolve_planning_read_dir``; behavior-
+    # identical since LANE_STATE is PRIMARY-partition (no fail-loud arm
+    # reachable here).
+    lanes_read_dir = placement_seam(repo_root, mission_slug, owned=owned).read_dir(MissionArtifactKind.LANE_STATE)
+    from specify_cli.lanes.persistence import require_lanes_json, resolve_lanes_dir
+
+    lanes_manifest = require_lanes_json(lanes_read_dir)
+    lane = lanes_manifest.lane_for_wp(wp_id)
+    if lane is None:
+        raise ValueError(f"{wp_id} resolved to execution_mode={execution_mode.value!r} but is not assigned to any lane in {resolve_lanes_dir(lanes_read_dir)}")
+
+    planning_lane_workspace = _resolve_planning_lane_arm(
+        repo_root,
+        mission_slug,
+        wp_id,
+        normalized_wp,
+        execution_mode,
+        lane,
+        lanes_manifest.target_branch,
+        owned=owned,
+    )
+    if planning_lane_workspace is not None:
+        return planning_lane_workspace
+
+    return _resolve_code_lane_arm(repo_root, mission_slug, wp_id, normalized_wp, execution_mode, lane, owned=owned)
 
 
 def resolve_lane_base_ref(

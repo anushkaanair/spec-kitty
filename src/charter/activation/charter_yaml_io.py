@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import functools
 import copy
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 import hashlib
 from io import StringIO
@@ -466,7 +467,7 @@ def _activation_keys() -> tuple[str, ...]:
     """
     from charter.activation.pack_manager import ACTIVATION_YAML_KEYS  # noqa: PLC0415 -- avoids import cycle (WP05)
 
-    return ACTIVATION_YAML_KEYS
+    return tuple(str(key) for key in ACTIVATION_YAML_KEYS)
 
 
 def __getattr__(name: str) -> object:
@@ -535,6 +536,31 @@ def save_charter_yaml(path: Path, document: Any) -> None:
     apply_yaml_write(prepare_yaml_write(path, desired, section="document", inputs=(before,)))
 
 
+def catalog_field_from_document(document: Any, field: str) -> Any | None:
+    """Extract ``catalog.<field>`` from an already-loaded ``charter.yaml`` document.
+
+    Pure, in-memory extraction -- no disk I/O of any kind. This is the ONE
+    canonical extraction rule (DIRECTIVE_044) behind both
+    :func:`read_catalog_field` (which loads *document* from disk itself,
+    fail-open) and callers that already hold a loaded document (e.g. a
+    migration that must not read the file a second time). The caller owns
+    *document*'s load path and its failure semantics; this function never
+    touches disk, so it cannot turn a fail-closed caller fail-open.
+
+    Returns ``None`` when *document* is not a mapping, its ``catalog``
+    section is absent or not a mapping, or ``field`` itself is absent from
+    that section.
+
+    Gates on ``collections.abc.Mapping`` rather than ``dict`` so any
+    Mapping-like document (e.g. ``types.MappingProxyType``) is accepted;
+    ``dict`` and ruamel's ``CommentedMap`` are both Mappings.
+    """
+    catalog = document.get("catalog") if isinstance(document, Mapping) else None
+    if not isinstance(catalog, Mapping):
+        return None
+    return catalog.get(field)
+
+
 def read_catalog_field(repo_root: Path, field: str) -> Any | None:
     """Read a single ``catalog.<field>`` value from ``charter.yaml`` (Finding B, #4993).
 
@@ -551,6 +577,10 @@ def read_catalog_field(repo_root: Path, field: str) -> Any | None:
     that section -- a uniform "no signal here" result for every caller.
     Mirrors the fail-open shape ``charter.activation.language_scope.
     _read_compiled_languages`` already used for this same file/section.
+
+    Loads the document, then delegates the actual field extraction to
+    :func:`catalog_field_from_document` -- the disk-read/fail-open policy
+    lives here; the extraction rule itself lives in exactly one place.
     """
     charter_yaml_path = repo_root / CHARTER_YAML
     if not charter_yaml_path.exists():
@@ -562,21 +592,6 @@ def read_catalog_field(repo_root: Path, field: str) -> Any | None:
         return None
 
     return catalog_field_from_document(document, field)
-
-
-def catalog_field_from_document(document: Any, field: str) -> Any | None:
-    """Read ``catalog.<field>`` from an already-loaded ``charter.yaml`` document.
-
-    The document-level half of :func:`read_catalog_field`, for callers that
-    must load the file themselves (for example to fail closed on an unreadable
-    charter, where :func:`read_catalog_field` fails open). Returns ``None``
-    when ``catalog`` is absent or not a mapping, or ``field`` is absent.
-    """
-    catalog = document.get("catalog") if isinstance(document, dict) else None
-    if not isinstance(catalog, dict):
-        return None
-
-    return catalog.get(field)
 
 
 def read_catalog_mission(repo_root: Path) -> Any | None:

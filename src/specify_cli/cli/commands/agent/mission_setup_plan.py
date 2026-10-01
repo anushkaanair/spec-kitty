@@ -6,9 +6,8 @@ feature-dir resolution → spec gate → plan scaffold → lifecycle emit → pl
 commit → documentation wiring → result emit), plus the planning-commit helpers
 it owns: ``_commit_to_branch`` + ``CommitToBranchResult``, ``_kind_for_artifact``
 (and its ``_ARTIFACT_TYPE_TO_KIND`` table), ``_artifact_has_no_git_changes``,
-``_artifact_absent_at_placement``, ``_print_artifact_unchanged``,
-``_warn_commit_failed``. The heavyweight ``commit_for_mission`` import stays
-function-local (A-3 / NFR-005).
+``_print_artifact_unchanged``, ``_warn_commit_failed``. The heavyweight
+``commit_for_mission`` import stays function-local (A-3 / NFR-005).
 
 The command is defined here as a plain callable; ``mission`` registers it on its
 Typer ``app`` and re-exports ``setup_plan`` / ``_commit_to_branch`` /
@@ -33,8 +32,7 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 import shutil
-import subprocess
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Literal, cast
 
 from specify_cli.cli.commands._commit_recipes import safe_commit_recipe
@@ -43,12 +41,14 @@ import typer
 
 from charter.activation.mission_type_profiles import resolve_mission_type_context
 from charter.resolution import ResolutionResult
-from mission_runtime import MissionArtifactKind, placement_seam
+from kernel.git import GitCommandError, status_entries
+from mission_runtime import MissionArtifactKind, OwnedCheckout, placement_seam
+from specify_cli.cli.commands._owned_checkout import OwnedCheckoutOption
 from specify_cli.core.checkout_identity import CheckoutIdentity, Intent, resolve_checkout_identity
 from specify_cli.core.constants import MISSION_TYPE_DOCUMENTATION
 from specify_cli.doc_analysis.doc_state import GeneratorConfig
 from specify_cli.mission import _canonical_meta_mission_type, get_mission_type
-from specify_cli.core.paths import load_meta_fail_closed
+from specify_cli.core.paths import load_meta_fail_closed, read_target_branch_from_meta
 from specify_cli.missions._resolve_planning_branch import (
     PlanningBranchResolutionFailed,
     load_mission_target_branch,
@@ -57,6 +57,7 @@ from specify_cli.runtime.resolver import TemplateConfigurationError
 
 from specify_cli.cli.commands.agent.mission_branch_context import (
     _inject_branch_contract,
+    read_minted_mission_branch,
 )
 from specify_cli.cli.commands.agent.mission_feature_resolution import (
     _ARTIFACT_TYPE_TO_KIND as _ARTIFACT_TYPE_TO_KIND,
@@ -84,7 +85,10 @@ logger = logging.getLogger(__name__)
 SETUP_PLAN_COMMAND_NAME = "spec-kitty agent mission setup-plan"
 PROJECT_ROOT_NOT_FOUND = "Could not locate project root"
 PROJECT_ROOT_NOT_FOUND_MESSAGE = f"{PROJECT_ROOT_NOT_FOUND}. Run from within spec-kitty repository."
-TASKS_MD_FILENAME = "tasks.md"
+#: FR-013: setup-plan refuses a spec.md that declares a malformed
+#: kind-prefixed requirement ID in a declared position (WP05).
+SPEC_REQUIREMENT_IDS_INVALID = "SPEC_REQUIREMENT_IDS_INVALID"
+SPEC_REQUIREMENT_IDS_INVALID_MESSAGE = "spec.md declares requirement IDs that do not match the requirement-ID grammar"
 
 
 # ---------------------------------------------------------------------------
@@ -98,33 +102,12 @@ def _artifact_has_no_git_changes(repo_root: Path, file_path: Path) -> bool:
         with contextlib.suppress(ValueError):
             candidate = candidate.relative_to(repo_root)
 
-    status = subprocess.run(
-        ["git", "status", "--porcelain", "--", str(candidate)],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    return status.returncode == 0 and not status.stdout.strip()
-
-
-def _artifact_absent_at_placement(worktree_root: Path, commit_paths: tuple[Path, ...], file_path: Path) -> bool:
-    """Return True iff the artifact is NOT present at the resolved placement.
-
-    FR-006 / D-5: a commit that would run against a worktree where the artifact
-    does not exist is a no-op-against-the-wrong-surface (vs. a genuine
-    benign-unchanged where the artifact IS present and already committed). When
-    ``_planning_commit_worktree`` produced committable paths, each must exist on
-    disk; when it produced none, the original ``file_path`` is checked against
-    the worktree. An empty changeset where the artifact IS present is a genuine
-    no-op (returns False here), handled by the caller.
-    """
-    if commit_paths:
-        return any(not path.exists() for path in commit_paths)
-    # No committable paths: check the artifact at the worktree-relative location.
-    return not _artifact_has_no_git_changes(worktree_root, file_path) and not file_path.exists()
+    try:
+        return not status_entries(repo_root, pathspecs=[str(candidate)], untracked=None)
+    except GitCommandError:
+        # Advisory: "no changes" only skips a redundant commit; when git cannot
+        # say, report "has changes" so the commit is still attempted.
+        return False
 
 
 def _print_artifact_unchanged(artifact_type: str, json_output: bool) -> None:
@@ -198,6 +181,8 @@ def _commit_to_branch(
     repo_root: Path,
     _target_branch: str,
     json_output: bool = False,
+    *,
+    owned: OwnedCheckout | None = None,
 ) -> CommitToBranchResult:
     """Commit a planning artifact to its single resolved placement.
 
@@ -224,6 +209,12 @@ def _commit_to_branch(
         _target_branch: Branch the mission targets; passed to commit_for_mission
             for the post-commit ff-advance (WP09 / FR-010 / #1878).
         json_output: If True, suppress Rich console output
+        owned: Validated ownership fact (owned-checkout-lifecycle-authority
+            WP09). When set, protection and the router's own ``repo_root``
+            resolve from ``owned.repository_root`` (R) regardless of the
+            ``repo_root`` argument's own value -- "the linked checkout
+            cannot weaken protection" -- while the actual write lands on
+            ``owned.owned_root`` (P) via ``commit_for_mission``'s ``owned=``.
 
     Returns:
         CommitToBranchResult: the typed commit outcome (see the class docstring).
@@ -237,15 +228,17 @@ def _commit_to_branch(
     from specify_cli.git.protection_policy import ProtectionPolicy
 
     commit_msg = f"Add {artifact_type} for feature {mission_slug}"
-    policy = ProtectionPolicy.resolve(repo_root)
+    protection_root = owned.repository_root if owned is not None else repo_root
+    policy = ProtectionPolicy.resolve(protection_root)
     router_result = commit_for_mission(
-        repo_root=repo_root,
+        repo_root=protection_root,
         mission_slug=mission_slug,
         files=(file_path,),
         message=commit_msg,
         policy=policy,
         kind=_kind_for_artifact(artifact_type),
         target_branch=_target_branch,
+        owned=owned,
     )
 
     if router_result.status == "committed":
@@ -324,29 +317,6 @@ def _resolve_setup_plan_feature_dir(repo_root: Path, feature: str | None, *, jso
         raise typer.Exit(1) from None
 
 
-def _emit_spec_missing(spec_file: Path, feature_dir: Path, mission_slug: str, *, json_output: bool) -> None:
-    """Emit the SPEC_FILE_MISSING payload and exit 1."""
-    payload: dict[str, object] = {
-        "error_code": "SPEC_FILE_MISSING",
-        "error": f"Required spec not found for mission '{mission_slug}': {spec_file.resolve()}",
-        "mission_slug": mission_slug,
-        "mission_dir": str(feature_dir.resolve()),
-        "feature_dir": str(feature_dir.resolve()),  # legacy alias of mission_dir (#5206)
-        "spec_file": str(spec_file.resolve()),
-        "remediation": [
-            f"Restore the missing spec file at {spec_file.resolve()}",
-            f"Or select another mission explicitly: {SETUP_PLAN_COMMAND_NAME} --mission <mission-slug> --json",
-        ],
-    }
-    if json_output:
-        _emit_json(payload)
-    else:
-        console.print(f"[red]Error:[/red] {payload['error']}")
-        for step in cast(list[str], payload["remediation"]):
-            console.print(f"  - {step}")
-    raise typer.Exit(1)
-
-
 def _resolve_branch_match_operands(
     invocation_identity: CheckoutIdentity,
     plan_read_dir: Path,
@@ -378,7 +348,7 @@ def _resolve_branch_match_operands(
         match_target = load_mission_target_branch(plan_read_dir)
     except PlanningBranchResolutionFailed:
         match_target = invoking_branch
-    return invoking_branch, match_target
+    return invoking_branch, read_minted_mission_branch(plan_read_dir) or match_target
 
 
 def _enforce_spec_gate(
@@ -390,6 +360,7 @@ def _enforce_spec_gate(
     target_branch: str,
     current_branch: str,
     match_target_branch: str | None = None,
+    expected_checkout_branch: str | None = None,
     json_output: bool,
 ) -> bool:
     """Issue #846 entry gate: spec must exist + be committed + substantive.
@@ -406,6 +377,7 @@ def _enforce_spec_gate(
         target_branch=target_branch,
         current_branch=current_branch,
         match_target_branch=match_target_branch,
+        expected_checkout_branch=expected_checkout_branch,
     )
     if outcome is None:
         return False
@@ -427,6 +399,7 @@ def _evaluate_spec_gate(
     target_branch: str,
     current_branch: str,
     match_target_branch: str | None = None,
+    expected_checkout_branch: str | None = None,
 ) -> tuple[SetupPlanLocalOutcome | None, str | None]:
     """Build, but do not report, the authoritative local spec-gate result."""
     if not spec_file.exists():
@@ -460,7 +433,7 @@ def _evaluate_spec_gate(
     spec_is_committed = is_committed(spec_file, repo_root, diagnostics=_commit_diagnostics)
     spec_is_substantive = is_substantive(spec_file, "spec")
     if spec_is_committed and spec_is_substantive:
-        return None, None
+        return _evaluate_requirement_id_gate(spec_file, feature_dir, mission_slug)
 
     blocked_reason = (
         "spec.md must be committed AND substantive before setup-plan can run. "
@@ -485,11 +458,91 @@ def _evaluate_spec_gate(
         target_branch=target_branch,
         current_branch=current_branch,
         match_target_branch=match_target_branch,
+        expected_checkout_branch=expected_checkout_branch,
     )
     return (
         SetupPlanLocalOutcome(rendered_payload, 0, "blocked"),
         f"[yellow]Blocked:[/yellow] {blocked_reason}",
     )
+
+
+def _requirement_id_gate_remediation() -> list[str]:
+    """FR-013's remediation list: the kind vocabulary, the suffix rule, the
+    foreign-citation form, and the resolution step -- never a kind
+    alternation literal (C-001)."""
+    return [
+        "Use one of the recognised requirement-ID kinds: FR, NFR, C or SC.",
+        "Write the letter suffix in lowercase (e.g. FR-006a, not FR-006A).",
+        "To cite another mission's ID, write <mission-slug>#<ID> instead of declaring it here.",
+        "Commit spec.md and re-run setup-plan.",
+    ]
+
+
+def _render_requirement_id_gate_message(invalid_ids: list[dict[str, object]]) -> str:
+    """The FR-013 refusal's human-readable rendering, ``SPEC_FILE_MISSING``-styled:
+    one escaped line per offending ID. Escaping matters because
+    ``grammar.RULE_TEXT`` contains ``[<lowercase letter>]``, which rich would
+    otherwise parse as markup."""
+    from rich.markup import escape
+
+    lines = [f"[red]Error:[/red] {escape(SPEC_REQUIREMENT_IDS_INVALID_MESSAGE)}"]
+    for entry in invalid_ids:
+        token = escape(str(entry["token"]))
+        rule = escape(str(entry["rule"]))
+        lines.append(f"  - line {entry['line']}: {token} (rule: {rule})")
+    return "\n".join(lines)
+
+
+def _evaluate_requirement_id_gate(
+    spec_file: Path,
+    feature_dir: Path,
+    mission_slug: str,
+) -> tuple[SetupPlanLocalOutcome | None, str | None]:
+    """FR-013: refuse a spec.md that declares a malformed requirement ID.
+
+    Pure (builds, but does not report, the result), mirroring
+    ``_evaluate_spec_gate``'s own 2-tuple contract -- returns ``(None,
+    None)`` when the spec's declared IDs are all well-formed, so the caller
+    (``_evaluate_spec_gate``) proceeds exactly as it did before this gate
+    existed.
+    """
+    from specify_cli.requirement_mapping.lint import lint_spec_requirement_ids
+
+    result = lint_spec_requirement_ids(spec_file.read_text(encoding="utf-8"))
+    if not result.blocking:
+        return None, None
+
+    invalid_ids = [error.as_dict() for error in result.errors]
+    payload: dict[str, object] = {
+        "result": "error",
+        "phase_complete": False,
+        "error_code": SPEC_REQUIREMENT_IDS_INVALID,
+        "error": SPEC_REQUIREMENT_IDS_INVALID_MESSAGE,
+        "invalid_requirement_ids": invalid_ids,
+        "mission_slug": mission_slug,
+        "mission_dir": str(feature_dir.resolve()),
+        "feature_dir": str(feature_dir.resolve()),  # legacy alias of mission_dir (#5206)
+        "spec_file": str(spec_file.resolve()),
+        "remediation": _requirement_id_gate_remediation(),
+    }
+    message = _render_requirement_id_gate_message(invalid_ids)
+    return SetupPlanLocalOutcome(payload, 1, "error"), message
+
+
+def _spec_requirement_id_warnings(spec_file: Path) -> list[dict[str, object]]:
+    """FR-014: non-blocking prose-token warnings for the current spec.md.
+
+    Returns ``[]`` when *spec_file* is not a file -- the spec gate owns
+    existence, and several ``setup_plan`` unit tests patch
+    ``_enforce_spec_gate`` to bypass it entirely, so ``spec_file`` may not
+    sit at a real file in those tests.
+    """
+    if not spec_file.is_file():
+        return []
+    from specify_cli.requirement_mapping.lint import lint_spec_requirement_ids
+
+    result = lint_spec_requirement_ids(spec_file.read_text(encoding="utf-8"))
+    return [warning.as_dict() for warning in result.warnings]
 
 
 def _resolve_plan_template(repo_root: Path, feature_dir: Path) -> ResolutionResult:
@@ -634,8 +687,23 @@ def _is_plan_pristine(
     )
 
 
-def _emit_spec_plan_phase_events(feature_dir: Path, mission_slug: str, spec_file: Path, repo_root: Path) -> None:
-    """Record SpecifyCompleted + PlanStarted lifecycle markers (issue #1067)."""
+def _emit_spec_plan_phase_events(
+    feature_dir: Path,
+    mission_slug: str,
+    spec_file: Path,
+    repo_root: Path,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> None:
+    """Record SpecifyCompleted + PlanStarted lifecycle markers (issue #1067).
+
+    ``owned`` (review cycle 1 issue 3): forwarded as ``repo_root=`` to both
+    ``emit_artifact_phase`` calls, so the lock-root resolution reads
+    ``owned.repository_root`` directly instead of walking the worktree
+    pointer back to R via ``get_main_repo_root``
+    (``status/lifecycle_events.py``, out-of-map declared edit -- see that
+    module's ``persist_lifecycle_event_local`` docstring).
+    """
     from specify_cli.cli.commands.agent import mission as _mission
 
     try:
@@ -645,18 +713,21 @@ def _emit_spec_plan_phase_events(feature_dir: Path, mission_slug: str, spec_file
             PLAN_STARTED,
         )
 
+        lifecycle_repo_root = owned.repository_root if owned is not None else None
         emit_artifact_phase(
             feature_dir,
             event_type=SPECIFY_COMPLETED,
             mission_slug=mission_slug,
             actor=SETUP_PLAN_COMMAND_NAME,
             artifact_path=_mission._branch_tree_relative_path(spec_file, repo_root),
+            repo_root=lifecycle_repo_root,
         )
         emit_artifact_phase(
             feature_dir,
             event_type=PLAN_STARTED,
             mission_slug=mission_slug,
             actor=SETUP_PLAN_COMMAND_NAME,
+            repo_root=lifecycle_repo_root,
         )
     except Exception as _phase_exc:  # noqa: BLE001
         logger.debug("Lifecycle phase emission skipped: %s", _phase_exc)
@@ -671,6 +742,7 @@ def _commit_plan_if_substantive(
     target_branch: str,
     json_output: bool,
     plan_template: ResolutionResult,
+    owned: OwnedCheckout | None = None,
 ) -> tuple[CommitToBranchResult | None, str | None, bool]:
     """Commit plan.md when substantive; otherwise resolve blocked vs. scaffold_only.
 
@@ -694,7 +766,7 @@ def _commit_plan_if_substantive(
     # seam that resolved ``plan_template`` itself.
     mission_type = getattr(plan_template, "mission", None) or "software-dev"
     if is_substantive(plan_file, "plan", mission_type=mission_type, project_dir=repo_root):
-        commit_result = _mission._commit_to_branch(plan_file, mission_slug, "plan", repo_root, target_branch, json_output)
+        commit_result = _mission._commit_to_branch(plan_file, mission_slug, "plan", repo_root, target_branch, json_output, owned=owned)
         try:
             from specify_cli.status import emit_artifact_phase, PLAN_COMPLETED
 
@@ -704,6 +776,7 @@ def _commit_plan_if_substantive(
                 mission_slug=mission_slug,
                 actor=SETUP_PLAN_COMMAND_NAME,
                 artifact_path=_mission._branch_tree_relative_path(plan_file, repo_root),
+                repo_root=owned.repository_root if owned is not None else None,
             )
         except Exception as _plan_exc:  # noqa: BLE001
             logger.debug("PlanCompleted emission skipped: %s", _plan_exc)
@@ -771,6 +844,7 @@ def _run_documentation_gap_analysis(
     *,
     target_branch: str,
     json_output: bool,
+    owned: OwnedCheckout | None = None,
 ) -> str | None:
     """Run gap analysis for gap_filling/mission_specific doc missions; return its path or None."""
     from specify_cli.doc_analysis.doc_state import (
@@ -805,15 +879,21 @@ def _run_documentation_gap_analysis(
             from specify_cli.coordination.commit_router import commit_for_mission
             from specify_cli.git.protection_policy import ProtectionPolicy
 
-            _gap_policy = ProtectionPolicy.resolve(repo_root)
+            # owned-checkout-lifecycle-authority WP09: protection (and the
+            # router's own repo_root) resolves from R when owned, matching
+            # _commit_to_branch -- the linked checkout cannot weaken it. The
+            # write itself still lands on P via commit_for_mission's owned=.
+            _gap_protection_root = owned.repository_root if owned is not None else repo_root
+            _gap_policy = ProtectionPolicy.resolve(_gap_protection_root)
             commit_for_mission(
-                repo_root=repo_root,
+                repo_root=_gap_protection_root,
                 mission_slug=mission_slug,
                 files=(gap_analysis_output, meta_file),
                 message=f"Add gap analysis for feature {mission_slug}",
                 policy=_gap_policy,
                 kind=MissionArtifactKind.PRIMARY_METADATA,
                 target_branch=target_branch,
+                owned=owned,
             )
         if not json_output:
             coverage_pct = analysis.coverage_matrix.get_coverage_percentage() * 100
@@ -832,6 +912,7 @@ def _detect_and_configure_generators(
     *,
     target_branch: str,
     json_output: bool,
+    owned: OwnedCheckout | None = None,
 ) -> list[GeneratorConfig]:
     """Detect documentation generators, persist config to meta.json, return detected list."""
     from specify_cli.doc_analysis.doc_state import set_generators_configured
@@ -859,15 +940,19 @@ def _detect_and_configure_generators(
                 from specify_cli.coordination.commit_router import commit_for_mission
                 from specify_cli.git.protection_policy import ProtectionPolicy
 
-                _gen_policy = ProtectionPolicy.resolve(repo_root)
+                # owned-checkout-lifecycle-authority WP09: same protection-
+                # root rule as the gap-analysis commit above.
+                _gen_protection_root = owned.repository_root if owned is not None else repo_root
+                _gen_policy = ProtectionPolicy.resolve(_gen_protection_root)
                 commit_for_mission(
-                    repo_root=repo_root,
+                    repo_root=_gen_protection_root,
                     mission_slug=mission_slug,
                     files=(meta_file,),
                     message=f"Update generator config for feature {mission_slug}",
                     policy=_gen_policy,
                     kind=MissionArtifactKind.PRIMARY_METADATA,
                     target_branch=target_branch,
+                    owned=owned,
                 )
         except Exception as gen_err:
             if not json_output:
@@ -881,10 +966,18 @@ def _run_documentation_wiring(
     *,
     target_branch: str,
     json_output: bool,
+    owned: OwnedCheckout | None = None,
 ) -> tuple[str | None, list[GeneratorConfig]]:
     """Documentation-mission plan wiring (T014 + T016): gap analysis + generator detection.
 
-    No-op (returns ``(None, [])``) for non-documentation missions.
+    No-op (returns ``(None, [])``) for non-documentation missions. A
+    documentation-type owned mission reaches both phase helpers below, which
+    each accept ``owned=`` (owned-checkout-lifecycle-authority WP09, review
+    cycle 1 issue 1): both commits land on P via ``commit_for_mission``'s
+    ``owned=``, and protection resolves from ``owned.repository_root`` --
+    covered by
+    ``test_owned_lifecycle_acceptance_status.py::test_o2_flag_setup_plan_documentation_type_commits_gap_and_generators_in_p``
+    (with and without a stale R copy).
 
     read-side-seam-primary-primitive-closure-01KYKMMT WP04 (FR-013, #2886):
     this used to take the caller's ``feature_dir`` (the STATUS/lifecycle-side
@@ -901,12 +994,14 @@ def _run_documentation_wiring(
     ``gap-analysis.md`` itself carries no ``MissionArtifactKind`` (WP02 T013's
     honest bound) -- it simply anchors on this resolved directory.
     """
-    primary_dir = placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.PRIMARY_METADATA)
+    primary_dir = placement_seam(repo_root, mission_slug, owned=owned).read_dir(MissionArtifactKind.PRIMARY_METADATA)
     if get_mission_type(primary_dir) != MISSION_TYPE_DOCUMENTATION:
         return None, []
     meta_file = primary_dir / "meta.json"
-    gap_analysis_path = _run_documentation_gap_analysis(primary_dir, mission_slug, repo_root, meta_file, target_branch=target_branch, json_output=json_output)
-    generators_detected = _detect_and_configure_generators(mission_slug, repo_root, meta_file, target_branch=target_branch, json_output=json_output)
+    gap_analysis_path = _run_documentation_gap_analysis(
+        primary_dir, mission_slug, repo_root, meta_file, target_branch=target_branch, json_output=json_output, owned=owned
+    )
+    generators_detected = _detect_and_configure_generators(mission_slug, repo_root, meta_file, target_branch=target_branch, json_output=json_output, owned=owned)
     return gap_analysis_path, generators_detected
 
 
@@ -924,7 +1019,9 @@ def _build_setup_plan_result(
     target_branch: str,
     current_branch: str,
     match_target_branch: str | None = None,
+    expected_checkout_branch: str | None = None,
     plan_scaffold_only: bool = False,
+    requirement_id_warnings: Sequence[Mapping[str, object]] = (),
 ) -> SetupPlanLocalOutcome:
     """Build the authoritative setup-plan result without rendering it.
 
@@ -934,6 +1031,12 @@ def _build_setup_plan_result(
     ``mission_create`` twin — instead of ``blocked``. ``phase_complete``
     stays tied to ``plan_is_substantive`` alone, so the scaffold_only case
     still reports ``phase_complete: false``.
+
+    FR-014 / NFR-002: ``requirement_id_warnings`` is additive on every
+    payload this builder produces (success, scaffold, and the
+    plan-not-substantive blocked result) -- none of those carry an
+    ``error_code`` key, unlike the FR-013 gate refusal built by
+    ``_evaluate_requirement_id_gate``, which never reaches this builder.
     """
     result: dict[str, object] = {
         "result": "success" if (plan_is_substantive or plan_scaffold_only) else "blocked",
@@ -944,6 +1047,7 @@ def _build_setup_plan_result(
         "feature_dir": str(feature_dir),  # legacy alias of mission_dir (#5206)
         "spec_file": str(spec_file),
         "plan_substantive": plan_is_substantive,
+        "requirement_id_warnings": [dict(warning) for warning in requirement_id_warnings],
     }
     if plan_scaffold_only:
         result["scaffold_only"] = True
@@ -966,6 +1070,7 @@ def _build_setup_plan_result(
         target_branch=target_branch,
         current_branch=current_branch,
         match_target_branch=match_target_branch,
+        expected_checkout_branch=expected_checkout_branch,
     )
     render_kind: Literal["success", "scaffold", "blocked", "error"] = "scaffold" if plan_scaffold_only else "success" if plan_is_substantive else "blocked"
     return SetupPlanLocalOutcome(result, 0, render_kind)
@@ -985,8 +1090,11 @@ def _emit_setup_plan_result(
     target_branch: str,
     current_branch: str,
     match_target_branch: str | None = None,
+    expected_checkout_branch: str | None = None,
     json_output: bool,
     plan_scaffold_only: bool = False,
+    owned: OwnedCheckout | None = None,
+    requirement_id_warnings: Sequence[Mapping[str, object]] = (),
 ) -> None:
     """Compatibility reporter backed by the side-effect-free result builder."""
     outcome = _build_setup_plan_result(
@@ -1002,19 +1110,120 @@ def _emit_setup_plan_result(
         target_branch=target_branch,
         current_branch=current_branch,
         match_target_branch=match_target_branch,
+        expected_checkout_branch=expected_checkout_branch,
         plan_scaffold_only=plan_scaffold_only,
+        requirement_id_warnings=requirement_id_warnings,
     )
+    payload = dict(outcome.payload)
+    if owned is not None:
+        # FR-007: additive-only in owned runs; non-owned payloads never
+        # carry this key (WP08's envelope rule).
+        from specify_cli.cli.commands._owned_checkout import echo_stale_copy_warning, stale_copy_payload
+
+        payload.update(stale_copy_payload(owned))
+        if not json_output:
+            echo_stale_copy_warning(owned)
     if not json_output:
+        from rich.markup import escape
+
+        for warning in requirement_id_warnings:
+            token = escape(str(warning["token"]))
+            message = escape(str(warning["message"]))
+            console.print(f"[yellow]Warning:[/yellow] line {warning['line']}: {token} — {message}")
         console.print(f"[green]✓[/green] Plan scaffolded: {plan_file}")
         return
-    _emit_json(dict(outcome.payload))
+    _emit_json(payload)
+
+
+@dataclass(frozen=True)
+class _SetupPlanScope:
+    """The resolved root/branch/feature-dir preamble for ``setup-plan`` (T046 campsite).
+
+    Extracted so the owned-checkout arm (next commit) has a single place to
+    branch: an owned run resolves every field from the fact instead of R,
+    and skips ``_show_branch_context`` entirely (``target_branch`` comes
+    straight from the fact).
+    """
+
+    repo_root: Path
+    feature_dir: Path
+    mission_slug: str
+    target_branch: str
+    owned: OwnedCheckout | None = None
+
+    @property
+    def git_root(self) -> Path:
+        """The checkout every committed/governance read resolves from: P when owned, else R."""
+        return self.owned.owned_root if self.owned is not None else self.repo_root
+
+
+def _resolve_setup_plan_scope(feature: str | None, json_output: bool, *, owned_claim: Path | None = None) -> _SetupPlanScope:
+    """Resolve the root/branch/feature-dir preamble; exit 1 on a missing project root.
+
+    Behaviour-preserving for the non-owned path (locate the project root,
+    enforce git preflight, resolve the feature dir, then read the branch
+    context) -- byte-identical to the inline body it replaces. Owned
+    (owned-checkout-lifecycle-authority WP09, FR-005): validates ownership
+    exactly once via WP08's shared seam (G2: no direct
+    ``resolve_owned_mission``/``adopt_owned_checkout`` call here), runs the
+    git preflight against P (``owned.owned_root``) instead of R, and
+    resolves every field straight from the fact -- ``_show_branch_context``
+    never runs for an owned mission (``target_branch`` comes from the fact).
+    """
+    from mission_runtime import ActionContextError
+    from specify_cli.cli.commands.agent import mission as _mission
+    from specify_cli.cli.commands._owned_checkout import (
+        emit_owned_refusal,
+        resolve_owned_or_adopt,
+        result_error_envelope,
+    )
+    from specify_cli.core.owned_mission import LIFECYCLE_OWNED_TOPOLOGIES
+
+    repo_root = _mission.locate_project_root()
+    if repo_root is None:
+        error_msg = PROJECT_ROOT_NOT_FOUND_MESSAGE
+        if json_output:
+            _emit_json({"error": error_msg})
+        else:
+            console.print(f"[red]Error:[/red] {error_msg}")
+        raise typer.Exit(1)
+
+    try:
+        owned = resolve_owned_or_adopt(repo_root, owned_claim, feature, cwd=Path.cwd(), allowed_topologies=LIFECYCLE_OWNED_TOPOLOGIES)
+    except ActionContextError as exc:
+        emit_owned_refusal(exc, json_output=json_output, envelope=result_error_envelope)
+
+    if owned is not None:
+        _mission._enforce_git_preflight(owned.owned_root, json_output=json_output, command_name=SETUP_PLAN_COMMAND_NAME)
+        return _SetupPlanScope(
+            repo_root=repo_root,
+            feature_dir=owned.mission_dir,
+            mission_slug=owned.mission_slug,
+            # Landing branch for every display field (the non-owned contract),
+            # read from the fact's own mission meta; the checkout/write branch
+            # is ``owned.write_branch`` (``expected_checkout_branch``).
+            target_branch=read_target_branch_from_meta(owned.mission_dir) or owned.write_branch,
+            owned=owned,
+        )
+
+    _mission._enforce_git_preflight(
+        repo_root,
+        json_output=json_output,
+        command_name=SETUP_PLAN_COMMAND_NAME,
+    )
+
+    feature_dir = _resolve_setup_plan_feature_dir(repo_root, feature, json_output=json_output)
+    mission_slug = feature_dir.name
+    _, target_branch = _mission._show_branch_context(repo_root, mission_slug, json_output)
+    return _SetupPlanScope(repo_root=repo_root, feature_dir=feature_dir, mission_slug=mission_slug, target_branch=target_branch)
 
 
 def setup_plan(
     feature: Annotated[str | None, typer.Option("--mission", help="Mission slug (e.g., '020-my-mission')")] = None,
     json_output: Annotated[bool, typer.Option("--json", help="Output JSON format")] = False,
+    owned_checkout: OwnedCheckoutOption = None,
 ) -> None:
-    """Scaffold implementation plan template in the project root checkout.
+    """Scaffold an implementation plan template in the repository root checkout or an owned checkout.
 
     This command is designed for AI agents to call programmatically.
     Creates plan.md and commits to target branch.
@@ -1037,24 +1246,13 @@ def setup_plan(
     from specify_cli.cli.commands.agent import mission as _mission
 
     try:
-        repo_root = _mission.locate_project_root()
-        if repo_root is None:
-            error_msg = PROJECT_ROOT_NOT_FOUND_MESSAGE
-            if json_output:
-                _emit_json({"error": error_msg})
-            else:
-                console.print(f"[red]Error:[/red] {error_msg}")
-            raise typer.Exit(1)
-
-        _mission._enforce_git_preflight(
-            repo_root,
-            json_output=json_output,
-            command_name=SETUP_PLAN_COMMAND_NAME,
-        )
-
-        feature_dir = _resolve_setup_plan_feature_dir(repo_root, feature, json_output=json_output)
-        mission_slug = feature_dir.name
-        _, target_branch = _mission._show_branch_context(repo_root, mission_slug, json_output)
+        scope = _resolve_setup_plan_scope(feature, json_output, owned_claim=owned_checkout)
+        repo_root = scope.repo_root
+        feature_dir = scope.feature_dir
+        mission_slug = scope.mission_slug
+        target_branch = scope.target_branch
+        owned = scope.owned
+        git_root = scope.git_root
 
         # gate-read-surface-completion WP02 / FR-001 / #2107 (out-of-map edit —
         # WP01 owns ``mission.py``; rationale: re-point ``setup_plan``'s PLANNING
@@ -1079,73 +1277,104 @@ def setup_plan(
         # Routed through the ``mission`` shim (``_mission`` deferred-imported at the
         # top of this body) so the historical ``mission._planning_read_dir`` patch
         # seam — exercised by ``test_setup_plan_read_surface`` — reaches this caller.
-        spec_read_dir = _mission._planning_read_dir(repo_root, mission_slug, artifact_type="spec")
+        if owned is not None:
+            # Both SPEC and PLAN are PRIMARY-partition kinds: every
+            # PRIMARY-partition ``PlacementSeam.read_dir`` resolves to
+            # ``owned.mission_dir`` for an owned run (WP04), so no seam call
+            # is needed here -- using the fact's field directly is the
+            # honest form (G4/G5).
+            spec_read_dir = owned.mission_dir
+            plan_read_dir = owned.mission_dir
+        else:
+            # Routed through the ``mission`` shim (``_mission`` deferred-imported at the
+            # top of this body) so the historical ``mission._planning_read_dir`` patch
+            # seam — exercised by ``test_setup_plan_read_surface`` — reaches this caller.
+            spec_read_dir = _mission._planning_read_dir(repo_root, mission_slug, artifact_type="spec")
+            plan_read_dir = _mission._planning_read_dir(repo_root, mission_slug, artifact_type="plan")
         spec_file = spec_read_dir / "spec.md"
-        plan_read_dir = _mission._planning_read_dir(repo_root, mission_slug, artifact_type="plan")
         plan_file = plan_read_dir / "plan.md"
 
-        # FR-006 / #3124: compute the branch-match operands from the INVOKING
-        # checkout + the mission's meta.json target — NOT the primary HEAD that
-        # locate_project_root() re-anchored ``repo_root`` onto. ``target_branch``
-        # (above) stays primary-anchored for every display/planning field; only the
-        # match value reflects the invoking checkout. ``plan_read_dir`` is the
-        # PRIMARY planning surface where the canonical meta.json lives.
-        #
-        # #3786: the identity is resolved ONCE here, at the command entrypoint —
-        # the single boundary that legitimately reads ambient state — and injected
-        # into ``_resolve_branch_match_operands``; nothing below this point reads
-        # ``Path.cwd()`` for identity.
-        invocation_identity = resolve_checkout_identity(Path.cwd(), Intent.WRITE)
-        current_branch, match_target_branch = _resolve_branch_match_operands(
-            invocation_identity,
-            plan_read_dir,
-            fallback_branch=target_branch,
-            get_current_branch=_mission.get_current_branch,
-        )
+        expected_checkout_branch: str | None = None
+        if owned is not None:
+            # The minter already proved P's branch; the invoking-checkout
+            # match reduces to the fact's own write branch (owned-checkout-
+            # lifecycle-authority WP09, FR-005), which is also the checkout the
+            # contract names (the #5100 minted branch for a protected-target
+            # mint; ``target_branch`` stays the landing branch).
+            current_branch = match_target_branch = expected_checkout_branch = owned.write_branch
+        else:
+            # FR-006 / #3124: compute the branch-match operands from the INVOKING
+            # checkout + the mission's meta.json target — NOT the primary HEAD that
+            # locate_project_root() re-anchored ``repo_root`` onto. ``target_branch``
+            # (above) stays primary-anchored for every display/planning field; only the
+            # match value reflects the invoking checkout. ``plan_read_dir`` is the
+            # PRIMARY planning surface where the canonical meta.json lives.
+            #
+            # #3786: the identity is resolved ONCE here, at the command entrypoint —
+            # the single boundary that legitimately reads ambient state — and injected
+            # into ``_resolve_branch_match_operands``; nothing below this point reads
+            # ``Path.cwd()`` for identity.
+            invocation_identity = resolve_checkout_identity(Path.cwd(), Intent.WRITE)
+            current_branch, match_target_branch = _resolve_branch_match_operands(
+                invocation_identity,
+                plan_read_dir,
+                fallback_branch=target_branch,
+                get_current_branch=_mission.get_current_branch,
+            )
 
         if _enforce_spec_gate(
             spec_file,
             feature_dir,
             mission_slug,
-            repo_root,
+            git_root,
             target_branch=target_branch,
             current_branch=current_branch,
             match_target_branch=match_target_branch,
+            expected_checkout_branch=expected_checkout_branch,
             json_output=json_output,
         ):
             return
 
+        # FR-014: computed once, after the FR-013 gate has already passed --
+        # every non-error setup-plan payload carries it additively.
+        requirement_id_warnings = _spec_requirement_id_warnings(spec_file)
+
         try:
-            plan_template = _resolve_plan_template(repo_root, plan_read_dir)
+            plan_template = _resolve_plan_template(git_root, plan_read_dir)
         except FileNotFoundError as exc:
             raise FileNotFoundError("Plan template not found in repository or package") from exc
         _scaffold_plan_template(plan_file, plan_template)
-        _emit_spec_plan_phase_events(feature_dir, mission_slug, spec_file, repo_root)
+        _emit_spec_plan_phase_events(feature_dir, mission_slug, spec_file, git_root, owned=owned)
 
         from specify_cli.missions._substantive import is_substantive
 
         # Decision 5 (#3832): reuse the single upstream-resolved
         # ``plan_template`` (already in scope from ``_resolve_plan_template``
         # above) rather than re-resolving the mission type independently.
-        # ``project_dir=repo_root`` (#3830 FIX-1): reach a pack-provided
-        # declaration through the same seam that resolved ``plan_template``.
+        # ``project_dir=git_root`` (#3830 FIX-1, owned-checkout-lifecycle-
+        # authority WP09 FR-016): reach a pack-provided declaration through
+        # the same seam that resolved ``plan_template`` -- P for an owned
+        # run, R otherwise.
         plan_is_substantive = is_substantive(
             plan_file,
             "plan",
             mission_type=getattr(plan_template, "mission", None) or "software-dev",
-            project_dir=repo_root,
+            project_dir=git_root,
         )
         plan_commit_result, plan_blocked_reason, plan_scaffold_only = _commit_plan_if_substantive(
             plan_file,
             feature_dir,
             mission_slug,
-            repo_root,
+            git_root,
             target_branch=target_branch,
             json_output=json_output,
             plan_template=plan_template,
+            owned=owned,
         )
 
-        gap_analysis_path, generators_detected = _run_documentation_wiring(mission_slug, repo_root, target_branch=target_branch, json_output=json_output)
+        gap_analysis_path, generators_detected = _run_documentation_wiring(
+            mission_slug, git_root, target_branch=target_branch, json_output=json_output, owned=owned
+        )
 
         _emit_setup_plan_result(
             plan_file=plan_file,
@@ -1160,8 +1389,11 @@ def setup_plan(
             target_branch=target_branch,
             current_branch=current_branch,
             match_target_branch=match_target_branch,
+            expected_checkout_branch=expected_checkout_branch,
             json_output=json_output,
             plan_scaffold_only=plan_scaffold_only,
+            owned=owned,
+            requirement_id_warnings=requirement_id_warnings,
         )
 
     except typer.Exit:

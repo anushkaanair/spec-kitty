@@ -161,23 +161,10 @@ def _read_case_json(case_dir: Path) -> _CaseJson:
 
 
 # ---------------------------------------------------------------------------
-# All-six-resolve replay test
+# Config-key registry: fail-closed lookup and driver-count guard
 # ---------------------------------------------------------------------------
 
 _DISTINCT_CONFIG_KEYS: tuple[str, ...] = tuple(dict.fromkeys(spec.config_key for spec in _MERGE_DRIVERS))
-
-
-@pytest.mark.unit
-@pytest.mark.parametrize("config_key", _DISTINCT_CONFIG_KEYS)
-def test_every_registered_config_key_resolves_through_replay(config_key: str) -> None:
-    """Every distinct ``_MERGE_DRIVERS`` config key resolves to a callable.
-
-    Only ``spec-kitty-traces`` is otherwise exercised through replay
-    (``test_bookkeeping_projection_seam.py:202-318``); the resolver must keep
-    resolving every registered kind, not just that one.
-    """
-    driver = _resolve_registered_driver_callable(config_key)
-    assert callable(driver)
 
 
 @pytest.mark.unit

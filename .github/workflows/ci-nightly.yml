@@ -64,6 +64,9 @@ concurrency:
 permissions:
   contents: read
 
+# Fork guard: automated runs (schedule, push to main, workflow_run) are core-repo
+# only. On a fork the guarded jobs skip; pull_request and workflow_dispatch still
+# run everywhere. Pinned by tests/ci/test_fork_guard.py.
 jobs:
   # ---------------------------------------------------------------------------
   # performance / e2e / stress: split from the former single
@@ -98,6 +101,7 @@ jobs:
   # shrunk): a generous timeout costs nothing unless a job hangs, and this
   # WP's own evidence base is a single dispatch.
   performance:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: Performance suite (nightly-only, #3595)
     runs-on: ubuntu-24.04
     timeout-minutes: 35
@@ -217,6 +221,7 @@ jobs:
   # generous timeout costs nothing unless a job hangs). PWHEADLESS keeps any
   # UI-touching heavy/e2e test headless.
   e2e:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: Heavy e2e suite (nightly-only, #3595)
     runs-on: ubuntu-24.04
     timeout-minutes: 40
@@ -306,6 +311,7 @@ jobs:
   # suites. `not windows_ci` leaves the Windows-critical subset to
   # ci-windows.yml.
   stress:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: Stress suite (nightly-only, #3595)
     runs-on: ubuntu-24.04
     # DO NOT set SPEC_KITTY_RUN_PERFORMANCE on this job. This 10-minute
@@ -394,9 +400,11 @@ jobs:
   # ---------------------------------------------------------------------------
   # Shard 1/6: tests/unit, tests/status, tests/cli.
   interpreter-matrix-shard-1:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: "Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # headroom (#5378): max-suite=12:35 runs=36300726806,36393904544,36482214935,36517786727,36553997695 formula=ceil((max+0:30)*1.5)
+    timeout-minutes: 20
     # `issues: write` for the FR-007 escalation step below.
     permissions:
       contents: read
@@ -469,9 +477,11 @@ jobs:
 
   # Shard 2/6: tests/specify_cli/runtime, tests/charter, tests/kernel.
   interpreter-matrix-shard-2:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: "Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # headroom (#5378): max-suite>=20:09 runs=36300726806,36393904544,36482214935,36517786727,36553997695 formula=ceil((max+0:30)*1.5)
+    timeout-minutes: 31
     permissions:
       contents: read
       issues: write
@@ -534,9 +544,11 @@ jobs:
   # derivation (a fresh local collect-only capture, bucketed and split via a
   # one-time greedy LPT pass -- never SK-247's mechanism).
   interpreter-matrix-shard-3:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: "Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # headroom (#5378): max-suite=22:12 runs=36300726806,36393904544,36482214935,36517786727,36553997695 formula=ceil((max+0:30)*1.5)
+    timeout-minutes: 35
     permissions:
       contents: read
       issues: write
@@ -562,7 +574,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          uv run --frozen --python "3.13" --all-extras pytest -m "fast or unit" tests/adversarial tests/architectural tests/ast_analysis tests/consolidation tests/core tests/doctrine_synthesizer tests/integration tests/invocation tests/migrate tests/migration tests/mission_metadata tests/post_merge tests/release tests/reporting tests/reviews tests/specify_cli/charter tests/specify_cli/charter_freshness tests/specify_cli/charter_runtime tests/specify_cli/cli tests/specify_cli/config tests/specify_cli/decisions tests/specify_cli/dossier tests/specify_cli/missions tests/specify_cli/orchestrator_api tests/specify_cli/ownership tests/specify_cli/shims tests/specify_cli/skills tests/specify_cli/tasks tests/specify_cli/tasks_authoring tests/specify_cli/test_active_mission_removal.py tests/specify_cli/test_bytecode_heal.py tests/specify_cli/test_change_mode_read_boundaries.py tests/specify_cli/test_doctrine_service_factory.py tests/specify_cli/test_meta_read_permission_denied_regression.py tests/specify_cli/test_mission_brief_missing_vs_corrupt.py tests/specify_cli/test_mission_brief_resilient_write.py tests/specify_cli/test_mission_metadata_change_mode.py tests/specify_cli/test_no_manual_ffmerge.py tests/specify_cli/test_repair_lane_mismatch.py tests/specify_cli/test_requirement_mapping_coord_surface.py tests/specify_cli/test_wp_frontmatter_fold.py tests/specify_cli/upgrade tests/test_test_venv_bootstrap.py tests/ui -q -n auto --dist loadfile --junitxml="out/reports/xunit-nightly-interpreter-3.13-shard-3.xml"
+          uv run --frozen --python "3.13" --all-extras pytest -m "fast or unit" tests/adversarial tests/architectural tests/ast_analysis tests/consolidation tests/core tests/doctrine_synthesizer tests/integration tests/invocation tests/migrate tests/migration tests/mission_metadata tests/post_merge tests/release tests/reporting tests/reviews tests/specify_cli/charter tests/specify_cli/charter_freshness tests/specify_cli/charter_runtime tests/specify_cli/cli tests/specify_cli/config tests/specify_cli/decisions tests/specify_cli/dossier tests/specify_cli/missions tests/specify_cli/orchestrator_api tests/specify_cli/ownership tests/specify_cli/shims tests/specify_cli/skills tests/specify_cli/tasks tests/specify_cli/tasks_authoring tests/specify_cli/test_active_mission_removal.py tests/specify_cli/test_bytecode_heal.py tests/specify_cli/test_change_mode_read_boundaries.py tests/specify_cli/test_doctrine_service_factory.py tests/specify_cli/test_meta_read_permission_denied_regression.py tests/specify_cli/test_mission_brief_missing_vs_corrupt.py tests/specify_cli/test_mission_brief_resilient_write.py tests/specify_cli/test_mission_metadata_change_mode.py tests/specify_cli/test_no_manual_ffmerge.py tests/specify_cli/test_repair_lane_mismatch.py tests/specify_cli/test_requirement_mapping_coord_surface.py tests/specify_cli/test_wp_frontmatter_fold.py tests/specify_cli/upgrade tests/test_test_venv_bootstrap.py -q -n auto --dist loadfile --junitxml="out/reports/xunit-nightly-interpreter-3.13-shard-3.xml"
           code=$?
           echo "INTERPRETER_SHARD_3_EXIT=$code" >> "$GITHUB_ENV"
           echo "::notice::interpreter 3.13 shard 3 suite exit=$code (if: always() -- full mode never short-circuits; a red suite is surfaced by the terminal fail-loud step, #4212)"
@@ -595,8 +607,10 @@ jobs:
 
   # Shard 4/6.
   interpreter-matrix-shard-4:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: "Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)"
     runs-on: ubuntu-24.04
+    # headroom (#5378): max-suite=14:27 runs=36300726806,36393904544,36482214935,36517786727,36553997695 formula=ceil((max+0:30)*1.5)
     timeout-minutes: 25
     permissions:
       contents: read
@@ -623,7 +637,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          uv run --frozen --python "3.13" --all-extras pytest -m "fast or unit" tests/_support tests/auth tests/characterization tests/contract tests/doctrine tests/dossier tests/git_ops tests/mission tests/missions tests/scripts tests/specify_cli/agent_utils tests/specify_cli/asset_preservation tests/specify_cli/bulk_edit tests/specify_cli/charter_lint tests/specify_cli/charter_preflight tests/specify_cli/consolidation tests/specify_cli/contracts tests/specify_cli/coordination tests/specify_cli/core tests/specify_cli/dashboard tests/specify_cli/events tests/specify_cli/git tests/specify_cli/integration tests/specify_cli/invocation tests/specify_cli/mission_v1 tests/specify_cli/readiness tests/specify_cli/retrospective tests/specify_cli/test_1716_closeout_regression.py tests/specify_cli/test_analysis_report_symlink_loops.py tests/specify_cli/test_atomic_write.py tests/specify_cli/test_audit_tail_readers.py tests/specify_cli/test_charter_lifecycle_gates.py tests/specify_cli/test_doctor_doctrine.py tests/specify_cli/test_logging_bootstrap.py tests/specify_cli/test_mid8_contract_sensitive_routing.py tests/specify_cli/test_mission_brief_overwrite_chokepoint.py tests/specify_cli/test_mission_discard_marker.py tests/specify_cli/test_research_drg_nodes.py tests/specify_cli/test_state_gitignore_migration.py tests/specify_cli/test_validate_mission_paths_single_caller.py tests/specify_cli/test_worktrees_index.py tests/specify_cli/test_wp18_meta_reader_contracts.py tests/specify_cli/widen tests/task_utils tests/test_template tests/test_worker_home_isolation.py tests/tracker -q -n auto --dist loadfile --junitxml="out/reports/xunit-nightly-interpreter-3.13-shard-4.xml"
+          uv run --frozen --python "3.13" --all-extras pytest -m "fast or unit" tests/_support tests/auth tests/characterization tests/contract tests/doctrine tests/dossier tests/git_ops tests/mission tests/missions tests/scripts tests/specify_cli/agent_utils tests/specify_cli/asset_preservation tests/specify_cli/bulk_edit tests/specify_cli/charter_lint tests/specify_cli/charter_preflight tests/specify_cli/consolidation tests/specify_cli/contracts tests/specify_cli/coordination tests/specify_cli/core tests/specify_cli/events tests/specify_cli/git tests/specify_cli/integration tests/specify_cli/invocation tests/specify_cli/mission_v1 tests/specify_cli/readiness tests/specify_cli/retrospective tests/specify_cli/test_1716_closeout_regression.py tests/specify_cli/test_analysis_report_symlink_loops.py tests/specify_cli/test_atomic_write.py tests/specify_cli/test_audit_tail_readers.py tests/specify_cli/test_charter_lifecycle_gates.py tests/specify_cli/test_doctor_doctrine.py tests/specify_cli/test_logging_bootstrap.py tests/specify_cli/test_mid8_contract_sensitive_routing.py tests/specify_cli/test_mission_brief_overwrite_chokepoint.py tests/specify_cli/test_mission_discard_marker.py tests/specify_cli/test_research_drg_nodes.py tests/specify_cli/test_state_gitignore_migration.py tests/specify_cli/test_validate_mission_paths_single_caller.py tests/specify_cli/test_worktrees_index.py tests/specify_cli/test_wp18_meta_reader_contracts.py tests/specify_cli/widen tests/task_utils tests/test_template tests/test_worker_home_isolation.py tests/tracker -q -n auto --dist loadfile --junitxml="out/reports/xunit-nightly-interpreter-3.13-shard-4.xml"
           code=$?
           echo "INTERPRETER_SHARD_4_EXIT=$code" >> "$GITHUB_ENV"
           echo "::notice::interpreter 3.13 shard 4 suite exit=$code (if: always() -- full mode never short-circuits; a red suite is surfaced by the terminal fail-loud step, #4212)"
@@ -656,9 +670,11 @@ jobs:
 
   # Shard 5/6.
   interpreter-matrix-shard-5:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: "Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)"
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # headroom (#5378): max-suite=22:32 runs=36300726806,36393904544,36482214935,36517786727,36553997695 formula=ceil((max+0:30)*1.5)
+    timeout-minutes: 35
     permissions:
       contents: read
       issues: write
@@ -684,7 +700,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          uv run --frozen --python "3.13" --all-extras pytest -m "fast or unit" tests/acceptance tests/audit tests/compat tests/context tests/dashboard tests/docs tests/evidence tests/glossary tests/lanes tests/policy tests/research tests/retrospective tests/review tests/runtime tests/specify_cli/acceptance tests/specify_cli/compat tests/specify_cli/docs tests/specify_cli/doctrine tests/specify_cli/live_work tests/specify_cli/migration tests/specify_cli/mission_step_contracts tests/specify_cli/retrospect tests/specify_cli/review tests/specify_cli/saas_client tests/specify_cli/test_bare_prose_false_negative_sample.py tests/specify_cli/test_brief_pair_atomicity.py tests/specify_cli/test_charter_pack_registry.py tests/specify_cli/test_command_template_cleanliness.py tests/specify_cli/test_delete_scalar.py tests/specify_cli/test_documentation_template_resolution.py tests/specify_cli/test_entrypoint_json_mode.py tests/specify_cli/test_feature_metadata.py tests/specify_cli/test_feature_metadata_origin.py tests/specify_cli/test_gitignore_contract.py tests/specify_cli/test_mid8_direct_routing.py tests/specify_cli/test_mission_metadata.py tests/specify_cli/test_mission_type_read_converters.py tests/specify_cli/test_mission_type_write_boundaries.py tests/specify_cli/test_read_seam_migration_core.py tests/specify_cli/test_requirement_mapping.py tests/specify_cli/test_state_contract.py tests/specify_cli/tool_surface tests/specify_cli/tracker tests/tasks tests/test_frontmatter_dup_key.py -q -n auto --dist loadfile --junitxml="out/reports/xunit-nightly-interpreter-3.13-shard-5.xml"
+          uv run --frozen --python "3.13" --all-extras pytest -m "fast or unit" tests/acceptance tests/audit tests/compat tests/context tests/docs tests/evidence tests/glossary tests/lanes tests/policy tests/research tests/retrospective tests/review tests/runtime tests/specify_cli/acceptance tests/specify_cli/compat tests/specify_cli/docs tests/specify_cli/doctrine tests/specify_cli/live_work tests/specify_cli/migration tests/specify_cli/mission_step_contracts tests/specify_cli/retrospect tests/specify_cli/review tests/specify_cli/saas_client tests/specify_cli/test_bare_prose_false_negative_sample.py tests/specify_cli/test_brief_pair_atomicity.py tests/specify_cli/test_charter_pack_registry.py tests/specify_cli/test_command_template_cleanliness.py tests/specify_cli/test_delete_scalar.py tests/specify_cli/test_documentation_template_resolution.py tests/specify_cli/test_entrypoint_json_mode.py tests/specify_cli/test_feature_metadata.py tests/specify_cli/test_feature_metadata_origin.py tests/specify_cli/test_gitignore_contract.py tests/specify_cli/test_mid8_direct_routing.py tests/specify_cli/test_mission_metadata.py tests/specify_cli/test_mission_type_read_converters.py tests/specify_cli/test_mission_type_write_boundaries.py tests/specify_cli/test_read_seam_migration_core.py tests/specify_cli/test_requirement_id_grammar.py tests/specify_cli/test_requirement_id_lint.py tests/specify_cli/test_requirement_mapping.py tests/specify_cli/test_requirement_reason_parity.py tests/specify_cli/test_state_contract.py tests/specify_cli/tool_surface tests/specify_cli/tracker tests/tasks tests/test_frontmatter_dup_key.py -q -n auto --dist loadfile --junitxml="out/reports/xunit-nightly-interpreter-3.13-shard-5.xml"
           code=$?
           echo "INTERPRETER_SHARD_5_EXIT=$code" >> "$GITHUB_ENV"
           echo "::notice::interpreter 3.13 shard 5 suite exit=$code (if: always() -- full mode never short-circuits; a red suite is surfaced by the terminal fail-loud step, #4212)"
@@ -717,8 +733,10 @@ jobs:
 
   # Shard 6/6.
   interpreter-matrix-shard-6:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: "Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)"
     runs-on: ubuntu-24.04
+    # headroom (#5378): max-suite=7:26 runs=36300726806,36393904544,36482214935,36517786727,36553997695 formula=ceil((max+0:30)*1.5)
     timeout-minutes: 25
     permissions:
       contents: read
@@ -745,7 +763,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          uv run --frozen --python "3.13" --all-extras pytest -m "fast or unit" tests/agent tests/ci tests/coordination tests/cross_cutting tests/decisions tests/init tests/mission_runtime tests/next tests/paths tests/prompts tests/proof tests/readiness tests/regressions tests/specify_cli/audit tests/specify_cli/bootstrap tests/specify_cli/context tests/specify_cli/distribution tests/specify_cli/drg_writers tests/specify_cli/identity tests/specify_cli/lanes tests/specify_cli/next tests/specify_cli/regression tests/specify_cli/session_presence tests/specify_cli/status tests/specify_cli/test_acceptable_ending.py tests/specify_cli/test_acceptance_needs_clarification.py tests/specify_cli/test_canonical_acceptance.py tests/specify_cli/test_charter_list.py tests/specify_cli/test_cli tests/specify_cli/test_codebase_sweep.py tests/specify_cli/test_configured_command.py tests/specify_cli/test_documentation_drg_nodes.py tests/specify_cli/test_intake_sources.py tests/specify_cli/test_intake_sources_hardening.py tests/specify_cli/test_lane_regression_guard.py tests/specify_cli/test_meta_fail_closed_degradation_paths.py tests/specify_cli/test_no_checklist_surface.py tests/specify_cli/test_profile_context_migration.py tests/specify_cli/test_runtime_hard_fail.py tests/specify_cli/test_state_doctor.py tests/specify_cli/test_workspace_context_tombstone.py tests/state tests/test_dashboard tests/upgrade tests/zeitgeist_client -q -n auto --dist loadfile --junitxml="out/reports/xunit-nightly-interpreter-3.13-shard-6.xml"
+          uv run --frozen --python "3.13" --all-extras pytest -m "fast or unit" tests/agent tests/ci tests/coordination tests/cross_cutting tests/decisions tests/init tests/mission_runtime tests/next tests/paths tests/prompts tests/readiness tests/regressions tests/specify_cli/audit tests/specify_cli/bootstrap tests/specify_cli/context tests/specify_cli/distribution tests/specify_cli/drg_writers tests/specify_cli/identity tests/specify_cli/lanes tests/specify_cli/next tests/specify_cli/regression tests/specify_cli/session_presence tests/specify_cli/status tests/specify_cli/test_acceptable_ending.py tests/specify_cli/test_acceptance_needs_clarification.py tests/specify_cli/test_canonical_acceptance.py tests/specify_cli/test_charter_list.py tests/specify_cli/test_cli tests/specify_cli/test_codebase_sweep.py tests/specify_cli/test_configured_command.py tests/specify_cli/test_documentation_drg_nodes.py tests/specify_cli/test_intake_sources.py tests/specify_cli/test_intake_sources_hardening.py tests/specify_cli/test_lane_regression_guard.py tests/specify_cli/test_meta_fail_closed_degradation_paths.py tests/specify_cli/test_no_checklist_surface.py tests/specify_cli/test_profile_context_migration.py tests/specify_cli/test_runtime_hard_fail.py tests/specify_cli/test_state_doctor.py tests/specify_cli/test_workspace_context_tombstone.py tests/specify_cli/workspace tests/state tests/upgrade tests/zeitgeist_client -q -n auto --dist loadfile --junitxml="out/reports/xunit-nightly-interpreter-3.13-shard-6.xml"
           code=$?
           echo "INTERPRETER_SHARD_6_EXIT=$code" >> "$GITHUB_ENV"
           echo "::notice::interpreter 3.13 shard 6 suite exit=$code (if: always() -- full mode never short-circuits; a red suite is surfaced by the terminal fail-loud step, #4212)"
@@ -798,6 +816,7 @@ jobs:
   # the module list itself, which both read from the one committed registry).
   # ---------------------------------------------------------------------------
   generate-full-matrix:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: Generate full module-shard matrix (nightly-only)
     runs-on: ubuntu-24.04
     outputs:
@@ -891,6 +910,7 @@ jobs:
   # terminal fail-loud (#4212) + FR-007 escalation pattern as the suites above.
   # ---------------------------------------------------------------------------
   integration-next:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: Integration + next suite (nightly-only, #4729)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
@@ -993,9 +1013,11 @@ jobs:
   # zero-collected floor (a directory lane never exempts exit 5, FIND-2 #5034).
   # ---------------------------------------------------------------------------
   specify-cli-out-of-matrix:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
     name: specify_cli out-of-matrix trees (nightly-only, #5201)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    # headroom (#5378): max-suite>=45:01 runs=36300726806,36393904544,36482214935,36517786727,36553997695 formula=ceil((max+0:30)*1.5)
+    timeout-minutes: 69
     # `issues: write` for the FR-007 escalation step below.
     permissions:
       contents: read
@@ -1066,14 +1088,118 @@ jobs:
           echo "specify_cli out-of-matrix suite passed (exit 0)."
 
   # ---------------------------------------------------------------------------
+  # architectural-backstop (#5510, FR-001, SC-003; folds #3265): the nightly runs
+  # the FULL per-PR architectural battery base, so a green nightly really means
+  # the whole battery ran. Before this job the nightly reached the battery only
+  # through interpreter-matrix-shard-3's `-m "fast or unit"` selection (Python
+  # 3.13), roughly a fifth of it; ADR 2026-09-26-1 and the by-design closure of
+  # #5302 both assume a full nightly backstop.
+  #
+  # Plugin-free on purpose (D-04): no `--battery-part`, no partition plugin, so
+  # if the partition machinery or the gate selector ever dropped a file, this
+  # plain base run still executes it. The command is the `architectural-heavy`
+  # base command of ci-router.yml (same path, marker and deselects); its parity
+  # is pinned by tests/ci/test_nightly_architectural_backstop.py, and the
+  # fast + S1 + S2 = base half is the partition proof's job. The python-version
+  # pin is the per-PR battery interpreter (interpreter diversity stays with the
+  # interpreter shards, D-14). It is deliberately NOT a registry key (D-26).
+  #
+  # `-n 4` and no `-q` so xdist prints `created: 4/4 workers` (FR-002 evidence).
+  # Same if: always() + set +e + exit-into-$GITHUB_ENV + terminal fail-loud
+  # (#4212) + FR-007 escalation pattern as the other directory lanes, including
+  # no exit-5 exemption. No continue-on-error anywhere: a red backstop fails the
+  # run conclusion, which scripts/ci/release_nightly_gate.py reads for the
+  # release SHA, so the release gate needs no extra wiring (T017).
+  #
+  # Its junit report is the per-file timings refresh source for the battery
+  # partition (D-29/D-36: the seed comes from census logs, junit capture via
+  # `--from-junit` is the refresh path).
+  # ---------------------------------------------------------------------------
+  architectural-backstop:
+    if: (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch')
+    name: Architectural battery backstop (nightly-only, #5510)
+    runs-on: ubuntu-24.04
+    # headroom (#5378): max-suite>=25:09 runs=census-2026-09-30 formula=ceil((max+0:30)*1.5)
+    timeout-minutes: 40
+    # `issues: write` for the FR-007 escalation step below.
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          # Full history: several architectural recovery/receipt tests
+          # `git archive` historical mission SHAs, which a shallow checkout
+          # does not contain (same reason as the per-PR battery job).
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: '3.12'
+
+      - name: Sync dev environment
+        shell: bash
+        run: uv sync --frozen --all-extras
+
+      - name: Run the full architectural battery base (no partition, run-all-regardless)
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          uv run --frozen python -m pytest tests/architectural \
+            -m "not performance and not stress and not timing" \
+            -n 4 --dist loadfile \
+            --deselect tests/architectural/test_no_legacy_terminology.py \
+            --deselect tests/architectural/test_layer_rules.py \
+            --deselect tests/architectural/test_pyproject_shape.py \
+            --deselect tests/architectural/test_archive_root_byte_identical.py \
+            --junitxml=out/reports/xunit-nightly-architectural.xml
+          code=$?
+          echo "ARCH_BACKSTOP_EXIT=$code" >> "$GITHUB_ENV"
+          echo "::notice::architectural backstop exit=$code (full base, no partition; if: always() -- a red suite is surfaced by the terminal fail-loud step, #4212)"
+
+      - name: Upload nightly architectural backstop reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ci-nightly-architectural-backstop-reports
+          path: out/reports/
+
+      # Nightly red -> deduped-P0 escalation (FR-007), scoped to the
+      # `architectural` suite key. Fail-closed, if: always(); the `:-1` default
+      # (FIND-1) treats an unset/timeout-killed exit as failure.
+      - name: Escalate architectural backstop red -> deduped P0 (fail-closed)
+        if: always() && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${ARCH_BACKSTOP_EXIT:-1}" -ne 0 ]; then conclusion=failure; else conclusion=success; fi
+          python3 scripts/ci/nightly_escalation.py --suite-key architectural --conclusion "$conclusion" --ref "$GITHUB_REF" --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # Terminal fail-loud gate (#4212): only exit 0 passes. Exit 5 (zero
+      # collected) and an unset/timeout-killed exit (`:-1`) both fail -- this
+      # is a directory lane (FIND-2, #5034).
+      - name: Fail the job if the architectural backstop was red (run-all-then-fail-loud)
+        if: always()
+        shell: bash
+        run: |
+          if [ "${ARCH_BACKSTOP_EXIT:-1}" -ne 0 ]; then
+            echo "::error::architectural backstop exited ${ARCH_BACKSTOP_EXIT} (a zero-collected exit 5 counts as failure for this directory-based lane, not a legitimate skip)"
+            exit 1
+          fi
+          echo "architectural backstop passed (exit 0)."
+
+  # ---------------------------------------------------------------------------
   # nightly-summary: terminal `if: always()` aggregator so a scheduled/dispatch
   # run's complete failure set is visible in one place, never short-circuited.
   # ---------------------------------------------------------------------------
   nightly-summary:
     name: Nightly full-mode summary
     runs-on: ubuntu-24.04
-    needs: [performance, e2e, stress, interpreter-matrix-shard-1, interpreter-matrix-shard-2, interpreter-matrix-shard-3, interpreter-matrix-shard-4, interpreter-matrix-shard-5, interpreter-matrix-shard-6, integration-next, specify-cli-out-of-matrix, full-module-matrix]
-    if: always()
+    needs: [performance, e2e, stress, interpreter-matrix-shard-1, interpreter-matrix-shard-2, interpreter-matrix-shard-3, interpreter-matrix-shard-4, interpreter-matrix-shard-5, interpreter-matrix-shard-6, integration-next, specify-cli-out-of-matrix, architectural-backstop, full-module-matrix]
+    if: ${{ (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && always() }}
     steps:
       - name: Report full-mode results (run-all-regardless, never fail-fast)
         shell: bash
@@ -1089,4 +1215,5 @@ jobs:
           echo "interpreter-matrix-shard-6: ${{ needs.interpreter-matrix-shard-6.result }}"
           echo "integration-next: ${{ needs.integration-next.result }}"
           echo "specify-cli-out-of-matrix: ${{ needs.specify-cli-out-of-matrix.result }}"
+          echo "architectural-backstop: ${{ needs.architectural-backstop.result }}"
           echo "full-module-matrix: ${{ needs.full-module-matrix.result }}"

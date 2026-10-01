@@ -37,6 +37,7 @@ from pathlib import Path
 
 import typer
 
+from kernel.git import GitCommandError, status_entries, tracked_paths
 from specify_cli.core.constants import KITTY_SPECS_DIR
 from specify_cli.core.paths import locate_project_root
 from specify_cli.core.utils import safe_is_dir
@@ -250,20 +251,12 @@ def _check_tracked_worktrees_content(repo_root: Path) -> list[DoctorFinding]:
     from specify_cli.core.constants import WORKTREES_DIR
 
     try:
-        out = subprocess.check_output(
-            ["git", "-C", str(repo_root), "ls-files", "--", WORKTREES_DIR],
-            text=True,
-            stderr=subprocess.DEVNULL,
-        )
-    except (OSError, subprocess.CalledProcessError):
-        # Not a git repo / git error — nothing to report here.
+        listed = tracked_paths(repo_root, pathspecs=[WORKTREES_DIR])
+    except GitCommandError:
+        # Advisory doctor check: not a git repo / git error -- nothing to report here.
         return []
 
-    tracked = [
-        line
-        for line in out.splitlines()
-        if line.strip() and path_is_under_worktrees(Path(line.strip()))
-    ]
+    tracked = [str(path) for path in listed if path_is_under_worktrees(Path(str(path)))]
     if not tracked:
         return [DoctorFinding(
             severity="ok",
@@ -353,11 +346,10 @@ def _coord_worktree_dirty_finding(worktree: Path) -> DoctorFinding | None:
     """Return a finding if the coord worktree has uncommitted changes."""
 
     try:
-        dirty = subprocess.check_output(
-            ["git", "-C", str(worktree), "status", "--porcelain"], text=True,
-        ).strip()
-    except subprocess.CalledProcessError:
-        dirty = ""
+        dirty = status_entries(worktree, untracked=None)
+    except GitCommandError:
+        # Advisory doctor check: an unreadable worktree yields no dirty finding (other checks cover it).
+        dirty = ()
     if not dirty:
         return None
     return DoctorFinding(
@@ -655,6 +647,10 @@ def _coord_branch_stale_vs_target_finding(
     coord_sha = _rev_parse(repo_root, f"refs/heads/{coord_branch}")
     target_sha = _rev_parse(repo_root, f"refs/heads/{target_branch}")
     if not coord_sha or not target_sha or coord_sha == target_sha:
+        return None
+    if _is_ff_candidate(repo_root, target_sha, coord_sha):
+        # Coord branch strictly AHEAD of target: it carries only its own
+        # coordination commits (e.g. the status log a create seeds, #5440).
         return None
     stale = _fast_forward_finding(
         subject_sha=coord_sha, tip_sha=target_sha, repo_root=repo_root,
@@ -965,8 +961,9 @@ def _fix_never_created_branches(
     Targets only ``COORDINATION_WORKTREE_NEVER_CREATED`` findings that carry
     a ``meta_path`` in their ``extra`` dict (populated by
     :func:`_collect_coordination_findings`). After removal, call
-    :func:`~specify_cli.migration.backfill_topology.backfill_topology_repo` so
-    topology is re-derived from the now-absent key.
+    :func:`~specify_cli.migration.backfill_topology.backfill_topology_repo` with
+    ``runtime_reading=True`` so topology is re-stamped with its RUNTIME reading
+    (never a derived ``single_branch``) from the now-absent key.
 
     When *repo_root* is given (the real ``--fix`` dispatch path always passes
     it, via :func:`_apply_never_created_fix`), each finding's coordination
@@ -1004,7 +1001,7 @@ def _fix_never_created_branches(
                 continue
         # Canonical three-mutation flatten (#3219 / FR-015 / D-PLAN-17), converged
         # onto the ONE shared primitive: clears `coordination_branch`, pops the
-        # stale `topology` so `backfill_topology_repo` re-derives it (backfill
+        # stale `topology` so the caller re-stamps it (backfill
         # never overwrites an existing topology, and every mission minted
         # post-#2069 stores `topology` at create time -- leaving it would keep
         # the mission routed through coordination, a false-green flatten), and
@@ -1354,8 +1351,12 @@ def _apply_never_created_fix(findings: list[DoctorFinding], repo_root: Path) -> 
         )
     if fixed_slugs:
         from specify_cli.migration.backfill_topology import backfill_topology_repo
+
+        # runtime_reading (#5100): an unattended --fix must never opt a
+        # flattened mission into single_branch; a derived single_branch cell is
+        # stamped as lanes, which is how the unstamped mission already ran.
         for slug in fixed_slugs:
-            backfill_topology_repo(repo_root, mission_slug=slug)
+            backfill_topology_repo(repo_root, mission_slug=slug, runtime_reading=True)
         console.print(
             "[green]Topology backfilled.[/green] "
             "Run `spec-kitty doctor coordination` to verify."
@@ -1765,6 +1766,8 @@ def _fix_one_mission_coord_staleness(
     coord_branch, target_branch, coord_sha, target_sha = shas
     if coord_sha == target_sha:
         return None  # nothing to fix: already in sync
+    if _is_ff_candidate(repo_root, target_sha, coord_sha):
+        return None  # coord strictly ahead: only its own coordination commits (#5440)
 
     if not _is_ff_candidate(repo_root, coord_sha, target_sha):
         return _coord_staleness_fix_blocked_finding(
@@ -1909,7 +1912,7 @@ def run_coordination_health(
     when the branch is remote-only). It also removes stale ``coordination_branch``
     keys from ``meta.json`` for any ``COORDINATION_WORKTREE_NEVER_CREATED``
     findings, re-runs :func:`~specify_cli.migration.backfill_topology.backfill_topology_repo`
-    to re-derive topology from the now-absent key, then attempts the WP06
+    with ``runtime_reading=True`` (never a derived ``single_branch``), then attempts the WP06
     Gap-1 coord-vs-target fast-forward (:func:`_apply_coord_staleness_fixes`)
     for every coordinated mission. A per-mission unsafe precondition -- a
     diverged coord branch, a dirty coord worktree, a coord worktree that does

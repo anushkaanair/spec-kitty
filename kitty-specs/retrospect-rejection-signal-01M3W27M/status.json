@@ -1,0 +1,70 @@
+{
+  "event_count": 9,
+  "last_event_id": "01M3W56C3BJPREG837W4CAWZ75",
+  "materialized_at": "2026-10-01T16:36:36.587453+00:00",
+  "mission_number": "",
+  "mission_slug": "retrospect-rejection-signal-01M3W27M",
+  "mission_type": "software-dev",
+  "schema_version": 2,
+  "summary": {
+    "approved": 2,
+    "blocked": 0,
+    "canceled": 0,
+    "claimed": 0,
+    "done": 0,
+    "for_review": 0,
+    "in_progress": 0,
+    "in_review": 0,
+    "planned": 0
+  },
+  "work_packages": {
+    "WP01": {
+      "actor": "stijn-dejongh",
+      "agent": "stijn-dejongh",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 3,
+      "lane": "approved",
+      "last_event_id": "01M3W5661PVYQR4MFE3T2CDE6V",
+      "last_transition_at": "2026-10-01T16:36:30.390903+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "Work committed (c0d40911..d6ecec3b); no claim base recorded because implement was blocked by #5550",
+        "Work committed; no claim base recorded because implement was blocked by #5550",
+        "Approved by Stijn (human-in-charge) in the project thread, 2026-10-01T16:35Z: 'Go ahead'"
+      ],
+      "provider": "__resolved_provider_absent__",
+      "role": "reviewer",
+      "subtasks": {
+        "T001": "done",
+        "T002": "done",
+        "T003": "done",
+        "T004": "done",
+        "T005": "done"
+      }
+    },
+    "WP02": {
+      "actor": "stijn-dejongh",
+      "agent": "stijn-dejongh",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 2,
+      "lane": "approved",
+      "last_event_id": "01M3W56C3BJPREG837W4CAWZ75",
+      "last_transition_at": "2026-10-01T16:36:36.587453+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "Work committed (20db55eb..d6ecec3b); no claim base recorded because implement was blocked by #5550",
+        "Approved by Stijn (human-in-charge) in the project thread, 2026-10-01T16:35Z: 'Go ahead'"
+      ],
+      "provider": "__resolved_provider_absent__",
+      "role": "reviewer",
+      "subtasks": {
+        "T006": "done",
+        "T007": "done",
+        "T008": "done",
+        "T009": "done"
+      }
+    }
+  }
+}

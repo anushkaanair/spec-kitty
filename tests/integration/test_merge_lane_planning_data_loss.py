@@ -32,6 +32,7 @@ import contextlib
 import json
 import subprocess
 from kernel.clock import now_utc_iso
+from kernel.git import StatusEntry
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -42,6 +43,7 @@ from specify_cli.cli.commands.consolidate import _run_lane_based_consolidation
 from specify_cli.lanes.models import ExecutionLane, LanesManifest
 from specify_cli.lanes.persistence import write_lanes_json
 from specify_cli.consolidation.config import MergeStrategy
+from tests.lane_test_utils import create_lane_branches
 
 
 pytestmark = [pytest.mark.git_repo, pytest.mark.non_sandbox]
@@ -143,6 +145,9 @@ class TestMergeIncludesPlanningLane:
         _seed_wp_done_raw(feature_dir, slug, ["WP01", "WP02", "WP03", "WP04"])
 
         manifest = _make_manifest_with_planning_and_code(slug)
+        # #5417: code lanes need their created branches (#5338 claim-time
+        # refusal); lane-planning is exempt and resolves to the target.
+        create_lane_branches(tmp_path, manifest)
 
         captured_states: list[list[str]] = []
 
@@ -672,12 +677,12 @@ class TestLegacyPlanningOnlyMetaInvariant:
         classified_lines: list[str] = []
 
         def classify_without_meta_membership(
-            lines: list[str], expected_paths: set[str], **kwargs: object
-        ) -> tuple[list[str], int]:
+            lines: list[StatusEntry], expected_paths: set[str], **kwargs: object
+        ) -> tuple[list[StatusEntry], int]:
             # Drop the F2 membership to recreate the pre-fix expected_paths.
             # Forward any keyword-only args (e.g. ``residue_predicate``) intact so
             # this spy stays signature-agnostic to the production classifier.
-            classified_lines.extend(lines)
+            classified_lines.extend(entry.display() for entry in lines)
             return real_classify(lines, expected_paths - {meta_rel}, **kwargs)
 
         def is_self_bookkeeping_churn_without_meta(path: object) -> bool:

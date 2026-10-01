@@ -48,7 +48,7 @@ def test_skills_installer_includes_block_for_triggers(command: str, trigger_flag
     assert trigger_flag in body
 
 
-@pytest.mark.parametrize("command", ["status", "dashboard", "implement", "review"])
+@pytest.mark.parametrize("command", ["status", "implement", "review"])
 def test_skills_installer_omits_block_for_non_triggers(command: str) -> None:
     body = _skill_body(command)
     assert _BLOCK not in body

@@ -318,6 +318,7 @@ from .views import (
     format_post_mission_events,
 )
 from .review_roles import (
+    is_latest_implementer,
     latest_implementer_actor,
 )
 from .work_package_lifecycle import (
@@ -359,6 +360,15 @@ from .cutover_eligibility import (
     is_cut_over,
 )
 
+# WP03 (mixed-lane-authorship-soundness-01M3M7Y0, FR-001): the lane-head
+# stamp key, re-exported so WP04's consolidation reader resolves it via
+# ``from specify_cli.status import LANE_HEAD_KEY`` -- SR-2
+# (test_status_module_boundary.py) forbids a direct
+# ``specify_cli.status.lane_head`` import outside this package.
+from .lane_head import (
+    LANE_HEAD_KEY,
+)
+
 
 def uninitialized_status_error(mission_slug: str, wp_id: str, feature_dir: Path) -> str:
     """Return the cycle-aware missing-status message without eager dependency-graph imports."""
@@ -379,6 +389,7 @@ def uninitialized_status_error(mission_slug: str, wp_id: str, feature_dir: Path)
 __all__ = [
     "ActiveWPStatus",
     "CutOverVerdict",
+    "LANE_HEAD_KEY",
     # WP05 (verdict-seam-write-unification-01KZ9Q35, out-of-map): promoted onto
     # the facade so every verdict-authority reader (tasks_verdict_persistence,
     # agent_utils.status, tasks_parsing_validation, workflow_cores/executor)
@@ -461,6 +472,7 @@ __all__ = [
     "MissionNotCompletedError",
     "TransitionRequest",
     "GENERIC_IMPLEMENTATION_ACTORS",
+    "is_latest_implementer",
     "latest_implementer_actor",
     "WorkPackageClaimConflict",
     "WorkPackageStartRejected",

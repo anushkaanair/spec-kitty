@@ -134,6 +134,8 @@
           href: how-to/governance/manage-glossary.md
         - name: "Troubleshooting Charter Failures"
           href: how-to/governance/troubleshoot-charter.md
+        - name: "Extend your charter for an unsupported language"
+          href: how-to/governance/extend-charter-for-unsupported-language.md
         - name: "How to Use Retrospective Learning"
           href: how-to/governance/use-retrospective-learning.md
     - name: Parallel & Multi-Agent Work
@@ -157,11 +159,9 @@
           href: how-to/collaboration/adhoc-specialist-session.md
         - name: "Give Feedback on Spec Kitty"
           href: how-to/collaboration/give-feedback.md
-    - name: Dashboard & History
+    - name: Status & History
       href: how-to/monitoring/index.md
       items:
-        - name: "How to Use the Spec Kitty Dashboard"
-          href: how-to/monitoring/use-dashboard.md
         - name: "Use Operation History"
           href: how-to/monitoring/use-operation-history.md
     - name: Recovery & Troubleshooting
@@ -178,8 +178,6 @@
       items:
         - name: "Solo Developer Workflow"
           href: how-to/scenarios/solo-developer-workflow.md
-        - name: "Dashboard-Driven Development"
-          href: how-to/scenarios/dashboard-driven-development.md
         - name: "Agency Client Transparency Workflow"
           href: how-to/scenarios/agency-client-demo.md
         - name: "Parallel Implementation Tracking"

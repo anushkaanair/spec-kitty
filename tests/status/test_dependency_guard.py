@@ -816,10 +816,10 @@ class TestCoordSurfaceResolution:
             surfaces["reduced"] = feature_dir
             return real_reduce(feature_dir)
 
-        def tracking_readiness(planning_dir: Path, wp_id: str, snapshot: Any) -> Any:
+        def tracking_readiness(planning_dir: Path, wp_id: str, snapshot: Any, *, owned: Any = None) -> Any:
             observed.append("readiness")
             surfaces["planning"] = planning_dir
-            return real_readiness(planning_dir, wp_id, snapshot)
+            return real_readiness(planning_dir, wp_id, snapshot, owned=owned)
 
         def counting_read(*args: Any, **kwargs: Any) -> Any:
             observed.append("read_events")
@@ -846,4 +846,4 @@ def test_flat_ad_hoc_directory_keeps_its_declared_dependencies(tmp_path: Path) -
     feature_dir.mkdir()
     _dependent_pair(feature_dir)
     with pytest.raises(TransitionError, match="unsatisfied dependencies"):
-        emit_status_transition(_claim_request(feature_dir, "WP02"), ensure_sync_daemon=False)
+        emit_status_transition(_claim_request(feature_dir, "WP02"))

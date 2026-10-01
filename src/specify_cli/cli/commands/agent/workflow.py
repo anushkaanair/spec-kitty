@@ -24,12 +24,14 @@ readers is no longer restated as a number in this docstring. Live code is the
 authority; this docstring intentionally carries no second frozen count that
 can go stale silently.
 
-Sites in this module that **mention** ``review-cycle-*`` artifacts but do
-**not** mutate the counter or write any artifact:
+Sites in this module and its ``workflow_cores`` / ``workflow_executor``
+helpers that **mention** ``review-cycle-*`` artifacts but do **not** mutate
+the counter or write any artifact:
 
-* ``_resolve_review_feedback_pointer``'s docstring, describing the canonical
-  pointer scheme.
-* ``_has_prior_rejection``, which performs a read-only ``glob`` check.
+* ``workflow_cores.resolve_review_feedback_pointer``'s docstring, describing
+  the canonical pointer scheme.
+* ``workflow_cores.has_prior_rejection``, which performs a read-only ``glob``
+  check.
 * fix-mode prompt rendering, which reads the latest artifact via
   ``ReviewCycleArtifact.from_file`` / ``.latest``; no write.
 * review-prompt rendering, which computes a *placeholder* path
@@ -55,12 +57,8 @@ contract.
 
 from __future__ import annotations
 
-from specify_cli.core.constants import (
-    MISSION_TYPE_RESEARCH,
-)
 import json
 import logging
-import re
 import subprocess
 import contextlib
 from pathlib import Path
@@ -68,6 +66,8 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated
 
 import typer
+
+from kernel.git import GitCommandError, status_entries
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -78,50 +78,30 @@ if TYPE_CHECKING:
     from specify_cli.invocation.record import OpStartedEvent
 
 from charter.activation.context import build_charter_context
-from specify_cli.cli.commands.agent.tasks import _collect_status_artifacts
+from specify_cli.cli.commands._owned_checkout import owned_checkout_option
+from specify_cli.cli.commands.agent.tasks import _collect_status_artifacts  # noqa: F401 -- late-bound via workflow_executor._wf() / patched by tests
 from specify_cli.cli.commands.implement import implement as top_level_implement
 from specify_cli.cli.selector_resolution import resolve_mission_handle
 from specify_cli.coordination.types import CommitReceipt
-from specify_cli.core.dependency_graph import (
-    build_dependency_graph,
-    dependency_readiness_for_wp,
-    get_dependents,
-)
-from specify_cli.core.paths import get_feature_target_branch, get_main_repo_root, is_worktree_context, locate_project_root
-from specify_cli.core.utils import write_text_within_directory
+from specify_cli.core.paths import get_feature_target_branch, get_main_repo_root, is_worktree_context, locate_project_root  # noqa: F401 -- late-bound via workflow_executor._wf() / patched by tests
 from mission_runtime import CommitTarget, MissionArtifactKind, is_primary_artifact_kind, kind_for_mission_file
 from specify_cli.core.commit_guard import GuardCapability
 from specify_cli.git import safe_commit
 from specify_cli.git.commit_helpers import SafeCommitRecoveryFailed
-from specify_cli.mission import get_deliverables_path, get_mission_type
 from specify_cli.mission_metadata import resolve_mission_identity
-from specify_cli.review.prompt_metadata import (
-    build_review_prompt_metadata,
-    validate_review_prompt_metadata,
-    write_review_prompt_with_metadata,
-)
-from specify_cli.review.antipattern_checklist import render_wp_review_antipattern_checklist
 from specify_cli.review.cycle import (
     REVIEW_FEEDBACK_SENTINELS,
     next_review_feedback_source_path,
-    resolve_review_cycle_pointer,
 )
-from specify_cli.status import feature_status_lock
-from specify_cli.status import AgentAssignment, Lane
+from specify_cli.status import feature_status_lock  # noqa: F401 -- late-bound via workflow_executor._wf() / patched by tests
+from specify_cli.status import Lane
 from specify_cli.status import (
     ResolvedBinding,
-    WorkPackageClaimConflict,
-    WorkPackageStartRejected,
     read_wp_frontmatter,
-    start_implementation_status,
-    start_review_status,
 )
 from specify_cli.task_utils import (
-    append_activity_log,
-    build_document,
     extract_scalar,
-    locate_work_package,
-    set_scalar,
+    locate_work_package,  # noqa: F401 -- late-bound via workflow_executor._wf() / patched by tests
     split_frontmatter,
 )
 from specify_cli.workspace.context import (
@@ -130,35 +110,24 @@ from specify_cli.workspace.context import (
     resolve_workspace_for_wp,
 )
 
-# WP02 (coord-authority-trio-degod-01KX7094, T013): bare re-export shims for
-# the god-function pieces moved to workflow_cores.py / workflow_executor.py.
-# NOT added to __all__ (this module defines none, and stays that way) --
-# existing ``from specify_cli.cli.commands.agent.workflow import <name>``
-# imports and ``monkeypatch.setattr(workflow, "<name>", ...)`` call sites
-# resolve identically to before the split.
+# WP02 (coord-authority-trio-degod-01KX7094, T013): pieces of the former god
+# functions now live in workflow_cores.py / workflow_executor.py and are
+# imported from there directly. Only five names are still re-exported here,
+# each marked ``noqa: F401``: ``_collect_status_artifacts``,
+# ``is_worktree_context``, ``feature_status_lock``, ``locate_work_package`` and
+# ``_commit_workflow_change``. workflow_executor reads them late through
+# ``_wf()``, so ``monkeypatch.setattr(workflow, "<name>", ...)`` intercepts
+# them. Everything else is imported frozen by workflow_executor, so patching
+# it on this module would be vacuous: import and patch it at its home module.
 from specify_cli.cli.commands.agent.workflow_cores import (
     ImplementRequest,
     ReviewRequest,
     auto_claim_failure_message as _auto_claim_failure_message,
-    has_prior_rejection as _has_prior_rejection,
-    is_missing_canonical_status_error as _is_missing_canonical_status_error,
-    latest_review_feedback_reference as _latest_review_feedback_reference,
-    missing_canonical_status_message as _missing_canonical_status_message,
     normalize_wp_id as _normalize_wp_id,
-    read_wp_events as _read_wp_events,
-    render_isolation_banner as _render_isolation_banner,
-    render_resolved_agent_identity as _render_resolved_agent_identity,
-    render_wp_prompt_wrapper as _render_wp_prompt_wrapper,
-    resolve_review_feedback_context as _resolve_review_feedback_context,
-    resolve_review_feedback_pointer as _resolve_review_feedback_pointer,
-    review_feedback_root as _review_feedback_root,
-    shared_artifact_guidance as _shared_artifact_guidance,
-    workspace_contract_description as _workspace_contract_description,
 )
 from specify_cli.cli.commands.agent.workflow_executor import (
-    commit_workflow_change as _commit_workflow_change,
+    commit_workflow_change as _commit_workflow_change,  # noqa: F401 -- late-bound via workflow_executor._wf() / patched by tests
     ensure_workspace_materialized as _ensure_workspace_materialized,
-    write_prompt_to_file as _write_prompt_to_file,
 )
 
 # Phase functions the implement()/review()/_resolve_review_context() shells
@@ -798,6 +767,21 @@ def _resolve_legacy_porcelain_root(
         return repo_root
 
 
+def _legacy_paths_already_committed(root: Path, paths: list[Path]) -> bool:
+    """True when git positively reports nothing pending for *paths* in *root*.
+
+    No ``--untracked-files`` flag, as before. Advisory: this pre-check only lets
+    an already-committed state skip the commit; when git cannot answer, report
+    ``False`` so ``safe_commit`` (which guards and reports its own failure)
+    runs, rather than skip a commit or record a receipt for state that never
+    landed.
+    """
+    try:
+        return not status_entries(root, pathspecs=[str(p) for p in paths], untracked=None)
+    except GitCommandError:
+        return False
+
+
 def _commit_via_legacy_safe_commit(
     *,
     repo_root: Path,
@@ -826,16 +810,7 @@ def _commit_via_legacy_safe_commit(
     # ``repo_root`` — a gitignored ``.worktrees/`` status file reads as clean
     # from ``repo_root`` and would trip a phantom "already committed" no-op.
     porcelain_root = _resolve_legacy_porcelain_root(repo_root, mission_slug, mid8)
-    porcelain = subprocess.run(
-        ["git", "status", "--porcelain", "--", *[str(p) for p in paths]],
-        cwd=porcelain_root,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    if porcelain.returncode == 0 and not porcelain.stdout.strip():
+    if _legacy_paths_already_committed(porcelain_root, paths):
         # State already present at HEAD (persisted by the transactional emit).
         _record_receipt(
             target_branch,
@@ -912,6 +887,35 @@ def _render_charter_context(
 
 
 app = typer.Typer(name="action", help="Mission action commands that display prompts and instructions for agents", no_args_is_help=True)
+
+
+def _refuse_owned_action(owned_claim: Path, mission: str | None, *, action: str) -> None:
+    """Refuse ``agent action implement`` / ``review`` under ``--owned-checkout`` (FR-018, US6).
+
+    WP08 owns :func:`refuse_owned_action` and its validation order (a
+    ``--mission`` handle runs full ownership validation first, so an invalid
+    path gets its own FR-020 code before the unconditional
+    ``OWNED_ACTION_UNSUPPORTED`` refusal below it). This helper only locates
+    the repository root, delegates, and renders the typed refusal on stderr
+    -- there is no ``--json`` flag on these commands (NFR-004 carve-out), so
+    ``json_output`` is always ``False``.
+
+    Refused: owned checkouts use ``spec-kitty next --owned-checkout`` and
+    ``spec-kitty agent tasks move-task --owned-checkout`` instead.
+    """
+    from mission_runtime import ActionContextError
+
+    from specify_cli.cli.commands._owned_checkout import emit_owned_refusal, refuse_owned_action, success_false_envelope
+
+    repo_root = locate_project_root()
+    if repo_root is None:
+        print("Error: Could not locate project root")
+        raise typer.Exit(1)
+    repo_root = get_main_repo_root(repo_root)
+    try:
+        refuse_owned_action(repo_root, owned_claim, mission, action=action)
+    except ActionContextError as exc:
+        emit_owned_refusal(exc, json_output=False, envelope=success_false_envelope)
 
 
 def _ensure_target_branch_checked_out(repo_root: Path, mission_slug: str) -> tuple[Path, str]:
@@ -1359,6 +1363,15 @@ def implement(
             help="Suppress the bulk-edit inference warning when spec language resembles a bulk edit but the mission is not one.",
         ),
     ] = False,
+    owned_checkout: Annotated[
+        Path | None,
+        owned_checkout_option(
+            help=(
+                "Not yet supported. Refused: owned checkouts use 'spec-kitty next "
+                "--owned-checkout' and 'spec-kitty agent tasks move-task --owned-checkout' instead."
+            )
+        ),
+    ] = None,
 ) -> None:
     """Display work package prompt with implementation instructions.
 
@@ -1373,6 +1386,11 @@ def implement(
         spec-kitty agent action implement wp01 --agent codex
         spec-kitty agent action implement --agent gemini  # auto-detects first planned WP
     """
+    # WP09 T047 (FR-018, US6): refuse before ANY side effect -- must precede
+    # even the receipt reset and the sparse-checkout preflight below.
+    if owned_checkout is not None:
+        _refuse_owned_action(owned_checkout, mission, action="implement")
+
     # T009: the raw CLI-option surface, unresolved -- threaded through the
     # early preflight phases below instead of five separate positional args.
     request = ImplementRequest(
@@ -1447,7 +1465,7 @@ def implement(
         # checkout the mission does not own. write_intent gates the
         # checkout-identity refusal (pure reads leave it False).
         workspace = resolve_workspace_for_wp(main_repo_root, mission_slug, normalized_wp_id, write_intent=True)
-        status_execution_mode = "direct_repo" if workspace.resolution_kind == "repo_root" else "worktree"
+        status_execution_mode = workspace.status_execution_mode
 
         def _create_workspace() -> None:
             top_level_implement(
@@ -1494,6 +1512,12 @@ def implement(
                 f"established after self-heal for: {', '.join(ancestry.missing_refs)}"
             )
             raise typer.Exit(1)
+        if ancestry.code_lanes_deferred_to is not None:
+            print(
+                "Planning work package: code dependency lanes are not merged into the repository root "
+                f"checkout on the target branch; they reach {ancestry.code_lanes_deferred_to} "
+                "through `spec-kitty consolidate` (#5296)."
+            )
 
         subtask_ids = [str(item) for item in wp_meta.subtasks if isinstance(item, str)]
         subtask_cmd = " ".join(subtask_ids) if subtask_ids else "<subtask-ids>"
@@ -1863,6 +1887,15 @@ def review(
     model: Annotated[str | None, typer.Option("--model", help=_MODEL_OPT_HELP)] = None,
     profile: Annotated[str | None, typer.Option("--profile", help=_PROFILE_OPT_HELP)] = None,
     invocation_id: Annotated[str | None, typer.Option("--invocation-id", help=_INVOCATION_ID_OPT_HELP)] = None,
+    owned_checkout: Annotated[
+        Path | None,
+        owned_checkout_option(
+            help=(
+                "Not yet supported. Refused: owned checkouts use 'spec-kitty next "
+                "--owned-checkout' and 'spec-kitty agent tasks move-task --owned-checkout' instead."
+            )
+        ),
+    ] = None,
 ) -> None:
     """Display work package prompt with review instructions.
 
@@ -1876,6 +1909,11 @@ def review(
         spec-kitty agent action review wp02 --agent codex
         spec-kitty agent action review --agent gemini  # auto-detects first for_review WP
     """
+    # WP09 T047 (FR-018, US6): refuse before ANY side effect -- must precede
+    # even the receipt reset below.
+    if owned_checkout is not None:
+        _refuse_owned_action(owned_checkout, mission, action="review")
+
     # T010: the raw CLI-option surface, unresolved.
     request = ReviewRequest(wp_id=wp_id, mission=mission, agent=agent)
 

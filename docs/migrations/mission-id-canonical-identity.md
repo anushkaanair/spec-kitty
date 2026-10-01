@@ -67,7 +67,6 @@ global invariant can actually be enforced.
 | Lane worktree naming† | `.worktrees/<slug>-lane-<id>` | `.worktrees/<slug>-lane-<id>` (unchanged — see footnote) |
 | Ambiguous selector | Silent first-match fallback | Structured `MISSION_AMBIGUOUS_SELECTOR` error |
 | When `mission_number` is assigned | At mission creation | At merge time, under the merge-state lock |
-| Dashboard scanner key | `mission_slug` | `mission_id` (distinct rows for duplicate prefixes) |
 
 - `mid8` is the first 8 characters of the ULID. It is the short disambiguator
   used in the Mission branch and coordination identifiers.
@@ -262,9 +261,6 @@ the identity directly (see ADR
 
 - You may see both legacy and new Mission branches side-by-side during the
   transition. That is expected.
-- The dashboard scanner keys rows by `mission_id`, so two missions that share
-  a numeric prefix now appear as distinct rows instead of overwriting each
-  other.
 - Existing worktrees for a mission do **not** rename automatically. Lane
   worktrees never need to — they were never keyed on the identity.
 
@@ -313,8 +309,8 @@ after the migration:
    `spec-kitty doctor identity --json` attached.
 
 **Do not** hand-edit `meta.json` to remove `mission_id`. The file is watched
-by the event log and the dashboard scanner, and a missing `mission_id` will
-cause them to classify the mission as legacy and prompt for another
+by the event log, and a missing `mission_id` will
+cause it to classify the mission as legacy and prompt for another
 backfill — at which point the mission will receive a **different** ULID, and
 any event log entries keyed off the original ULID will become orphaned.
 
@@ -324,5 +320,5 @@ any event log entries keyed off the original ULID will become orphaned.
 - [Event Envelope Reference](../api/event-envelope.md) — how `mission_id` flows into the machine contract.
 - [Orchestrator API Reference](../api/orchestrator-api.md) — `--mission` selector semantics.
 - [Execution Lanes](../architecture/execution-lanes.md) — lane branch and worktree naming.
-- [Feature Detection architecture note](https://github.com/spec-kitty/spec-kitty/blob/main/docs/architecture/feature-detection.md) — historical context for the pre-083 selector.
+- [Feature Detection architecture note](https://github.com/spec-kitty/spec-kitty/blob/main/docs/archive/architecture/feature-detection.md) — historical context for the pre-083 selector.
 - [Feature Flag Deprecation](feature-flag-deprecation.md) — the earlier `--feature` → `--mission` migration.

@@ -66,7 +66,7 @@ dependencies = [
     "ruamel.yaml>=0.18.0",
     "pydantic>=2.0",
     "packaging>=23.0",
-    "psutil>=5.9.0",  # Cross-platform process management for dashboard
+    "psutil>=5.9.0",  # Cross-platform process management
     # spec-kitty-events / spec-kitty-tracker: public shared-package
     # dependencies. Their public-surface contracts are pinned in
     # tests/contract/spec_kitty_events_consumer/ and
@@ -103,12 +103,11 @@ test = [
     "pytest-cov>=4.1.0",  # Required by CI coverage flags
     "pytest-timeout>=2.2.0",  # Required by mutmut pytest_add_cli_args --timeout flag
     "pytest-xdist>=3.8.0",  # Parallelize large CI shards with --dist loadfile
-    "pytest-playwright>=0.7.0",  # Headless browser e2e driver for tests/ui/ (issue #1008); Chromium installed via `playwright install chromium`, never committed
     "respx>=0.21.1",  # HTTPX mocking for auth transport tests (feature 080)
     "diff-cover>=10.0.0",  # Enforce changed-line coverage in CI
     "chardet>=3.0.4,<6",  # Pin chardet below 6.x to avoid requests compatibility warning
     "build>=1.0.0",  # Required for distribution tests (wheel building)
-    "hatchling>=1.27.0",  # Already a [build-system] requirement; pinned here so it's importable outside build isolation. (charter-code-topology-01M152G1, S5: its prior sole rationale, tests/doctrine/test_hatch_build.py's in-process BuildHookInterface coverage of the dormant doctrine wheel, was deleted with the dormant spec-kitty-doctrine wheel groundwork per MAP-BUILD -- kept as a lockfile-neutral no-op rather than risk uv.lock drift for a redundant-but-harmless test-extra pin.)
+    "hatchling>=1.27.0",  # Already a [build-system] requirement; pinned here so it's importable outside build isolation. (charter-code-topology-01M152G1, S5: its prior sole rationale, tests/doctrine/test_hatch_build.py's in-process BuildHookInterface coverage of the dormant doctrine wheel, was deleted with the dormant spec-kitty-doctrine wheel groundwork per MAP-BUILD. Kept anyway -- test-suite-remediation-01M3SSDW's WP04 made this pin load-bearing: tests/_support/shared_build_artifacts.py builds with `--no-isolation`, so this pin plus `build` are now the only source of the backend; dropping it would reintroduce an isolated, network-reaching build.)
     "mutmut>=3.5.0",  # Mutation testing
     "pytestarch>=4.0.0",  # Architectural dependency testing (ADR 2026-03-27-1)
 ]
@@ -203,7 +202,7 @@ artifacts = [
 # consumers. Other repo-local packs (e.g. `packs/internal/`, the maintainer-only
 # org-tier pack) must NOT be force-included into the wheel. Guarded by
 # tests/cross_cutting/packaging/test_packaging_safety.py.
-force-include = { "packs/built-in" = "packs/built-in", "src/doctrine.py" = "doctrine.py" }
+force-include = { "packs/built-in" = "packs/built-in" }
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -243,6 +242,11 @@ line-length = 164
 # Formatter-debt ratchet for issue #473. These files were not formatted under
 # the live Ruff config on origin/main; remove entries as files are reformatted.
 # This is formatter-only so `ruff check .` still lints these files.
+# NOTE (#5301): this exclude list is honored only during directory discovery.
+# A path passed explicitly to `ruff format` / `ruff format --check` is still
+# checked/formatted unless `--force-exclude` is given — always use
+# `make format-check-files FILES=...` (or `--force-exclude`) for per-file
+# invocations so ratchet-listed files don't report false "would reformat" hits.
 # Shrink-only ratchet enforced by tests/architectural/test_ruff_format_exclude_ratchet.py
 # (issue #559): the entry count may not exceed the pinned baseline, every entry
 # must exist on disk, and every entry must still genuinely reformat under the
@@ -312,7 +316,6 @@ exclude = [
     "src/charter/activation/_drg_helpers.py",
     "src/charter/activation/action_doctrine_bundle.py",
     "src/charter/activation/action_grain.py",
-    "src/charter/activation/activations.py",
     "src/charter/bundle.py",
     "src/charter/activation/cascade.py",
     "src/charter/activation/catalog.py",
@@ -324,7 +327,6 @@ exclude = [
     "src/charter/activation/context_renderers/catalog_diagnosis.py",
     "src/charter/activation/context_renderers/delivery_table.py",
     "src/charter/activation/context_renderers/profile_sections.py",
-    "src/charter/activation/context_renderers/reference_pointers.py",
     "src/charter/activation/context_renderers/section_bodies.py",
     "src/charter/activation/corpus/__init__.py",
     "src/charter/activation/doctrine_service_builder.py",
@@ -340,9 +342,6 @@ exclude = [
     "src/charter/activation/neutrality/lint.py",
     "src/charter/activation/org_expected_artifacts.py",
     "src/charter/activation/org_extends.py",
-    "src/charter/activation/org_pack_discovery.py",
-    "src/charter/activation/pack_context.py",
-    "src/charter/activation/progressive_disclosure.py",
     "src/charter/activation/reference_resolver.py",
     "src/charter/resolution.py",
     "src/charter/activation/schemas.py",
@@ -371,7 +370,6 @@ exclude = [
     "src/charter/offering/agent_profiles/repository.py",
     "src/charter/offering/agent_profiles/schema_models.py",
     "src/charter/offering/agent_profiles/validation.py",
-    "src/charter/offering/artifact_kinds.py",
     "src/charter/offering/assets/repository.py",
     "src/charter/offering/base.py",
     "src/charter/offering/directives/models.py",
@@ -381,7 +379,6 @@ exclude = [
     "src/charter/offering/drg/migration/extractor.py",
     "src/charter/offering/drg/models.py",
     "src/charter/offering/drg/org_pack_config.py",
-    "src/charter/offering/drg/org_pack_loader.py",
     "src/charter/offering/drg/override_policy.py",
     "src/charter/offering/drg/query.py",
     "src/charter/offering/drg/reachability.py",
@@ -419,14 +416,10 @@ exclude = [
     "src/kernel/env_expand.py",
     "src/kernel/git_topology.py",
     "src/kernel/sibling_paths.py",
-    "src/mission_runtime/__init__.py",
     "src/mission_runtime/artifacts.py",
-    "src/mission_runtime/checkout_identity.py",
-    "src/mission_runtime/context.py",
     "src/mission_runtime/lifecycle_phase.py",
     "src/mission_runtime/read_dir_degrade.py",
     "src/runtime/next/__init__.py",
-    "src/runtime/next/_internal_runtime/contracts.py",
     "src/runtime/next/_internal_runtime/discovery.py",
     "src/runtime/next/_internal_runtime/engine.py",
     "src/runtime/next/_internal_runtime/events.py",
@@ -439,8 +432,6 @@ exclude = [
     "src/runtime/next/_internal_runtime/workflow_schema.py",
     "src/runtime/next/_runtime_pkg_notice.py",
     "src/runtime/next/discovery.py",
-    "src/runtime/next/runtime_bridge_composition.py",
-    "src/runtime/next/runtime_bridge_cores.py",
     "src/runtime/next/runtime_bridge_engine.py",
     "src/runtime/next/runtime_bridge_identity.py",
     "src/runtime/next/runtime_bridge_retrospective.py",
@@ -488,7 +479,6 @@ exclude = [
     "src/specify_cli/cli/commands/_doctrine_collect.py",
     "src/specify_cli/cli/commands/_doctrine_health.py",
     "src/specify_cli/cli/commands/_env_file_doctor.py",
-    "src/specify_cli/cli/commands/_identity_audit.py",
     "src/specify_cli/cli/commands/_mission_type_audit.py",
     "src/specify_cli/cli/commands/_profile_health_render.py",
     "src/specify_cli/cli/commands/_test_env_check.py",
@@ -504,8 +494,6 @@ exclude = [
     "src/specify_cli/cli/commands/agent/tasks.py",
     "src/specify_cli/cli/commands/agent/tasks_command_adapters.py",
     "src/specify_cli/cli/commands/agent/tasks_dependency_graph.py",
-    "src/specify_cli/cli/commands/agent/tasks_map_requirements.py",
-    "src/specify_cli/cli/commands/agent/tasks_mark_status.py",
     "src/specify_cli/cli/commands/agent/tasks_materialization.py",
     "src/specify_cli/cli/commands/agent/tasks_outline.py",
     "src/specify_cli/cli/commands/agent/tasks_shared.py",
@@ -515,7 +503,6 @@ exclude = [
     "src/specify_cli/cli/commands/agent/workflow.py",
     "src/specify_cli/cli/commands/agent/workflow_cores.py",
     "src/specify_cli/cli/commands/agent/workflow_executor.py",
-    "src/specify_cli/cli/commands/agent_retrospect.py",
     "src/specify_cli/cli/commands/archive.py",
     "src/specify_cli/cli/commands/auth.py",
     "src/specify_cli/cli/commands/charter/__init__.py",
@@ -532,7 +519,6 @@ exclude = [
     "src/specify_cli/cli/commands/charter/sync.py",
     "src/specify_cli/cli/commands/charter_bundle.py",
     "src/specify_cli/cli/commands/config_cmd.py",
-    "src/specify_cli/cli/commands/dashboard.py",
     "src/specify_cli/cli/commands/dispatch.py",
     "src/specify_cli/cli/commands/docs.py",
     "src/specify_cli/cli/commands/doctrine.py",
@@ -543,7 +529,6 @@ exclude = [
     "src/specify_cli/cli/commands/lint.py",
     "src/specify_cli/cli/commands/materialize.py",
     "src/specify_cli/cli/commands/migrate/backfill_provenance.py",
-    "src/specify_cli/cli/commands/ops.py",
     "src/specify_cli/cli/commands/plugin.py",
     "src/specify_cli/cli/commands/profile_invocation.py",
     "src/specify_cli/cli/commands/profiles_cmd.py",
@@ -552,7 +537,6 @@ exclude = [
     "src/specify_cli/cli/commands/review/_ble001_audit.py",
     "src/specify_cli/cli/commands/review/_lane_gate.py",
     "src/specify_cli/cli/commands/safe_commit_cmd.py",
-    "src/specify_cli/cli/commands/spec_commit_cmd.py",
     "src/specify_cli/cli/commands/validate_encoding.py",
     "src/specify_cli/cli/commands/validate_tasks.py",
     "src/specify_cli/cli/commands/verify.py",
@@ -569,16 +553,13 @@ exclude = [
     "src/specify_cli/context/store.py",
     "src/specify_cli/contracts/anchoring.py",
     "src/specify_cli/contracts/registry.py",
-    "src/specify_cli/coordination/commit_router.py",
     "src/specify_cli/coordination/legacy_resolution.py",
     "src/specify_cli/coordination/outbound.py",
     "src/specify_cli/coordination/policy.py",
     "src/specify_cli/coordination/status_service.py",
     "src/specify_cli/coordination/teardown.py",
-    "src/specify_cli/coordination/transaction.py",
     "src/specify_cli/coordination/transaction_errors.py",
     "src/specify_cli/coordination/workspace.py",
-    "src/specify_cli/core/checkout_ownership.py",
     "src/specify_cli/core/commit_guard.py",
     "src/specify_cli/core/config.py",
     "src/specify_cli/core/constants.py",
@@ -588,19 +569,9 @@ exclude = [
     "src/specify_cli/core/paths.py",
     "src/specify_cli/core/saas_sync_config.py",
     "src/specify_cli/core/secret_redaction.py",
-    "src/specify_cli/core/stale_detection.py",
     "src/specify_cli/core/subtask_rows.py",
     "src/specify_cli/core/vcs/detection.py",
     "src/specify_cli/core/wps_manifest.py",
-    "src/specify_cli/dashboard/diagnostics.py",
-    "src/specify_cli/dashboard/handlers/base.py",
-    "src/specify_cli/dashboard/handlers/glossary.py",
-    "src/specify_cli/dashboard/handlers/lint.py",
-    "src/specify_cli/dashboard/handlers/router.py",
-    "src/specify_cli/dashboard/handlers/static.py",
-    "src/specify_cli/dashboard/lifecycle.py",
-    "src/specify_cli/dashboard/scanner.py",
-    "src/specify_cli/dashboard/templates/__init__.py",
     "src/specify_cli/decisions/ownership.py",
     "src/specify_cli/decisions/verify.py",
     "src/specify_cli/distribution/simple_index.py",
@@ -618,7 +589,6 @@ exclude = [
     "src/specify_cli/doctrine_synthesizer/apply.py",
     "src/specify_cli/doctrine_synthesizer/conflict.py",
     "src/specify_cli/dossier/__init__.py",
-    "src/specify_cli/dossier/api.py",
     "src/specify_cli/dossier/models.py",
     "src/specify_cli/drg_writers/registry.py",
     "src/specify_cli/events/decision_log.py",
@@ -644,26 +614,20 @@ exclude = [
     "src/specify_cli/lanes/lifecycle_sync.py",
     "src/specify_cli/lanes/recovery.py",
     "src/specify_cli/lanes/stale_check.py",
-    "src/specify_cli/consolidation/bookkeeping_projection.py",
     "src/specify_cli/consolidation/config.py",
     "src/specify_cli/consolidation/conflict_classifier.py",
     "src/specify_cli/consolidation/conflict_resolver.py",
     "src/specify_cli/consolidation/done_bookkeeping.py",
-    "src/specify_cli/consolidation/executor.py",
     "src/specify_cli/consolidation/forecast.py",
-    "src/specify_cli/consolidation/git_probes.py",
     "src/specify_cli/consolidation/push_preflight.py",
     "src/specify_cli/consolidation/workspace.py",
     "src/specify_cli/migration/backfill_identity.py",
     "src/specify_cli/migration/backfill_mission_type.py",
-    "src/specify_cli/migration/backfill_runtime_state.py",
-    "src/specify_cli/migration/backfill_topology.py",
     "src/specify_cli/migration/canonicalization.py",
     "src/specify_cli/migration/normalize_mission_lifecycle.py",
     "src/specify_cli/migration/rebuild_state.py",
     "src/specify_cli/migration/rewrite_opposed_by.py",
     "src/specify_cli/migration/runner.py",
-    "src/specify_cli/migration/runtime_state_cutover.py",
     "src/specify_cli/migration/schema_version.py",
     "src/specify_cli/migration/strip_frontmatter.py",
     "src/specify_cli/migration/verdict_provenance_backfill.py",
@@ -686,12 +650,10 @@ exclude = [
     "src/specify_cli/post_merge/retrospective_terminus.py",
     "src/specify_cli/post_merge/review_artifact_consistency.py",
     "src/specify_cli/post_merge/stale_assertions.py",
-    "src/specify_cli/proof/events.py",
     "src/specify_cli/readiness/coordinator.py",
     "src/specify_cli/readiness/render.py",
     "src/specify_cli/readiness/upgrade_ux.py",
     "src/specify_cli/release/version.py",
-    "src/specify_cli/requirement_mapping.py",
     "src/specify_cli/retrospective/cli.py",
     "src/specify_cli/retrospective/deprecation.py",
     "src/specify_cli/retrospective/events.py",
@@ -728,7 +690,6 @@ exclude = [
     "src/specify_cli/status/identity_audit.py",
     "src/specify_cli/status/lane_reader.py",
     "src/specify_cli/status/migrate_lifecycle_envelope.py",
-    "src/specify_cli/status/models.py",
     "src/specify_cli/status/resolved_binding.py",
     "src/specify_cli/status/uninitialized_hint.py",
     "src/specify_cli/status/validate.py",
@@ -922,7 +883,6 @@ exclude = [
     "tests/architectural/test_bridge_cores_import_boundary.py",
     "tests/architectural/test_charter_facades_reexport_doctrine.py",
     "tests/architectural/test_ci_collection_completeness.py",
-    "tests/architectural/test_ci_corpus_trigger_completeness.py",
     "tests/architectural/test_clock_import_ban.py",
     "tests/architectural/test_compat_shims.py",
     "tests/architectural/test_coord_read_residuals_closeout.py",
@@ -957,7 +917,6 @@ exclude = [
     "tests/architectural/test_merge_reconciliation_class_guard.py",
     "tests/architectural/test_meta_decoder_comparator_singletons.py",
     "tests/architectural/test_migration_chain_integrity.py",
-    "tests/architectural/test_mission_runtime_surface.py",
     "tests/architectural/test_no_absolute_event_timestamp_mixture.py",
     "tests/architectural/test_no_authored_applies_edge.py",
     "tests/architectural/test_no_dead_doctrine_paths.py",
@@ -971,14 +930,12 @@ exclude = [
     "tests/architectural/test_pack_lineage_no_parallel_resolver.py",
     "tests/architectural/test_pack_manifest_no_author_edit.py",
     "tests/architectural/test_protection_resolver_call_sites.py",
-    "tests/architectural/test_read_surface_placement_guard.py",
     "tests/architectural/test_real_home_isolation_guard.py",
     "tests/architectural/test_reference_enum_ratchet.py",
     "tests/architectural/test_resume_non_reemission_guard.py",
     "tests/architectural/test_review_claim_no_frontmatter.py",
     "tests/architectural/test_saas_sync_gate_selection_invariance.py",
     "tests/architectural/test_safe_commit_import_boundary.py",
-    "tests/architectural/test_same_tier_uniqueness.py",
     "tests/architectural/test_session_reaper.py",
     "tests/architectural/test_shim_registry_schema.py",
     "tests/architectural/test_spec_kitty_home_pin_budget.py",
@@ -1004,7 +961,6 @@ exclude = [
     "tests/audit/test_audit_serializer.py",
     "tests/audit/test_detectors.py",
     "tests/audit/test_identity_adapter.py",
-    "tests/audit/test_no_legacy_agent_profiles_path.py",
     "tests/audit/test_shape_registry_writer_parity.py",
     "tests/auth/concurrency/test_incident_regression.py",
     "tests/auth/concurrency/test_machine_refresh_lock.py",
@@ -1012,8 +968,6 @@ exclude = [
     "tests/auth/concurrency/test_single_flight_refresh.py",
     "tests/auth/concurrency/test_stale_grant_preservation.py",
     "tests/auth/integration/test_audit_clirunner.py",
-    "tests/auth/integration/test_browser_login_e2e.py",
-    "tests/auth/integration/test_headless_login_e2e.py",
     "tests/auth/integration/test_logout_e2e.py",
     "tests/auth/integration/test_transport_rewired.py",
     "tests/auth/secure_storage/test_file_fallback_windows_root.py",
@@ -1035,7 +989,6 @@ exclude = [
     "tests/auth/test_session.py",
     "tests/auth/test_spec_kitty_home_paths.py",
     "tests/auth/test_state_manager.py",
-    "tests/auth/test_websocket_provisioning.py",
     "tests/calibration/test_inequality.py",
     "tests/calibration/test_walker.py",
     "tests/characterization/_normalize.py",
@@ -1076,7 +1029,6 @@ exclude = [
     "tests/charter/test_activation_engine_charter_yaml.py",
     "tests/charter/test_activation_identifier_normalization.py",
     "tests/charter/test_activation_vocabulary_setequal.py",
-    "tests/charter/test_activations.py",
     "tests/charter/test_alias_deleted_regression.py",
     "tests/charter/test_bundle_contract.py",
     "tests/charter/test_bundle_manifest_model.py",
@@ -1175,16 +1127,11 @@ exclude = [
     "tests/charter/test_worktree_charter_via_canonical_root.py",
     "tests/ci/test_sonarcloud_branch_review.py",
     "tests/cli/commands/test_agent_config_coverage.py",
-    "tests/cli/commands/test_charter_bundle_coverage.py",
     "tests/cli/commands/test_charter_io.py",
-    "tests/cli/commands/test_charter_orchestration.py",
-    "tests/cli/commands/test_charter_rendering.py",
     "tests/cli/commands/test_doctor_topology.py",
-    "tests/cli/commands/test_implement_base_flag.py",
     "tests/cli/commands/test_intake.py",
     "tests/cli/commands/test_render_fold_not_repairable_3115.py",
     "tests/cli/commands/test_resolve_lanes_dir.py",
-    "tests/cli/commands/test_retrospect.py",
     "tests/cli/commands/test_retrospect_update_persisted.py",
     "tests/cli/test_agent_retrospect_synthesize.py",
     "tests/cli/test_agent_status_messaging.py",
@@ -1192,12 +1139,10 @@ exclude = [
     "tests/cli/test_charter_activate_warning.py",
     "tests/cli/test_charter_mission_type_commands.py",
     "tests/cli/test_doctrine_commands.py",
-    "tests/cli/test_doctrine_org_commands.py",
     "tests/cli/test_implement_bulk_edit_planning.py",
     "tests/cli/test_mission_brief.py",
     "tests/cli/test_mission_type_malformed_yaml_cli_boundary.py",
     "tests/cli_gate/test_ci_determinism.py",
-    "tests/cli_gate/test_dashboard_modes.py",
     "tests/cli_gate/test_doctor_modes.py",
     "tests/cli_gate/test_legacy_version_checker_removed.py",
     "tests/cli_gate/test_nested_safe_commands.py",
@@ -1224,7 +1169,6 @@ exclude = [
     "tests/contract/test_terminology_guards.py",
     "tests/coordination/test_analysis_report_rehome.py",
     "tests/coordination/test_coherence.py",
-    "tests/coordination/test_commit_router.py",
     "tests/coordination/test_commit_router_layering.py",
     "tests/coordination/test_coord_staleness.py",
     "tests/coordination/test_flatten_primitive_single_source.py",
@@ -1235,16 +1179,12 @@ exclude = [
     "tests/coordination/test_verdict_dir_co_resolution.py",
     "tests/coordination/test_write_seam_adoption.py",
     "tests/core/test_adapters.py",
-    "tests/core/test_checkout_ownership.py",
     "tests/core/test_dependency_parser.py",
-    "tests/core/test_loopback_http.py",
     "tests/core/test_mission_create_activation_gate.py",
-    "tests/core/test_mission_create_checkout_restore.py",
     "tests/core/test_mission_creation_identity.py",
     "tests/core/test_paths_coverage_supplements.py",
     "tests/core/test_worktree_symlink_fallback.py",
     "tests/core/test_wps_manifest.py",
-    "tests/cross_cutting/dashboard/test_dashboard_bug_117_lifecycle.py",
     "tests/cross_cutting/encoding/test_encoding_validation_cli.py",
     "tests/cross_cutting/misc/test_plan_validation.py",
     "tests/cross_cutting/misc/test_template_compliance.py",
@@ -1257,7 +1197,6 @@ exclude = [
     "tests/cross_cutting/versioning/test_upgrade_version_update.py",
     "tests/cross_cutting/versioning/test_version_detection.py",
     "tests/cross_cutting/versioning/test_version_fallback.py",
-    "tests/dashboard/test_duplicate_prefix_rendering.py",
     "tests/docs/_publish_manifest_helpers.py",
     "tests/docs/diagram_drift/binding_table.py",
     "tests/docs/diagram_drift/guard.py",
@@ -1273,7 +1212,6 @@ exclude = [
     "tests/docs/test_env_var_scope_warning.py",
     "tests/docs/test_frontmatter_backfill.py",
     "tests/docs/test_glossary_linker.py",
-    "tests/docs/test_migration_manifest_complete.py",
     "tests/docs/test_no_retrospect_preview.py",
     "tests/docs/test_publish_manifest_coherence.py",
     "tests/docs/test_published_pages.py",
@@ -1282,7 +1220,6 @@ exclude = [
     "tests/docs/test_redirect_stub_generator.py",
     "tests/docs/test_sync_changelog.py",
     "tests/docs/test_tracker_egress_upgrade_note_3108.py",
-    "tests/docs/test_workflow_migration_manifest_complete.py",
     "tests/doctor/test_identity_audit.py",
     "tests/doctor/test_shim_registry.py",
     "tests/doctrine/_builtin_inventory.py",
@@ -1377,7 +1314,6 @@ exclude = [
     "tests/doctrine/test_missions_root_packs_env.py",
     "tests/doctrine/test_model_task_routing_evaluator.py",
     "tests/doctrine/test_model_task_routing_parity.py",
-    "tests/doctrine/test_org_pack_augmentation.py",
     "tests/doctrine/test_org_pack_delegation.py",
     "tests/doctrine/test_org_pack_subdir.py",
     "tests/doctrine/test_overlay_precedence.py",
@@ -1427,10 +1363,8 @@ exclude = [
     "tests/doctrine_synthesizer/test_conflict_failclosed.py",
     "tests/doctrine_synthesizer/test_path_traversal_rejection.py",
     "tests/doctrine_synthesizer/test_provenance.py",
-    "tests/dossier/test_api.py",
     "tests/dossier/test_determinism.py",
     "tests/dossier/test_events.py",
-    "tests/dossier/test_http_runtime.py",
     "tests/dossier/test_indexer.py",
     "tests/dossier/test_manifest_guard_parity.py",
     "tests/dossier/test_models.py",
@@ -1438,7 +1372,6 @@ exclude = [
     "tests/dossier/test_reexport_trim.py",
     "tests/dossier/test_snapshot.py",
     "tests/e2e/conftest.py",
-    "tests/e2e/test_cli_smoke.py",
     "tests/e2e/test_mission_create_clean_output.py",
     "tests/e2e/test_upgrade_post_state.py",
     "tests/evidence/test_project_sync_consent_manifest.py",
@@ -1459,7 +1392,6 @@ exclude = [
     "tests/git_ops/test_two_branch_strategy_integration.py",
     "tests/git_ops/test_worktree.py",
     "tests/glossary/bench_chokepoint.py",
-    "tests/glossary/test_canonical_promotion.py",
     "tests/glossary/test_entity_pages.py",
     "tests/glossary/test_events_queue.py",
     "tests/glossary/test_gate_terms.py",
@@ -1519,7 +1451,6 @@ exclude = [
     "tests/integration/test_coord_loop_workspace.py",
     "tests/integration/test_coord_topology_smoke.py",
     "tests/integration/test_custom_mission_runtime_walk.py",
-    "tests/integration/test_dashboard_counters.py",
     "tests/integration/test_deferral_enforcement_and_disclosure.py",
     "tests/integration/test_documentation_runtime_walk.py",
     "tests/integration/test_dossier_snapshot_no_self_block.py",
@@ -1570,7 +1501,6 @@ exclude = [
     "tests/integration/test_review_handoff.py",
     "tests/integration/test_sc008_topology_resolution.py",
     "tests/integration/test_slice_f_cross_axis.py",
-    "tests/integration/test_surface_translation_seam.py",
     "tests/integration/test_three_layer_drg_end_to_end.py",
     "tests/integration/test_token_refresh_dedup.py",
     "tests/integration/test_tool_artifact_owner.py",
@@ -1623,7 +1553,6 @@ exclude = [
     "tests/consolidation/test_executor_coord_reconcile.py",
     "tests/consolidation/test_executor_coverage.py",
     "tests/consolidation/test_executor_option_a_revert_helpers_2711.py",
-    "tests/consolidation/test_executor_phase_boundary.py",
     "tests/consolidation/test_forecast_seam.py",
     "tests/consolidation/test_hollow_review_warnings.py",
     "tests/consolidation/test_issue_2367_bake_strand.py",
@@ -1640,7 +1569,6 @@ exclude = [
     "tests/consolidation/test_merge_target_resolution.py",
     "tests/consolidation/test_merge_time_number_assignment.py",
     "tests/consolidation/test_merge_workspace_unit.py",
-    "tests/consolidation/test_preflight_seam.py",
     "tests/consolidation/test_profile_charter_e2e.py",
     "tests/consolidation/test_push_preflight.py",
     "tests/consolidation/test_resolve_seam.py",
@@ -1649,8 +1577,6 @@ exclude = [
     "tests/migrate/test_charter_encoding_migration.py",
     "tests/migration/test_backfill_identity_cli.py",
     "tests/migration/test_backfill_provenance.py",
-    "tests/migration/test_backfill_topology_cli.py",
-    "tests/migration/test_birth_cutover.py",
     "tests/migration/test_corpus_frontload_idempotent.py",
     "tests/migration/test_mission_handle_matches_meta_contract.py",
     "tests/migration/test_normalize_mission_lifecycle_cli.py",
@@ -1660,15 +1586,12 @@ exclude = [
     "tests/mission_runtime/test_artifact_partition.py",
     "tests/mission_runtime/test_artifact_partition_mapping.py",
     "tests/mission_runtime/test_artifact_surface_backfilled_primary.py",
-    "tests/mission_runtime/test_builder_fs_free_identity.py",
     "tests/mission_runtime/test_context_factory_invariant.py",
     "tests/mission_runtime/test_context_fragments.py",
-    "tests/mission_runtime/test_coord_read_seam.py",
     "tests/mission_runtime/test_create_time_write_target.py",
     "tests/mission_runtime/test_lifecycle_phase.py",
     "tests/mission_runtime/test_placement_seam.py",
     "tests/mission_runtime/test_read_path_create_window_invariant.py",
-    "tests/mission_runtime/test_resolution_typed_errors.py",
     "tests/mission_runtime/test_resolve_context_for_mission_pure.py",
     "tests/mission_runtime/test_resolve_placement_only.py",
     "tests/mission_runtime/test_retrospective_artifact_kind.py",
@@ -1694,9 +1617,7 @@ exclude = [
     "tests/missions/test_write_surface_coherence.py",
     "tests/mocked_env.py",
     "tests/next/test_composition_gate_widening.py",
-    "tests/next/test_decision_unit.py",
     "tests/next/test_internal_runtime_coverage.py",
-    "tests/next/test_internal_runtime_engine_coverage.py",
     "tests/next/test_mission_run_back_reference.py",
     "tests/next/test_next_command_integration.py",
     "tests/next/test_next_replay_parity_integration.py",
@@ -1724,7 +1645,6 @@ exclude = [
     "tests/post_merge/test_stale_assertions_message.py",
     "tests/post_merge/test_stale_assertions_precision.py",
     "tests/prompts/test_prompt_fragment_rendering.py",
-    "tests/proof/test_event_schemas.py",
     "tests/readiness/test_auth_coordinator_matrix.py",
     "tests/readiness/test_auth_renderer.py",
     "tests/readiness/test_coordinator_caching.py",
@@ -1783,12 +1703,7 @@ exclude = [
     "tests/review/test_review_cycle_merge_driver.py",
     "tests/review/test_verdict_seam_reader_collapse.py",
     "tests/reviews/test_review_gate_activation.py",
-    "tests/runtime/_bridge_oracle.py",
     "tests/runtime/test_bootstrap_version_fallback.py",
-    "tests/runtime/test_bridge_composition.py",
-    "tests/runtime/test_bridge_cores.py",
-    "tests/runtime/test_bridge_decide_next.py",
-    "tests/runtime/test_bridge_engine.py",
     "tests/runtime/test_bridge_io.py",
     "tests/runtime/test_bridge_retrospective.py",
     "tests/runtime/test_config_show_origin_integration.py",
@@ -1846,7 +1761,6 @@ exclude = [
     "tests/specify_cli/charter_runtime/test_freshness_activation_visibility.py",
     "tests/specify_cli/charter_runtime/test_preflight_noop_stability.py",
     "tests/specify_cli/charter_runtime/test_preflight_one_pass.py",
-    "tests/specify_cli/charter_runtime/test_references_parity_refresh.py",
     "tests/specify_cli/cli/commands/agent/test_2684_force_provenance.py",
     "tests/specify_cli/cli/commands/agent/test_2959_override_partition.py",
     "tests/specify_cli/cli/commands/agent/test_check_unchecked_subtasks_snapshot_source.py",
@@ -1882,7 +1796,6 @@ exclude = [
     "tests/specify_cli/cli/commands/agent/test_mission_parsing.py",
     "tests/specify_cli/cli/commands/agent/test_mission_planning_entry.py",
     "tests/specify_cli/cli/commands/agent/test_mission_record_analysis.py",
-    "tests/specify_cli/cli/commands/agent/test_mission_setup_plan_phases.py",
     "tests/specify_cli/cli/commands/agent/test_mission_shim_reexports.py",
     "tests/specify_cli/cli/commands/agent/test_move_task_approval_body_collision.py",
     "tests/specify_cli/cli/commands/agent/test_move_task_durability.py",
@@ -1910,14 +1823,12 @@ exclude = [
     "tests/specify_cli/cli/commands/agent/test_tasks_mark_status_seam.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_materialization.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_move_task_authority_staging.py",
-    "tests/specify_cli/cli/commands/agent/test_tasks_move_task_degod.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_move_task_pre_review_baseline_read.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_move_task_pre_review_gate_escape_hatch.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_move_task_seam.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_parsing_validation.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_ports.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_shared_seam.py",
-    "tests/specify_cli/cli/commands/agent/test_tasks_status_cmd_seam.py",
     "tests/specify_cli/cli/commands/agent/test_tasks_status_view.py",
     "tests/specify_cli/cli/commands/agent/test_tests_stale_check.py",
     "tests/specify_cli/cli/commands/agent/test_workflow.py",
@@ -1947,8 +1858,6 @@ exclude = [
     "tests/specify_cli/cli/commands/review/test_lane_gate_no_artifact_rendering.py",
     "tests/specify_cli/cli/commands/review/test_mode_resolution.py",
     "tests/specify_cli/cli/commands/review/test_zero_reference_not_applicable.py",
-    "tests/specify_cli/cli/commands/test_accept_birth_cutover_seam.py",
-    "tests/specify_cli/cli/commands/test_accept_clean_tree.py",
     "tests/specify_cli/cli/commands/test_accept_normalize_encoding.py",
     "tests/specify_cli/cli/commands/test_accept_readiness_no_write.py",
     "tests/specify_cli/cli/commands/test_accept_residual_partition.py",
@@ -1983,7 +1892,6 @@ exclude = [
     "tests/specify_cli/cli/commands/test_env_file_doctor.py",
     "tests/specify_cli/cli/commands/test_finalize_tasks_explicit_empty_owned_files.py",
     "tests/specify_cli/cli/commands/test_help_snapshot.py",
-    "tests/specify_cli/cli/commands/test_identity_audit.py",
     "tests/specify_cli/cli/commands/test_implement.py",
     "tests/specify_cli/cli/commands/test_implement_base_ref.py",
     "tests/specify_cli/cli/commands/test_implement_bookkeeping_identifiers.py",
@@ -2021,9 +1929,7 @@ exclude = [
     "tests/specify_cli/cli/commands/test_mission_state_doctor.py",
     "tests/specify_cli/cli/commands/test_mission_type_rendering.py",
     "tests/specify_cli/cli/commands/test_mission_type_template_set_cli.py",
-    "tests/specify_cli/cli/commands/test_next_answer_effective_root.py",
     "tests/specify_cli/cli/commands/test_next_fail_closed.py",
-    "tests/specify_cli/cli/commands/test_next_owned_commit_guard.py",
     "tests/specify_cli/cli/commands/test_next_typed_error_passthrough.py",
     "tests/specify_cli/cli/commands/test_precondition_ref_unification.py",
     "tests/specify_cli/cli/commands/test_read_cli_surface_adoption.py",
@@ -2077,11 +1983,9 @@ exclude = [
     "tests/specify_cli/coordination/test_legacy_warning_classifier.py",
     "tests/specify_cli/coordination/test_outbound.py",
     "tests/specify_cli/coordination/test_partition_authority_characterization.py",
-    "tests/specify_cli/coordination/test_policy.py",
     "tests/specify_cli/coordination/test_residual_writer_routing.py",
     "tests/specify_cli/coordination/test_simple_case_flat_topology.py",
     "tests/specify_cli/coordination/test_sparse_checkout.py",
-    "tests/specify_cli/coordination/test_status_transition.py",
     "tests/specify_cli/coordination/test_status_transition_adoption.py",
     "tests/specify_cli/coordination/test_status_transition_degrade.py",
     "tests/specify_cli/coordination/test_teardown_seam_persist_before_destroy.py",
@@ -2119,11 +2023,6 @@ exclude = [
     "tests/specify_cli/core/test_worktree.py",
     "tests/specify_cli/core/test_wps_manifest.py",
     "tests/specify_cli/core/test_write_surface_resolver_foundation.py",
-    "tests/specify_cli/dashboard/test_dashboard_csp.py",
-    "tests/specify_cli/dashboard/test_dashboard_wording.py",
-    "tests/specify_cli/dashboard/test_glossary_handler.py",
-    "tests/specify_cli/dashboard/test_lint_tile_handler.py",
-    "tests/specify_cli/dashboard/test_scanner_snapshot_reads.py",
     "tests/specify_cli/decisions/test_emit.py",
     "tests/specify_cli/decisions/test_ownership_3111.py",
     "tests/specify_cli/decisions/test_service_idempotency.py",
@@ -2183,7 +2082,6 @@ exclude = [
     "tests/specify_cli/migration/test_backfill_migration_coexistence.py",
     "tests/specify_cli/migration/test_backfill_mission_type.py",
     "tests/specify_cli/migration/test_backfill_ownership.py",
-    "tests/specify_cli/migration/test_backfill_topology.py",
     "tests/specify_cli/migration/test_backfill_topology_mission_scope.py",
     "tests/specify_cli/migration/test_dogfood_corpus_backfilled.py",
     "tests/specify_cli/migration/test_mission_event_rebuild.py",
@@ -2389,8 +2287,6 @@ exclude = [
     "tests/status/test_agent_status_emit_cli.py",
     "tests/status/test_aggregate_coord_deleted_contract.py",
     "tests/status/test_aggregate_surface_resolution.py",
-    "tests/status/test_bootstrap.py",
-    "tests/status/test_dashboard_status_parity.py",
     "tests/status/test_derived_view_slug_traversal.py",
     "tests/status/test_doctor_husks.py",
     "tests/status/test_doctor_uninitialized.py",
@@ -2429,18 +2325,6 @@ exclude = [
     "tests/tasks/test_pre_commit_wp_guard_unit.py",
     "tests/tasks/test_tasks_2x_unit.py",
     "tests/tasks/test_tasks_support.py",
-    "tests/test_dashboard/__init__.py",
-    "tests/test_dashboard/test_api_charter.py",
-    "tests/test_dashboard/test_api_handler.py",
-    "tests/test_dashboard/test_charter_chokepoint_regression.py",
-    "tests/test_dashboard/test_dashboard_preflight.py",
-    "tests/test_dashboard/test_diagnostics.py",
-    "tests/test_dashboard/test_imports.py",
-    "tests/test_dashboard/test_lifecycle.py",
-    "tests/test_dashboard/test_scanner.py",
-    "tests/test_dashboard/test_scanner_mission_id.py",
-    "tests/test_dashboard/test_static.py",
-    "tests/test_dashboard/test_templates.py",
     "tests/test_frontmatter_dup_key.py",
     "tests/test_isolation_helpers.py",
     "tests/test_template/test_asset_generator.py",
@@ -2705,7 +2589,7 @@ follow_imports = "normal"
 # core.errors defines the StructuredError base every typed error family
 # subclasses; under the ``specify_cli.*`` skip above it resolves as ``Any`` and
 # every subclass declaration reads "Class cannot subclass StructuredError (has
-# type Any)" (e.g. dashboard/server.py's PortUnavailableError and friends).
+# type Any)".
 # It imports only ``typing``, so following it cannot drag bootstrap errors
 # into a narrow check — same shape as the protection_policy entry (issue
 # #3719), and it must likewise stay after the ``specify_cli.*`` skip.
@@ -2722,6 +2606,27 @@ follow_imports = "normal"
 # as the core.errors entry above (issue #3719), and it must likewise stay
 # after the ``specify_cli.*`` skip.
 module = ["specify_cli.auth.errors"]
+follow_imports = "normal"
+
+[[tool.mypy.overrides]]
+# requirement_mapping.grammar is the single requirement-ID grammar authority
+# (C-001); its concrete ``RequirementId | None`` / ``str`` / ``list[...]``
+# return types are needed by requirement_mapping/lint.py's setup-plan lint
+# (WP05, requirement-id-grammar-01M3NRCA). Under the ``specify_cli.*`` skip
+# above every attribute of the module (functions, patterns, the ``RULE_TEXT``
+# constant) resolves as ``Any``, so a narrow ``mypy --strict`` check on
+# lint.py reports "Returning Any from function declared to return str" even
+# though grammar.py itself is strict-clean in isolation. It imports only
+# ``dataclasses``, ``typing`` and ``kernel._safe_re``, so following it cannot
+# drag bootstrap errors into a narrow check — same shape/precedent as the
+# core.errors/auth.errors entries above (issue #3719); must stay after the
+# ``specify_cli.*`` skip. Scoped to the grammar module only:
+# ``specify_cli.requirement_mapping`` (the package's own ``__init__.py``) is
+# NOT included here — it does function-local imports of
+# ``specify_cli.frontmatter`` (see ``read_all_wp_raw_requirement_refs``), so
+# following it normally would risk dragging non-grammar modules into a
+# narrow strict check.
+module = ["specify_cli.requirement_mapping.grammar"]
 follow_imports = "normal"
 
 [[tool.mypy.overrides]]
@@ -2795,13 +2700,6 @@ module = [
     "specify_cli.cli.ui",
     "specify_cli.core.context_validation",
     "specify_cli.core.mission_detection",
-    "specify_cli.dashboard.diagnostics",
-    "specify_cli.dashboard.handlers.api",
-    "specify_cli.dashboard.handlers.base",
-    "specify_cli.dashboard.handlers.mission_runs",
-    "specify_cli.dashboard.lifecycle",
-    "specify_cli.dashboard.scanner",
-    "specify_cli.dossier.api",
     "specify_cli.dossier.indexer",
     "specify_cli.dossier.manifest",
     "specify_cli.dossier.models",
@@ -2851,10 +2749,10 @@ dev = [
     # with `--extra test`; the dev group IS installed by a plain `uv sync`, so
     # declare it here too.
     "pytest-xdist>=3.8.0",
-    # `make test-full`'s serial passes (Makefile:60,62) pass `--timeout=240
-    # --timeout-method=signal`, which needs the pytest-timeout plugin. Same
-    # reasoning as pytest-xdist above: it lives in the `test` extra, but the
-    # dev group IS installed by a plain `uv sync`, so declare it here too.
+    # pytest.ini's single per-test timeout authority (`timeout = 240`, #3143)
+    # needs the pytest-timeout plugin. Same reasoning as pytest-xdist above: it
+    # lives in the `test` extra, but the dev group IS installed by a plain
+    # `uv sync`, so declare it here too.
     "pytest-timeout>=2.2.0",
     # The architectural suite (`tests/architectural/`) imports `pytestarch`.
     # `make test-fast` / `make test-full` run `uv run --frozen pytest`, which in
@@ -2865,7 +2763,17 @@ dev = [
     # (#5160 friction 2). Keep the pin equal to the `test` extra to avoid uv.lock
     # drift.
     "pytestarch>=4.0.0",
+    # Docs spelling check (`python -m scripts.docs.check_spelling`, issue #5426). The pin is
+    # exact on purpose: dictionary content is behavior, so a new codespell release must not
+    # be able to turn CI red. Bump it deliberately, together with the docs it newly flags.
+    "codespell==2.4.3",
 ]
+
+[tool.codespell]
+# Scope roots and pass-specific flags live in scripts/docs/check_spelling.py;
+# this table owns only the dictionary behavior shared by every pass.
+skip = "*docs/archive,*docs/archive/*,*docs/reports,*docs/reports/*,*docs/plans,*docs/plans/*,*docs/api/cli-commands.md,*.yaml,*.yml,*.json,*.jsonl,*.pdf,*.png,*.webp,*.jpeg,*.jpg,*.svg,*.css,*.js,*.html"
+ignore-words-list = "accreting,disjointness,pre-empt,pre-empts,pre-emptively,re-declared,trough,unparseable"
 
 [tool.mutmut]
 paths_to_mutate = [
@@ -2913,7 +2821,6 @@ pytest_add_cli_args = [
     "--ignore=tests/release/",
     "--ignore=tests/architecture/",
     "--ignore=tests/docs/",
-    "--ignore=tests/test_dashboard/",
     # The three entries below are mutmut-sandbox-only workarounds. This entire list lives in
     # [tool.mutmut] pytest_add_cli_args, which is passed exclusively when mutmut forks pytest —
     # plain `pytest` invocations are unaffected and will still collect these directories.
@@ -2934,7 +2841,6 @@ also_copy = [
 
     ".pytest_cache/spec-kitty-test-venv/",  # Pre-seeded venv so test_venv fixture skips rebuild
     "src/specify_cli/*.py",  # Copy all top-level modules (frontmatter, etc.)
-    "src/doctrine.py",       # CR-06 deprecation shim re-exporting charter.offering
     "src/kernel/",           # Copy kernel package for shared utilities
     "src/charter/",          # Copy charter package (nests the relocated doctrine offering)
     "src/specify_cli/status/",  # Copy status module for status transitions
@@ -2952,7 +2858,6 @@ also_copy = [
     "src/specify_cli/tracker/",  # Copy tracker
     "src/specify_cli/events/",  # Copy events
     "src/specify_cli/dossier/",  # Copy dossier
-    "src/specify_cli/dashboard/",  # Copy dashboard
     "src/specify_cli/orchestrator_api/",  # Copy orchestrator API
     "src/specify_cli/templates/",  # Copy templates
     "src/specify_cli/mission_v1/",  # Copy mission v1

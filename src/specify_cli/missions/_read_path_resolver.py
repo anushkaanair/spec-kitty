@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING
 from mission_runtime import MissionArtifactKind
 
 if TYPE_CHECKING:
-    from mission_runtime import MissionResolver, MissionTopology
+    from mission_runtime import MissionResolver, MissionTopology, OwnedCheckout
 
 
 STATUS_READ_PATH_NOT_FOUND_CODE = "STATUS_READ_PATH_NOT_FOUND"
@@ -129,13 +129,7 @@ def stored_topology_from_meta(meta: Mapping[str, object]) -> MissionTopology | N
     """
     from mission_runtime import MissionTopology
 
-    raw = meta.get("topology")
-    if not isinstance(raw, str):
-        return None
-    try:
-        return MissionTopology(raw)
-    except ValueError:
-        return None
+    return MissionTopology.from_stored(meta.get("topology"))
 
 
 def classify_from_meta(
@@ -173,7 +167,7 @@ def classify_from_meta(
     touches no disk. The lanes axis never changes the coord-routing answer, so a
     corrupt ``lanes.json`` degrades to "no lanes" rather than failing the read.
     """
-    from specify_cli.migration.backfill_topology import _derive_topology
+    from specify_cli.migration.backfill_topology import topology_from_meta
 
     stored = stored_topology_from_meta(meta)
     if stored is not None:
@@ -184,16 +178,16 @@ def classify_from_meta(
         # to the caller's historical probe-based husk derivation (C-004 / FR-003).
         return None
     # Absent ``topology`` field in a READABLE meta (un-backfilled legacy / flattened):
-    # classify ONCE via WP01's single authority from the in-hand meta + the disk lanes
-    # signal. ``_derive_topology`` reads ``coordination_branch`` from ``meta`` and
-    # probes ``lanes.json`` under ``feature_dir`` — the SAME derivation
-    # ``read_topology`` uses, kept pure (no write) here at the read boundary.
+    # classify ONCE from the in-hand meta + the disk lanes signal through
+    # ``topology_from_meta`` — the SAME runtime derivation ``read_topology`` uses
+    # (never a derived ``single_branch``, #5100 FR-013), kept pure (no write) here
+    # at the read boundary.
     #
-    # ``_derive_topology`` is typed -> MissionTopology, but mypy widens it to ``Any``
+    # ``topology_from_meta`` is typed -> MissionTopology, but mypy widens it to ``Any``
     # through the late-import chain (``follow_imports=skip`` on ``specify_cli.*``);
     # bind explicitly so the return narrows back (the same pattern as
     # ``_compose_mission_dir``'s cast in this module).
-    derived: MissionTopology = _derive_topology(dict(meta), feature_dir)
+    derived: MissionTopology = topology_from_meta(meta, feature_dir)
     return derived
 
 
@@ -1482,7 +1476,7 @@ def resolve_subtasks_gate_dir(
     repo_root: Path | None,
     mission_slug: str,
     *,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
 ) -> Path:
     """Resolve the PRIMARY mission dir the subtask-completeness gate reads ``tasks.md`` from.
 
@@ -1510,6 +1504,9 @@ def resolve_subtasks_gate_dir(
     3. When neither yields a root (``WorkspaceRootNotFound`` — e.g. a bare
        ``tmp_path`` fixture with no git ancestry), ``feature_dir`` is returned
        unchanged, preserving pre-existing non-repo test behavior.
+
+    ``owned`` (the validated owned checkout, when present) makes the answer
+    the owned checkout's own ``TASKS_INDEX`` directory.
     """
     primary_root = repo_root
     if primary_root is None:
@@ -1517,12 +1514,12 @@ def resolve_subtasks_gate_dir(
             primary_root = resolve_canonical_root(feature_dir)
         except WorkspaceRootNotFound:
             return feature_dir
-    if effective_root is not None:
+    if owned is not None:
         from mission_runtime import placement_seam
 
-        return placement_seam(
-            primary_root, mission_slug, effective_root=effective_root
-        ).read_dir(MissionArtifactKind.TASKS_INDEX)
+        return placement_seam(primary_root, mission_slug, owned=owned).read_dir(
+            MissionArtifactKind.TASKS_INDEX
+        )
     # resolve_planning_read_dir is defined in this same module, so its
     # declared `-> Path` return type is visible to mypy directly (no
     # follow_imports=skip boundary crossed here) — a cast was redundant

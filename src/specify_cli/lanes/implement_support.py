@@ -14,7 +14,8 @@ from pathlib import Path
 
 from kernel.clock import now_utc_iso
 from mission_runtime import MissionArtifactKind, placement_seam
-from specify_cli.ownership.models import WorkProductKind
+from specify_cli.core.errors import StructuredError
+from specify_cli.core.git_ops import get_current_branch
 from specify_cli.lanes.lane_env import lane_test_env
 from specify_cli.lanes.models import ExecutionLane, LanesManifest
 from specify_cli.lanes.branch_naming import lane_branch_name, worktree_dir_name as _worktree_dir_name
@@ -26,10 +27,165 @@ from specify_cli.lanes.worktree_allocator import (
     ORPHANED_PIN_RECOVERY_HINT,
     _read_coordination_branch,
     allocate_lane_worktree,
+    persist_lane_context,
     predict_lane_worktree,
 )
 from specify_cli.workspace.context import ResolvedWorkspace
-from specify_cli.workspace.context import WorkspaceContext, save_context
+from specify_cli.workspace.context import WorkspaceContext
+
+
+class WriteCheckoutWrongBranchError(StructuredError):
+    """The repo-root write checkout's HEAD is not the WP's expected branch (#5100 T018)."""
+
+    error_code: str = "WRITE_CHECKOUT_WRONG_BRANCH"
+
+
+class WriteCheckoutOccupiedError(StructuredError):
+    """Another WP is already ``in_progress`` in this single_branch write checkout (#5100 T018)."""
+
+    error_code: str = "WRITE_CHECKOUT_OCCUPIED"
+
+
+class WriteCheckoutDirtyError(StructuredError):
+    """The repo-root write checkout has uncommitted changes outside spec-kitty's own paths (#5100 T018)."""
+
+    error_code: str = "WRITE_CHECKOUT_DIRTY"
+
+
+def _owned_status_prefixes(mission_slug: str) -> tuple[str, ...]:
+    """Spec-kitty-owned path prefixes to exclude from the dirty-checkout scan.
+
+    A single_branch mission's status log and snapshot live on the PRIMARY
+    partition (no coordination worktree), and ``.kittify/`` holds spec-kitty's
+    own runtime/workspace state -- neither is the operator's own uncommitted
+    work. ``meta.json`` is included too: ``implement`` itself writes to it
+    earlier in the SAME call (``_ensure_vcs_in_meta`` locks the VCS backend
+    on a mission's first claim) -- without this, that self-inflicted write
+    would make every first-ever single_branch claim refuse itself as
+    "dirty".
+    """
+    return (
+        f"kitty-specs/{mission_slug}/status.events.jsonl",
+        f"kitty-specs/{mission_slug}/status.json",
+        f"kitty-specs/{mission_slug}/meta.json",
+        ".kittify/",
+    )
+
+
+def _is_single_branch_mission(repo_root: Path, mission_slug: str) -> bool:
+    """Return whether *mission_slug*'s STORED topology is ``single_branch``.
+
+    #5100 WP04 cycle-2 fix (review issue 1): a planning_artifact WP of EVERY
+    topology resolves to the same ``lane-planning`` repo-root lane
+    (``is_repo_root_lane``), so gating the write-checkout refusals on the
+    LANE alone fired them for lanes/coord missions too -- breaking the
+    ordinary "dirty while planning" case those topologies have always
+    allowed. ``contracts/single-branch-execution.md`` scopes "Implement:
+    refusals" to single_branch missions only; this is the topology gate that
+    enforces that scope. Uses the canonical stored-topology read
+    (:func:`mission_runtime.resolve_topology`), never re-derived here.
+    """
+    from mission_runtime import is_single_branch, resolve_topology
+
+    return is_single_branch(resolve_topology(repo_root, mission_slug))
+
+
+def _ensure_repo_root_checkout_available(
+    repo_root: Path,
+    mission_slug: str,
+    wp_id: str,
+    resolved_workspace: ResolvedWorkspace,
+    *,
+    occupancy_verified: bool = False,
+) -> bool:
+    """Enforce the repo-root-lane refusal order (contract order 2-4, #5100 T018).
+
+    Refusal 1 (unmigrated) is NOT checked here: it never reaches this arm.
+    An unmigrated single_branch mission's WPs are still assigned to CODE
+    lanes in ``lanes.json`` (the re-stamp migration has not run), so
+    :func:`~specify_cli.lanes.compute.is_repo_root_lane` never routes them to
+    this repo-root arm in the first place -- they resolve through the
+    ordinary code-lane path unchanged (contracts/single-branch-execution.md).
+
+    Scoped to single_branch missions ONLY (cycle-2 fix, review issue 1): a
+    planning_artifact WP of a lanes/coord mission ALSO resolves to the
+    repo-root ``lane-planning`` lane, but that mission's repo-root checkout
+    is the ordinary shared planning root, not the single_branch write
+    checkout this refusal order protects -- a dirty planning root or a
+    non-target HEAD there is normal and must stay allowed. A no-op (returns
+    immediately) for every other topology.
+
+    Order (single_branch only):
+      2. Wrong branch -- refuses unconditionally (no resume exemption).
+      3. Occupied -- another WP (any single_branch mission) ``in_progress``
+         in this checkout. ``exclude`` already drops this WP's own entry, so
+         resuming itself is structurally never "another WP". The scan reads
+         every candidate mission's status log, so a caller that already ran
+         it earlier in the SAME ``implement`` call passes
+         ``occupancy_verified=True`` to skip the repeat (the claim that
+         would change the answer only lands after allocation).
+      4. Dirty -- skipped when THIS wp_id is itself already ``in_progress``
+         (a genuine resume; the checkout is expected to carry its own
+         uncommitted work).
+
+    Returns:
+        ``True`` when the occupancy scan ran (or was already verified) for
+        this call, so the caller can thread it into a later repeat check;
+        ``False`` when the mission is not single_branch and nothing was checked.
+    """
+    if not _is_single_branch_mission(repo_root, mission_slug):
+        return False
+
+    from specify_cli.lanes.checkout_occupancy import dirty_paths, in_progress_wps_in_write_checkout
+    from specify_cli.status import Lane
+    from specify_cli.status import get_wp_lane, has_event_log
+
+    write_checkout = resolved_workspace.worktree_path
+    expected_branch = resolved_workspace.branch_name
+    if expected_branch is None:
+        # A planning_artifact WP resolves no branch expectation of its own (its
+        # repo root is the ordinary planning root in every other topology), but
+        # in a single_branch mission it shares THIS write checkout and must
+        # sit on the mission's write branch just like a code WP -- take it from
+        # the same single rule, regardless of WP kind.
+        from mission_runtime import resolve_single_branch_write_ref
+        from specify_cli.core.paths import get_feature_target_branch
+
+        expected_branch = resolve_single_branch_write_ref(repo_root, mission_slug, get_feature_target_branch(repo_root, mission_slug))
+    current_branch = get_current_branch(write_checkout)
+    if current_branch != expected_branch:
+        raise WriteCheckoutWrongBranchError(
+            f"The write checkout at {write_checkout} is on branch "
+            f"{current_branch!r}, but {mission_slug} {wp_id} expects "
+            f"{expected_branch!r}. Check out {expected_branch!r} in "
+            f"{write_checkout} before retrying."
+        )
+
+    occupants = [] if occupancy_verified else in_progress_wps_in_write_checkout(repo_root, write_checkout, exclude=(mission_slug, wp_id))
+    if occupants:
+        other_mission, other_wp = occupants[0]
+        raise WriteCheckoutOccupiedError(
+            f"{other_mission} {other_wp} is already in_progress in the shared "
+            f"write checkout at {write_checkout}. Move {other_wp} out of "
+            f"in_progress (approve, reject, or block it) before claiming "
+            f"{mission_slug} {wp_id}."
+        )
+
+    status_feature_dir = placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.STATUS_STATE)
+    # has_event_log guard: a caller reaching this arm before the event log
+    # is bootstrapped (e.g. a direct unit-level call to this function,
+    # bypassing implement's own earlier ``_ensure_wp_claim_preconditions``
+    # seeded-WP check) has, by construction, no recorded claim -- never a
+    # resume.
+    is_resume = has_event_log(status_feature_dir) and get_wp_lane(status_feature_dir, wp_id) == Lane.IN_PROGRESS
+    if not is_resume:
+        dirty = dirty_paths(write_checkout, owned_prefixes=_owned_status_prefixes(mission_slug))
+        if dirty:
+            listed = ", ".join(dirty)
+            raise WriteCheckoutDirtyError(
+                f"The write checkout at {write_checkout} has uncommitted changes: {listed}. Commit or stash them before claiming {mission_slug} {wp_id}."
+            )
+    return True
 
 
 @dataclass
@@ -98,7 +254,7 @@ def refresh_reused_lane_context(
     existing_ctx.wp_id = wp_id
     existing_ctx.current_wp = wp_id
     existing_ctx.dependencies = declared_deps
-    save_context(repo_root, existing_ctx)
+    persist_lane_context(repo_root, existing_ctx)
     return True
 
 
@@ -112,6 +268,7 @@ def create_lane_workspace(
     declared_deps: list[str],
     vcs_backend_value: str,
     base: str | None = None,
+    occupancy_verified: bool = False,
 ) -> LaneWorkspaceResult:
     """Create or reuse the execution workspace for the given WP.
 
@@ -129,11 +286,31 @@ def create_lane_workspace(
         vcs_backend_value: VCS backend value string (e.g., "git").
         base: Explicit ``--base`` ref, threaded into allocation and recorded
             as the honored base for fresh lane provenance.
+        occupancy_verified: The caller already ran the write-checkout
+            occupancy scan earlier in this same call (``implement``'s early
+            refusal), so the repo-root arm skips repeating that full-repo
+            scan; wrong-branch and dirty checks still repeat (cheap).
 
     Returns:
         LaneWorkspaceResult with workspace info.
     """
-    if resolved_workspace.execution_mode == WorkProductKind.PLANNING_ARTIFACT:
+    from specify_cli.lanes.compute import is_repo_root_lane
+
+    if is_repo_root_lane(resolved_workspace):
+        # Repo-root lane: the WP executes directly in the write checkout
+        # (``repo_root``), with no worktree of its own. Keyed on the LANE,
+        # not the WP kind (T009): WP05 routes single_branch code WPs through
+        # this same arm. #5100 T018: enforce the write-checkout refusal
+        # order (wrong branch / occupied / dirty) BEFORE recording the claim
+        # base, so a refusal never leaves a stray claim-base ref behind.
+        _ensure_repo_root_checkout_available(repo_root, mission_slug, wp_id, resolved_workspace, occupancy_verified=occupancy_verified)
+
+        # Record the claim base ONCE (idempotent-by-absence) so the
+        # for_review gate has a starting point to diff against (WP02/T007,
+        # contracts/single-branch-execution.md "Claim base and for_review").
+        from specify_cli.lanes.claim_base import record_claim_base
+
+        record_claim_base(repo_root, repo_root, mission_slug, wp_id)
         return LaneWorkspaceResult(
             workspace_path=resolved_workspace.worktree_path,
             branch_name=resolved_workspace.branch_name,
@@ -178,6 +355,9 @@ def create_lane_workspace(
     from specify_cli.policy.hook_installer import install_commit_guard
 
     hook_guard_record = install_commit_guard(workspace_path, repo_root)
+    # #5115/WP07: the lane-tip recorder is installed inside
+    # ``allocate_lane_worktree`` itself (worktree_allocator.py), the single
+    # choke point every route/caller passes through -- not duplicated here.
     # #4895: a foreign (non-spec-kitty) pre-existing hook was backed up
     # before being overwritten -- surface the sidecar path in `implement`'s
     # output so the operator can recover it, instead of leaving the
@@ -256,7 +436,7 @@ def create_lane_workspace(
             current_wp=wp_id,
             lane_test_env=persisted_lane_test_env,
         )
-        save_context(repo_root, context)
+        persist_lane_context(repo_root, context)
 
     return LaneWorkspaceResult(
         workspace_path=workspace_path,
@@ -371,8 +551,9 @@ def reenter_lane_self_heal(
         # the fully approved tips required by the existing claim predicate.
         approved = _approved_dependency_lane_refs(main_repo_root, mission_slug, status_dir, lane, manifest)
         lane = replace(lane, depends_on_lanes=tuple(dep_id for dep_id, _ref in approved))
+        branch: str | None = None
     else:
-        workspace_path, _branch = predict_lane_worktree(main_repo_root, mission_slug, lane.lane_id)
+        workspace_path, branch = predict_lane_worktree(main_repo_root, mission_slug, lane.lane_id)
     if not workspace_path.exists():
         return None
     # #4827/WP03/T014: thread the target-branch tip through the shared merge
@@ -382,6 +563,13 @@ def reenter_lane_self_heal(
     target_tip = capture_branch_tip(main_repo_root, manifest.target_branch)
     _merge_recorded_planning_commit(main_repo_root, workspace_path, lane.lane_id, manifest.planning_commit_sha, target_tip)
     _merge_dependency_lane_tips(main_repo_root, workspace_path, mission_slug, lane, manifest)
+    if branch is not None:
+        # #5115/WP07 (FR-018): a CODE lane self-heal re-entry (never the
+        # planning lane, which has no ``-lane-``-matching branch of its own
+        # to record a tip for) refreshes its tip too.
+        from specify_cli.lanes.lane_tip import record_tip
+
+        record_tip(main_repo_root, branch)
     return workspace_path
 
 
@@ -394,10 +582,16 @@ class AncestryCheckResult:
     dependency lane's tip -- is a git ancestor of the workspace HEAD.
     ``missing_refs`` names what is not yet an ancestor, for the caller's
     refusal message; empty when ``ok`` is True.
+
+    ``code_lanes_deferred_to`` is the target branch when the #5296 waiver
+    applied (a planning-lane claim on the target-branch root checkout): the
+    caller that owns console output tells the operator that code lanes reach
+    that branch through ``spec-kitty consolidate``. ``None`` otherwise.
     """
 
     ok: bool
     missing_refs: tuple[str, ...] = ()
+    code_lanes_deferred_to: str | None = None
 
 
 def _workspace_head(workspace_path: Path) -> str | None:
@@ -441,6 +635,29 @@ def _dependency_lane_status(mission_dir: Path) -> dict[str, str]:
     return {wp_id: str(state.get("lane", Lane.PLANNED)) for wp_id, state in snapshot.work_packages.items()}
 
 
+def _root_checkout_is_target(main_repo_root: Path, lanes_manifest: LanesManifest) -> bool:
+    """``True`` iff the repository root checkout's HEAD is the mission target branch.
+
+    Detached HEAD or an unresolvable HEAD is ``False`` (the waiver never fires).
+    """
+    result = subprocess.run(
+        ["git", "symbolic-ref", "--short", "-q", "HEAD"],
+        cwd=str(main_repo_root),
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return False
+    return bool(result.stdout.strip() == lanes_manifest.target_branch)
+
+
+def _planning_claim_waives_code_lanes(main_repo_root: Path, lane: ExecutionLane, lanes_manifest: LanesManifest) -> bool:
+    """``True`` for the #5296 waiver scope: planning lane AND root checkout on the target."""
+    from specify_cli.lanes.compute import is_planning_lane
+
+    return is_planning_lane(lane) and _root_checkout_is_target(main_repo_root, lanes_manifest)
+
+
 def _approved_dependency_lane_refs(
     main_repo_root: Path,
     mission_slug: str,
@@ -463,8 +680,23 @@ def _approved_dependency_lane_refs(
     A dependency lane whose branch does not resolve (merged-and-deleted
     post-mission, mirroring ``_merge_dependency_lane_tips``'s own skip) is
     likewise omitted -- there is nothing left to assert ancestry against.
+
+    #5296 waiver (the ONLY place it lives): a claim of the canonical planning
+    lane (:func:`is_planning_lane`) whose repository root checkout HEAD is the
+    mission's target branch requires NO code-lane ancestry -- this returns
+    ``[]``. The planning lane's workspace IS that root checkout, so merging
+    code dependency lanes into it would land code on the target (or die with
+    ``ProtectedBranchCommitError`` on a protected target) outside
+    ``spec-kitty consolidate``'s attribution window; code lanes reach the
+    target only through consolidation. Every dependency lane of the planning
+    lane other than itself is a code lane, so nothing narrower is needed. A
+    planning lane with the root on any OTHER branch, and every code lane,
+    are unchanged.
     """
     from specify_cli.status import Lane
+
+    if _planning_claim_waives_code_lanes(main_repo_root, lane, lanes_manifest):
+        return []
 
     dependency_lanes = _dependency_lane_status(mission_dir)
     by_id = {dep_lane.lane_id: dep_lane for dep_lane in lanes_manifest.lanes}
@@ -477,7 +709,7 @@ def _approved_dependency_lane_refs(
         all_approved = all(dependency_lanes.get(wp_id) in (Lane.APPROVED, Lane.DONE) for wp_id in dep_lane.wp_ids)
         if not all_approved:
             continue
-        branch = lane_branch_name(mission_slug, dep_id)
+        branch = lane_branch_name(mission_slug, dep_id, target_branch=lanes_manifest.target_branch)
         if not branch_exists(main_repo_root, branch):
             continue
         refs.append((dep_id, branch))
@@ -559,7 +791,8 @@ def check_claim_ancestry(
         if not _is_git_ancestor(workspace_path, branch, head):
             missing.append(f"approved dependency lane {dep_id} ({branch})")
 
-    return AncestryCheckResult(ok=not missing, missing_refs=tuple(missing))
+    deferred = manifest.target_branch if _planning_claim_waives_code_lanes(main_repo_root, lane, manifest) else None
+    return AncestryCheckResult(ok=not missing, missing_refs=tuple(missing), code_lanes_deferred_to=deferred)
 
 
 def resolve_claim_ancestry_gate(

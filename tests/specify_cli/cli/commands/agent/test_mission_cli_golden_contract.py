@@ -116,6 +116,8 @@ _EXPECTED_FLAGS: dict[str, frozenset[str]] = {
             "--retain-worktrees",  # added for the #3131 merge-retention opt-in (2026-09-02)
             "--allow-duplicate",  # added for the #4033 idempotency-guard escape hatch (2026-09-14)
             "--allow-dup",  # alias for --allow-duplicate (#4033)
+            "--commit-to-target",  # added for the #5100 single_branch protected-target opt-out (2026-09-29)
+            "--no-commit-to-target",  # negation of --commit-to-target (#5100)
         }
     ),
     "check-prerequisites": frozenset(
@@ -132,7 +134,9 @@ _EXPECTED_FLAGS: dict[str, frozenset[str]] = {
     # Explicit opt-in added by analysis-report-transaction-01M38YDX; the
     # default broad dirty-tree guard remains the contract below.
     "record-analysis": frozenset({"--mission", "--input-file", "--agent", "--json", "--report-only"}),
-    "setup-plan": frozenset({"--mission", "--json"}),
+    # `--owned-checkout` added by owned-checkout-lifecycle-authority WP09
+    # (2026-09-29, FR-005): an owned mission can be planned entirely in P.
+    "setup-plan": frozenset({"--mission", "--json", "--owned-checkout"}),
     # `--merge-commit` added for the #4231 PR-merge baseline recording passthrough (2026-09-13);
     # `--target-branch` added in the same issue's fix round for the PR-base-branch landing check (2026-09-14);
     # `--attest-first-landing-commit` added in fix round 4 — every landing shape needs the

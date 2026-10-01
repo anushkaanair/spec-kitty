@@ -28,7 +28,6 @@ Terminology note:
 ## Practical Usage
 
 - [Install Spec Kitty](../guides/how-to/installation/install-spec-kitty.md)
-- [Use the Dashboard](../guides/how-to/monitoring/use-dashboard.md)
 - [Upgrade to 0.11.0](../guides/how-to/installation/install-and-upgrade.md)
 
 ## Command Internals
@@ -89,10 +88,15 @@ For non-obvious runtime behaviour an operator may encounter:
 │                                                        validating.           │
 │                                                        [default:             │
 │                                                        no-normalize-encodin… │
-│ --owned-checkout                                 PATH  Explicit owned        │
-│                                                        checkout for a        │
-│                                                        single-branch         │
-│                                                        mission.              │
+│ --owned-checkout                                 PATH  Run against an owned  │
+│                                                        checkout: a linked    │
+│                                                        checkout that owns    │
+│                                                        this mission. Refuses │
+│                                                        the repository root   │
+│                                                        checkout, lane        │
+│                                                        worktrees and         │
+│                                                        coordination          │
+│                                                        worktrees.            │
 │ --merge-commit                                   SHA   With --mode pr:       │
 │                                                        record this PR merge  │
 │                                                        commit as the         │
@@ -1329,6 +1333,32 @@ _Charter pack management commands._
 │                                                            mission still     │
 │                                                            refuses before    │
 │                                                            any mutation.     │
+│ --attest-cancele…                         TEXT             Operator          │
+│                                                            attestation       │
+│                                                            (repeatable, one  │
+│                                                            WP id each): the  │
+│                                                            named canceled    │
+│                                                            WP's content is   │
+│                                                            absent or         │
+│                                                            superseded,       │
+│                                                            verified by hand. │
+│                                                            Lifts a           │
+│                                                            mixed-lane REFUSE │
+│                                                            whose attribution │
+│                                                            evidence can      │
+│                                                            never appear      │
+│                                                            later; never      │
+│                                                            lifts a FAIL.     │
+│                                                            Requires          │
+│                                                            --attest-reason;  │
+│                                                            recorded durably  │
+│                                                            in the status     │
+│                                                            event log.        │
+│ --attest-reason                           TEXT             What you checked, │
+│                                                            recorded with     │
+│                                                            --attest-cancele… │
+│                                                            (required with    │
+│                                                            it).              │
 │ --help             -h                                      Show this message │
 │                                                            and exit.         │
 ╰──────────────────────────────────────────────────────────────────────────────╯
@@ -1498,27 +1528,6 @@ _Diff-scoped fail-closed cut-over gate (pre-merge required check)._
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
-## spec-kitty dashboard
-
-```
- Usage: spec-kitty dashboard [OPTIONS]
-
- Open or stop the Spec Kitty dashboard.
-
-╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --port          INTEGER  Preferred port for the dashboard (falls back to the │
-│                          first available port).                              │
-│ --kill                   Stop the running dashboard for this project and     │
-│                          clear its metadata.                                 │
-│ --open                   Open dashboard URL in your default browser          │
-│                          (disabled by default).                              │
-│ --json                   Print the mission registry as JSON (keyed by        │
-│                          mission_id) and exit. Does not start the dashboard  │
-│                          server.                                             │
-│ --help  -h               Show this message and exit.                         │
-╰──────────────────────────────────────────────────────────────────────────────╯
-```
-
 ## spec-kitty dispatch
 
 _Dispatch a request to a governed Op (canonical surface)._
@@ -1604,6 +1613,8 @@ _Project health diagnostics_
 │                         (presence/tier/ignore).                              │
 │ provenance              Flag committed absolute built-in-pack leaks and      │
 │                         ambiguous template sources (C-PRV-5).                │
+│ run-index               Flag absolute run_dir paths in the run index that    │
+│                         break on copy/move (#5390).                          │
 │ command-files           Check all agent command files for correctness.       │
 │ skills                  Check command-skill manifest drift for Codex, Vibe,  │
 │                         Pi, and Letta.                                       │
@@ -2130,6 +2141,27 @@ _Project health diagnostics_
 │                          slug)                                               │
 │ --json                   Machine-readable JSON output                        │
 │ --help     -h            Show this message and exit.                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+```
+
+## spec-kitty doctor run-index
+
+```
+ Usage: spec-kitty doctor run-index [OPTIONS]
+
+ Flag absolute run_dir paths in the run index that break on copy/move (#5390).
+
+ Scans .kittify/runtime/feature-runs.json for run_dir values stored as
+ absolute paths (nonportable — a copied or moved project resolves the
+ original folder's cursor). Read-only; heal with ``spec-kitty migrate``.
+
+ Examples:
+     spec-kitty doctor run-index
+     spec-kitty doctor run-index --json
+
+╭─ Options ────────────────────────────────────────────────────────────────────╮
+│ --json            Machine-readable JSON output                               │
+│ --help  -h        Show this message and exit.                                │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -3651,13 +3683,24 @@ _Migration commands: update .kittify/ layout and backfill identity fields in leg
 
      spec-kitty migrate backfill-topology
 
+     spec-kitty migrate backfill-topology --restamp-single-branch --dry-run
+
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
-│ --json                   Emit per-mission result list as structured JSON     │
-│ --dry-run                Report what would change without writing any files. │
-│                          The JSON shape is identical to a live run.          │
-│ --mission          SLUG  Scope to a single mission slug (e.g. 083-foo-bar).  │
-│                          Omit to process all.                                │
-│ --help     -h            Show this message and exit.                         │
+│ --json                                 Emit per-mission result list as       │
+│                                        structured JSON                       │
+│ --dry-run                              Report what would change without      │
+│                                        writing any files. The JSON shape is  │
+│                                        identical to a live run.              │
+│ --mission                        SLUG  Scope to a single mission slug (e.g.  │
+│                                        083-foo-bar). Omit to process all.    │
+│ --restamp-single-branch                Re-stamp every single_branch mission  │
+│                                        whose lanes.json has a code lane to   │
+│                                        topology: lanes (Invariant T-1        │
+│                                        repair, #5100). Mutually exclusive    │
+│                                        with the ordinary backfill this       │
+│                                        command otherwise runs; combine with  │
+│                                        --dry-run to preview.                 │
+│ --help                   -h            Show this message and exit.           │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -4605,8 +4648,10 @@ _Turn live drain ON for one scope. Live drain (moments/presence/capability/relay
 │ --json                          Output JSON decision only                    │
 │ --answer                  TEXT  Answer to a pending decision                 │
 │ --decision-id             TEXT  Decision ID (required if multiple pending)   │
-│ --owned-checkout          PATH  Explicit checkout root owned by this         │
-│                                 invocation                                   │
+│ --owned-checkout          PATH  Run against an owned checkout: a linked      │
+│                                 checkout that owns this mission. Refuses the │
+│                                 repository root checkout, lane worktrees and │
+│                                 coordination worktrees.                      │
 │ --help            -h            Show this message and exit.                  │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -5685,7 +5730,10 @@ _Emit the open-Ops reminder for the Claude Code Stop hook._
 │                                    post-commit ff-advance (WP09 / FR-010).   │
 │                                    Optional.                                 │
 │    --json                          Output JSON.                              │
-│    --owned-checkout          PATH  Explicit single-branch checkout root.     │
+│    --owned-checkout          PATH  Run against an owned checkout: a linked   │
+│                                    checkout that owns this mission. Refuses  │
+│                                    the repository root checkout, lane        │
+│                                    worktrees and coordination worktrees.     │
 │    --help            -h            Show this message and exit.               │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```
@@ -5714,12 +5762,15 @@ _Emit the open-Ops reminder for the Claude Code Stop hook._
 │                                                   branch-flat shapes         │
 │                                                   (single_branch, lanes) do  │
 │                                                   not. Default:              │
-│                                                   context-derived (#2581) —  │
-│                                                   coord on the primary       │
-│                                                   branch or with --pr-bound, │
-│                                                   single_branch on a         │
-│                                                   non-primary feature        │
-│                                                   branch.                    │
+│                                                   context-derived (#2581,    │
+│                                                   #2602) — coord on the      │
+│                                                   primary branch or with     │
+│                                                   --pr-bound when            │
+│                                                   coordination is reachable; │
+│                                                   lanes otherwise.           │
+│                                                   single_branch only when    │
+│                                                   requested explicitly (or   │
+│                                                   via --owned-checkout).     │
 │ --json                                            Emit JSON result           │
 │ --help          -h                                Show this message and      │
 │                                                   exit.                      │
@@ -6189,7 +6240,7 @@ _Tracker synchronization commands_
 │ --check-files                Check mission file integrity [default: True]    │
 │ --check-tools                Check for installed development tools           │
 │                              [default: True]                                 │
-│ --diagnostics                Show detailed diagnostics with dashboard health │
+│ --diagnostics                Show detailed project diagnostics               │
 │ --help         -h            Show this message and exit.                     │
 ╰──────────────────────────────────────────────────────────────────────────────╯
 ```

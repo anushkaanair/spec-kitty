@@ -252,28 +252,6 @@ class VerdictRevertCompoundFailure(RuntimeError):
         super().__init__(message)
 
 
-def _resolve_verdict_commit_router(
-    st: _MoveTaskState, ports: TasksPorts
-) -> tuple[CoordCommitRouter | None, str | None]:
-    """Resolve the review-cycle artifact's ``commit_router`` + skip reason.
-
-    T050: mirrors ``tasks_move_task.py``'s own status-event gate EXACTLY
-    (``if st.resolved_auto_commit and not st.skip_target_branch_commit:`` at
-    ``tasks_move_task.py:346``, threaded via ``tasks_transition_core.py``'s
-    analogous ``if not req.skip_target_branch_commit:`` / ``if req.auto_commit
-    and not req.skip_target_branch_commit and req.protected_error:`` guards at
-    lines 317/344) so the review-cycle-artifact commit never attempts a
-    protected-branch write the status-event commit already declined. Returns
-    ``(commit_router, skip_reason)`` -- ``skip_reason is None`` iff the write
-    will be durable.
-    """
-    if not st.resolved_auto_commit:
-        return None, _DURABILITY_REASON_NO_AUTO_COMMIT
-    if st.skip_target_branch_commit:
-        return None, _DURABILITY_REASON_PROTECTED_TARGET_BRANCH
-    return ports.coord, None
-
-
 def _resolve_revert_commit_worktree(
     st: _MoveTaskState, *, target_ref: str, original_path: Path,
 ) -> tuple[Path, Path | None]:
@@ -305,7 +283,7 @@ def _resolve_revert_commit_worktree(
     the primary-copy check in the caller).
     """
     if st.owned is not None:
-        return st.owned.root, original_path
+        return st.owned.owned_root, original_path
     if target_ref == st.target_branch:
         return st.main_repo_root, original_path
 
@@ -346,7 +324,7 @@ def revert_committed_verdict_write(
     if not signal.durably_persisted or signal.artifact_path is None:
         return
     try:
-        queue_root = st.owned.root if st.owned is not None else st.main_repo_root
+        queue_root = st.owned.owned_root if st.owned is not None else st.main_repo_root
         with acquire_verdict_save_queue(queue_root):
             _revert_committed_verdict_write_held(st, signal)
     except VerdictSaveBusy as exc:
@@ -436,7 +414,7 @@ def _revert_committed_verdict_write_held(
     target = placement_seam(
         st.main_repo_root,
         st.mission_slug,
-        effective_root=st.owned.root if st.owned else None,
+        owned=st.owned,
     ).write_target(kind=MissionArtifactKind.REVIEW_CYCLE)
     worktree_root, commit_path = _resolve_revert_commit_worktree(
         st, target_ref=target.ref, original_path=original_path
@@ -445,12 +423,13 @@ def _revert_committed_verdict_write_held(
         return  # coord-staged copy already reverted (or never landed) -- idempotent no-op
     try:
         safe_commit(
-            repo_root=st.owned.root if st.owned is not None else st.main_repo_root,
+            repo_root=st.owned.owned_root if st.owned is not None else st.main_repo_root,
             worktree_root=worktree_root,
             target=target,
             message=message,
             paths=(commit_path,),
             capability=GuardCapability.STANDARD,
+            owned=st.owned,
         )
     except Exception as commit_error:
         raise VerdictRevertError(
@@ -543,7 +522,7 @@ def _persist_review_cycle_with_queue(
         ):
             review_cycle = create(None if st.skip_target_branch_commit else ports.coord)
         else:
-            queue_root = st.owned.root if st.owned is not None else st.main_repo_root
+            queue_root = st.owned.owned_root if st.owned is not None else st.main_repo_root
             with acquire_verdict_save_queue(queue_root):
                 review_cycle = create(None if st.skip_target_branch_commit else ports.coord)
     except VerdictSaveBusy as exc:
@@ -908,7 +887,7 @@ def _persist_approved_review_cycle(
             verdict="approved",
             commit_router=commit_router,
             reproduction_command=reproduction_command,
-            effective_root=st.owned.root if st.owned else None,
+            owned=st.owned,
         )
 
     durability_signal = _persist_review_cycle_with_queue(st, ports, _create)
@@ -945,7 +924,7 @@ def persist_rejected_review_cycle_for_rollback(
             feedback_source=st.resolved_feedback_source,
             reviewer_agent=st.agent or "unknown",
             commit_router=commit_router,
-            effective_root=st.owned.root if st.owned else None,
+            owned=st.owned,
         )
 
     durability_signal = _persist_review_cycle_with_queue(st, ports, _create)

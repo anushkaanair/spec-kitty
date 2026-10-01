@@ -79,9 +79,7 @@ def test_scope_to_mission_matches_existing_state(tmp_path: Path) -> None:
     assert [s.slug for s in result] == ["083-a"]
 
 
-def test_scope_to_mission_unmatched_resolves_existing_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scope_to_mission_unmatched_resolves_existing_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # When the slug is not in all_states but a matching dir exists, the mission
     # is classified directly. Stub the resolver + classifier to the dir.
     target = tmp_path / "kitty-specs" / "084-b"
@@ -95,9 +93,7 @@ def test_scope_to_mission_unmatched_resolves_existing_dir(
     assert [s.slug for s in result] == ["084-b"]
 
 
-def test_scope_to_mission_unmatched_missing_dir(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_scope_to_mission_unmatched_missing_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Resolver yields a non-existent path → no scoped states.
     _stub_placement_seam(monkeypatch, tmp_path / "nope")
     states = [_state("083-a", "assigned")]
@@ -159,9 +155,7 @@ def test_print_identity_human_full(capsys: pytest.CaptureFixture[str]) -> None:
         "legacy_paths": ["kitty-specs/083-a"],
         "orphan_paths": ["kitty-specs/084-b"],
     }
-    ia._print_identity_human(
-        states, {}, {}, summary, {"legacy"}, True, "legacy"
-    )
+    ia._print_identity_human(states, {}, {}, summary, {"legacy"}, True, "legacy")
 
 
 # --- _read_stored_topology ---------------------------------------------------
@@ -176,9 +170,7 @@ def test_read_stored_topology_missing_meta(tmp_path: Path) -> None:
 def test_read_stored_topology_valid(tmp_path: Path) -> None:
     d = tmp_path / "083-a"
     d.mkdir()
-    (d / "meta.json").write_text(
-        json.dumps({"topology": "lanes", "flattened": True}), encoding="utf-8"
-    )
+    (d / "meta.json").write_text(json.dumps({"topology": "lanes", "flattened": True}), encoding="utf-8")
     row = ia._read_stored_topology(d)
     assert row["topology"] == "lanes"
     assert row["flattened"] is True
@@ -200,6 +192,144 @@ def test_read_stored_topology_non_object(tmp_path: Path) -> None:
     (d / "meta.json").write_text("[1, 2, 3]", encoding="utf-8")
     row = ia._read_stored_topology(d)
     assert "corrupt json" in (row["error"] or "")
+
+
+def _write_lanes(feature_dir: Path, lanes: list[dict[str, object]]) -> None:
+    manifest = {
+        "version": 1,
+        "mission_slug": feature_dir.name,
+        "mission_branch": f"kitty/mission-{feature_dir.name}",
+        "target_branch": "main",
+        "lanes": lanes,
+        "computed_at": "2026-09-28T00:00:00+00:00",
+        "computed_from": "dependency_graph+ownership",
+    }
+    (feature_dir / "lanes.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+# --- T014 (#5100 IC-02): SINGLE_BRANCH_CODE_LANES_UNMIGRATED finding --------
+
+
+def test_read_stored_topology_flags_single_branch_with_code_lane(tmp_path: Path) -> None:
+    """Positive: single_branch + a code lane in lanes.json flags the finding."""
+    d = tmp_path / "083-a"
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"topology": "single_branch"}), encoding="utf-8")
+    _write_lanes(d, [{"lane_id": "lane-a", "wp_ids": ["WP01"]}])
+
+    row = ia._read_stored_topology(d)
+
+    assert row["finding"] == "SINGLE_BRANCH_CODE_LANES_UNMIGRATED"
+
+
+def test_read_stored_topology_clean_single_branch_has_no_finding(tmp_path: Path) -> None:
+    """Negative control: single_branch + only lane-planning -> no finding."""
+    d = tmp_path / "083-a"
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"topology": "single_branch"}), encoding="utf-8")
+    _write_lanes(d, [{"lane_id": "lane-planning", "wp_ids": ["WP01"]}])
+
+    row = ia._read_stored_topology(d)
+
+    assert row["finding"] is None
+
+
+def test_read_stored_topology_single_branch_no_lanes_json_has_no_finding(tmp_path: Path) -> None:
+    """Negative control: single_branch with no lanes.json at all -> no finding."""
+    d = tmp_path / "083-a"
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"topology": "single_branch"}), encoding="utf-8")
+
+    row = ia._read_stored_topology(d)
+
+    assert row["finding"] is None
+
+
+def test_read_stored_topology_non_single_branch_topology_has_no_finding(tmp_path: Path) -> None:
+    """A ``lanes`` (or any non-single_branch) mission is never flagged, even with code lanes."""
+    d = tmp_path / "083-a"
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"topology": "lanes"}), encoding="utf-8")
+    _write_lanes(d, [{"lane_id": "lane-a", "wp_ids": ["WP01"]}])
+
+    row = ia._read_stored_topology(d)
+
+    assert row["finding"] is None
+
+
+def _write_legacy_feature_slug_lanes(feature_dir: Path) -> None:
+    """A legacy manifest keyed ``feature_slug`` (no ``mission_slug``), one code lane.
+
+    Mirrors ``064-complete-mission-identity-cutover``'s real on-disk shape --
+    ``read_lanes_json`` rejects it with ``CorruptLanesError``.
+    """
+    manifest = {
+        "version": 1,
+        "feature_slug": feature_dir.name,
+        "mission_id": feature_dir.name,
+        "mission_branch": f"kitty/mission-{feature_dir.name}",
+        "target_branch": "main",
+        "lanes": [{"lane_id": "lane-a", "wp_ids": [f"WP{n:02d}" for n in range(1, 10)]}],
+        "computed_at": "2026-04-06T00:00:00+00:00",
+        "computed_from": "dependency_graph+ownership",
+    }
+    (feature_dir / "lanes.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_read_stored_topology_unreadable_lanes_flags_lanes_manifest_unreadable(tmp_path: Path) -> None:
+    """Review cycle-1 blocker: an unreadable lanes.json is NEVER reported as clean.
+
+    A stored single_branch mission whose lanes.json exists but the canonical
+    reader rejects it (the 064 repro) must surface a distinct, non-None
+    finding -- never fold silently into "no finding", which would let a
+    genuine Invariant T-1 violation report as clean.
+    """
+    d = tmp_path / "064-complete-mission-identity-cutover"
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"topology": "single_branch"}), encoding="utf-8")
+    _write_legacy_feature_slug_lanes(d)
+
+    row = ia._read_stored_topology(d)
+
+    assert row["finding"] == "LANES_MANIFEST_UNREADABLE"
+    assert row["finding"] != "SINGLE_BRANCH_CODE_LANES_UNMIGRATED"
+
+
+# --- Operator decision (PR #5398 handoff): doctor skips TERMINAL (archived) --
+# missions. A completed single_branch + code-lane mission is never run again, so
+# reporting SINGLE_BRANCH_CODE_LANES_UNMIGRATED on it is pointless churn on a
+# frozen dossier. The skip keys on the same canonical completion predicate
+# (:func:`specify_cli.status.lifecycle.is_mission_completed`) the re-stamp
+# migration uses, so the finding and the migration's selection never drift
+# apart. A LIVE mission is still flagged -- the guard still applies to it.
+
+
+def test_read_stored_topology_archived_single_branch_code_lane_has_no_finding(tmp_path: Path) -> None:
+    """A completed (merged) single_branch + code-lane mission produces no finding."""
+    d = tmp_path / "archived-sb"
+    d.mkdir()
+    (d / "meta.json").write_text(
+        json.dumps({"topology": "single_branch", "merged_at": "2026-09-25T14:19:52.098680+00:00"}),
+        encoding="utf-8",
+    )
+    _write_lanes(d, [{"lane_id": "lane-a", "wp_ids": ["WP01"]}])
+
+    row = ia._read_stored_topology(d)
+
+    assert row["finding"] is None
+    assert row["remedy"] is None
+
+
+def test_read_stored_topology_live_single_branch_code_lane_still_flags(tmp_path: Path) -> None:
+    """Twin control: a LIVE (un-merged, non-terminal) mission is still flagged."""
+    d = tmp_path / "live-sb"
+    d.mkdir()
+    (d / "meta.json").write_text(json.dumps({"topology": "single_branch"}), encoding="utf-8")
+    _write_lanes(d, [{"lane_id": "lane-a", "wp_ids": ["WP01"]}])
+
+    row = ia._read_stored_topology(d)
+
+    assert row["finding"] == "SINGLE_BRANCH_CODE_LANES_UNMIGRATED"
 
 
 # --- _collect_topology_rows --------------------------------------------------
@@ -231,9 +361,7 @@ def test_print_topology_human_smoke() -> None:
 # --- entrypoints: exit-code contract -----------------------------------------
 
 
-def test_run_identity_audit_mission_not_found(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_identity_audit_mission_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import specify_cli.status as status_mod
 
     monkeypatch.setattr(status_mod, "audit_repo", lambda *_a: [])
@@ -244,9 +372,7 @@ def test_run_identity_audit_mission_not_found(
     assert exc.value.exit_code == 1
 
 
-def test_run_identity_audit_json_fail_on_exits_1(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_identity_audit_json_fail_on_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import specify_cli.status as status_mod
 
     states = [_state("083-a", "legacy")]
@@ -259,9 +385,7 @@ def test_run_identity_audit_json_fail_on_exits_1(
     assert exc.value.exit_code == 1
 
 
-def test_run_identity_audit_human_clean_exits_0(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_identity_audit_human_clean_exits_0(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import specify_cli.status as status_mod
 
     states = [_state("083-a", "assigned")]
@@ -278,9 +402,7 @@ def test_run_identity_audit_human_clean_exits_0(
     assert exc.value.exit_code == 0
 
 
-def test_run_topology_audit_not_found(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_run_topology_audit_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "kitty-specs").mkdir()
     # Resolver yields a non-existent dir → no rows → exit(1).
     _stub_placement_seam(monkeypatch, tmp_path / "nope")
@@ -306,6 +428,66 @@ def test_run_topology_audit_human(tmp_path: Path) -> None:
     d.mkdir()
     (d / "meta.json").write_text(json.dumps({"topology": "lanes"}), encoding="utf-8")
     ia.run_topology_audit(tmp_path, False, None)
+
+
+def _seed_topology_mission(root: Path, slug: str, *, lanes: list[dict[str, object]] | None, legacy: bool = False) -> None:
+    d = root / "kitty-specs" / slug
+    d.mkdir(parents=True)
+    (d / "meta.json").write_text(json.dumps({"topology": "single_branch"}), encoding="utf-8")
+    if legacy:
+        _write_legacy_feature_slug_lanes(d)
+    elif lanes is not None:
+        _write_lanes(d, lanes)
+
+
+_RESTAMP_REMEDY = "spec-kitty migrate backfill-topology --restamp-single-branch"
+# Probed end to end in a clone: `finalize-tasks` REFUSES a corrupt lanes.json, so the
+# honest remedy is restore-from-git, or delete + rebuild (finalize-tasks before any
+# WP starts; `doctor mission-state --fix` once execution has begun).
+_UNREADABLE_RESTORE = "git checkout <ref> -- kitty-specs/084-b/lanes.json"
+_UNREADABLE_REBUILD_PLANNED = "spec-kitty agent mission finalize-tasks"
+_UNREADABLE_REBUILD_STARTED = "spec-kitty doctor mission-state --fix --mission 084-b"
+
+
+def test_run_topology_audit_json_carries_remedy(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """FR-015: each finding row carries its remedy; a clean mission carries none."""
+    _seed_topology_mission(tmp_path, "083-a", lanes=[{"lane_id": "lane-a", "wp_ids": ["WP01"]}])
+    _seed_topology_mission(tmp_path, "084-b", lanes=None, legacy=True)
+    _seed_topology_mission(tmp_path, "085-c", lanes=[{"lane_id": "lane-planning", "wp_ids": ["WP01"]}])
+
+    ia.run_topology_audit(tmp_path, True, None)
+
+    rows = {r["slug"]: r for r in json.loads(capsys.readouterr().out)["missions"]}
+    assert rows["083-a"]["finding"] == "SINGLE_BRANCH_CODE_LANES_UNMIGRATED"
+    assert _RESTAMP_REMEDY in rows["083-a"]["remedy"]
+    assert rows["084-b"]["finding"] == "LANES_MANIFEST_UNREADABLE"
+    for needle in (_UNREADABLE_RESTORE, _UNREADABLE_REBUILD_PLANNED, _UNREADABLE_REBUILD_STARTED):
+        assert needle in rows["084-b"]["remedy"]
+    assert "delete" in rows["084-b"]["remedy"]  # finalize-tasks alone cannot repair a corrupt file
+    assert rows["085-c"]["finding"] is None
+    assert rows["085-c"].get("remedy") is None
+
+
+def test_run_topology_audit_human_prints_remedy(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _seed_topology_mission(tmp_path, "083-a", lanes=[{"lane_id": "lane-a", "wp_ids": ["WP01"]}])
+    _seed_topology_mission(tmp_path, "084-b", lanes=None, legacy=True)
+
+    ia.run_topology_audit(tmp_path, False, None)
+
+    out = " ".join(capsys.readouterr().out.split())
+    assert _RESTAMP_REMEDY in out
+    assert _UNREADABLE_RESTORE in out
+    assert _UNREADABLE_REBUILD_STARTED in out
+
+
+def test_run_topology_audit_human_clean_prints_no_remedy(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    _seed_topology_mission(tmp_path, "085-c", lanes=[{"lane_id": "lane-planning", "wp_ids": ["WP01"]}])
+
+    ia.run_topology_audit(tmp_path, False, None)
+
+    out = capsys.readouterr().out
+    assert "spec-kitty migrate" not in out
+    assert "finalize-tasks" not in out
 
 
 def test_identity_audit_does_not_import_doctor() -> None:

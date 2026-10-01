@@ -34,15 +34,18 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from kernel.git import StatusEntry, status_entries
 from kernel.clock import UTC, datetime, now_utc, parse_iso
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from mission_runtime import OwnedCheckout
     from specify_cli.workspace.context import ResolvedWorkspace
 
 from specify_cli.cli.commands._commit_recipes import safe_commit_recipe
+from specify_cli.cli.commands._git_remedies import restore_recipe
 from specify_cli.cli.commands.agent.tasks_dependency_graph import (
     _count_behind_commits_outside_planning_artifacts,
 )
@@ -252,6 +255,10 @@ def _apply_review_status_flags(
 # ---------------------------------------------------------------------------
 
 
+class LaneSpecsDiffUnreadableError(RuntimeError):
+    """The lane's kitty-specs/ merge-base diff could not be read (guard fails closed)."""
+
+
 class _ConsoleLike(Protocol):
     # Positional ``print`` only — the validators render with
     # ``console.print(message)`` and never pass keyword options. A ``**kwargs``
@@ -315,45 +322,37 @@ def _validate_research_artifacts(
     a populated ``guidance`` list that the caller returns as the failure result.
     Mutates nothing outside its local ``guidance`` accumulator.
     """
-    result = subprocess.run(
-        ["git", "status", "--porcelain", str(feature_dir)], cwd=main_repo_root, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
-    )
-    uncommitted_in_main = result.stdout.rstrip()
-    if not uncommitted_in_main:
+    # Guard (FR-013): a failed probe must not read as "nothing dirty", so a
+    # GitCommandError propagates and the move is refused, never waved through.
+    # No ``--untracked-files`` flag, as before: the repository's own
+    # ``status.showUntrackedFiles`` decides.
+    dirty = status_entries(main_repo_root, pathspecs=[str(feature_dir)], untracked=None)
+    if not dirty:
         return None
 
     # Use the dirty classifier to partition paths into blocking vs. benign.
     # Benign paths (status artifacts, other WPs' task files, metadata) are
     # expected during concurrent multi-agent work and must NOT block handoff.
-    from specify_cli.review.dirty_classifier import classify_dirty_paths
+    from specify_cli.review.dirty_classifier import classify_dirty_paths, status_entry_paths
 
-    # Each entry pairs one raw porcelain line with the path(s) it names.
-    # A rename entry (PR-FRESH-001) reports as ONE composite line,
-    # "old -> new" -- git's own convention for a staged/detected rename --
-    # and must be judged on BOTH paths: it blocks if EITHER side would
-    # block for the moving WP, and is benign only when BOTH sides are.
-    # Splitting here, before either path string ever reaches the
-    # classifier, keeps a rename from ever presenting a composite string to
-    # a single-path classifier/regex.
+    # Each item pairs one status entry's display line with the path(s) it names.
+    # A rename entry (PR-FRESH-001) carries TWO typed paths (source and
+    # destination) and must be judged on BOTH: it blocks if EITHER side would
+    # block for the moving WP, and is benign only when BOTH sides are. The
+    # typed entry hands the classifier each path on its own, so a rename never
+    # presents a composite string to a single-path classifier/regex, and a file
+    # literally named ``a -> b`` is one path.
     entries: list[tuple[str, tuple[str, ...]]] = []
-    for line in uncommitted_in_main.split("\n"):
-        if not line.strip():
-            continue
-        # git status --porcelain format: "XY path" (first 3 chars are status)
-        file_part = line[3:] if len(line) > 3 else line.strip()
+    for entry in dirty:
+        paths = status_entry_paths(entry)
         # EXCLUDE policy (C-006): dossier snapshot writes are derived,
         # ephemeral, and recomputable; they must never self-block a
         # transition. Drop them before classification so they cannot
         # leak into the blocking bucket via a path that bypasses
         # ``.gitignore``.
-        if _is_dossier_snapshot(file_part):
+        if all(_is_dossier_snapshot(path) for path in paths):
             continue
-        if " -> " in file_part:
-            old_path, new_path = file_part.split(" -> ", 1)
-            paths: tuple[str, ...] = (old_path, new_path)
-        else:
-            paths = (file_part,)
-        entries.append((line, paths))
+        entries.append((entry.display(), paths))
 
     flat_paths = [path for _line, paths in entries for path in paths]
     blocking, _benign = classify_dirty_paths(
@@ -548,10 +547,12 @@ def _check_uncommitted_worktree_changes(
     worktree_path: Path,
     wp_id: str,
     target_lane: str,
-    filter_runtime_state_paths: Callable[[str], str],
+    filter_runtime_state_paths: Callable[[Sequence[StatusEntry]], Sequence[StatusEntry]],
 ) -> list[str] | None:
     """Block when the worktree has genuine uncommitted implementation work."""
-    result = subprocess.run(["git", "status", "--porcelain"], cwd=worktree_path, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+    # Guard (FR-013): a failed probe propagates (GitCommandError) rather than
+    # reading as a clean worktree. No ``--untracked-files`` flag, as before.
+    status = status_entries(worktree_path, untracked=None)
     # FR-015 / C-003: strip spec-kitty's own runtime-state files (e.g.
     # .spec-kitty/review-lock.json written by the review tooling, or
     # .kittify/ merge metadata) before deciding whether the worktree
@@ -559,23 +560,20 @@ def _check_uncommitted_worktree_changes(
     # fixed, named tuple (no patterns) so paths outside it still reach
     # the blocking branch and surface as "Uncommitted implementation
     # changes in worktree!" (C-004).
-    uncommitted_in_worktree = filter_runtime_state_paths(result.stdout.strip())
+    uncommitted_in_worktree = filter_runtime_state_paths(status)
     if not uncommitted_in_worktree:
         return None
 
     staged_lines = []
     unstaged_lines = []
-    for line in uncommitted_in_worktree.split("\n"):
-        if not line.strip():
+    for entry in uncommitted_in_worktree:
+        if entry.is_untracked:
+            unstaged_lines.append(entry.display())
             continue
-        if line.startswith("??"):
-            unstaged_lines.append(line)
-            continue
-        status = line[:2]
-        if status[0] != " ":
-            staged_lines.append(line)
-        if status[1] != " ":
-            unstaged_lines.append(line)
+        if entry.index != " ":
+            staged_lines.append(entry.display())
+        if entry.worktree != " ":
+            unstaged_lines.append(entry.display())
 
     guidance: list[str] = []
     if staged_lines and not unstaged_lines:
@@ -586,8 +584,8 @@ def _check_uncommitted_worktree_changes(
         guidance.append("Uncommitted implementation changes in worktree!")
     guidance.append("")
     guidance.append("Modified files:")
-    for line in uncommitted_in_worktree.split("\n")[:5]:
-        guidance.append(f"  {line}")
+    for entry in uncommitted_in_worktree[:5]:
+        guidance.append(f"  {entry.display()}")
     guidance.append("")
     guidance.append("Commit your work first:")
     guidance.append(f"  cd {worktree_path}")
@@ -684,6 +682,38 @@ def _resolve_planning_branch_for_lane_guard(feature_dir: Path) -> str | None:
     return None
 
 
+def _unreadable_lane_guard_guidance(
+    exc: LaneSpecsDiffUnreadableError,
+    *,
+    guard_base: str,
+    from_meta: bool,
+    feature_dir: Path,
+    retry: str,
+) -> list[str]:
+    """Refusal text for an unreadable lane-hygiene diff: name the base ref and how to repoint it.
+
+    The usual cause is a base ref with no local branch (``planning_base_branch``
+    naming a deleted branch, or the lane's base branch missing locally), so no
+    merge-base can be computed. There is no force flag: the operator repoints
+    the ref or recreates the branch.
+    """
+    meta_path = feature_dir / "meta.json"
+    if from_meta:
+        origin = f"from `planning_base_branch` (or `target_branch`) in {meta_path}"
+        repoint = f"or set `planning_base_branch` in {meta_path} to an existing local branch"
+    else:
+        origin = f"the lane's base branch; {meta_path} names no `planning_base_branch`"
+        repoint = f"or add `planning_base_branch` naming an existing local branch to {meta_path}"
+    return [
+        str(exc),
+        "",
+        f"Base ref tried: '{guard_base}' ({origin}).",
+        f"If '{guard_base}' has no local branch, recreate it (`git branch {guard_base} <commit>`, or `git fetch origin {guard_base}:{guard_base}`), {repoint}.",
+        "",
+        f"Then retry: {retry}",
+    ]
+
+
 def _check_kitty_specs_contamination(
     *,
     worktree_path: Path,
@@ -702,10 +732,20 @@ def _check_kitty_specs_contamination(
     # fall back to ``check_branch`` (unchanged behaviour for the flat/legacy case).
     _planning_branch = _resolve_planning_branch_for_lane_guard(feature_dir)
     _guard_base = _planning_branch or check_branch
-    contamination_files = list_wp_branch_specs_changes_for_guard(
-        worktree_path=worktree_path,
-        base_branch=_guard_base,
-    )
+    try:
+        contamination_files = list_wp_branch_specs_changes_for_guard(
+            worktree_path=worktree_path,
+            base_branch=_guard_base,
+        )
+    except LaneSpecsDiffUnreadableError as exc:
+        # Fail closed: an unreadable diff must refuse, never read as "no contamination".
+        return _unreadable_lane_guard_guidance(
+            exc,
+            guard_base=_guard_base,
+            from_meta=_planning_branch is not None,
+            feature_dir=feature_dir,
+            retry=f"spec-kitty agent tasks move-task {wp_id} --to {target_lane}",
+        )
     if not contamination_files:
         return None
 
@@ -729,7 +769,16 @@ def _check_kitty_specs_contamination(
     guidance.append("")
     guidance.append(f"Clean the branch before moving to {target_lane}:")
     guidance.append(f"  cd {worktree_path}")
-    guidance.append(f"  git restore --source {_guard_base} --staged --worktree -- {KITTY_SPECS_DIR}/")
+    # #3931 F-30 (P0, data-loss): scope the restore to the NAMED offending files
+    # and source it from the MERGE-BASE of this lane and its planning branch --
+    # never `--source <planning-tip> -- kitty-specs/`. A directory-scoped restore
+    # from the planning tip pulls every other mission's advanced planning content
+    # into the lane AND deletes lane-local files the planning branch does not
+    # carry (issue-matrix.json, acceptance-matrix.json; PR #4881, epic #4915).
+    from specify_cli.core.vcs.git import git_merge_base
+
+    _restore_base = git_merge_base(worktree_path, "HEAD", _guard_base) or f"$(git merge-base HEAD {_guard_base})"
+    guidance.append(f"  {restore_recipe(contamination_files, source=_restore_base)}")
     # FR-018 (WP03 review cycle 1, #1): --to-branch must name worktree_path's
     # OWN checked-out branch, resolved here with one extra git call -- never
     # check_branch/_guard_base, which is the comparison BASE this lane
@@ -746,6 +795,34 @@ def _check_kitty_specs_contamination(
     return guidance
 
 
+def _validate_repo_root_workspace(
+    *,
+    workspace: ResolvedWorkspace,
+    workspace_override: ResolvedWorkspace | None,
+    main_repo_root: Path,
+    mission_slug: str,
+    wp_id: str,
+    target_lane: str,
+) -> tuple[bool, list[str]]:
+    """Readiness verdict for a WP that runs in the repository-root checkout.
+
+    A branchless planning_artifact WP (and an owned checkout, which has its own
+    implementation guard) keeps the historic short-circuit. A repo-root WP that
+    owns a real branch (single_branch code WP) has no worktree to inspect, so
+    the shared claim-base ``for_review`` gate (:mod:`specify_cli.lanes.for_review_gate`,
+    the same one ``agent status emit`` and the orchestrator use) decides.
+    """
+    if workspace_override is not None or str(getattr(target_lane, "value", target_lane)) != "for_review" or getattr(workspace, "branch_name", None) is None:
+        return True, []
+
+    from specify_cli.lanes.for_review_gate import evaluate_for_review_gate
+
+    decision = evaluate_for_review_gate(main_repo_root, mission_slug, wp_id)
+    if decision.passed:
+        return True, []
+    return False, [decision.reason]
+
+
 def _validate_worktree_state(
     *,
     repo_root: Path,
@@ -758,7 +835,7 @@ def _validate_worktree_state(
     get_feature_target_branch: Callable[[Path, str], str],
     review_currency_check_branch: Callable[..., str],
     behind_commits_touch_only_planning_artifacts: Callable[[Path, str, str], bool],
-    filter_runtime_state_paths: Callable[[str], str],
+    filter_runtime_state_paths: Callable[[Sequence[StatusEntry]], Sequence[StatusEntry]],
     list_wp_branch_specs_changes_for_guard: Callable[..., list[str]],
     workspace_override: ResolvedWorkspace | None = None,
     review_base_ref: str | None = None,
@@ -786,7 +863,14 @@ def _validate_worktree_state(
             workspace = None
 
     if workspace is not None and workspace.resolution_kind == "repo_root":
-        return True, []
+        return _validate_repo_root_workspace(
+            workspace=workspace,
+            workspace_override=workspace_override,
+            main_repo_root=main_repo_root,
+            mission_slug=mission_slug,
+            wp_id=wp_id,
+            target_lane=target_lane,
+        )
 
     worktree_path = _resolve_worktree_path(
         main_repo_root=main_repo_root,
@@ -863,7 +947,7 @@ def _validate_ready_for_review(
     force: bool,
     target_lane: str = "for_review",
     *,
-    effective_root: Path | None = None,
+    owned: OwnedCheckout | None = None,
     workspace_override: ResolvedWorkspace | None = None,
     review_base_ref: str | None = None,
     check_kitty_specs: bool = True,
@@ -873,7 +957,7 @@ def _validate_ready_for_review(
     resolve_workspace_for_wp: Callable[[Path, str, str], ResolvedWorkspace],
     review_currency_check_branch: Callable[..., str],
     behind_commits_touch_only_planning_artifacts: Callable[[Path, str, str], bool],
-    filter_runtime_state_paths: Callable[[str], str],
+    filter_runtime_state_paths: Callable[[Sequence[StatusEntry]], Sequence[StatusEntry]],
     list_wp_branch_specs_changes_for_guard: Callable[..., list[str]],
     console: _ConsoleLike,
 ) -> tuple[bool, list[str]]:
@@ -907,7 +991,8 @@ def _validate_ready_for_review(
 
     # Write path: keep main-repo-root resolution so canonical serialization
     # pins to the primary checkout regardless of where the operator stands.
-    main_repo_root = get_main_repo_root(repo_root)
+    # An owned run reads the repository root off the validated fact (WP16).
+    main_repo_root = owned.repository_root if owned is not None else get_main_repo_root(repo_root)
     # WP06 / FR-006 / T027: route research-artifact read to PRIMARY-partition seam.
     # research.md / meta.json / spec.md all live on PRIMARY (not the coord husk).
     # resolve_feature_dir_for_mission (coord-aware) would return the STATUS-only
@@ -917,7 +1002,7 @@ def _validate_ready_for_review(
         placement_seam,
     )
 
-    feature_dir = placement_seam(main_repo_root, mission_slug, effective_root=effective_root).read_dir(MissionArtifactKind.RESEARCH)
+    feature_dir = placement_seam(main_repo_root, mission_slug, owned=owned).read_dir(MissionArtifactKind.RESEARCH)
 
     # Detect mission type from feature's meta.json
     mission_type = get_mission_type(feature_dir)
@@ -925,7 +1010,7 @@ def _validate_ready_for_review(
     # Check 1: Uncommitted research artifacts in planning repo (applies to ALL missions)
     # Research artifacts live in kitty-specs/ which is in the planning repo, not worktrees
     research_guidance = _validate_research_artifacts(
-        main_repo_root=effective_root or main_repo_root,
+        main_repo_root=owned.owned_root if owned is not None else main_repo_root,
         feature_dir=feature_dir,
         mission_slug=mission_slug,
         wp_id=wp_id,

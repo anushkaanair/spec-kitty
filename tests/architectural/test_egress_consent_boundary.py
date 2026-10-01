@@ -148,7 +148,8 @@ It does **not** see:
    at all — evades both the method-name rules (the callee is a bare ``Name``,
    not ``.post``/``.patch``/``.request``) and ``_transmits_a_body`` (`:295-306`),
    which requires ``headers`` **and** a body keyword to be present before it
-   will call a bare-``Name`` callee a sink. `#3113`: the guard's own bite-test
+   will call a bare-``Name`` callee a sink. `#5493` (accepted residual of
+   `#3113`, closed COMPLETED 2026-08-02): the guard's own bite-test
    (`test_scanner_detects_each_sink_shape`) exercised only the kwargs form of
    the injected-transport shape, so it would have certified a scanner that was
    blind to this one — a negative control that only tests the shape you
@@ -169,12 +170,13 @@ It does **not** see:
    acceptance criteria a non-zero count is itself the outcome: **the matcher is
    left alone.** What catches this shape is review, and the file-keyed
    allowlist if the sink lands in a file nobody has reasoned about.
-   ``test_scanner_detects_each_sink_shape`` carries both of `#3113`'s
-   positional cases pinned as ``pytest.xfail(..., strict=True)``, naming this
-   limit.
+   ``test_scanner_detects_each_sink_shape`` pins both positional cases of
+   the open residual `#5493` (split from the closed `#3113`) as
+   ``pytest.mark.xfail(..., strict=True)``, naming this limit.
 
 Spec: FR-002, FR-003, FR-019, FR-025-FR-032, C-003. `#3113` (FR-013, FR-014,
-FR-015) adds limit 8 above; cross-referenced one-directionally against
+FR-015; closed COMPLETED 2026-08-02) adds limit 8 above, re-pointed to the
+open residual `#5493`; cross-referenced one-directionally against
 ``kitty-specs/journal-project-consent-3030-01KYKWQS/egress-inventory.md``,
 which belongs to a closed mission and is not edited by this change (C-010).
 
@@ -561,11 +563,6 @@ _EGRESS_ALLOWLIST: dict[str, Allowance] = {
         inventory_id="E18",
         note="OAuth token revocation; carries no project data.",
     ),
-    "specify_cli/auth/websocket/token_provisioning.py": Allowance(
-        kind=AllowanceKind.NOT_PROJECT_DATA,
-        inventory_id="E18",
-        note="Provisions a websocket token; carries no project data.",
-    ),
     "specify_cli/tracker/saas_readiness.py": Allowance(
         kind=AllowanceKind.NOT_PROJECT_DATA,
         inventory_id="E18",
@@ -611,25 +608,8 @@ _EGRESS_ALLOWLIST: dict[str, Allowance] = {
             "about every sink-bearing file under src/ — complementary, not redundant."
         ),
     ),
-    # specify_cli/dashboard/handlers/api.py RETIRED (E4 re-homing, planning epic #4):
-    # its only transmit primitive was the /api/sync/trigger proxy urlopen; the
-    # route was deleted rather than gated, so the file holds no sink and is off
-    # the allowlist entirely.
-    "specify_cli/dashboard/lifecycle.py": Allowance(
-        kind=AllowanceKind.LOOPBACK_CONTROL,
-        inventory_id="E18",
-        note="Localhost dashboard health probe and shutdown/control endpoints.",
-    ),
-    # specify_cli/dashboard/server.py (#4125, fix round 2): the detached-spawn
-    # readiness probe GETs the child's /api/health on 127.0.0.1 to verify the
-    # listener serves this project's identity (project_path + token) — the
-    # same loopback contract lifecycle.py's row above covers, on the spawn
-    # side of the same boundary. Sends no payload beyond the GET itself.
-    "specify_cli/dashboard/server.py": Allowance(
-        kind=AllowanceKind.LOOPBACK_CONTROL,
-        inventory_id="E18",
-        note="Localhost detached-child readiness probe: GET /api/health on 127.0.0.1 to verify the listener's project identity (#4125).",
-    ),
+    # specify_cli/dashboard/{handlers/api,lifecycle,server}.py RETIRED: the
+    # bundled dashboard and its loopback control plane were deleted (#5530).
     # -- Anonymous Feedback Submission (in-harness-feedback-survey-01M3PK9W) --
     "specify_cli/feedback/sender.py": Allowance(
         kind=AllowanceKind.NOT_PROJECT_DATA,
@@ -982,7 +962,8 @@ class TestGuardBites:
                 id="injected-transport-positional-url-name",
                 marks=pytest.mark.xfail(
                     reason=(
-                        "#3113 case (A): all-positional injected transport whose first "
+                        "#5493 case (A) (accepted residual of #3113, closed COMPLETED "
+                        "2026-08-02): all-positional injected transport whose first "
                         "argument name IS in _URL_ARG_NAMES. _transmits_a_body requires "
                         "headers= AND a body keyword (:295-306), so an all-positional call "
                         "is invisible regardless of argument names. This is limit 8 in the "
@@ -1005,10 +986,11 @@ class TestGuardBites:
                 id="injected-transport-positional-non-url-name",
                 marks=pytest.mark.xfail(
                     reason=(
-                        "#3113 case (B) -- THE ADOPTION GATE: all-positional injected "
+                        "#5493 case (B) -- THE ADOPTION GATE (accepted residual of #3113, "
+                        "closed COMPLETED 2026-08-02): all-positional injected "
                         "transport whose argument names (post, u, payload, meta) are "
                         "OUTSIDE _URL_ARG_NAMES. A matcher that passed (A) above but failed "
-                        "this case would still be blind in exactly the way #3113 is about, "
+                        "this case would still be blind in exactly the way #5493 is about, "
                         "because _attr_tail returns node.id verbatim for a bare Name "
                         "(:266-272) -- (A) alone would certify a blind matcher. Same "
                         "limit-8 gap as (A); same FR-015 non-adoption decision (non-zero "
@@ -1032,7 +1014,8 @@ class TestGuardBites:
     def test_positional_transport_strict_xfail_landmines_disposition_still_pending(
         self,
     ) -> None:
-        """WP06 (T028/T030, FR-015 fix-before-wiring): re-validate the two #3113
+        """WP06 (T028/T030, FR-015 fix-before-wiring): re-validate the two
+        #5493 (accepted residual of #3113, closed COMPLETED 2026-08-02)
         strict-xfail landmines on the current tree.
 
         Re-validated in isolation: both ``injected-transport-positional-*``
@@ -1041,9 +1024,9 @@ class TestGuardBites:
         non-zero false positives over ``src/``) still holds, so the gap is
         still genuinely open. This guard pins that disposition: it fails if
         either case's marker is dropped, stops being ``strict=True``, or loses
-        its ``#3113`` tracking reference without the underlying gap actually
-        closing (``strict=True`` on the parametrized test itself already
-        catches an unexpected XPASS).
+        its ``#5493`` tracking reference (the open residual issue) without the
+        underlying gap actually closing (``strict=True`` on the parametrized
+        test itself already catches an unexpected XPASS).
         """
         marks = getattr(type(self).test_scanner_detects_each_sink_shape, "pytestmark", [])
         parametrize_marks = [m for m in marks if m.name == "parametrize"]
@@ -1056,7 +1039,7 @@ class TestGuardBites:
         }
         for case_id, xfail_mark in xfail_params.items():
             assert xfail_mark.kwargs.get("strict") is True, case_id
-            assert "#3113" in xfail_mark.kwargs.get("reason", ""), case_id
+            assert "#5493" in xfail_mark.kwargs.get("reason", ""), case_id
 
     def test_unlisted_sender_is_reported_with_its_seam(self, tmp_path: Path) -> None:
         """The whole collection path reds on a synthetic un-allowlisted sender."""
@@ -1871,19 +1854,19 @@ def test_sender_aliases_resolve_transitively(tmp_path: Path) -> None:
 #
 # Extends the E18 "token traffic, no project data" allowances above
 # (auth/flows/refresh.py, auth/flows/revoke.py, auth/token_manager.py,
-# auth/websocket/token_provisioning.py, auth/http/transport.py already carry
+# auth/http/transport.py already carry
 # a NOT_PROJECT_DATA row in `_EGRESS_ALLOWLIST` for the *sink* scanner) with a
 # second, narrower boundary on one specific accessor rather than a duplicate
 # gate: `get_saas_base_url()` knows nothing about a session's issuer, so a
 # token-send flow that calls it can silently send a held bearer token to the
 # wrong host on a stale/mismatched session
-# (contracts/issuer-target-helper.md). The four flows above must instead
+# (contracts/issuer-target-helper.md). The three flows above must instead
 # resolve their endpoint through
 # `specify_cli.auth.server_target.resolve_token_endpoint`, which compares the
 # session's issuer against the resolved target and refuses on a mismatch.
 #
 # AST-based, not text-matching, and this distinction is load-bearing here:
-# three of the four forbidden modules carry a *comment* naming
+# forbidden modules carry a *comment* naming
 # `get_saas_base_url()` to explain that they no longer call it
 # (auth/flows/refresh.py:98/105, auth/token_manager.py:162/439) -- a grep
 # would false-positive on exactly the modules this fence exists to protect.
@@ -1893,13 +1876,14 @@ def test_sender_aliases_resolve_transitively(tmp_path: Path) -> None:
 
 _ISSUER_TARGET_SYMBOL = "get_saas_base_url"
 
-#: The four token-send modules `get_saas_base_url()` must never reach.
+#: The three token-send modules `get_saas_base_url()` must never reach
+#: (the fourth, `auth/websocket/token_provisioning.py`, was deleted with the
+#: dead `auth.websocket` package, dead-code review 2026-09-30).
 _FORBIDDEN_TOKEN_SEND_MODULES: frozenset[str] = frozenset(
     {
         "specify_cli/auth/flows/refresh.py",
         "specify_cli/auth/flows/revoke.py",
         "specify_cli/auth/token_manager.py",
-        "specify_cli/auth/websocket/token_provisioning.py",
     }
 )
 
@@ -1932,7 +1916,7 @@ _SERVER_TARGET_DECISION_SYMBOLS: frozenset[str] = frozenset(
     }
 )
 
-#: The six consumers SC-003 names: the four token-send flows,
+#: The five consumers SC-003 names: the three token-send flows,
 #: `saas_client.auth._guard_session_issuer`, and
 #: `_auth_saas_target.format_saas_mismatch_warning`.
 _ISSUER_TARGET_DECISION_CONSUMERS: frozenset[str] = frozenset(
@@ -1940,7 +1924,6 @@ _ISSUER_TARGET_DECISION_CONSUMERS: frozenset[str] = frozenset(
         "specify_cli/auth/flows/refresh.py",
         "specify_cli/auth/flows/revoke.py",
         "specify_cli/auth/token_manager.py",
-        "specify_cli/auth/websocket/token_provisioning.py",
         "specify_cli/saas_client/auth.py",
         "specify_cli/cli/commands/_auth_saas_target.py",
     }
@@ -2030,7 +2013,7 @@ class TestIssuerTargetFence:
     """
 
     def test_forbidden_modules_carry_no_reference_today(self) -> None:
-        """T018: the four token-send modules are clean on the real tree."""
+        """T018: the three token-send modules are clean on the real tree."""
         violations = _issuer_target_fence_violations(
             forbidden=_FORBIDDEN_TOKEN_SEND_MODULES,
             allowlist=_ISSUER_TARGET_ALLOWLIST_FLOOR,
@@ -2038,7 +2021,7 @@ class TestIssuerTargetFence:
         assert violations == [], "\n".join(violations)
 
     def test_allowlist_floor_is_disjoint_from_forbidden_modules(self) -> None:
-        """T019: the allowlist provably excludes the four token-send modules
+        """T019: the allowlist provably excludes the three token-send modules
         (no vacuous whitelist)."""
         overlap = _FORBIDDEN_TOKEN_SEND_MODULES & _ISSUER_TARGET_ALLOWLIST_FLOOR
         assert overlap == set(), f"vacuous allowlist: {sorted(overlap)}"
@@ -2131,7 +2114,7 @@ class TestIssuerTargetFence:
     def test_six_consumers_import_the_shared_issuer_target_decision(self) -> None:
         """SC-003 positive membership: the compare+normalize+remedy decision
         lives in exactly one module (`server_target.py`); every one of the
-        six consumers (four flows + `saas_client._guard_session_issuer` +
+        five consumers (three flows + `saas_client._guard_session_issuer` +
         `_auth_saas_target.format_saas_mismatch_warning`) imports/consumes
         it. Positive membership, not a "no copies" grep.
         """

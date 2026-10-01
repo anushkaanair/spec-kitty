@@ -12,7 +12,8 @@ import logging
 import re
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -23,14 +24,10 @@ from mission_runtime import (
     CommitTarget,
     MissionArtifactKind,
     MissionTopology,
+    kind_is_coordination_residue,
     placement_seam,
     resolve_create_time_write_target,
-)
-from specify_cli.core.checkout_ownership import (
-    OwnershipClaim,
-    OwnershipValidationResult,
-    error_for_claim,
-    resolve_ownership_claim,
+    resolve_placement_only,
 )
 from specify_cli.core.commit_guard import GuardCapability
 from specify_cli.core.git_ops import get_current_branch, has_unborn_head, is_git_repo
@@ -39,13 +36,16 @@ from specify_cli.core.mission_payload import (
     default_mission_display_name,
     default_mission_purpose_context,
 )
+from specify_cli.core.owned_mission import OwnedCreateMission, OwnedCreateRoot
 from specify_cli.core.paths import (
     MissionMetaReadError,
+    read_commit_to_target,
     is_worktree_context,
     load_meta_fail_closed,
     locate_project_root,
 )
 from kernel.clock import now_utc_iso
+from kernel.git import GitCommandError, GitPath, status_entries, tracked_paths
 from specify_cli.git import preflight_commit, safe_commit
 from specify_cli.git.commit_helpers import (
     ProtectedBranchRefused,
@@ -53,8 +53,9 @@ from specify_cli.git.commit_helpers import (
     SafeCommitHeadMismatch,
     SafeCommitStagedTreeUnchanged,
 )
-from specify_cli.git.ref_advance import RefRestoreError, restore_branch_ref
-from specify_cli.lanes.branch_naming import mission_dir_name, resolve_mid8, strip_numeric_prefix
+from specify_cli.git.destructive_guard import DestructiveOpRefused, guarded_worktree_remove
+from specify_cli.git.ref_advance import RefAdvanceError, RefRestoreError, _list_worktrees, restore_branch_ref
+from specify_cli.lanes.branch_naming import mission_branch_name, mission_dir_name, resolve_mid8, strip_numeric_prefix
 from specify_cli.mission_metadata import load_meta_or_empty, validate_purpose_summary
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ logger = logging.getLogger(__name__)
 # reads) hoisted to named constants rather than restated as literals.
 _META_KEY_MISSION_TYPE = "mission_type"
 _META_KEY_CREATED_AT = "created_at"
+_STATUS_EVENTS_FILENAME = "status.events.jsonl"
 
 # WP12 (FR-011 / #3339): coordination branches are the only branch refs a
 # mission-create mints, and their names are all ``kitty/mission-<slug>-<mid8>``.
@@ -124,7 +126,10 @@ class MissionCreationResult:
     # freshly-minted branch from an idempotent reuse on re-run.
     coordination_branch: str | None = None
     coordination_branch_created: bool = False
-    owned_checkout: Path | None = None
+    # Public result field keeps origin/main's name (``owned_checkout``) so every
+    # consumer of the result shape reads one attribute; it now carries the
+    # validated owned-create fact rather than a bare path (G5).
+    owned_checkout: OwnedCreateRoot | None = None
     canonical_repo_root: Path | None = None
 
 
@@ -222,6 +227,7 @@ def _commit_feature_file(
     *,
     worktree_root: Path | None = None,
     create_time_target: CommitTarget | None = None,
+    owned: OwnedCreateMission | None = None,
 ) -> None:
     """Commit one or more create-owned artifacts in ONE transactional commit.
 
@@ -273,6 +279,9 @@ def _commit_feature_file(
         message=commit_msg,
         paths=file_paths,
         capability=GuardCapability.STANDARD,
+        # Owned create: the mission-scoped commit_to_target fold reads the new
+        # mission from the validated create fact, never the repository root.
+        owned=owned,
     )
 
 
@@ -419,6 +428,174 @@ def _find_live_duplicate_mission(
     return None
 
 
+class MissionBranchExistsError(MissionCreationError):
+    """Raised when the deterministically-composed mission branch already exists.
+
+    #5100 FR-007 (WP08): a protected-target ``single_branch`` mission mints
+    ``kitty/mission-<slug>-<mid8>`` and refuses outright rather than reusing
+    or recreating a same-named branch -- an existing branch under that exact
+    name could hold unrelated content (a stale branch from a prior, deleted
+    mission whose mid8 happened to collide, or an operator's own local
+    branch), and silently checking it out would corrupt the mission's history.
+    """
+
+    error_code: str = "MISSION_BRANCH_EXISTS"
+
+
+def _refuse_target_without_commit(write_root: Path, target_branch: str) -> None:
+    """Refuse a protected mint whose *target_branch* names no commit (#5100 WP08 follow-up).
+
+    The mission branch forks from the target's tip, so a target that resolves to
+    no commit -- never created, or the operator's still-unborn default branch
+    while this checkout sits on another -- cannot be minted from. (An unborn
+    HEAD in the write checkout itself is refused earlier by
+    :func:`_create_mission_core_impl`'s #4033 guard.) Raise an actionable
+    :class:`MissionCreationError` naming the target BEFORE any ref or meta
+    mutation, instead of surfacing git's raw "'<target>' is not a commit".
+    """
+    probe = subprocess.run(
+        ["git", "-C", str(write_root), "rev-parse", "--verify", "--quiet", f"{target_branch}^{{commit}}"],
+        capture_output=True,
+        check=False,
+    )
+    if probe.returncode == 0:
+        return
+    raise MissionCreationError(
+        f"Cannot mint the protected-target mission branch: target branch {target_branch!r} "
+        f"has no commit in {write_root} (it does not exist yet, or is still unborn). "
+        f"Create it with at least one commit (for example: git branch {target_branch} <start-point>), "
+        "or pass --target-branch naming an existing branch, then retry."
+    )
+
+
+def _target_is_protected(write_root: Path, target_branch: str) -> bool:
+    """True when *target_branch* is a protected target under the #5100 rule (C-002).
+
+    The ONE protection decision the protected single_branch mint and the
+    create-time re-create refusal both consult (:func:`_protected_mint_applies`).
+    """
+    from specify_cli.core.git_ops import resolve_primary_branch
+    from specify_cli.git.protection_policy import ProtectionPolicy
+
+    policy = ProtectionPolicy.resolve(write_root)
+    # bias=False (mission_branch_context._resolve_primary_branch_for_recommendation's
+    # rationale applies verbatim here): the CURRENT checkout is virtually
+    # ALWAYS the target branch at create time (single_branch missions are
+    # created from wherever the operator is standing), so the default
+    # feature-bias resolution would treat EVERY target as "primary" and mint
+    # unconditionally. The genuine repository primary (main/master/origin
+    # default) is what the #5100 rule means by "primary".
+    primary_branch = resolve_primary_branch(write_root, bias=False)
+    return bool(policy.is_protected_target(target_branch, primary_branch=primary_branch))
+
+
+def _protected_mint_applies(
+    write_root: Path,
+    *,
+    topology: MissionTopology,
+    commit_to_target: bool,
+    target_branch: str,
+) -> bool:
+    """True when create will mint a protected-target mission branch (#5100 WP08).
+
+    Only then does a re-create of an already-scaffolded mission collide on the
+    deterministic mission branch (same slug + mid8), so only then must the
+    re-create be refused up front as MISSION_ALREADY_EXISTS rather than surface
+    the mint's MISSION_BRANCH_EXISTS. Every other shape keeps origin/main's
+    idempotent resume (the #4033 guard already refuses a LIVE duplicate).
+    """
+    if topology is not MissionTopology.SINGLE_BRANCH or commit_to_target:
+        return False
+    return _target_is_protected(write_root, target_branch)
+
+
+def _mint_protected_single_branch_mission_branch(
+    write_root: Path,
+    mission_slug_formatted: str,
+    *,
+    mission_id: str,
+    target_branch: str,
+    meta: dict[str, Any],
+) -> None:
+    """Mint + check out the mission branch for a protected single_branch target.
+
+    #5100 FR-007/FR-012 (WP08 / IC-05, research.md R-5/R-8). A no-op unless
+    the target is protected under the #5100 "primary plus configured" rule
+    (:meth:`~specify_cli.git.protection_policy.ProtectionPolicy.is_protected_target`,
+    C-002: the single protection authority). When it fires:
+
+    1. Refuses if the write checkout (*write_root*) has uncommitted
+       changes outside this mission's own (still-untracked) scaffold --
+       switching branches under the operator's unrelated dirty work would be
+       unsafe (mirrors FR-009's write-checkout dirty refusal, scoped here to
+       the narrower create-time question).
+    2. Composes the deterministic name via :func:`mission_branch_name` (the
+       ONE composer -- never re-derived here) and refuses with
+       :class:`MissionBranchExistsError` if that ref already exists.
+    3. Creates the branch at ``target_branch``'s tip and checks it out in
+       *write_root* -- no worktree.
+    4. Records ``meta["mission_branch"]``.
+
+    Mutates *meta* in place; raises on any refusal (fail-closed, no partial
+    mutation of *meta* on the refusal paths -- the git branch/checkout writes
+    only happen after both refusal checks pass).
+    """
+    if not _target_is_protected(write_root, target_branch):
+        return
+    _refuse_target_without_commit(write_root, target_branch)
+
+    # This mission's own (still-untracked) scaffold is never "dirty" here --
+    # only the operator's unrelated uncommitted work is. A bidirectional
+    # component-wise overlap (unlike ``lanes.checkout_occupancy.dirty_paths``'s
+    # one-directional ``_is_owned_path``) is required: on a freshly-scaffolded
+    # ``kitty-specs/`` (this mission is the first ever created), git's default
+    # ``--untracked-files=normal`` collapses the whole new directory to the
+    # single line ``kitty-specs/`` -- an ANCESTOR of, not a match for, the
+    # mission-scoped path below.
+    owned_paths = (GitPath.parse(".kittify"), GitPath.parse(f"{KITTY_SPECS_DIR}/{mission_slug_formatted}"))
+    dirty: list[str] = []
+    # Guard: a failed ``git status`` raises ``GitCommandError`` (a ``RuntimeError``,
+    # as the helper this replaces raised) rather than reading as "clean".
+    for entry in status_entries(write_root, untracked=None):
+        if any(owned.overlaps(entry.path) for owned in owned_paths):
+            continue
+        dirty.append(str(entry.path))
+    if dirty:
+        raise MissionCreationError(
+            "Cannot mint the protected-target mission branch: the write "
+            f"checkout at {write_root} has uncommitted changes outside "
+            f"this mission's own scaffold: {', '.join(dirty)}. Commit or "
+            "discard them, then retry."
+        )
+
+    branch_name = mission_branch_name(mission_slug_formatted, mission_id=mission_id)
+    exists = (
+        subprocess.run(
+            ["git", "-C", str(write_root), "rev-parse", "--verify", f"refs/heads/{branch_name}"],
+            capture_output=True,
+            check=False,
+        ).returncode
+        == 0
+    )
+    if exists:
+        raise MissionBranchExistsError(
+            f"Mission branch {branch_name!r} already exists. Choose a "
+            "different mission slug, remove the stale branch, or pass "
+            "--commit-to-target to commit directly onto the target."
+        )
+
+    create_result = subprocess.run(
+        ["git", "-C", str(write_root), "checkout", "-b", branch_name, target_branch],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if create_result.returncode != 0:
+        detail = (create_result.stderr or create_result.stdout or "").strip()
+        raise MissionCreationError(f"Failed to create and check out mission branch {branch_name!r} from {target_branch!r}: {detail}")
+    meta["mission_branch"] = branch_name
+
+
 def _path_is_tracked_by_git(repo_root: Path, path: Path) -> bool:
     """True when git tracks any file under ``path``.
 
@@ -427,17 +604,10 @@ def _path_is_tracked_by_git(repo_root: Path, path: Path) -> bool:
     deletion whenever Git cannot establish that the path is disposable.
     """
     try:
-        result = subprocess.run(
-            ["git", "-C", str(repo_root), "ls-files", "--", str(path)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except OSError:
+        return bool(tracked_paths(repo_root, pathspecs=(str(path),)))
+    except GitCommandError:
+        # Refuse deletion whenever Git cannot establish that the path is disposable.
         return True
-    if result.returncode != 0:
-        return True
-    return bool(result.stdout.strip())
 
 
 def _failure_is_disposable_create_refusal(exc: BaseException) -> bool:
@@ -504,6 +674,63 @@ def _remove_orphan_mission_scaffolds(planned: tuple[Path, ...]) -> None:
             shutil.rmtree(candidate)
 
 
+def _worktrees_on_branch(repo_root: Path, branch: str) -> tuple[Path, ...]:
+    """Return the linked worktrees that have *branch* checked out (best-effort).
+
+    Reuses the one ``git worktree list --porcelain`` parser in
+    :mod:`specify_cli.git.ref_advance`; an enumeration failure yields no entries.
+    """
+    try:
+        entries = _list_worktrees(repo_root, None)
+    except RefAdvanceError:
+        return ()
+    return tuple(entry.path for entry in entries if not entry.detached and entry.branch == f"refs/heads/{branch}")
+
+
+def _status_log_residue(worktree: Path) -> Callable[[str], bool]:
+    """Classify a failed create's coordination-worktree leftovers for the removal guard.
+
+    The only thing a failed create leaves in its coordination worktree is the
+    mission status log, which the rollback copies next to the retained primary
+    scaffold first, so it is not operator work the removal could destroy. Git
+    may report it as a collapsed untracked directory (``kitty-specs/``), so a
+    reported path is residue only when every file under it is a status log
+    inside ``kitty-specs/``.
+
+    NOTE: the residue check matches on ``_STATUS_EVENTS_FILENAME`` alone (no
+    ``status.json`` leg) because create only ever emits the append-only log --
+    it never writes a ``status.json`` snapshot -- so ``status.events.jsonl`` is
+    the only STATUS_STATE residue a failed create can leave behind.
+    """
+
+    def is_residue(path: str) -> bool:
+        reported = worktree / path
+        files = [reported] if reported.is_file() else [child for child in reported.rglob("*") if child.is_file()]
+        return bool(files) and all(child.name == _STATUS_EVENTS_FILENAME and child.relative_to(worktree).parts[0] == KITTY_SPECS_DIR for child in files)
+
+    return is_residue
+
+
+def _salvage_status_logs(coord_worktree: Path, repo_root: Path) -> None:
+    """Copy a doomed coordination worktree's status logs into the primary checkout.
+
+    A failed create keeps its partial scaffold for resume-probe diagnosis; since
+    #5440 the status log (with the persisted ``MissionCreated``) lives in the
+    coordination worktree, so it is carried next to that scaffold before the
+    worktree is removed. Only a mission dir that already exists on the primary
+    side and has no log of its own receives a copy (best-effort, never raises).
+    The coordination twin holds only that log, which MissionResolver skips, so
+    the census reuses the scaffold snapshot rather than the resolver.
+    """
+    for name in sorted(_list_mission_scaffolds(coord_worktree)):
+        log = coord_worktree / KITTY_SPECS_DIR / name / _STATUS_EVENTS_FILENAME
+        primary_dir = repo_root / KITTY_SPECS_DIR / name
+        destination = primary_dir / _STATUS_EVENTS_FILENAME
+        if log.is_file() and primary_dir.is_dir() and not destination.exists():
+            with contextlib.suppress(OSError):
+                shutil.copy2(log, destination)
+
+
 def _restore_git_state_after_failed_create(
     repo_root: Path,
     *,
@@ -566,8 +793,18 @@ def _restore_git_state_after_failed_create(
                     check=False,
                 )
     # 2. Delete only the coordination branches that appeared during this create.
+    #    A coordination-routed create materialized a worktree on its branch
+    #    (#5440); git refuses to delete a checked-out branch, so that worktree
+    #    goes first.
     orphaned = _list_coordination_branches(repo_root) - pre_existing_coordination_branches
     for branch in sorted(orphaned):
+        for worktree in _worktrees_on_branch(repo_root, branch):
+            _salvage_status_logs(worktree, repo_root)
+            # The removal chokepoint refuses a worktree holding anything but the
+            # salvaged log; the branch delete below then fails too, leaving the
+            # operator's work in place for diagnosis.
+            with contextlib.suppress(DestructiveOpRefused, RuntimeError):
+                guarded_worktree_remove(worktree, retain=False, is_residue=_status_log_residue(worktree))
         subprocess.run(
             ["git", "-C", str(repo_root), "branch", "-D", branch],
             capture_output=True,
@@ -594,9 +831,10 @@ def create_mission_core(
     topology: MissionTopology = MissionTopology.COORD,
     force_recreate_coordination_branch: bool = False,
     allow_worktree_context: bool = False,
-    owned_checkout: Path | None = None,
+    owned_create_root: OwnedCreateRoot | None = None,
     retain_branches: bool = False,
     retain_worktrees: bool = False,
+    commit_to_target: bool = False,
     allow_duplicate: bool = False,
 ) -> MissionCreationResult:
     """Create a new mission, restoring git state if creation fails (FR-011).
@@ -612,7 +850,7 @@ def create_mission_core(
     # An explicit owned checkout is the write/commit surface. Snapshot that
     # checkout rather than the canonical primary so a late failure restores
     # the branch ref and index that this invocation actually mutated.
-    rollback_root = owned_checkout.resolve() if owned_checkout is not None else repo_root
+    rollback_root = owned_create_root.checkout if owned_create_root is not None else repo_root
     if rollback_root is None:
         rollback_root = locate_project_root()
     original_branch: str | None = None
@@ -658,9 +896,10 @@ def create_mission_core(
             topology=topology,
             force_recreate_coordination_branch=force_recreate_coordination_branch,
             allow_worktree_context=allow_worktree_context,
-            owned_checkout=owned_checkout,
+            owned_create_root=owned_create_root,
             retain_branches=retain_branches,
             retain_worktrees=retain_worktrees,
+            commit_to_target=commit_to_target,
             allow_duplicate=allow_duplicate,
         )
     except BaseException as _create_exc:
@@ -692,6 +931,966 @@ def create_mission_core(
         raise
 
 
+def _validate_create_inputs(mission_slug: str, friendly_name: str | None) -> str:
+    """Validate ``mission_slug``/``friendly_name`` and return the resolved friendly name.
+
+    Section 1 of the pre-decomposition body (FR-026 / T051): the kebab-case
+    slug check, the explicitly-empty-``friendly_name`` refusal, and the
+    default-to-``default_mission_display_name(mission_slug)`` fallback. The
+    fallback is a pure computation with no observable side effect before it,
+    so folding it in here (rather than leaving it at its original later call
+    site) does not change what raises or when.
+    """
+    if not KEBAB_CASE_PATTERN.match(mission_slug):
+        raise MissionCreationError(
+            f"Invalid feature slug '{mission_slug}'. "
+            "Must be kebab-case (lowercase letters, numbers, hyphens only)."
+            "\n\nValid examples:"
+            "\n  - user-auth"
+            "\n  - fix-bug-123"
+            "\n  - 068-feature-name"
+            "\n  - new-dashboard"
+            "\n\nInvalid examples:"
+            "\n  - User-Auth (uppercase)"
+            "\n  - user_auth (underscores)"
+        )
+
+    friendly_name_was_provided = friendly_name is not None
+    normalized_friendly_name = " ".join((friendly_name or "").split())
+    if friendly_name_was_provided and not normalized_friendly_name:
+        raise MissionCreationError("Mission creation requires a non-empty friendly_name.")
+    if not normalized_friendly_name:
+        normalized_friendly_name = default_mission_display_name(mission_slug)
+    return normalized_friendly_name
+
+
+@dataclass(frozen=True, slots=True)
+class _CreateRoots:
+    """Resolved roots + current branch for one ``create_mission_core`` call (T051).
+
+    ``owned`` carries the caller-supplied, already-validated owned-checkout
+    fact (WP02's :class:`OwnedCreateRoot`), or ``None`` for an unowned
+    (repository root) create. Validation happens exactly once, in the
+    caller that mints ``owned_create_root`` (FR-003 spirit); this function
+    never re-validates a caller-supplied fact.
+    """
+
+    repository_root: Path
+    write_root: Path
+    owned: OwnedCreateRoot | None
+    current_branch: str
+
+
+def _resolve_create_roots(
+    repo_root: Path | None,
+    owned_create_root: OwnedCreateRoot | None,
+    allow_worktree_context: bool,
+) -> _CreateRoots:
+    """Resolve the repository-root / write-root pair and validate context guards.
+
+    Section 2 of the pre-decomposition body (FR-026 / T051; owned-checkout
+    resolution re-expressed for FR-016 / T053, #5009 1f42f76ea; typed
+    ``owned_create_root`` parameter T055): the worktree-context guard (skipped
+    for an owned create, matching the pre-decomposition behaviour), the
+    not-a-git-repo guard, the unborn-HEAD guard (checked against the WRITE
+    root, since linked checkouts can have different HEAD states in the same
+    repository), and the detached-HEAD guard. ``owned_create_root`` is minted
+    ONCE by the caller through WP02's
+    :func:`specify_cli.core.owned_mission.resolve_owned_create_root` -- which
+    raises :class:`mission_runtime.ActionContextError` carrying the SAME error
+    codes the pre-decomposition ``resolve_ownership_claim`` +
+    ``error_for_claim`` call (a G1 floor offender) used to raise -- and is
+    never re-validated here.
+    """
+    cwd = Path.cwd().resolve()
+    resolved_root = repo_root
+
+    if owned_create_root is None:
+        if not allow_worktree_context and is_worktree_context(cwd):
+            raise MissionCreationError("Cannot create missions from inside a worktree. Run from the project root checkout.")
+        if resolved_root is None:
+            resolved_root = locate_project_root()
+    else:
+        # HIGH-2 fix-cycle-1 regression repair: the already-validated fact is
+        # the SINGLE source of the repository root on the owned path -- never
+        # a caller-supplied `repo_root` left unresolved. Before this WP,
+        # a supplied `repo_root` was `.resolve()`d before use; T055
+        # accidentally left it as the caller's bare (possibly symlinked)
+        # path when `repo_root` was not ``None``. Cross-check rather than
+        # silently preferring one over the other: a caller-supplied
+        # `repo_root` that resolves to a DIFFERENT path than the fact's own
+        # `repository_root` is a caller bug (roots that disagree must never
+        # be silently mixed) and fails closed.
+        if resolved_root is not None and resolved_root.resolve() != owned_create_root.repository_root:
+            raise MissionCreationError(
+                f"Owned-create repository root mismatch: the supplied repo_root "
+                f"({resolved_root.resolve()}) does not match the validated owned "
+                f"checkout's repository root ({owned_create_root.repository_root})."
+            )
+        resolved_root = owned_create_root.repository_root
+
+    if resolved_root is None:
+        raise MissionCreationError("Could not locate project root. Run from within spec-kitty repository.")
+
+    write_root = owned_create_root.checkout if owned_create_root is not None else resolved_root
+
+    if not is_git_repo(resolved_root):
+        raise MissionCreationError("Not in a git repository. Mission creation requires git.")
+    # Every topology commits its scaffold. Inspect the selected write checkout:
+    # linked checkouts can have different HEAD states in the same repository.
+    if has_unborn_head(write_root):
+        raise MissionCreationError(
+            "This checkout has no commits yet, so Spec Kitty cannot commit the mission scaffold.\n\n"
+            "Make an initial commit first, then create the mission:\n"
+            "  git commit --allow-empty -m 'Initial commit'\n\n"
+            "If the repository already has files staged, commit those instead."
+        )
+
+    current_branch = get_current_branch(write_root)
+    if not current_branch or current_branch == "HEAD":
+        raise MissionCreationError("Must be on a branch to create missions (detached HEAD detected).")
+
+    return _CreateRoots(
+        repository_root=resolved_root,
+        write_root=write_root,
+        owned=owned_create_root,
+        current_branch=current_branch,
+    )
+
+
+def _refuse_live_duplicate(
+    write_root: Path,
+    mission_slug: str,
+    mission: str | None,
+    allow_duplicate: bool,
+) -> None:
+    """Idempotency guard (#4033, FR-001..004, C-001, C-002).
+
+    Section 2.5 of the pre-decomposition body (T051): refuse a same-key (same
+    base ``mission_slug`` AND same ``mission_type``) LIVE prior mission HERE
+    -- before any scaffold/branch write (NFR-002: no orphan scaffold on
+    refusal). "Live" excludes abandoned priors (canceled, genesis / no
+    lifecycle progress, or spec never committed, see
+    :func:`_prior_mission_is_abandoned`), so the common gave-up-and-re-ran
+    path just works with no flag (FR-003).
+    """
+    if allow_duplicate:
+        return
+    effective_mission_type = mission or "software-dev"
+    duplicate = _find_live_duplicate_mission(
+        write_root,
+        mission_slug=mission_slug,
+        mission_type=effective_mission_type,
+    )
+    if duplicate is None:
+        return
+    duplicate_dir_name, duplicate_mid8 = duplicate
+    raise MissionAlreadyExistsError(
+        f"A mission named '{strip_numeric_prefix(mission_slug)}' of type "
+        f"'{effective_mission_type}' already exists and is not "
+        f"abandoned: {duplicate_dir_name} (mid8 {duplicate_mid8}). "
+        "Refusing to silently create a duplicate (#4033).\n\n"
+        "If the prior mission is genuinely abandoned (canceled, or "
+        "never actually worked), re-run this create with no flag --"
+        " abandoned priors are auto-allowed.\n\n"
+        "To deliberately create a second mission with the same name, "
+        "pass --allow-duplicate (create_mission_core(allow_duplicate=True)"
+        " for programmatic callers)."
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _Purpose:
+    """Normalized, validated purpose fields for one create call (section 3, T051)."""
+
+    tldr: str
+    context: str
+
+
+def _resolve_purpose(
+    normalized_friendly_name: str,
+    purpose_tldr: str | None,
+    purpose_context: str | None,
+    planning_branch: str,
+) -> _Purpose:
+    """Normalize and validate the purpose TL;DR/context (section 3, T051)."""
+    normalized_purpose_tldr = " ".join((purpose_tldr or "").split()) if purpose_tldr is not None else normalized_friendly_name
+    normalized_purpose_context = (
+        " ".join((purpose_context or "").split()) if purpose_context is not None else default_mission_purpose_context(normalized_friendly_name, planning_branch)
+    )
+    purpose_errors = validate_purpose_summary(normalized_purpose_tldr, normalized_purpose_context)
+    if purpose_errors:
+        raise MissionCreationError(" ".join(purpose_errors))
+    return _Purpose(tldr=normalized_purpose_tldr, context=normalized_purpose_context)
+
+
+@dataclass(frozen=True, slots=True)
+class _Governance:
+    """Resolved mission-type context + spec template for one create call (section 4, T051)."""
+
+    mission_type_context: Any
+    spec_template: Any
+
+
+def _resolve_create_governance(governance_root: Path, mission: str | None) -> _Governance:
+    """Resolve the activated mission's spec template before any mission state exists.
+
+    Section 4 of the pre-decomposition body (T051; FR-016 governance-root
+    argument re-expressed by T053, #5009 1f42f76ea). A configuration failure
+    must not leave a directory, metadata, or lifecycle events that look like
+    a successful creation, so this runs before any create-side-effect helper.
+
+    ``governance_root`` is the SINGLE root every read below uses: the
+    validated owned checkout when the create is owned, the repository root
+    checkout otherwise (FR-016) -- the validated write checkout owns charter
+    and template configuration, and its activation may intentionally differ
+    from the repository root checkout's.
+
+    Fail-closed at the mission-create / mission-type-use boundary (WP04
+    re-architecture): ``PackContext`` construction is now total (an absent
+    or empty ``mission_type_activations`` key reads as ``frozenset()``
+    without raising), so the actionable "provision your charter" error fires
+    HERE, at the narrowest funnel every mission-create path passes through.
+    """
+    from charter.activation.mission_type_profiles import (
+        existing_mission_types,
+        resolve_mission_type_context,
+    )
+    from charter.activation.pack_context import CharterPackConfigError
+    from specify_cli.runtime.resolver import resolve_configured_template
+
+    if not existing_mission_types(governance_root):
+        raise CharterPackConfigError(
+            "This project has no activated mission types, so a mission cannot "
+            "be created. A mission requires at least one activated mission "
+            "type. Provision the project's charter: run `spec-kitty init` "
+            "(new project) or `spec-kitty upgrade` (existing project), or add a "
+            "non-empty `mission_type_activations` list to .kittify/config.yaml "
+            "(or the charter.yaml it points to)."
+        )
+
+    selected_mission_type = mission or "software-dev"
+    mission_type_context = resolve_mission_type_context(
+        governance_root,
+        mission_type=selected_mission_type,
+    )
+    spec_template = resolve_configured_template(
+        "spec",
+        governance_root,
+        mission_type_context,
+    )
+    return _Governance(mission_type_context=mission_type_context, spec_template=spec_template)
+
+
+@dataclass(frozen=True, slots=True)
+class _Scaffold:
+    """Paths written by the directory-creation + spec-template phase (sections 4/5, T051)."""
+
+    feature_dir: Path
+    scaffold_paths: tuple[Path, ...]
+    tasks_readme: Path
+    spec_file: Path
+    #: The owned create root bound to ``feature_dir`` (``None`` for an unowned
+    #: create): every create commit folds the mission-scoped protection hatch
+    #: through this fact, never a re-derived repository root.
+    owned_mission: OwnedCreateMission | None = None
+    #: Directory holding the mission's ``status.events.jsonl`` (#5440): the
+    #: coordination worktree's mission dir for a coordination-routed create
+    #: (set by :func:`_seed_coordination_status_dir`), ``feature_dir`` otherwise.
+    status_dir: Path | None = None
+    #: Root of the coordination worktree holding ``status_dir`` (#5440), carried
+    #: as a value from the seed so the commit never re-derives it from a path.
+    coordination_root: Path | None = None
+
+    @property
+    def status_log(self) -> Path:
+        """The mission's canonical ``status.events.jsonl`` at create time."""
+        return (self.status_dir or self.feature_dir) / _STATUS_EVENTS_FILENAME
+
+
+def _status_homes_on_coordination(topology: MissionTopology, owned: OwnedCreateRoot | None) -> bool:
+    """True when the create seeds the status log on the coordination surface (#5440).
+
+    ``status.events.jsonl`` is ``MissionArtifactKind.STATUS_STATE``. Its
+    coord-vs-primary home is derived from the single partition authority
+    :func:`mission_runtime.kind_is_coordination_residue` (kind + topology) rather
+    than hand-rolling the predicate from :func:`mission_runtime.routes_through_coordination`
+    alone -- that half ignores the kind side and silently assumes STATUS_STATE is
+    a coordination-placement kind. Deriving from the canonical predicate keeps
+    this create-time gate in lockstep with ``_PLACEMENT_ARTIFACT_KINDS`` (the
+    NFR-004 "swappable locus"): re-homing STATUS_STATE there now flips this gate
+    for free instead of needing a matching edit here. An owned create is
+    ``single_branch`` by construction, so it keeps the primary home regardless.
+    """
+    return owned is None and kind_is_coordination_residue(MissionArtifactKind.STATUS_STATE, topology)
+
+
+def _seed_coordination_status_dir(resolved_root: Path, mission_slug: str, mid8: str) -> tuple[Path, Path] | None:
+    """Materialize the coordination worktree and seed the mission's status dir in it.
+
+    Returns the coordination worktree root and its mission dir holding an empty
+    ``status.events.jsonl``, or ``None`` when no local coordination branch backs
+    the mission (e.g. a target that does not resolve to a ref, so the mint was
+    skipped); the caller then keeps the primary home. Materialization goes
+    through the canonical write-time seam
+    (:func:`~specify_cli.coordination.surface_resolver.materialize_coord_surface_for_write`),
+    never a hand-rolled ``git worktree add``.
+    """
+    from specify_cli.coordination.surface_resolver import (  # noqa: PLC0415
+        CoordinationWorktreeUnmaterialized,
+        materialize_coord_surface_for_write,
+    )
+    from specify_cli.coordination.workspace import CoordinationWorkspace  # noqa: PLC0415
+    from specify_cli.missions._read_path_resolver import CoordState, coord_feature_dir, probe_coord_state  # noqa: PLC0415
+
+    try:
+        materialize_coord_surface_for_write(resolved_root, mission_slug)
+    except CoordinationWorktreeUnmaterialized:
+        # No local coordination branch to materialize (the seam only refuses a
+        # branch it cannot see locally): there is no coordination surface yet.
+        return None
+    if probe_coord_state(resolved_root, mission_slug, mid8) not in (CoordState.MATERIALIZED, CoordState.EMPTY):
+        return None
+    coordination_root: Path = CoordinationWorkspace.worktree_path(resolved_root, mission_slug, mid8)
+    status_dir: Path = coord_feature_dir(resolved_root, mission_slug, mid8)
+    status_dir.mkdir(parents=True, exist_ok=True)
+    (status_dir / _STATUS_EVENTS_FILENAME).touch(exist_ok=True)
+    return coordination_root, status_dir
+
+
+def _commit_coordination_status_seed(resolved_root: Path, mission_slug: str, coordination_root: Path, status_dir: Path) -> None:
+    """Commit the seeded status log on the coordination branch (#5440).
+
+    Mirrors ``coordination.status_transition._commit_status_artifacts_to_coord``:
+    the destination comes from the placement seam for ``STATUS_STATE`` (never a
+    checkout-derived ref) and ``safe_commit`` keeps HEAD == destination in the
+    coordination worktree. Raises on failure so the create rollback fires.
+    """
+    safe_commit(
+        repo_root=resolved_root,
+        worktree_root=coordination_root,
+        target=resolve_placement_only(resolved_root, mission_slug, kind=MissionArtifactKind.STATUS_STATE),
+        message=f"Add status log for mission {mission_slug}",
+        paths=(status_dir / _STATUS_EVENTS_FILENAME,),
+        capability=GuardCapability.STANDARD,
+    )
+
+
+def _place_status_log(
+    scaffold: _Scaffold,
+    *,
+    resolved_root: Path,
+    mission_slug_formatted: str,
+    mid8: str,
+    topology: MissionTopology,
+    owned: OwnedCreateRoot | None,
+) -> _Scaffold:
+    """Give the status log its one durable home before any event is emitted (#5440).
+
+    A coordination-routed create seeds the log in the coordination worktree.
+    When no local coordination branch backs the mission (the mint was skipped
+    because the target does not resolve to a ref), there is no coordination
+    surface to hold it, so the log keeps the primary home and rides the
+    scaffold commit as before.
+    """
+    if not _status_homes_on_coordination(topology, owned):
+        return scaffold
+    seeded = _seed_coordination_status_dir(resolved_root, mission_slug_formatted, mid8)
+    if seeded is not None:
+        coordination_root, status_dir = seeded
+        return replace(scaffold, status_dir=status_dir, coordination_root=coordination_root)
+    primary_log = scaffold.feature_dir / _STATUS_EVENTS_FILENAME
+    primary_log.touch(exist_ok=True)
+    meta_index = scaffold.scaffold_paths.index(scaffold.feature_dir / "meta.json")
+    paths = (*scaffold.scaffold_paths[: meta_index + 1], primary_log, *scaffold.scaffold_paths[meta_index + 1 :])
+    return replace(scaffold, scaffold_paths=paths)
+
+
+def _scaffold_mission_dir(
+    *,
+    write_root: Path,
+    resolved_root: Path,
+    mission_slug_formatted: str,
+    planning_branch: str,
+    create_time_target: CommitTarget,
+    spec_template: Any,
+    owned: OwnedCreateRoot | None = None,
+    topology: MissionTopology,
+    commit_to_target: bool,
+) -> _Scaffold:
+    """Create the mission directory tree and the (uncommitted) spec.md scaffold.
+
+    Sections 4 and 5 of the pre-decomposition body (T051): human-slug + mid8
+    directory naming (FR-032/FR-044), the preflight commit-authority check
+    (same authority as ``safe_commit``, so a bootstrap refusal is disclosed
+    before any write), and the spec.md scaffold copy. ``spec.md`` is
+    intentionally NOT committed here (#846): the agent commits it from
+    ``/spec-kitty.specify`` once it holds substantive content.
+    """
+    feature_dir = write_root / KITTY_SPECS_DIR / mission_slug_formatted
+    _refuse_protected_recreate(
+        write_root,
+        feature_dir,
+        topology=topology,
+        commit_to_target=commit_to_target,
+        planning_branch=planning_branch,
+    )
+    owned_mission = owned.bind_mission(feature_dir) if owned is not None else None
+    # #5440: the status log is a COORD-partition kind (``STATUS_STATE``). Under a
+    # coordination-routed topology its home is the coordination surface, seeded
+    # by :func:`_seed_coordination_status_dir`; it never joins the target-branch
+    # scaffold commit.
+    status_on_primary = not _status_homes_on_coordination(topology, owned)
+    scaffold_paths = (
+        feature_dir / "meta.json",
+        *((feature_dir / _STATUS_EVENTS_FILENAME,) if status_on_primary else ()),
+        feature_dir / "tasks" / "README.md",
+        feature_dir / "tasks" / ".gitkeep",
+    )
+    # Validate before scaffold writes using the same authority as safe_commit.
+    # Main permits these bootstrap refusals and discloses the uncommitted
+    # scaffold; preserve that contract while rejecting other invalid targets.
+    # The actual commit repeats validation, so this grants no stale authority.
+    with contextlib.suppress(*_BOOTSTRAP_META_COMMIT_SKIPS):
+        preflight_commit(
+            repo_root=resolved_root,
+            worktree_root=write_root,
+            target=create_time_target,
+            message=f"Add scaffold for mission {mission_slug_formatted}",
+            paths=scaffold_paths,
+            capability=GuardCapability.STANDARD,
+            # Owned create: the mission-scoped fold reads the new mission's own
+            # (not-yet-written) meta through the validated create fact, never
+            # the repository root's copy (owned-checkout-lifecycle-authority).
+            owned=owned_mission,
+        )
+    feature_dir.mkdir(parents=True, exist_ok=True)
+
+    (feature_dir / "checklists").mkdir(exist_ok=True)
+    (feature_dir / "research").mkdir(exist_ok=True)
+    tasks_dir = feature_dir / "tasks"
+    tasks_dir.mkdir(exist_ok=True)
+
+    (tasks_dir / ".gitkeep").touch()
+
+    # Initialize empty event log so the feature has canonical status from birth.
+    if status_on_primary:
+        (feature_dir / _STATUS_EVENTS_FILENAME).touch(exist_ok=True)
+
+    tasks_readme = tasks_dir / "README.md"
+    tasks_readme.write_text(
+        render_tasks_readme_content(planning_branch),
+        encoding="utf-8",
+    )
+
+    spec_file = feature_dir / "spec.md"
+    if not spec_file.exists():
+        shutil.copy2(spec_template.path, spec_file)
+
+    return _Scaffold(
+        feature_dir=feature_dir,
+        scaffold_paths=scaffold_paths,
+        tasks_readme=tasks_readme,
+        spec_file=spec_file,
+        owned_mission=owned_mission,
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class _MetaBuild:
+    """``meta.json`` contents plus the coordination-branch mint outcome (T051)."""
+
+    meta: dict[str, Any]
+    coordination_branch_created: bool
+    # #5100 (6.7): the protected-target mission branch the mint checked out,
+    # or ``None`` when no mint fired.
+    minted_mission_branch: str | None = None
+
+
+def _build_create_meta(
+    *,
+    feature_dir: Path,
+    mission_id: str,
+    mid8: str,
+    mission_slug_formatted: str,
+    normalized_friendly_name: str,
+    purpose: _Purpose,
+    mission: str | None,
+    planning_branch: str,
+    pr_bound: bool,
+    retain_branches: bool,
+    retain_worktrees: bool,
+    commit_to_target: bool,
+    resolved_root: Path,
+    write_root: Path,
+    topology: MissionTopology,
+    force_recreate_coordination_branch: bool,
+) -> _MetaBuild:
+    """Assemble, mint the coordination branch for, and persist ``meta.json``.
+
+    Sections 6, 6.5 and 6.6 of the pre-decomposition body (T051): the
+    canonical machine-facing identity fields, the create-time retention
+    opt-in (#3131 FR-009, field-absent-unless-True), the per-mission
+    coordination branch mint (WP03 / issue #1348, #2218 -- ONLY for the
+    coordination-bearing shapes), and the topology corroboration (FR-002 /
+    #2069, #2218): the operator's explicit choice is stored verbatim and
+    only CORROBORATED (never re-derived) against the minted coordination
+    state.
+    """
+    meta: dict[str, Any] = load_meta_or_empty(feature_dir)
+
+    # Mint canonical machine-facing identity. The ULID was already generated
+    # by the caller (needed for mid8 directory naming). The ULID is immutable
+    # after creation. mission_number is null pre-merge; a dense display
+    # number is assigned only at merge time (single-writer context on main).
+    # See FR-044.
+    meta.setdefault("mission_id", mission_id)
+    # Backfill the canonical mid8 (first 8 chars of the ULID) so meta.json is
+    # the single canonical identity source: the directory name already embeds
+    # it, and any surface reading ``mid8`` from meta.json saw absence where
+    # the value was knowable (#3474).
+    meta.setdefault("mid8", mid8)
+    meta.setdefault("mission_number", None)  # JSON null — pre-merge missions have no number
+    meta.setdefault("slug", mission_slug_formatted)
+    meta.setdefault("mission_slug", mission_slug_formatted)
+    meta.setdefault("friendly_name", normalized_friendly_name)
+    meta.setdefault("purpose_tldr", purpose.tldr)
+    meta.setdefault("purpose_context", purpose.context)
+    meta.setdefault(_META_KEY_MISSION_TYPE, mission or "software-dev")
+    meta.setdefault("target_branch", planning_branch)
+    meta.setdefault(_META_KEY_CREATED_AT, now_utc_iso())
+    if pr_bound:
+        meta["pr_bound"] = True
+    if retain_branches:
+        meta["retain_branches"] = True
+    if retain_worktrees:
+        meta["retain_worktrees"] = True
+    # #5100 FR-008 (WP08): mirrors the retention pattern above -- mint ONLY
+    # when True, never a written ``false``.
+    if commit_to_target:
+        meta["commit_to_target"] = True
+
+    from specify_cli.missions._create import topology_mints_coordination_branch
+
+    coordination_branch_created_flag = False
+    if topology_mints_coordination_branch(topology):
+        from specify_cli.missions._create import ensure_coordination_branch
+
+        coordination_outcome = ensure_coordination_branch(
+            repo_root=resolved_root,
+            mission_slug=mission_slug_formatted,
+            mission_id=mission_id,
+            target_branch=planning_branch,
+            force_recreate=force_recreate_coordination_branch,
+        )
+        coordination_branch_created_flag = coordination_outcome.created
+        meta["coordination_branch"] = coordination_outcome.branch_name
+
+    from mission_runtime import classify_topology
+
+    if topology in (MissionTopology.COORD, MissionTopology.SINGLE_BRANCH):
+        corroborated = classify_topology(meta.get("coordination_branch") or None, has_lanes=False)
+        if corroborated is not topology:
+            raise MissionCreationError(
+                f"Topology corroboration failed for '{mission_slug_formatted}': stored "
+                f"'{topology.value}' but the minted coordination state classifies as "
+                f"'{corroborated.value}'."
+            )
+    meta["topology"] = topology.value
+    meta.setdefault("flattened", False)
+
+    minted_mission_branch = _mint_protected_branch_for_topology(
+        write_root,
+        mission_slug_formatted,
+        topology=topology,
+        mission_id=mission_id,
+        planning_branch=planning_branch,
+        meta=meta,
+    )
+
+    from specify_cli.mission_metadata import set_documentation_state, write_meta
+
+    write_meta(feature_dir, meta)
+
+    if mission == "documentation":
+        meta.setdefault(_META_KEY_MISSION_TYPE, "documentation")
+        if "documentation_state" not in meta:
+            doc_state: dict[str, Any] = {
+                "iteration_mode": "initial",
+                "divio_types_selected": [],
+                "generators_configured": [],
+                "target_audience": "developers",
+                "last_audit_date": None,
+                "coverage_percentage": 0.0,
+            }
+            set_documentation_state(feature_dir, doc_state)
+
+    return _MetaBuild(
+        meta=meta,
+        coordination_branch_created=coordination_branch_created_flag,
+        minted_mission_branch=minted_mission_branch,
+    )
+
+
+def _refuse_protected_recreate(
+    write_root: Path,
+    feature_dir: Path,
+    *,
+    topology: MissionTopology,
+    commit_to_target: bool,
+    planning_branch: str,
+) -> None:
+    """Refuse a re-create the #5100 protected-target mint would collide on (T051 port).
+
+    A re-create of an already-scaffolded mission that the protected-target
+    mint (:func:`_mint_protected_branch_for_topology`) would handle must
+    report MISSION_ALREADY_EXISTS. This runs BEFORE any write and before the
+    mint, whose "mission branch exists" refusal would otherwise mask it: the
+    mission branch name is derived from the same slug + mid8, so such a
+    re-create always collides on the branch too. Scoped to the mint's own
+    predicate: every other shape keeps the idempotent resume of a genesis-only
+    prior (the #4033 guard already refused a LIVE one).
+
+    Called by :func:`_scaffold_mission_dir` on the directory it just composed
+    (origin/main's order: right after the directory name, before the preflight
+    and any write), so the mission directory is composed exactly once.
+    """
+    mission_slug_formatted = feature_dir.name
+    if (feature_dir / "meta.json").exists() and _protected_mint_applies(
+        write_root,
+        topology=topology,
+        commit_to_target=commit_to_target,
+        target_branch=planning_branch,
+    ):
+        raise MissionAlreadyExistsError(
+            f"Mission directory {mission_slug_formatted} already exists ({KITTY_SPECS_DIR}/{mission_slug_formatted}/meta.json is present). "
+            "Refusing to overwrite an existing mission."
+        )
+
+
+def _mint_protected_branch_for_topology(
+    write_root: Path,
+    mission_slug_formatted: str,
+    *,
+    topology: MissionTopology,
+    mission_id: str,
+    planning_branch: str,
+    meta: dict[str, Any],
+) -> str | None:
+    """Step 6.7: protected-target mission branch (#5100 FR-007/FR-012, WP08 / IC-05).
+
+    Mint and check out the mission branch BEFORE any mission file is committed:
+    commit-router rule 3 refuses a coordination-less commit to a protected
+    target, planning artifacts included, so a branch that did not exist until
+    implement could never receive the spec, plan or tasks. Scoped to
+    SINGLE_BRANCH only (COORD/LANES_WITH_COORD already mint their OWN,
+    unconditional coordination branch; LANES keeps committing straight to
+    target_branch per its own contract). Returns the minted branch name, or
+    ``None`` when no mint fired.
+    """
+    if topology is not MissionTopology.SINGLE_BRANCH or read_commit_to_target(meta):
+        return None
+    _mint_protected_single_branch_mission_branch(
+        write_root,
+        mission_slug_formatted,
+        mission_id=mission_id,
+        target_branch=planning_branch,
+        meta=meta,
+    )
+    minted_branch = meta.get("mission_branch")
+    if isinstance(minted_branch, str) and minted_branch:
+        return minted_branch
+    return None
+
+
+def _emit_create_events(
+    *,
+    feature_dir: Path,
+    mission_slug_formatted: str,
+    meta: dict[str, Any],
+    planning_branch: str,
+    resolved_root: Path,
+    write_root: Path,
+    purpose: _Purpose,
+    normalized_friendly_name: str,
+    spec_file: Path,
+    lifecycle_root: Path | None = None,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Emit ``MissionCreated`` then ``SpecifyStarted`` to the local canonical log.
+
+    ``lifecycle_root`` (WP13 item 6, out-of-map): the owned create root's
+    ``repository_root`` when the create is owned, ``None`` otherwise. Passed as
+    ``repo_root=`` to both emitters so the lifecycle log is written against the
+    fact's repository root instead of re-deriving R from the owned checkout's
+    path (``get_main_repo_root`` walk) after the claim was validated.
+
+    Section 8 of the pre-decomposition body (T051). ``MissionCreated``
+    persistence is a hard requirement (raises ``MissionCreationError`` on any
+    failure, retaining the partial scaffold for resume-probe diagnosis);
+    ``SpecifyStarted`` failure is soft (logged, never raised) -- exactly the
+    pre-decomposition asymmetry.
+
+    Local canonical persistence MUST happen before any SaaS fan-out so
+    downstream dashboards and TeamSpace can replay a mission's full history
+    even when SaaS sync is offline (issue #1067).
+    """
+    try:
+        from specify_cli.identity.project import load_identity
+        from specify_cli.status import (
+            MISSION_CREATED,
+            _resolve_local_actor,
+            emit_mission_created_local,
+            read_lifecycle_events,
+        )
+
+        _identity = load_identity(resolved_root / ".kittify" / "config.yaml")
+        creation_actor = _resolve_local_actor()
+        expected_created_payload = build_mission_created_payload(
+            mission_slug=mission_slug_formatted,
+            mission_id=meta.get("mission_id"),
+            mission_number=None,
+            mission_type=str(meta.get(_META_KEY_MISSION_TYPE) or "software-dev"),
+            target_branch=planning_branch,
+            wp_count=0,
+            friendly_name=normalized_friendly_name,
+            purpose_tldr=purpose.tldr,
+            purpose_context=purpose.context,
+            created_at=str(meta[_META_KEY_CREATED_AT]) if meta.get(_META_KEY_CREATED_AT) else None,
+            actor=creation_actor,
+        )
+        created_event = emit_mission_created_local(
+            feature_dir,
+            mission_slug=mission_slug_formatted,
+            mission_id=meta.get("mission_id"),
+            mission_number=None,
+            mission_type=str(meta.get(_META_KEY_MISSION_TYPE) or "software-dev"),
+            target_branch=planning_branch,
+            wp_count=0,
+            project_uuid=str(_identity.project_uuid) if _identity.project_uuid else None,
+            project_slug=_identity.project_slug,
+            friendly_name=normalized_friendly_name,
+            purpose_tldr=purpose.tldr,
+            purpose_context=purpose.context,
+            created_at=str(meta[_META_KEY_CREATED_AT]) if meta.get(_META_KEY_CREATED_AT) else None,
+            actor=creation_actor,
+            fanout=False,
+            repo_root=lifecycle_root,
+        )
+        created_events = [event for event in read_lifecycle_events(feature_dir / _STATUS_EVENTS_FILENAME) if event.get("event_type") == MISSION_CREATED]
+        if len(created_events) != 1:
+            raise MissionCreationError(f"expected exactly one persisted MissionCreated event, found {len(created_events)}")
+        persisted_created = created_events[0]
+        if (
+            persisted_created.get("aggregate_id") != meta.get("mission_id")
+            or persisted_created.get("aggregate_type") != "Mission"
+            or persisted_created.get("payload") != expected_created_payload
+        ):
+            raise MissionCreationError("persisted MissionCreated event does not match the canonical creation snapshot")
+    except Exception as _local_evt_exc:  # noqa: BLE001
+        raise MissionCreationError(
+            "Local canonical MissionCreated persistence failed for "
+            f"{mission_slug_formatted!r}: {_local_evt_exc}. The partial scaffold "
+            "is retained for explicit resume-probe diagnosis; do not retry create "
+            "until it is repaired or removed."
+        ) from _local_evt_exc
+
+    # Mission creation immediately scaffolds ``spec.md`` and opens the specify
+    # phase. Record ``SpecifyStarted`` against the canonical local log so that
+    # TeamSpace replay can show "currently specifying" before the agent
+    # commits substantive spec content (which is where ``setup-plan`` later
+    # emits ``SpecifyCompleted``). Without this event the canonical lifecycle
+    # stream skips straight from ``MissionCreated`` to ``SpecifyCompleted``,
+    # leaving the specify-phase entry point invisible to dashboards and
+    # TeamSpace -- see issue #1067.
+    phase_event: dict[str, Any] | None = None
+    try:
+        from specify_cli.status import (
+            SPECIFY_STARTED,
+            emit_artifact_phase_local,
+        )
+
+        phase_event = emit_artifact_phase_local(
+            feature_dir,
+            event_type=SPECIFY_STARTED,
+            mission_slug=mission_slug_formatted,
+            actor="spec-kitty mission create",
+            artifact_path=(str(spec_file.relative_to(write_root)) if spec_file.is_relative_to(write_root) else "spec.md"),
+            repo_root=lifecycle_root,
+        )
+    except Exception as _phase_evt_exc:  # noqa: BLE001
+        logger.debug(
+            "Local SpecifyStarted persistence skipped for %s: %s",
+            mission_slug_formatted,
+            _phase_evt_exc,
+        )
+
+    return created_event, phase_event
+
+
+@dataclass(slots=True)
+class _CommitOutcome:
+    """Outcome of the scaffold commit + pending-origin consumption (T051)."""
+
+    scaffold_commit_skipped: bool
+    origin_binding_attempted: bool
+    origin_binding_succeeded: bool
+    origin_binding_error: str | None
+    meta: dict[str, Any]
+
+
+def _commit_create_scaffold(
+    *,
+    scaffold: _Scaffold,
+    resolved_root: Path,
+    write_root: Path,
+    create_time_target: CommitTarget,
+    mission_slug_formatted: str,
+    planning_branch: str,
+    meta: dict[str, Any],
+) -> _CommitOutcome:
+    """Commit the scaffold, then consume + commit a pending origin binding.
+
+    Sections 8.5, 9 and 9.5 of the pre-decomposition body (T051): ONE
+    transactional commit for the create-owned generated set (#2693), then the
+    ticket-first pending-origin consumption, then -- only on a successful
+    bind -- a SECOND commit landing the updated ``origin_ticket`` subtree
+    through the same sanctioned commit surface (squad follow-on to
+    #2739/#2693), so the tree never sits modified-uncommitted after a
+    successful origin bind.
+
+    FR-001 (#3673): do NOT suppress -- a hard git failure must raise so
+    ``create_mission_core``'s rollback
+    (``_restore_git_state_after_failed_create``) fires. ``_commit_feature_file``
+    calls ``safe_commit`` directly (no empty-changeset no-op); every path here
+    genuinely differs from HEAD at create time, so the commit is non-empty.
+    """
+    scaffold_commit_skipped = False
+    try:
+        _commit_feature_file(
+            scaffold.scaffold_paths,
+            mission_slug_formatted,
+            "scaffold",
+            resolved_root,
+            worktree_root=write_root,
+            create_time_target=create_time_target,
+            owned=scaffold.owned_mission,
+        )
+    except _BOOTSTRAP_META_COMMIT_SKIPS as exc:
+        scaffold_commit_skipped = True
+        logger.info(
+            "Skipping bootstrap scaffold commit for %s on planning branch %s: %s",
+            mission_slug_formatted,
+            planning_branch,
+            exc,
+        )
+    except SafeCommitStagedTreeUnchanged as exc:
+        # #3861: a byte-identical scaffold already committed is the same
+        # duplicate-mission signature the #4033 guard refuses pre-write (the
+        # residual path the guard can allow through, e.g. ``allow_duplicate``
+        # callers re-running with a frozen ``mission_id``). Surface the TYPED
+        # already-exists signal, never the prose.
+        raise MissionAlreadyExistsError(f"meta.json commit failed: {exc}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"meta.json commit failed: {exc}") from exc
+
+    (
+        origin_binding_attempted,
+        origin_binding_succeeded,
+        origin_binding_error,
+        meta,
+    ) = _consume_pending_origin_if_present(
+        repo_root=resolved_root,
+        feature_dir=scaffold.feature_dir,
+        meta=meta,
+    )
+
+    if origin_binding_succeeded:
+        meta_file = scaffold.feature_dir / "meta.json"
+        try:
+            _commit_feature_file(
+                (meta_file,),
+                mission_slug_formatted,
+                "origin-ticket binding",
+                resolved_root,
+                worktree_root=write_root,
+                create_time_target=create_time_target,
+                owned=scaffold.owned_mission,
+            )
+        except _BOOTSTRAP_META_COMMIT_SKIPS as exc:
+            scaffold_commit_skipped = True
+            logger.info(
+                "Skipping origin-ticket binding commit for %s on planning branch %s: %s",
+                mission_slug_formatted,
+                planning_branch,
+                exc,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"origin-ticket binding commit failed: {exc}") from exc
+
+    return _CommitOutcome(
+        scaffold_commit_skipped=scaffold_commit_skipped,
+        origin_binding_attempted=origin_binding_attempted,
+        origin_binding_succeeded=origin_binding_succeeded,
+        origin_binding_error=origin_binding_error,
+        meta=meta,
+    )
+
+
+def _build_create_result(
+    *,
+    scaffold: _Scaffold,
+    commit_outcome: _CommitOutcome,
+    mission_slug_formatted: str,
+    planning_branch: str,
+    current_branch: str,
+    coordination_branch_created: bool,
+    resolved_root: Path,
+    owned_create_root: OwnedCreateRoot | None,
+    created_event: dict[str, Any],
+    phase_event: dict[str, Any] | None,
+) -> MissionCreationResult:
+    """Build the final result and fan out the local events (section 10, T051).
+
+    Publishing happens after local creation has fully succeeded, including
+    main's explicitly disclosed bootstrap skips: a hard scaffold/origin
+    failure must leave no hosted events whose local authority was rolled
+    back.
+    """
+    meta_file = scaffold.feature_dir / "meta.json"
+    created_files = [scaffold.spec_file, meta_file, scaffold.tasks_readme]
+    uncommitted_files = [scaffold.spec_file]
+    if commit_outcome.scaffold_commit_skipped:
+        skipped_scaffold = list(scaffold.scaffold_paths)
+        created_files.extend(path for path in skipped_scaffold if path not in created_files)
+        uncommitted_files.extend(path for path in skipped_scaffold if path not in uncommitted_files)
+
+    from specify_cli.status import fanout_lifecycle_event_hosted
+
+    log_path = scaffold.status_log
+    if created_event is not None:
+        fanout_lifecycle_event_hosted(created_event, log_path=log_path)
+    if phase_event is not None:
+        fanout_lifecycle_event_hosted(phase_event, log_path=log_path)
+
+    return MissionCreationResult(
+        feature_dir=scaffold.feature_dir,
+        mission_slug=mission_slug_formatted,
+        mission_number=None,  # pre-merge: no display number assigned (FR-044)
+        meta=commit_outcome.meta,
+        target_branch=planning_branch,
+        current_branch=current_branch,
+        created_files=created_files,
+        uncommitted_files=uncommitted_files,
+        origin_binding_attempted=commit_outcome.origin_binding_attempted,
+        origin_binding_succeeded=commit_outcome.origin_binding_succeeded,
+        origin_binding_error=commit_outcome.origin_binding_error,
+        coordination_branch=commit_outcome.meta.get("coordination_branch"),
+        coordination_branch_created=coordination_branch_created,
+        owned_checkout=owned_create_root,
+        canonical_repo_root=resolved_root,
+    )
+
+
 def _create_mission_core_impl(
     repo_root: Path | None,
     mission_slug: str,
@@ -705,9 +1904,10 @@ def _create_mission_core_impl(
     topology: MissionTopology = MissionTopology.COORD,
     force_recreate_coordination_branch: bool = False,
     allow_worktree_context: bool = False,
-    owned_checkout: Path | None = None,
+    owned_create_root: OwnedCreateRoot | None = None,
     retain_branches: bool = False,
     retain_worktrees: bool = False,
+    commit_to_target: bool = False,
     allow_duplicate: bool = False,
 ) -> MissionCreationResult:
     """Create a new feature with all scaffolding.
@@ -761,11 +1961,14 @@ def _create_mission_core_impl(
         isolated (often temporary) repository while the test process itself
         happens to be running from within a lane worktree checkout, which is
         this project's normal execution context for its own test suite.
-    owned_checkout:
-        Explicit checkout root owned by this invocation. The path is validated
-        against the independently resolved primary checkout before the existing
-        worktree-context guard can be bypassed. ``None`` preserves the existing
-        guard and write-root behavior exactly.
+    owned_create_root:
+        The already-validated owned root (WP02's :class:`OwnedCreateRoot`) for
+        this invocation, or ``None`` for an unowned (repository root) create.
+        Callers holding only a raw ``--owned-checkout`` path resolve it through
+        :func:`specify_cli.core.owned_mission.resolve_owned_create_root` first
+        (validated exactly once per command, FR-003 spirit) and pass the typed
+        result here. ``None`` preserves the existing worktree-context guard and
+        write-root behavior exactly.
     retain_branches:
         Create-time retention opt-in (#3131 FR-009). When ``True``, mints
         ``retain_branches: true`` into ``meta.json`` so downstream ``spec-kitty
@@ -776,6 +1979,14 @@ def _create_mission_core_impl(
     retain_worktrees:
         Create-time retention opt-in (#3131 FR-009) for worktrees, mirroring
         ``retain_branches``. Defaults to ``False`` (field left ABSENT).
+    commit_to_target:
+        Operator override (#5100 FR-008, WP08). When ``True`` on a
+        ``SINGLE_BRANCH`` mission, skips the protected-target mission-branch
+        mint below and mints ``commit_to_target: true`` into ``meta.json`` so
+        the override is durable across the mission's lifetime. Defaults to
+        ``False``, in which case the field is left ABSENT from ``meta.json``
+        (mirrors ``retain_branches``/``retain_worktrees`` -- never written as
+        ``false``).
     allow_duplicate:
         Escape hatch for the idempotency guard (#4033, FR-004). Defaults to
         ``False``, preserving the guard: creation is refused with
@@ -806,609 +2017,134 @@ def _create_mission_core_impl(
         If the activated mission type cannot resolve its configured ``spec``
         template. Resolution happens before any mission state is created.
     """
-    # ------------------------------------------------------------------
-    # 1. Input validation
-    # ------------------------------------------------------------------
-    if not KEBAB_CASE_PATTERN.match(mission_slug):
+    normalized_friendly_name = _validate_create_inputs(mission_slug, friendly_name)
+    if commit_to_target and topology is not MissionTopology.SINGLE_BRANCH:
         raise MissionCreationError(
-            f"Invalid feature slug '{mission_slug}'. "
-            "Must be kebab-case (lowercase letters, numbers, hyphens only)."
-            "\n\nValid examples:"
-            "\n  - user-auth"
-            "\n  - fix-bug-123"
-            "\n  - 068-feature-name"
-            "\n  - new-dashboard"
-            "\n\nInvalid examples:"
-            "\n  - User-Auth (uppercase)"
-            "\n  - user_auth (underscores)"
+            f"--commit-to-target is only valid for a single_branch mission (got topology '{topology.value}'). "
+            "Pass --topology single_branch, or drop --commit-to-target."
         )
+    roots = _resolve_create_roots(repo_root, owned_create_root, allow_worktree_context)
+    resolved_root = roots.repository_root
+    write_root = roots.write_root
+    current_branch = roots.current_branch
 
-    friendly_name_was_provided = friendly_name is not None
-    normalized_friendly_name = " ".join((friendly_name or "").split())
-    if friendly_name_was_provided and not normalized_friendly_name:
-        raise MissionCreationError("Mission creation requires a non-empty friendly_name.")
+    _refuse_live_duplicate(write_root, mission_slug, mission, allow_duplicate)
 
-    # ------------------------------------------------------------------
-    # 2. Context guards
-    # ------------------------------------------------------------------
-    cwd = Path.cwd().resolve()
-    ownership_claim: OwnershipClaim | None = None
-    resolved_root = repo_root
-
-    if owned_checkout is None:
-        if not allow_worktree_context and is_worktree_context(cwd):
-            raise MissionCreationError("Cannot create missions from inside a worktree. Run from the project root checkout.")
-        if resolved_root is None:
-            resolved_root = locate_project_root()
-    else:
-        if resolved_root is None:
-            resolved_root = locate_project_root()
-        if resolved_root is not None:
-            resolved_root = resolved_root.resolve()
-            ownership_claim = resolve_ownership_claim(
-                owned_checkout.resolve(),
-                resolved_primary=resolved_root,
-            )
-            ownership_error = error_for_claim(ownership_claim)
-            if ownership_error is not None:
-                raise ownership_error
-
-    if resolved_root is None:
-        raise MissionCreationError("Could not locate project root. Run from within spec-kitty repository.")
-
-    effective_root = (
-        ownership_claim.claimed_checkout if ownership_claim is not None and ownership_claim.validation_result is OwnershipValidationResult.OWNED else resolved_root
-    )
-
-    if not is_git_repo(resolved_root):
-        raise MissionCreationError("Not in a git repository. Mission creation requires git.")
-    # Every topology commits its scaffold. Inspect the selected write checkout:
-    # linked checkouts can have different HEAD states in the same repository.
-    if has_unborn_head(effective_root):
-        raise MissionCreationError(
-            "This checkout has no commits yet, so Spec Kitty cannot commit the mission scaffold.\n\n"
-            "Make an initial commit first, then create the mission:\n"
-            "  git commit --allow-empty -m 'Initial commit'\n\n"
-            "If the repository already has files staged, commit those instead."
-        )
-
-    current_branch = get_current_branch(effective_root)
-    if not current_branch or current_branch == "HEAD":
-        raise MissionCreationError("Must be on a branch to create missions (detached HEAD detected).")
-
-    # ------------------------------------------------------------------
-    # 2.5 Idempotency guard (#4033, FR-001..004, C-001, C-002)
-    #
-    # Refuse a same-key (same base mission_slug AND same mission_type) LIVE
-    # prior mission HERE -- before any scaffold/branch write below (NFR-002:
-    # no orphan scaffold on refusal). "Live" excludes abandoned priors
-    # (canceled, genesis / no lifecycle progress, or spec never committed,
-    # see _prior_mission_is_abandoned), so the common gave-up-and-re-ran path
-    # just works with no flag (FR-003). ``allow_duplicate`` (FR-004) and the
-    # single-seam placement (C-001) cover every caller: CLI, specify, and the
-    # programmatic factory.
-    # ------------------------------------------------------------------
-    if not allow_duplicate:
-        effective_mission_type = mission or "software-dev"
-        duplicate = _find_live_duplicate_mission(
-            effective_root,
-            mission_slug=mission_slug,
-            mission_type=effective_mission_type,
-        )
-        if duplicate is not None:
-            duplicate_dir_name, duplicate_mid8 = duplicate
-            raise MissionAlreadyExistsError(
-                f"A mission named '{strip_numeric_prefix(mission_slug)}' of type "
-                f"'{effective_mission_type}' already exists and is not "
-                f"abandoned: {duplicate_dir_name} (mid8 {duplicate_mid8}). "
-                "Refusing to silently create a duplicate (#4033).\n\n"
-                "If the prior mission is genuinely abandoned (canceled, or "
-                "never actually worked), re-run this create with no flag --"
-                " abandoned priors are auto-allowed.\n\n"
-                "To deliberately create a second mission with the same name, "
-                "pass --allow-duplicate (create_mission_core(allow_duplicate=True)"
-                " for programmatic callers)."
-            )
-
-    # ------------------------------------------------------------------
-    # 3. Resolve planning branch
-    # ------------------------------------------------------------------
     planning_branch = target_branch if target_branch else current_branch
     create_time_target = resolve_create_time_write_target(planning_branch)
-    if not normalized_friendly_name:
-        normalized_friendly_name = default_mission_display_name(mission_slug)
+    purpose = _resolve_purpose(normalized_friendly_name, purpose_tldr, purpose_context, planning_branch)
 
-    normalized_purpose_tldr = " ".join((purpose_tldr or "").split()) if purpose_tldr is not None else normalized_friendly_name
-    normalized_purpose_context = (
-        " ".join((purpose_context or "").split()) if purpose_context is not None else default_mission_purpose_context(normalized_friendly_name, planning_branch)
-    )
-    purpose_errors = validate_purpose_summary(normalized_purpose_tldr, normalized_purpose_context)
-    if purpose_errors:
-        raise MissionCreationError(" ".join(purpose_errors))
+    # FR-016 (#5009 1f42f76ea, re-expressed on the decomposed pipeline): the
+    # validated write checkout owns charter and template configuration; its
+    # activation may intentionally differ from the repository root checkout's.
+    governance_root = roots.owned.checkout if roots.owned is not None else resolved_root
+    governance = _resolve_create_governance(governance_root, mission)
 
-    # Resolve the activated mission's specification template before creating
-    # any mission state. A configuration failure must not leave a directory,
-    # metadata, or lifecycle events that look like a successful creation.
-    from charter.activation.mission_type_profiles import (
-        existing_mission_types,
-        resolve_mission_type_context,
-    )
-    from charter.activation.pack_context import CharterPackConfigError
-    from specify_cli.runtime.resolver import resolve_configured_template
-
-    # Fail-closed at the mission-create / mission-type-use boundary (WP04
-    # re-architecture): ``PackContext`` construction is now total (an absent
-    # or empty ``mission_type_activations`` key reads as ``frozenset()``
-    # without raising, so the dozens of read / compose hot paths never crash).
-    # The actionable "provision your charter" error therefore fires HERE, at
-    # the narrowest funnel every mission-create path passes through (the CLI
-    # ``agent mission create`` command, the ticket-first ``tracker`` flow, and
-    # the ``make_mission`` test factory all call this function). A project
-    # with an EMPTY activated set -- whether the key is absent or an authored
-    # ``[]`` -- cannot host a mission: a mission requires at least one
-    # activated mission type. Read/gating callers of ``existing_mission_types``
-    # keep returning empty WITHOUT raising; only this require boundary raises.
-    if not existing_mission_types(resolved_root):
-        raise CharterPackConfigError(
-            "This project has no activated mission types, so a mission cannot "
-            "be created. A mission requires at least one activated mission "
-            "type. Provision the project's charter: run `spec-kitty init` "
-            "(new project) or `spec-kitty upgrade` (existing project), or add a "
-            "non-empty `mission_type_activations` list to .kittify/config.yaml "
-            "(or the charter.yaml it points to)."
-        )
-
-    selected_mission_type = mission or "software-dev"
-    mission_type_context = resolve_mission_type_context(
-        resolved_root,
-        mission_type=selected_mission_type,
-    )
-    spec_template = resolve_configured_template(
-        "spec",
-        resolved_root,
-        mission_type_context,
-    )
-
-    # ------------------------------------------------------------------
-    # 4. Directory creation — human-slug + mid8 format (FR-032, FR-044)
-    #
-    # Pre-merge missions are identified by mission_id (ULID) only.
-    # No feature_number is allocated here; mission_number stays None
-    # until merge time (single-writer context on main).
-    # ------------------------------------------------------------------
     # Mint the ULID first so we can derive mid8 for the directory name.
     # resolve_mid8 derives the mid8 from the declared mission_id (authoritative,
     # FR-004/NFR-003); mission_dir_name composes <human-slug>-<mid8> canonically,
     # stripping any NNN- prefix (FR-032, FR-044).
     mission_id = str(ULID())
     # One authoritative derivation (FR-004/NFR-003) feeds both consumers: the
-    # directory name below and the ``mid8`` meta backfill in section 6 (#3474),
-    # so the two can never drift.
+    # directory name below and the ``mid8`` meta backfill in
+    # ``_build_create_meta`` (#3474), so the two can never drift.
     mid8 = resolve_mid8("", mission_id=mission_id)
-    mission_slug_formatted = mission_dir_name(
-        mission_slug,
+    mission_slug_formatted = mission_dir_name(mission_slug, mid8=mid8)
+
+    scaffold = _scaffold_mission_dir(
+        write_root=write_root,
+        resolved_root=resolved_root,
+        mission_slug_formatted=mission_slug_formatted,
+        planning_branch=planning_branch,
+        create_time_target=create_time_target,
+        spec_template=governance.spec_template,
+        owned=roots.owned,
+        topology=topology,
+        commit_to_target=commit_to_target,
+    )
+
+    meta_build = _build_create_meta(
+        feature_dir=scaffold.feature_dir,
+        mission_id=mission_id,
         mid8=mid8,
+        mission_slug_formatted=mission_slug_formatted,
+        normalized_friendly_name=normalized_friendly_name,
+        purpose=purpose,
+        mission=mission,
+        planning_branch=planning_branch,
+        pr_bound=pr_bound,
+        retain_branches=retain_branches,
+        retain_worktrees=retain_worktrees,
+        commit_to_target=commit_to_target,
+        resolved_root=resolved_root,
+        write_root=write_root,
+        topology=topology,
+        force_recreate_coordination_branch=force_recreate_coordination_branch,
+    )
+    if meta_build.minted_mission_branch is not None:
+        # #5100 (6.7): the scaffold commit must land on the branch the mint
+        # just checked out -- `create_time_target` was resolved BEFORE the
+        # mint, from the (protected) planning branch. Without this,
+        # `safe_commit`'s HEAD-vs-destination check sees the write checkout on
+        # the minted branch but a destination of the protected
+        # `planning_branch`, raises `SafeCommitHeadMismatch`, and the scaffold
+        # commit silently treats it as an ordinary protected-target skip --
+        # leaving the just-minted branch with no scaffold commit at all.
+        # Re-derived through the SAME create-time seam (no mission identity is
+        # readable yet), never a hand-built CommitTarget.
+        create_time_target = resolve_create_time_write_target(meta_build.minted_mission_branch)
+
+    scaffold = _place_status_log(
+        scaffold,
+        resolved_root=resolved_root,
+        mission_slug_formatted=mission_slug_formatted,
+        mid8=mid8,
+        topology=topology,
+        owned=roots.owned,
     )
 
-    feature_dir = effective_root / KITTY_SPECS_DIR / mission_slug_formatted
-    scaffold_paths = (
-        feature_dir / "meta.json",
-        feature_dir / "status.events.jsonl",
-        feature_dir / "tasks" / "README.md",
-        feature_dir / "tasks" / ".gitkeep",
-    )
-    # Validate before scaffold writes using the same authority as safe_commit.
-    # Main permits these bootstrap refusals and discloses the uncommitted
-    # scaffold; preserve that contract while rejecting other invalid targets.
-    # The actual commit repeats validation, so this grants no stale authority.
-    with contextlib.suppress(*_BOOTSTRAP_META_COMMIT_SKIPS):
-        preflight_commit(
-            repo_root=resolved_root,
-            worktree_root=effective_root,
-            target=create_time_target,
-            message=f"Add scaffold for mission {mission_slug_formatted}",
-            paths=scaffold_paths,
-            capability=GuardCapability.STANDARD,
-        )
-    feature_dir.mkdir(parents=True, exist_ok=True)
-
-    (feature_dir / "checklists").mkdir(exist_ok=True)
-    (feature_dir / "research").mkdir(exist_ok=True)
-    tasks_dir = feature_dir / "tasks"
-    tasks_dir.mkdir(exist_ok=True)
-
-    (tasks_dir / ".gitkeep").touch()
-
-    # Initialize empty event log so the feature has canonical status from birth.
-    (feature_dir / "status.events.jsonl").touch(exist_ok=True)
-
-    # Tasks README
-    tasks_readme = tasks_dir / "README.md"
-    tasks_readme.write_text(
-        render_tasks_readme_content(planning_branch),
-        encoding="utf-8",
+    created_event, phase_event = _emit_create_events(
+        feature_dir=scaffold.status_log.parent,
+        mission_slug_formatted=mission_slug_formatted,
+        meta=meta_build.meta,
+        planning_branch=planning_branch,
+        resolved_root=resolved_root,
+        write_root=write_root,
+        purpose=purpose,
+        normalized_friendly_name=normalized_friendly_name,
+        spec_file=scaffold.spec_file,
+        lifecycle_root=roots.owned.repository_root if roots.owned is not None else None,
     )
 
-    # ------------------------------------------------------------------
-    # 5. Spec template
-    # ------------------------------------------------------------------
-    spec_file = feature_dir / "spec.md"
-    if not spec_file.exists():
-        shutil.copy2(spec_template.path, spec_file)
-
-    # NOTE: spec.md is intentionally NOT committed here (issue #846).
-    # The configured scaffold remains on disk but untracked at create time.
-    # The agent commits the populated spec.md from the /spec-kitty.specify
-    # slash-template after writing substantive content. The substantive-content
-    # gate at `setup-plan` entry (see specify_cli.missions._substantive) enforces
-    # that spec.md is committed AND substantive before plan.md can be scaffolded.
-    # See:
-    #   kitty-specs/charter-e2e-827-followups-01KQAJA0/contracts/specify-plan-commit-boundary.md
-
-    # ------------------------------------------------------------------
-    # 6. meta.json
-    # ------------------------------------------------------------------
-    meta_file = feature_dir / "meta.json"
-    meta: dict[str, Any] = load_meta_or_empty(feature_dir)
-
-    # Mint canonical machine-facing identity. The ULID was already generated
-    # above (needed for mid8 directory naming). The ULID is immutable after creation.
-    # mission_number is null pre-merge; a dense display number is assigned only
-    # at merge time (single-writer context on main). See FR-044.
-    meta.setdefault("mission_id", mission_id)
-    # Backfill the canonical mid8 (first 8 chars of the ULID) so meta.json is
-    # the single canonical identity source: the directory name already embeds
-    # it, and any surface reading ``mid8`` from meta.json saw absence where the
-    # value was knowable (#3474).
-    meta.setdefault("mid8", mid8)
-    meta.setdefault("mission_number", None)  # JSON null — pre-merge missions have no number
-    meta.setdefault("slug", mission_slug_formatted)
-    meta.setdefault("mission_slug", mission_slug_formatted)
-    meta.setdefault("friendly_name", normalized_friendly_name)
-    meta.setdefault("purpose_tldr", normalized_purpose_tldr)
-    meta.setdefault("purpose_context", normalized_purpose_context)
-    meta.setdefault(_META_KEY_MISSION_TYPE, mission or "software-dev")
-    meta.setdefault("target_branch", planning_branch)
-    meta.setdefault(_META_KEY_CREATED_AT, now_utc_iso())
-    if pr_bound:
-        meta["pr_bound"] = True
-
-    # Create-time retention opt-in (#3131 FR-009, T014). Write each field ONLY
-    # when True -- a non-retaining mission (the default) must leave both
-    # fields field-ABSENT, never a written ``false``, so its meta.json stays
-    # byte-identical to pre-#3131 output (FR-010, SC-004).
-    if retain_branches:
-        meta["retain_branches"] = True
-    if retain_worktrees:
-        meta["retain_worktrees"] = True
-
-    # ------------------------------------------------------------------
-    # 6.5 Coordination branch (WP03 / issue #1348, #2218)
-    #
-    # Mint (or idempotently reuse) the per-mission coordination branch
-    # ``kitty/mission-<slug>-<mid8>`` parented off ``planning_branch`` — but
-    # ONLY for the coordination-bearing shapes the operator chose. The
-    # branch-flat shapes (``SINGLE_BRANCH`` / ``LANES``) skip the mint and
-    # never write ``coordination_branch``, so create-time topology choice is
-    # honoured end-to-end (#2218). Persisting the branch ref in ``meta.json``
-    # makes downstream commands self-describing — no re-derivation, no drift.
-    # ------------------------------------------------------------------
-    from specify_cli.missions._create import topology_mints_coordination_branch
-
-    coordination_branch_value: str | None = None
-    coordination_branch_created_flag = False
-    if topology_mints_coordination_branch(topology):
-        from specify_cli.missions._create import ensure_coordination_branch
-
-        coordination_outcome = ensure_coordination_branch(
-            repo_root=resolved_root,
-            mission_slug=mission_slug_formatted,
-            mission_id=mission_id,
-            target_branch=planning_branch,
-            force_recreate=force_recreate_coordination_branch,
-        )
-        coordination_branch_value = coordination_outcome.branch_name
-        coordination_branch_created_flag = coordination_outcome.created
-        meta["coordination_branch"] = coordination_outcome.branch_name
-
-    # ------------------------------------------------------------------
-    # 6.6 Mission topology (FR-002 / #2069, #2218)
-    #
-    # STORE the operator's explicit ``MissionTopology`` choice verbatim so it is
-    # READ thereafter, never re-inferred from disk/git at resolve time. The
-    # explicit choice is authoritative because ``classify_topology`` CANNOT
-    # reproduce the ``LANES`` selection at create time (no ``lanes.json`` exists
-    # pre-``finalize-tasks``). We only use the classifier to CORROBORATE the
-    # coordination-determined cells (``COORD`` / ``SINGLE_BRANCH``): the minted
-    # state must agree with the stored choice, else fail closed. ``flattened`` is
-    # a separate boolean provenance flag, NOT a topology value.
-    # ------------------------------------------------------------------
-    from mission_runtime import classify_topology
-
-    if topology in (MissionTopology.COORD, MissionTopology.SINGLE_BRANCH):
-        corroborated = classify_topology(meta.get("coordination_branch") or None, has_lanes=False)
-        if corroborated is not topology:
-            raise MissionCreationError(
-                f"Topology corroboration failed for '{mission_slug_formatted}': stored "
-                f"'{topology.value}' but the minted coordination state classifies as "
-                f"'{corroborated.value}'."
-            )
-    meta["topology"] = topology.value
-    meta.setdefault("flattened", False)
-
-    from specify_cli.mission_metadata import set_documentation_state, write_meta
-
-    write_meta(feature_dir, meta)
-
-    # ------------------------------------------------------------------
-    # 7. Documentation state (if applicable)
-    #
-    # #2693: ``set_documentation_state`` rewrites ``meta.json`` on disk, so it
-    # runs BEFORE the single transactional scaffold commit (step 8.5) that
-    # stages ``meta.json``; otherwise the doc-state write would be left
-    # uncommitted. There is no separate commit here — the whole create-owned
-    # generated set commits exactly once, after the event-emission leg below.
-    # ------------------------------------------------------------------
-    if mission == "documentation":
-        meta.setdefault(_META_KEY_MISSION_TYPE, "documentation")
-        if "documentation_state" not in meta:
-            doc_state: dict[str, Any] = {
-                "iteration_mode": "initial",
-                "divio_types_selected": [],
-                "generators_configured": [],
-                "target_audience": "developers",
-                "last_audit_date": None,
-                "coverage_percentage": 0.0,
-            }
-            set_documentation_state(feature_dir, doc_state)
-
-    # ------------------------------------------------------------------
-    # 8. Event emission
-    #
-    # #2693: this leg MUTATES ``status.events.jsonl`` (it is initialised empty
-    # at scaffold time), so it MUST run BEFORE the transactional scaffold commit
-    # (step 8.5) — pre-fix the sole commit ran first and left the freshly-written
-    # event log untracked. Emission stays a pre-commit step so the committed
-    # ``status.events.jsonl`` already carries the ``MissionCreated`` /
-    # ``SpecifyStarted`` events.
-    #
-    # Local canonical persistence MUST happen before any SaaS fan-out so
-    # downstream dashboards and TeamSpace can replay a mission's full
-    # history even when SaaS sync is offline (issue #1067).
-    # ------------------------------------------------------------------
-    try:
-        from specify_cli.identity.project import load_identity
-        from specify_cli.status import (
-            MISSION_CREATED,
-            _resolve_local_actor,
-            emit_mission_created_local,
-            read_lifecycle_events,
-        )
-
-        _identity = load_identity(resolved_root / ".kittify" / "config.yaml")
-        creation_actor = _resolve_local_actor()
-        expected_created_payload = build_mission_created_payload(
-            mission_slug=mission_slug_formatted,
-            mission_id=meta.get("mission_id"),
-            mission_number=None,
-            mission_type=str(meta.get(_META_KEY_MISSION_TYPE) or mission or "software-dev"),
-            target_branch=planning_branch,
-            wp_count=0,
-            friendly_name=normalized_friendly_name,
-            purpose_tldr=normalized_purpose_tldr,
-            purpose_context=normalized_purpose_context,
-            created_at=str(meta[_META_KEY_CREATED_AT]) if meta.get(_META_KEY_CREATED_AT) else None,
-            actor=creation_actor,
-        )
-        created_event = emit_mission_created_local(
-            feature_dir,
-            mission_slug=mission_slug_formatted,
-            mission_id=meta.get("mission_id"),
-            mission_number=None,
-            mission_type=str(meta.get(_META_KEY_MISSION_TYPE) or mission or "software-dev"),
-            target_branch=planning_branch,
-            wp_count=0,
-            project_uuid=str(_identity.project_uuid) if _identity.project_uuid else None,
-            project_slug=_identity.project_slug,
-            friendly_name=normalized_friendly_name,
-            purpose_tldr=normalized_purpose_tldr,
-            purpose_context=normalized_purpose_context,
-            created_at=str(meta[_META_KEY_CREATED_AT]) if meta.get(_META_KEY_CREATED_AT) else None,
-            actor=creation_actor,
-            fanout=False,
-        )
-        created_events = [event for event in read_lifecycle_events(feature_dir / "status.events.jsonl") if event.get("event_type") == MISSION_CREATED]
-        if len(created_events) != 1:
-            raise MissionCreationError(f"expected exactly one persisted MissionCreated event, found {len(created_events)}")
-        persisted_created = created_events[0]
-        if (
-            persisted_created.get("aggregate_id") != meta.get("mission_id")
-            or persisted_created.get("aggregate_type") != "Mission"
-            or persisted_created.get("payload") != expected_created_payload
-        ):
-            raise MissionCreationError("persisted MissionCreated event does not match the canonical creation snapshot")
-    except Exception as _local_evt_exc:  # noqa: BLE001
-        raise MissionCreationError(
-            "Local canonical MissionCreated persistence failed for "
-            f"{mission_slug_formatted!r}: {_local_evt_exc}. The partial scaffold "
-            "is retained for explicit resume-probe diagnosis; do not retry create "
-            "until it is repaired or removed."
-        ) from _local_evt_exc
-
-    # Mission creation immediately scaffolds ``spec.md`` and opens
-    # the specify phase. Record ``SpecifyStarted`` against the canonical
-    # local log so that TeamSpace replay can show "currently specifying"
-    # before the agent commits substantive spec content (which is where
-    # ``setup-plan`` later emits ``SpecifyCompleted``). Without this event
-    # the canonical lifecycle stream skips straight from ``MissionCreated``
-    # to ``SpecifyCompleted``, leaving the specify-phase entry point
-    # invisible to dashboards and TeamSpace — see issue #1067.
-    phase_event: dict[str, Any] | None = None
-    try:
-        from specify_cli.status import (
-            SPECIFY_STARTED,
-            emit_artifact_phase_local,
-        )
-
-        phase_event = emit_artifact_phase_local(
-            feature_dir,
-            event_type=SPECIFY_STARTED,
-            mission_slug=mission_slug_formatted,
-            actor="spec-kitty mission create",
-            artifact_path=(str(spec_file.relative_to(effective_root)) if spec_file.is_relative_to(effective_root) else "spec.md"),
-        )
-    except Exception as _phase_evt_exc:  # noqa: BLE001
-        logger.debug(
-            "Local SpecifyStarted persistence skipped for %s: %s",
-            mission_slug_formatted,
-            _phase_evt_exc,
-        )
-
-    # ------------------------------------------------------------------
-    # 8.5 Transactional scaffold commit (#2693)
-    #
-    # ONE commit stages the full create-owned generated set: ``meta.json`` (+
-    # any documentation-state write from step 7), the canonical
-    # ``status.events.jsonl`` mutated by the event-emission leg ABOVE, and the
-    # ``tasks/`` scaffold (``README.md`` + ``.gitkeep``). Pre-#2693 this leg
-    # committed ``meta.json`` alone and reported the mission complete while
-    # leaving ``status.events.jsonl`` and the ``tasks/`` scaffold untracked and
-    # undisclosed. ``spec.md`` is deliberately EXCLUDED (#846): it is scaffolded
-    # empty here and committed later by ``/spec-kitty.specify`` once it holds
-    # substantive content — the CLI discloses it as an uncommitted artifact in
-    # the ``--json`` envelope so it is never untracked AND undisclosed.
-    #
-    # FR-001 (#3673): do NOT suppress — a hard git failure must raise so
-    # ``create_mission_core``'s rollback
-    # (``_restore_git_state_after_failed_create``) fires. ``_commit_feature_file``
-    # calls ``safe_commit`` directly (no empty-changeset no-op); every path here
-    # genuinely differs from HEAD at create time, so the commit is non-empty.
-    # NFR-001: re-raise with step context naming the failing step.
-    # ------------------------------------------------------------------
-    scaffold_commit_skipped = False
-    try:
-        _commit_feature_file(
-            scaffold_paths,
-            mission_slug_formatted,
-            "scaffold",
-            resolved_root,
-            worktree_root=effective_root,
-            create_time_target=create_time_target,
-        )
-    except _BOOTSTRAP_META_COMMIT_SKIPS as exc:
-        scaffold_commit_skipped = True
-        logger.info(
-            "Skipping bootstrap scaffold commit for %s on planning branch %s: %s",
-            mission_slug_formatted,
-            planning_branch,
-            exc,
-        )
-    except SafeCommitStagedTreeUnchanged as exc:
-        # #3861: a byte-identical scaffold already committed is the same
-        # duplicate-mission signature the #4033 guard refuses pre-write (the
-        # residual path the guard can allow through, e.g. ``allow_duplicate``
-        # callers re-running with a frozen ``mission_id``). Keep the step
-        # context in the message but surface the TYPED already-exists signal
-        # (``MissionAlreadyExistsError``) so callers classify on the code,
-        # never on the prose.
-        raise MissionAlreadyExistsError(f"meta.json commit failed: {exc}") from exc
-    except Exception as exc:
-        raise RuntimeError(f"meta.json commit failed: {exc}") from exc
-
-    # ------------------------------------------------------------------
-    # 9. Consume pending origin if present (ticket-first flow)
-    # ------------------------------------------------------------------
-    origin_binding_attempted = False
-    origin_binding_succeeded = False
-    origin_binding_error: str | None = None
-
-    origin_binding_attempted, origin_binding_succeeded, origin_binding_error, meta = _consume_pending_origin_if_present(
-        repo_root=resolved_root,
-        feature_dir=feature_dir,
-        meta=meta,
+    commit_outcome = _commit_create_scaffold(
+        scaffold=scaffold,
+        resolved_root=resolved_root,
+        write_root=write_root,
+        create_time_target=create_time_target,
+        mission_slug_formatted=mission_slug_formatted,
+        planning_branch=planning_branch,
+        meta=meta_build.meta,
     )
-
-    # ------------------------------------------------------------------
-    # 9.5 Commit the origin-ticket binding (squad follow-on to #2739/#2693)
-    #
-    # ``_consume_pending_origin_if_present`` -> ``bind_mission_origin`` calls
-    # the SaaS binder FIRST, then writes the updated ``origin_ticket`` subtree
-    # to ``meta.json`` locally via ``set_origin_ticket`` (``write_meta`` — a
-    # plain disk write, no commit). The step-8.5 scaffold commit above already
-    # landed BEFORE this write, so on the ticket-first flow a successful
-    # origin bind leaves ``meta.json`` modified-uncommitted in the working
-    # tree while the CLI's ``--json`` envelope reports the mission created —
-    # ``git status --porcelain`` shows ``M meta.json`` even though creation
-    # "succeeded". Land it through the SAME sanctioned commit surface used at
-    # step 8.5 so the tree is clean the moment origin binding succeeds.
-    # Mirrors step 8.5's FR-001 discipline: raise rather than silently leave
-    # the tree dirty on a hard commit failure.
-    # ------------------------------------------------------------------
-    if origin_binding_succeeded:
+    # The seed commit follows the target scaffold commit: a failure here makes
+    # the create rollback restore the target ref and drop the orphan
+    # coordination branch, and hosted fanout only fires once both commits land.
+    if scaffold.status_dir is not None and scaffold.coordination_root is not None:
         try:
-            _commit_feature_file(
-                (meta_file,),
-                mission_slug_formatted,
-                "origin-ticket binding",
-                resolved_root,
-                worktree_root=effective_root,
-                create_time_target=create_time_target,
-            )
-        except _BOOTSTRAP_META_COMMIT_SKIPS as exc:
-            scaffold_commit_skipped = True
-            logger.info(
-                "Skipping origin-ticket binding commit for %s on planning branch %s: %s",
-                mission_slug_formatted,
-                planning_branch,
-                exc,
-            )
+            _commit_coordination_status_seed(resolved_root, mission_slug_formatted, scaffold.coordination_root, scaffold.status_dir)
         except Exception as exc:
-            raise RuntimeError(f"origin-ticket binding commit failed: {exc}") from exc
+            raise RuntimeError(f"status log commit on the coordination branch failed: {exc}") from exc
 
-    # ------------------------------------------------------------------
-    # 10. Build result
-    # ------------------------------------------------------------------
-    created_files = [spec_file, meta_file, tasks_readme]
-    uncommitted_files = [spec_file]
-    if scaffold_commit_skipped:
-        skipped_scaffold = [
-            meta_file,
-            feature_dir / "status.events.jsonl",
-            tasks_readme,
-            tasks_dir / ".gitkeep",
-        ]
-        created_files.extend(path for path in skipped_scaffold if path not in created_files)
-        uncommitted_files.extend(skipped_scaffold)
-
-    # Publish after local creation has succeeded, including main's explicitly
-    # disclosed bootstrap skips. A hard scaffold/origin failure must leave no
-    # hosted events whose local authority was rolled back.
-    from specify_cli.status import fanout_lifecycle_event_hosted
-
-    log_path = feature_dir / "status.events.jsonl"
-    if created_event is not None:
-        fanout_lifecycle_event_hosted(created_event, log_path=log_path)
-    if phase_event is not None:
-        fanout_lifecycle_event_hosted(phase_event, log_path=log_path)
-
-    return MissionCreationResult(
-        feature_dir=feature_dir,
-        mission_slug=mission_slug_formatted,
-        mission_number=None,  # pre-merge: no display number assigned (FR-044)
-        meta=meta,
-        target_branch=planning_branch,
+    return _build_create_result(
+        scaffold=scaffold,
+        commit_outcome=commit_outcome,
+        mission_slug_formatted=mission_slug_formatted,
+        planning_branch=planning_branch,
         current_branch=current_branch,
-        created_files=created_files,
-        uncommitted_files=uncommitted_files,
-        origin_binding_attempted=origin_binding_attempted,
-        origin_binding_succeeded=origin_binding_succeeded,
-        origin_binding_error=origin_binding_error,
-        coordination_branch=coordination_branch_value,
-        coordination_branch_created=coordination_branch_created_flag,
-        owned_checkout=(
-            ownership_claim.claimed_checkout if ownership_claim is not None and ownership_claim.validation_result is OwnershipValidationResult.OWNED else None
-        ),
-        canonical_repo_root=resolved_root,
+        coordination_branch_created=meta_build.coordination_branch_created,
+        resolved_root=resolved_root,
+        owned_create_root=roots.owned,
+        created_event=created_event,
+        phase_event=phase_event,
     )
 
 

@@ -14,6 +14,7 @@ paths without checkout evidence stay unchanged and are reported by the doctor.
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path, PurePosixPath, PureWindowsPath
 import stat
 import tomllib
@@ -24,6 +25,7 @@ from charter.bundle import CHARTER_YAML
 from charter.missions import MissionsRootNotFound, MissionTemplateRepository
 from charter.pack_paths import PackRootNotFound
 from charter.provenance import is_built_in_pack_path, to_portable_source_path
+from kernel.git import GitCommandError, GitPath, index_entries
 from kernel.paths import BUILT_IN_PACK_SIBLING_PATTERN
 from kernel.sibling_paths import SiblingPathNotFound
 
@@ -172,23 +174,16 @@ def _checkout_tracks_mission(
         before_query = _source_path_snapshot(checkout_root, relative_source)
         if before_query is None or before_query != initial_source_snapshot:
             return False
-        index_entries = subprocess.run(
-            ["git", "-C", str(checkout_root), "ls-files", "--stage", "--error-unmatch", "--", relative_source.as_posix()],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=2,
-        ).stdout.splitlines()
+        index_records = index_entries(checkout_root, pathspecs=(relative_source.as_posix(),), timeout=2)
         after_query = _source_path_snapshot(checkout_root, relative_source)
-    except (OSError, subprocess.SubprocessError, tomllib.TOMLDecodeError, ValueError):
+    except (GitCommandError, OSError, subprocess.SubprocessError, tomllib.TOMLDecodeError, ValueError):
         return False
     if after_query is None or after_query != before_query:
         return False
-    if len(index_entries) != 1:
+    if len(index_records) != 1:
         return False
-    index_metadata, separator, indexed_path = index_entries[0].partition("\t")
-    fields = index_metadata.split()
-    return bool(separator) and indexed_path == relative_source.as_posix() and len(fields) == 3 and fields[0] in {"100644", "100755"} and fields[2] == "0"
+    record = index_records[0]
+    return record.path == GitPath.parse(relative_source.as_posix()) and record.mode in {"100644", "100755"} and record.stage == 0
 
 
 def _has_former_checkout_proof(source_path: str, token_suffix: str) -> bool:
@@ -240,18 +235,22 @@ def _load_charter_document(charter_path: Path) -> Any:
         raise MigrationStateUnreadableError(f"{charter_path} could not be read ({type(exc).__name__}); provenance was not evaluated") from exc
 
 
-def _healable_references(charter_path: Path, document: Any | None = None) -> list[tuple[dict[str, Any], str]]:
+def _healable_references(project_path: Path, document: Any | None = None) -> list[tuple[dict[str, Any], str]]:
     from charter.activation.charter_yaml_io import catalog_field_from_document  # noqa: PLC0415
 
+    charter_path = _charter_path(project_path)
     if not charter_path.is_file():
         return []
 
     if document is None:
         document = _load_charter_document(charter_path)
-    catalog = document.get("catalog") if hasattr(document, "get") else None
-    if not isinstance(catalog, dict):
+    # Same Mapping predicate as `catalog_field_from_document`, so the two
+    # "is this document-like" gates cannot disagree on a non-dict Mapping.
+    catalog = document.get("catalog") if isinstance(document, Mapping) else None
+    if not isinstance(catalog, Mapping):
         return []
 
+    # Read the mission from the already-loaded document: no second disk read.
     mission = catalog_field_from_document(document, "mission")
     template_set = catalog.get("template_set")
     if not isinstance(template_set, str) or not template_set:
@@ -279,9 +278,8 @@ def _healable_references(charter_path: Path, document: Any | None = None) -> lis
 
 def describe_template_set_leaks(project_path: Path) -> list[str]:
     """Return stale built-in template-set source paths without changing files."""
-    charter_path = _charter_path(project_path)
     return [
-        f"charter.yaml catalog[{reference.get('id', '?')}].source_path={reference.get('source_path')!r}" for reference, _token in _healable_references(charter_path)
+        f"charter.yaml catalog[{reference.get('id', '?')}].source_path={reference.get('source_path')!r}" for reference, _token in _healable_references(project_path)
     ]
 
 
@@ -294,9 +292,12 @@ def describe_template_set_ambiguities(project_path: Path) -> list[str]:
         return []
 
     document = _load_charter_document(charter_path)
-    catalog = document.get("catalog") if hasattr(document, "get") else None
-    if not isinstance(catalog, dict):
+    # Same Mapping predicate as `catalog_field_from_document`, so the two
+    # "is this document-like" gates cannot disagree on a non-dict Mapping.
+    catalog = document.get("catalog") if isinstance(document, Mapping) else None
+    if not isinstance(catalog, Mapping):
         return []
+    # Read the mission from the document just loaded: no second disk read.
     suffix = _expected_mission_suffix(catalog_field_from_document(document, "mission"))
     if suffix is None:
         return []
@@ -339,7 +340,7 @@ class HealTemplateSetProvenanceMigration(BaseMigration):
     runs_on_worktrees = False
 
     def detect(self, project_path: Path) -> bool:
-        return bool(_healable_references(_charter_path(project_path)))
+        return bool(_healable_references(project_path))
 
     def can_apply(self, project_path: Path) -> tuple[bool, str]:
         if self.detect(project_path):
@@ -354,7 +355,7 @@ class HealTemplateSetProvenanceMigration(BaseMigration):
         from charter.activation.charter_yaml_io import update_charter_yaml_section  # noqa: PLC0415
 
         document = _load_charter_document(charter_path)
-        healable = _healable_references(charter_path, document)
+        healable = _healable_references(project_path, document)
         if not healable:
             return MigrationResult(success=True)
 

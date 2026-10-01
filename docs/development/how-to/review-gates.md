@@ -2,7 +2,7 @@
 title: 'Review Gates: Pre-PR Hygiene, Review-Cycle Mechanics, and the Consolidation Gate'
 description: Review-cycle-artifact and consolidation-gate mechanics, the --skip-review-artifact-check override, and issue-matrix discovery, so review focuses on substance.
 doc_status: active
-updated: '2026-09-08'
+updated: '2026-09-30'
 audience: docs/context/audience/internal/lead-developer.md
 type: how-to
 related:
@@ -17,12 +17,12 @@ run locally before requesting review or opening a PR, so the actual review
 focuses on the substance of the change and not on confusing failures
 unrelated to it; and (2) the mechanics of the review-cycle artifact / consolidation
 gate and the issue-matrix discovery surface that a WP actually has to
-satisfy to reach `approved`/`done`. The verdict vocabulary, JSON schema, and
-`in-mission` semantics for the issue matrix are **already documented** in
-[`ERROR_CODES.md`](../../../src/specify_cli/cli/commands/review/ERROR_CODES.md)
-and
-[`spec-kitty-mission-review/SKILL.md`](../../../src/charter/offering/skills/spec-kitty-mission-review/SKILL.md) —
-this page cites them rather than restating them.
+satisfy to reach `approved`/`done`. The issue-matrix verdict vocabulary and
+the rule for which references need a row are owned by the
+[Issue-Matrix Verdict Reference](../reference/issue-matrix-verdicts.md); review
+error codes live in
+[`ERROR_CODES.md`](../../../src/specify_cli/cli/commands/review/ERROR_CODES.md).
+This page cites them rather than restating them.
 
 ## Environment hygiene before review/PR
 
@@ -289,15 +289,16 @@ recording a verdict.
 ## PR draft and WIP-title conventions
 
 A `WIP` or `[WIP]` prefix on your PR title marks the PR as author-declared
-not-ready. The two draft-gated CI suites (`integration-tests-core-misc`,
-`e2e-cross-cutting`) **skip** on a WIP-titled PR, but the `quality-gate`
-aggregator's exemption is draft-*flag*-only -- not title-based -- so a
-**non-draft** PR that still carries a WIP prefix is a contradiction the gate
-rejects by design: requesting review while WIP-titled must not pass. To land,
-either drop the `WIP` / `[WIP]` prefix from the title, or keep the PR in draft
-until it is ready. (See the `DRAFT_GATED_JOBS` note that used to live in
-`.github/workflows/ci-quality.yml`, deleted per PROGRAM.md §2 / planning#57 —
-this repo runs no GitHub Actions.)
+not-ready. Use the GitHub **draft** flag for the same purpose: keep the PR in
+draft until it is ready, and drop any `WIP` / `[WIP]` prefix before you mark it
+ready for review. A non-draft PR that still carries a WIP prefix is a
+contradiction — reviewers will send it back.
+
+No CI job currently gates on the draft flag or the WIP title: the modular CI
+(`ci-router.yml`, `ci-modules.yml`, `ci-aggregate.yml`) and `ci-quality.yml`'s
+`quality-gate` run the same way on draft and ready PRs. The earlier
+draft-gated suites (`integration-tests-core-misc`, `e2e-cross-cutting`) no
+longer exist.
 
 ## PR body style: consumer-focused BLUF
 
@@ -316,10 +317,163 @@ This is checked again at landing time; see
 Every user-facing change updates `docs/changelog/CHANGELOG.md` (the root
 `CHANGELOG.md` is a symlink to it — there is one canonical file). The entry
 mirrors the PR body's style: consumer-focused, impact-first, one line a user
-understands — e.g. "Fixed: sync could deliver one project's events to
-another project's workspace" — not an internal-mechanism summary. Add it
+understands — e.g. "`spec-kitty research` now finds its templates through
+the same resolver as every other mission template" — not an
+internal-mechanism summary. Add it
 under the relevant `[Unreleased]` category in
 [`docs/changelog/CHANGELOG.md`](../../changelog/CHANGELOG.md).
+
+Two automated checks keep docs prose and that `[Unreleased]` section in shape:
+a spelling check and a changelog style guard. Both run in CI as the always-on
+`docs-lint` job (see [`docs-lint` in the CI gate
+mechanics](../reference/ci-gate-mechanics.md#docs-lint)), so run them locally
+first.
+
+### Run the docs checks locally
+
+From the repository root, after a one-time `uv sync --frozen` (it installs the
+pinned `codespell` from the dev group):
+
+```bash
+make docs-lint        # both checks; stops at the first one that fails
+
+# or one at a time (`make docs-lint` runs each of these through `uv run --frozen`):
+uv run --frozen python -m scripts.docs.check_spelling                     # all three spelling passes
+uv run --frozen python -m scripts.docs.check_spelling --pass typo         # typos in docs prose
+uv run --frozen python -m scripts.docs.check_spelling --pass us           # US spelling in guides and context
+uv run --frozen python -m scripts.docs.check_spelling --pass unreleased   # US spelling in [Unreleased]
+uv run --frozen python -m scripts.docs.check_changelog_style              # changelog entry style
+```
+
+Exit code `0` means clean, `1` means findings, and `2` means the tool could not
+run or could not prove it looked at anything. Exit `2` covers:
+
+- `codespell` is not installed, or `pyproject.toml` has no `[tool.codespell]`
+  table (spelling check).
+- The changelog cannot be read (both scripts).
+- A `typo` or `us` pass scanned zero files (`the <pass> pass scanned 0 file(s)`).
+- The `unreleased` pass would scan a scratch copy of the section that a
+  `[tool.codespell]` `skip` glob drops, so nothing would be checked.
+
+A changelog with no `[Unreleased]` section is not an error: the `unreleased`
+pass scans `0` lines and the guard prints `nothing to check`, and both exit `0`.
+The checks run no pytest.
+
+Two options help when you test against another tree: `--repo-root PATH` on the
+spelling check, and `--changelog PATH` on both. A relative `--changelog`
+resolves against the repository root in both scripts (against `--repo-root` for
+the spelling check), so the result does not depend on your current directory.
+
+Do **not** run bare `codespell`. Without the script's scope roots it scans the
+whole repository, including skipped trees (`docs/archive/`, `docs/reports/`,
+`docs/plans/`) and generated files, and reports hundreds of hits that are not
+yours.
+
+### What gets checked
+
+The spelling check runs three passes. Each covers Markdown only; the
+`skip` list in `[tool.codespell]` in `pyproject.toml` excludes `docs/archive/`,
+`docs/reports/` and `docs/plans/`, the generated CLI reference
+(`docs/api/cli-commands.md`) and non-Markdown files. A page under those paths is
+never spell-checked, so respell it by hand if you touch it.
+
+| Pass | Looks for | Scope |
+|---|---|---|
+| `typo` | real typos | `docs/`, `packs/built-in/` and `README.md` |
+| `us` | British spellings (`behaviour`, `colour`) | `docs/guides/` and `docs/context/` |
+| `unreleased` | British spellings | the `[Unreleased]` section of the changelog only |
+
+The two American-spelling passes ignore code spans, fenced blocks and
+`<a id="…"></a>` heading anchors, and accept `dialogue`. The typo pass has no
+such exemption.
+
+The changelog guard reads the `[Unreleased]` section only; released sections are
+never restyled. Both scripts find that section through one shared locator, which
+ignores a release-looking heading inside a fenced block (fenced with ` ``` ` or
+`~~~`) and accepts a heading written without a space (`##[Unreleased]`). The
+guard enforces:
+
+| Area | Rule (finding id) |
+|---|---|
+| Headings | Only `### Breaking`, `Upgrade Notes`, `Added`, `Changed`, `Fixed`, `Internal`, each at most once and in that order (`heading-unknown`, `heading-duplicate`, `heading-order`). A `####` heading is allowed only under `### Fixed` (`subheading-placement`). |
+| Entry shape | Entries in every section except Internal start with a bold headline (`headline-missing`). Every entry is a `- ` bullet at column 0; a `* ` or `+ ` bullet fails (`bullet-marker`). Issue references go after the headline in parentheses, never inside the bold (`refs-in-bold`). Breaking, Changed and Fixed entries show the old behavior with `**Before:**` (or `**Why:**` plus `**After:**`), unless the body is short: at most two sentences and 300 characters (`contrast-missing`). |
+| Internal entries | One physical line, with no nested items and no `**Before:**` (`internal-shape`). |
+| Banned tokens | No requirement IDs such as `FR-012` outside backticks, no 26-character ULID (any one, not only a mission's), no `.kittify/evidence/` paths, no `planning#` references, no all-caps `DEFAULT`, `REFUSE` or `FAIL` outside backticks, no "Bug-fix; no CLI version bump" boilerplate, and no mention of the retired `merge` command (write `spec-kitty consolidate`; only an entry that also names `spec-kitty consolidate`, such as the rename entry, may name the old command). The same tokens are banned in the text above the first heading and in prose between a `###` or `####` heading and its first bullet (`banned-token`). |
+| Length | Measured in characters. An entry over 900 warns (`length-warning`); over 1,200 fails (`length`). Each nested bullet is measured on its own. A warning does not change the exit code. |
+
+A compliant entry looks like this (illustrative content; the guidance test runs
+this exact block through the guard, so it stays valid):
+
+<!-- docs-lint-example -->
+```markdown
+- **`spec-kitty consolidate` no longer deletes a lane branch that still holds unmerged commits** (#1234).
+  **Before:** cleanup removed the branch as soon as its Work Package was approved, so late commits were lost. **After:** cleanup checks the branch tip first and refuses, naming the commit to restore.
+```
+
+### False positives
+
+The banned-token rules match shapes, not meanings, so some legitimate text is
+flagged. In an entry headline or body these all fail: `WP-D-1` (the shape `D-1`
+reads as a requirement ID), `ISO C-3` (`C-3`), `SC-2086` (`SC-` plus digits),
+`DEFAULT-branch` (the all-caps word `DEFAULT`), and `C#10` in a bold headline
+(`refs-in-bold`, because of `#10`). Put the literal in backticks, for example
+`` `SC-2086` ``. That clears requirement IDs and all-caps words. It does not
+clear a ULID, which is matched even inside a code span.
+
+### Read a failure
+
+Each finding is one line. The spelling check prints
+`path:line: [typo] word — fix: suggestion` (or `[us-spelling]`), then a summary:
+
+```text
+docs/guides/example.md:12: [us-spelling] colour — fix: color
+1 finding(s) across 1 file(s); scanned: typo=665 file(s), us=134 file(s), unreleased=276 line(s)
+```
+
+The guard prints `path:line: [rule] [Section] headline excerpt — fix`, with
+`warning:` in front of warnings, then an `N error(s), M warning(s)` summary:
+
+```text
+docs/changelog/CHANGELOG.md:57: [refs-in-bold] [Fixed] Stop duplicate events (#1234) — Move `(#1234)` out of the bold headline: `- **Headline** (#1234).`
+```
+
+The line number is the real line in the file, and the text after the dash says
+what to do. Read the `scanned:` counts too: a pass that shows `0` looked at
+nothing (a wrong `--repo-root`, for instance), which is not the same as a clean
+pass. The check now refuses that case for the `typo` and `us` passes: it prints
+`error: the <pass> pass scanned 0 file(s); a check that looks at nothing cannot
+pass` and exits `2`. Only `unreleased=0 line(s)` can still be a clean result,
+when the changelog has no `[Unreleased]` section.
+
+### Allow a legitimate word
+
+When `codespell` flags a word that is correct here (a domain term, a proper
+noun), add it to `ignore-words-list` in the `[tool.codespell]` table of
+`pyproject.toml`. Use lowercase, comma-separated, with no spaces:
+
+```toml
+ignore-words-list = "accreting,disjointness,yourword"
+```
+
+One lowercase entry covers every capitalization. The list is shared by all
+three spelling passes, so add only words that are correct everywhere.
+
+### Exempt a quoted literal
+
+The two American-spelling passes flag British spellings inside quoted CLI
+output, status values, config keys and identifiers, where you cannot change the
+word. Put the literal in a code span (`` `like this` ``), or in a fenced block if
+it spans several lines. A single-word heading anchor written as
+`<a id="behaviour"></a>` is already exempt. This exemption does not apply to the
+typo pass: a real typo inside a code span is still a typo.
+
+### Known blind spots
+
+- Hyphenated British tokens such as `organisation-tier` or `behaviour-driven`
+  are never flagged, because `codespell` treats the hyphen as part of the word.
+  Spell them the American way yourself.
+- The `en-GB` to `en-US` dictionary is not complete; some words, for example
+  `materialised`, slip through. Respell them by hand when you see them.
 
 ## Shippable doctrine: built-in doctrine must work in a consumer repo
 
@@ -372,7 +526,7 @@ first pattern returned **84 hits across 23 files of which 52 were real** — the
 rest were permitted prose or a regex false positive. The worked classification,
 the relocation order, and the gate that currently *requires* one of these
 references live in
-[`built-in-doctrine-repo-coupling-audit.md`](../../plans/doctrine/built-in-doctrine-repo-coupling-audit.md).
+[`built-in-doctrine-repo-coupling-audit.md`](https://github.com/spec-kitty/spec-kitty/blob/main/docs/archive/plans/doctrine/built-in-doctrine-repo-coupling-audit.md).
 
 ## See also
 

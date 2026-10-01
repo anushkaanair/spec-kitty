@@ -14,6 +14,12 @@ any staging or commit, the helper asserts that the worktree's ``HEAD`` matches
 destination from the current working directory or HEAD --- a missing argument
 fails ``mypy --strict``, and a mismatched HEAD raises ``SafeCommitHeadMismatch``.
 
+The optional ``expected_parent_sha`` path is reserved for a caller that must
+commit against one captured branch tip. It builds the commit from that parent
+and advances the destination through the canonical ref-advance seam with a
+compare-and-swap; the normal commit path is unchanged when the argument is
+omitted.
+
 This is the structural invariant that makes every caller correct-by-construction.
 Policy can no longer drift from physical staging because policy and physical
 target are checked against each other at the chokepoint.
@@ -88,21 +94,32 @@ from __future__ import annotations
 from specify_cli.core.constants import WORKTREES_DIR
 import contextlib
 import logging
+import os
+import shlex
 import subprocess
-from collections.abc import Sequence
+import tempfile
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mission_runtime import CommitTarget
 from specify_cli.core.commit_guard import GuardCapability, GuardVerdict, ProtectionState
+from specify_cli.core.constants import KITTY_SPECS_DIR
 from specify_cli.core.commit_guard import evaluate as evaluate_commit_guard
+from kernel.git import GitCommandError, changed_paths
 from kernel.git_topology import (
     GitTopologyError,
     git_common_dir,
     git_toplevel,
 )
 from specify_cli.git.protection_policy import ProtectionPolicy
+from specify_cli.git.ref_advance import RefAdvanceError, advance_branch_ref_for_commit
+
+if TYPE_CHECKING:
+    from mission_runtime import OwnedCheckout
+
+    from specify_cli.core.owned_mission import OwnedCreateMission
 
 logger = logging.getLogger(__name__)
 
@@ -461,6 +478,7 @@ class CommitResult:
     sha: str
     destination_ref: str
     worktree_root: Path
+    diagnostic: str | None = None
 
     def to_dict(self) -> dict[str, str]:
         """Render a JSON-serializable mapping (#1891 / FR-013).
@@ -470,11 +488,14 @@ class CommitResult:
         ``CommitResult`` in a ``--json`` payload without raising
         ``Object of type CommitResult is not JSON serializable``.
         """
-        return {
+        payload = {
             "sha": self.sha,
             "destination_ref": self.destination_ref,
             "worktree_root": str(self.worktree_root),
         }
+        if self.diagnostic is not None:
+            payload["diagnostic"] = self.diagnostic
+        return payload
 
 
 # ---------------------------------------------------------------------------
@@ -677,25 +698,19 @@ def _unstage_requested_files(repo_path: Path, normalized_files: list[str]) -> No
     if not normalized_files:
         return
 
-    staged_result = subprocess.run(
-        ["git", "diff", "--cached", "--no-renames", "--name-only", "-z", "--", *normalized_files],
-        cwd=repo_path,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        check=False,
-    )
-    if staged_result.returncode != 0:
+    try:
+        staged_requested = [str(path) for path in changed_paths(repo_path, cached=True, pathspecs=normalized_files)]
+    except GitCommandError:
+        # Best-effort recovery step (unchanged): when the probe fails there is
+        # nothing safe to unstage, and the caller still re-applies its patch.
         return
-    staged_requested = [path for path in staged_result.stdout.split("\0") if path]
     if not staged_requested:
         return
 
     has_head = _run_git_text(repo_path, ["rev-parse", "--verify", "HEAD"]) is not None
     if has_head:
         subprocess.run(
-            ["git", "restore", "--staged", "--", *staged_requested],
+            ["git", "--literal-pathspecs", "restore", "--staged", "--", *staged_requested],
             cwd=repo_path,
             capture_output=True,
             text=True,
@@ -706,7 +721,7 @@ def _unstage_requested_files(repo_path: Path, normalized_files: list[str]) -> No
         return
 
     subprocess.run(
-        ["git", "rm", "--cached", "--ignore-unmatch", "-q", "--", *staged_requested],
+        ["git", "--literal-pathspecs", "rm", "--cached", "--ignore-unmatch", "-q", "--", *staged_requested],
         cwd=repo_path,
         capture_output=True,
         text=True,
@@ -754,27 +769,6 @@ def _restore_staged_patch(
             worktree_root=repo_path,
             unrecovered_paths=normalized_files,
         )
-
-
-_EMPTY_CHANGESET_MARKERS = (
-    "nothing to commit",
-    "nothing added to commit",
-    "no changes added to commit",
-)
-
-
-def _commit_output_is_empty_changeset(output: str) -> bool:
-    """True iff git's own output says the commit was a genuine empty changeset.
-
-    Secondary signal only — see :func:`_staged_tree_is_empty` for the
-    authoritative check. Output-text matching alone is unsound: a failing
-    pre-commit hook can print one of these markers to its own stdout/stderr
-    while rejecting a real staged change, which would misclassify a genuine
-    failure as a benign no-op (audit finding, PR #3269). Kept as a fallback
-    for callers that only have the combined text and no repo to probe.
-    """
-    low = output.lower()
-    return any(marker in low for marker in _EMPTY_CHANGESET_MARKERS)
 
 
 def _staged_tree_is_empty(repo_path: Path) -> bool:
@@ -886,6 +880,369 @@ def _run_commit_capture_sha(
     return sha, commit_result.stdout, commit_result.stderr
 
 
+def _mission_scoped_policies(
+    repo_root: Path,
+    worktree_root: Path,
+    mission_slug: str | None,
+    *,
+    owned: OwnedCheckout | OwnedCreateMission | None = None,
+) -> tuple[ProtectionPolicy, ProtectionPolicy]:
+    """Resolve the repo-root and worktree policies, folded to *mission_slug*'s ``commit_to_target``.
+
+    #5100 FR-008 mission-scoped hatch: when every staged path lives under one
+    mission's ``kitty-specs/<slug>/`` the commit is that mission's own write.
+
+    * **Owned** (``owned`` set): ownership is the validated fact, never inferred
+      from the filesystem shape of the two roots. The one owned authority,
+      :meth:`ProtectionPolicy.resolve_for_owned`, folds the mission's
+      ``meta.json`` held in the owned checkout (and the union of both roots'
+      protection configs) -- it never re-derives the repository root.
+    * **Non-owned**: :meth:`ProtectionPolicy.for_mission` folds the mission's
+      primary ``meta.json`` for both roots (origin/main's rule, including its
+      fail-closed ambiguous-selector arm).
+
+    A commit that is not one mission's own write keeps both plain policies.
+    """
+    if not mission_slug:
+        return ProtectionPolicy.resolve(repo_root), ProtectionPolicy.resolve(worktree_root)
+    if owned is not None:
+        owned_policy = ProtectionPolicy.resolve_for_owned(owned, mission_slug)
+        return owned_policy, owned_policy
+    return (
+        ProtectionPolicy.resolve(repo_root).for_mission(repo_root, mission_slug),
+        ProtectionPolicy.resolve(worktree_root).for_mission(repo_root, mission_slug),
+    )
+
+
+def _single_mission_slug(normalized_files: list[str]) -> str | None:
+    """Return the mission slug when every path is under one ``kitty-specs/<slug>/``, else ``None``."""
+    slugs: set[str] = set()
+    for rel in normalized_files:
+        parts = Path(rel).parts
+        if len(parts) < 3 or parts[0] != KITTY_SPECS_DIR:
+            return None
+        slugs.add(parts[1])
+    return next(iter(slugs)) if len(slugs) == 1 else None
+
+
+def _run_git_for_commit(
+    worktree_root: Path,
+    args: list[str],
+    *,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """Run one captured Git command for the expected-parent path."""
+    return subprocess.run(
+        ["git", *args],
+        cwd=worktree_root,
+        env=env,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+
+
+def _run_expected_parent_hook(
+    worktree_root: Path,
+    hook_name: str,
+    hook_args: list[str],
+    *,
+    env: dict[str, str],
+) -> None:
+    """Run a normal Git commit hook against the isolated candidate index."""
+    command = ["hook", "run", "--ignore-missing", hook_name]
+    if hook_args:
+        command.extend(["--", *hook_args])
+    result = _run_git_for_commit(worktree_root, command, env=env)
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        raise RuntimeError(f"safe_commit: {hook_name} hook rejected expected-parent commit: {detail or 'hook failed'}")
+
+
+def _build_expected_parent_tree(
+    worktree_root: Path,
+    expected_parent_sha: str,
+    normalized_files: list[str],
+    message_file: Path,
+    *,
+    env: dict[str, str],
+    expected_path_bytes: Mapping[str, bytes],
+) -> str:
+    """Run commit-message hooks and build a tree containing only requested paths."""
+    read_tree = _run_git_for_commit(worktree_root, ["read-tree", expected_parent_sha], env=env)
+    if read_tree.returncode != 0:
+        raise RuntimeError(f"safe_commit: could not seed expected-parent index: {read_tree.stderr.strip()}")
+    for file_path in normalized_files:
+        if Path(file_path).is_absolute() or ".." in Path(file_path).parts:
+            raise RuntimeError(f"safe_commit: expected-parent path must be worktree-relative: {file_path!r}")
+        staged = _run_git_for_commit(worktree_root, ["add", "--force", "--", file_path], env=env)
+        if staged.returncode != 0:
+            raise RuntimeError(f"safe_commit: failed to stage expected-parent path {file_path!r}: {staged.stderr.strip()}")
+
+    intended_tree = _write_expected_parent_tree(worktree_root, env=env)
+    _run_expected_parent_hook(worktree_root, "pre-commit", [], env=env)
+    _run_expected_parent_hook(worktree_root, "prepare-commit-msg", [str(message_file), "message"], env=env)
+    _run_expected_parent_hook(worktree_root, "commit-msg", [str(message_file)], env=env)
+
+    reset_index = _run_git_for_commit(worktree_root, ["read-tree", expected_parent_sha], env=env)
+    if reset_index.returncode != 0:
+        raise RuntimeError(f"safe_commit: could not isolate expected-parent paths: {reset_index.stderr.strip()}")
+    for file_path in normalized_files:
+        staged = _run_git_for_commit(worktree_root, ["add", "--force", "--", file_path], env=env)
+        if staged.returncode != 0:
+            raise RuntimeError(f"safe_commit: failed to stage expected-parent path {file_path!r}: {staged.stderr.strip()}")
+
+    tree = _write_expected_parent_tree(worktree_root, env=env)
+    if tree != intended_tree:
+        requested = ", ".join(normalized_files)
+        raise RuntimeError(f"safe_commit: commit hook changed requested path contents after staging; refusing expected-parent commit for {requested}")
+    _verify_expected_parent_tree_bytes(worktree_root, tree, expected_path_bytes, env=env)
+    return tree
+
+
+def _write_expected_parent_tree(worktree_root: Path, *, env: dict[str, str]) -> str:
+    """Write the candidate index tree or raise with Git's diagnostic."""
+    tree = _run_git_for_commit(worktree_root, ["write-tree"], env=env)
+    if tree.returncode != 0 or not tree.stdout.strip():
+        raise RuntimeError(f"safe_commit: could not write expected-parent tree: {tree.stderr.strip()}")
+    return tree.stdout.strip()
+
+
+def _hash_raw_blob_bytes(worktree_root: Path, contents: bytes) -> str:
+    """Return Git's object ID for exact bytes, without applying clean filters."""
+    result = subprocess.run(
+        ["git", "hash-object", "--stdin", "--no-filters"],
+        cwd=worktree_root,
+        input=contents,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout.strip():
+        detail = result.stderr.decode("utf-8", errors="replace").strip()
+        raise RuntimeError(f"safe_commit: could not hash expected raw path bytes: {detail or 'git hash-object failed'}")
+    return result.stdout.decode("ascii", errors="replace").strip()
+
+
+def _verify_expected_parent_tree_bytes(
+    worktree_root: Path,
+    tree_sha: str,
+    expected_path_bytes: Mapping[str, bytes],
+    *,
+    env: dict[str, str],
+) -> None:
+    """Refuse a candidate tree whose selected blobs differ from caller bytes."""
+    for path, expected_bytes in expected_path_bytes.items():
+        actual_blob = _run_git_for_commit(worktree_root, ["rev-parse", "--verify", f"{tree_sha}:{path}"], env=env)
+        if actual_blob.returncode != 0:
+            detail = (actual_blob.stderr or actual_blob.stdout).strip()
+            raise RuntimeError(f"safe_commit: could not inspect staged blob for {path!r}: {detail or 'git rev-parse failed'}")
+        expected_blob_sha = _hash_raw_blob_bytes(worktree_root, expected_bytes)
+        if actual_blob.stdout.strip() != expected_blob_sha:
+            raise RuntimeError(f"safe_commit: staged blob for {path!r} differs from expected raw bytes; refusing expected-parent commit")
+
+
+def _normalize_expected_parent_path_bytes(
+    worktree_root: Path,
+    normalized_files: list[str],
+    expected_path_bytes: Mapping[Path, bytes] | None,
+) -> dict[str, bytes]:
+    """Normalize exact-content assertions to the same paths used for staging."""
+    if expected_path_bytes is None:
+        return {}
+    root = worktree_root.resolve()
+    normalized: dict[str, bytes] = {}
+    for requested_path, contents in expected_path_bytes.items():
+        candidate = Path(requested_path)
+        if candidate.is_absolute():
+            try:
+                candidate = candidate.resolve().relative_to(root)
+            except ValueError as exc:
+                raise RuntimeError(f"safe_commit: expected raw-bytes path must be inside the worktree: {requested_path}") from exc
+        if candidate.is_absolute() or ".." in candidate.parts:
+            raise RuntimeError(f"safe_commit: expected raw-bytes path must be worktree-relative: {requested_path}")
+        relative_path = str(candidate)
+        if relative_path not in normalized_files:
+            raise RuntimeError(f"safe_commit: expected raw-bytes path was not requested for staging: {relative_path!r}")
+        if relative_path in normalized:
+            raise RuntimeError(f"safe_commit: duplicate expected raw-bytes path: {relative_path!r}")
+        normalized[relative_path] = contents
+    return normalized
+
+
+def _create_expected_parent_commit(
+    worktree_root: Path,
+    tree_sha: str,
+    expected_parent_sha: str,
+    message_file: Path,
+) -> str:
+    """Create a commit object whose sole parent is the captured target tip."""
+    signing = _expected_parent_signing_args(worktree_root)
+    created = _run_git_for_commit(
+        worktree_root,
+        ["commit-tree", *signing, tree_sha, "-p", expected_parent_sha, "-F", str(message_file)],
+    )
+    if created.returncode != 0 or not created.stdout.strip():
+        detail = (created.stderr or created.stdout).strip()
+        raise RuntimeError(f"safe_commit: could not create expected-parent commit: {detail or 'git commit-tree failed'}")
+    return created.stdout.strip()
+
+
+def _expected_parent_signing_args(worktree_root: Path) -> list[str]:
+    """Translate Git's commit.gpgsign setting to commit-tree's explicit option."""
+    configured = _run_git_for_commit(worktree_root, ["config", "--bool", "--get", "commit.gpgsign"])
+    if configured.returncode == 1:
+        return []
+    if configured.returncode != 0:
+        detail = (configured.stderr or configured.stdout).strip()
+        raise RuntimeError(f"safe_commit: could not read commit signing configuration: {detail or 'git config failed'}")
+    return ["-S"] if configured.stdout.strip().lower() == "true" else []
+
+
+def _compare_and_swap_commit_ref(
+    repo_root: Path,
+    worktree_root: Path,
+    destination_ref: str,
+    new_sha: str,
+    expected_parent_sha: str,
+    message: str,
+) -> None:
+    """Advance the target ref only while it still names the captured parent."""
+    try:
+        advance_branch_ref_for_commit(
+            repo_root,
+            worktree_root,
+            destination_ref,
+            new_sha,
+            expected_old_sha=expected_parent_sha,
+            message=message,
+        )
+    except RefAdvanceError as exc:
+        raise RuntimeError(f"safe_commit: conditional advance of target {destination_ref!r} from expected parent {expected_parent_sha} failed: {exc}") from exc
+
+
+def _expected_parent_index_repair_diagnostic(
+    worktree_root: Path,
+    destination_ref: str,
+    new_sha: str,
+    normalized_files: list[str],
+    detail: str,
+) -> str:
+    """Describe how to repair the real index after a commit has landed."""
+    repair = shlex.join(["git", "reset", "--quiet", new_sha, "--", *normalized_files])
+    return (
+        f"safe_commit: commit {new_sha} landed on {destination_ref}, but its requested index paths "
+        f"could not be refreshed: {detail or 'git reset failed'}. Repair the index by running "
+        f"{repair} from {worktree_root}."
+    )
+
+
+def _append_commit_diagnostic(current: str | None, addition: str) -> str:
+    """Combine post-commit diagnostics without dropping earlier repair advice."""
+    return f"{current}; {addition}" if current else addition
+
+
+def _safe_commit_with_expected_parent(
+    *,
+    repo_root: Path,
+    worktree_root: Path,
+    destination_ref: str,
+    expected_parent_sha: str,
+    message: str,
+    normalized_files: list[str],
+    expected_path_bytes: Mapping[str, bytes],
+) -> CommitResult:
+    """Create a hook-checked commit and atomically compare-and-swap its ref."""
+    landed_sha: str | None = None
+    result: CommitResult | None = None
+    diagnostic: str | None = None
+    try:
+        with tempfile.TemporaryDirectory(prefix="spec-kitty-pin-cas-") as temp_dir:
+            temp_root = Path(temp_dir)
+            index_path = temp_root / "index"
+            message_file = temp_root / "COMMIT_EDITMSG"
+            message_file.write_text(f"{message}\n", encoding="utf-8")
+            candidate_env = os.environ.copy()
+            candidate_env["GIT_INDEX_FILE"] = str(index_path)
+            tree_sha = _build_expected_parent_tree(
+                worktree_root,
+                expected_parent_sha,
+                normalized_files,
+                message_file,
+                env=candidate_env,
+                expected_path_bytes=expected_path_bytes,
+            )
+            expected_tree = _run_git_text(worktree_root, ["show", "-s", "--format=%T", expected_parent_sha])
+            if tree_sha == expected_tree:
+                raise SafeCommitStagedTreeUnchanged(destination_ref=destination_ref)
+            new_sha = _create_expected_parent_commit(worktree_root, tree_sha, expected_parent_sha, message_file)
+            _compare_and_swap_commit_ref(
+                repo_root,
+                worktree_root,
+                destination_ref,
+                new_sha,
+                expected_parent_sha,
+                message,
+            )
+            landed_sha = new_sha
+
+            try:
+                index_update = _run_git_for_commit(worktree_root, ["reset", "--quiet", new_sha, "--", *normalized_files])
+            except OSError as exc:
+                diagnostic = _expected_parent_index_repair_diagnostic(
+                    worktree_root,
+                    destination_ref,
+                    new_sha,
+                    normalized_files,
+                    str(exc),
+                )
+                logger.error(diagnostic)
+            else:
+                if index_update.returncode != 0:
+                    detail = (index_update.stderr or index_update.stdout).strip()
+                    diagnostic = _expected_parent_index_repair_diagnostic(
+                        worktree_root,
+                        destination_ref,
+                        new_sha,
+                        normalized_files,
+                        detail,
+                    )
+                    logger.error(diagnostic)
+
+            try:
+                post_commit = _run_git_for_commit(worktree_root, ["hook", "run", "--ignore-missing", "post-commit"])
+            except OSError as exc:
+                hook_diagnostic = f"safe_commit: commit {new_sha} landed, but the post-commit hook could not run: {exc}"
+                diagnostic = _append_commit_diagnostic(diagnostic, hook_diagnostic)
+                logger.warning(hook_diagnostic)
+            else:
+                if post_commit.returncode != 0:
+                    logger.warning("post-commit hook failed after expected-parent commit %s: %s", new_sha, (post_commit.stderr or post_commit.stdout).strip())
+            result = CommitResult(sha=new_sha, destination_ref=destination_ref, worktree_root=worktree_root, diagnostic=diagnostic)
+    except OSError as exc:
+        if landed_sha is None:
+            raise
+        if result is None:
+            diagnostic = _expected_parent_index_repair_diagnostic(
+                worktree_root,
+                destination_ref,
+                landed_sha,
+                normalized_files,
+                str(exc),
+            )
+            logger.error(diagnostic)
+        else:
+            cleanup_diagnostic = f"safe_commit: commit {landed_sha} landed, but its temporary commit workspace cleanup failed: {exc}"
+            diagnostic = _append_commit_diagnostic(diagnostic, cleanup_diagnostic)
+            logger.warning(cleanup_diagnostic)
+        return CommitResult(sha=landed_sha, destination_ref=destination_ref, worktree_root=worktree_root, diagnostic=diagnostic)
+
+    if result is None:
+        raise RuntimeError("safe_commit: expected-parent commit completed without a result")
+    return result
+
+
 def preflight_commit(
     *,
     repo_root: Path,
@@ -894,12 +1251,19 @@ def preflight_commit(
     message: str,
     paths: tuple[Path, ...],
     capability: GuardCapability = GuardCapability.STANDARD,
+    owned: OwnedCheckout | OwnedCreateMission | None = None,
 ) -> list[str]:
     """Validate a commit destination and paths without mutating git or files.
 
     Creation can use the same policy before writing its scaffold. The actual
     commit repeats this validation so a preflight never grants stale authority.
     Return the paths normalized for staging in the selected worktree.
+
+    ``owned`` is the validated owned-checkout fact (an owned lifecycle write's
+    :class:`~mission_runtime.OwnedCheckout`, or an owned ``mission create``'s
+    :class:`~specify_cli.core.owned_mission.OwnedCreateMission`); the
+    mission-scoped ``commit_to_target`` fold then reads the mission from the
+    fact (see :func:`_mission_scoped_policies`).
     """
     destination_ref = target.ref
     # 1. Shape: short branch name only.
@@ -973,8 +1337,12 @@ def preflight_commit(
     #    Both repo_root and worktree_root are checked (the worktree may be on a
     #    different branch when run from inside a lane worktree).  Each resolves
     #    its own ProtectionPolicy so the correct config is read for each root.
-    _policy_repo = ProtectionPolicy.resolve(repo_root)
-    _policy_wt = ProtectionPolicy.resolve(worktree_root)
+    #    Mission-scoped fold (#5100 FR-008): when EVERY staged path lives under one
+    #    mission's ``kitty-specs/<slug>/``, the commit is that mission's own write
+    #    and ``ProtectionPolicy.for_mission`` honours its persisted
+    #    ``commit_to_target`` for its own target branch only. Any path outside a
+    #    single mission dir (or no ``commit_to_target``) leaves the policy as-is.
+    _policy_repo, _policy_wt = _mission_scoped_policies(repo_root, worktree_root, _single_mission_slug(normalized_files), owned=owned)
     is_protected = _policy_repo.is_protected(destination_ref) or _policy_wt.is_protected(destination_ref)
     guard_verdict: GuardVerdict = evaluate_commit_guard(
         target,
@@ -1000,7 +1368,9 @@ def safe_commit(
     message: str,
     paths: tuple[Path, ...],
     capability: GuardCapability = GuardCapability.STANDARD,
-    effective_root: Path | None = None,
+    expected_parent_sha: str | None = None,
+    expected_path_bytes: Mapping[Path, bytes] | None = None,
+    owned: OwnedCheckout | OwnedCreateMission | None = None,
 ) -> CommitResult:
     """Commit ``paths`` to ``destination_ref`` inside ``worktree_root``.
 
@@ -1063,6 +1433,16 @@ def safe_commit(
             relative to ``worktree_root`` when possible.
         capability: Asserted-at-the-surface authorization passed to
             ``commit_guard.evaluate``. Defaults to ``GuardCapability.STANDARD``.
+        expected_parent_sha: Optional exact parent for a conditional ref update.
+            When supplied, a commit is built against this SHA and the target
+            branch advances only if it still points to that SHA.
+        expected_path_bytes: Optional exact raw bytes expected in selected
+            staged blobs. Requires ``expected_parent_sha`` and refuses before
+            ref update if a clean filter changes any asserted path.
+        owned: The validated owned-checkout fact when this is an owned write
+            (``None`` otherwise). The mission-scoped protection fold then reads
+            the mission from the fact -- never inferred from the two roots'
+            filesystem shape, never re-deriving the repository root.
 
     Returns:
         :class:`CommitResult` carrying the new commit SHA, the declared
@@ -1087,8 +1467,6 @@ def safe_commit(
             failed commit.
         RuntimeError: a low-level ``git add`` or ``git commit`` failed.
     """
-    # Compatibility-only routing hint after retirement of the ambient sync emitter.
-    del effective_root
     # 0. Compat shim: accept either ``target`` (preferred) or the legacy
     #    ``destination_ref`` string. The CommitTarget's ``ref`` is the single
     #    destination authority; ``destination_ref`` mirrors it below so callers
@@ -1109,7 +1487,26 @@ def safe_commit(
         message=message,
         paths=paths,
         capability=capability,
+        owned=owned,
     )
+
+    if expected_parent_sha is not None:
+        normalized_expected_path_bytes = _normalize_expected_parent_path_bytes(
+            worktree_root,
+            normalized_files,
+            expected_path_bytes,
+        )
+        return _safe_commit_with_expected_parent(
+            repo_root=repo_root,
+            worktree_root=worktree_root,
+            destination_ref=destination_ref,
+            expected_parent_sha=expected_parent_sha,
+            message=message,
+            normalized_files=normalized_files,
+            expected_path_bytes=normalized_expected_path_bytes,
+        )
+    if expected_path_bytes is not None:
+        raise ValueError("expected_path_bytes requires expected_parent_sha")
 
     # 7. Snapshot, then stage, EXACTLY the requested paths -- and ONLY these
     #    paths. `git add --force -- <path>` mutates the index entry for that

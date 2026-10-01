@@ -72,8 +72,15 @@ class _Fakes:
         self._subtasks_complete = subtasks_complete
         self._evidence_present = evidence_present
 
-    def resolve_subtasks_dir(self, feature_dir: Path, repo_root: Path | None, mission_slug: str, *, effective_root: Path | None = None) -> Path:
-        self.resolver_calls.append({"feature_dir": feature_dir, "repo_root": repo_root, "mission_slug": mission_slug, "effective_root": effective_root})
+    def resolve_subtasks_dir(self, feature_dir: Path, repo_root: Path | None, mission_slug: str, *, owned: Any = None) -> Path:
+        self.resolver_calls.append(
+            {
+                "feature_dir": feature_dir,
+                "repo_root": repo_root,
+                "mission_slug": mission_slug,
+                "owned": owned,
+            }
+        )
         return feature_dir
 
     def infer_subtasks_complete(self, subtasks_dir: Path, wp_id: str, *, status_dir: Path | None = None) -> bool:
@@ -169,11 +176,53 @@ class TestReviewGateInference:
         with pytest.raises(TransitionError):
             _prepare(feature_dir, _request(to_lane="for_review"), Lane.IN_PROGRESS, **fakes.kwargs())
 
-    def test_effective_root_is_threaded_to_the_resolver(self, feature_dir: Path, tmp_path: Path) -> None:
+    def test_owned_fact_is_threaded_to_the_resolver(self, feature_dir: Path, tmp_path: Path) -> None:
+        """T034: the resolver receives the collapsed fact, not a bare root."""
+        from mission_runtime import OwnedCheckout
+        from mission_runtime.context import MissionTopology
+
         fakes = _Fakes()
-        owned = tmp_path / "owned"
-        _prepare(feature_dir, _request(to_lane="for_review", effective_root=owned), Lane.IN_PROGRESS, **fakes.kwargs())
-        assert fakes.resolver_calls[0]["effective_root"] == owned
+        owned_root = tmp_path / "owned"
+        mission_dir = owned_root / "kitty-specs" / _SLUG
+        mission_dir.mkdir(parents=True)
+        fact = OwnedCheckout._mint(
+            repository_root=tmp_path / "primary",
+            owned_root=owned_root,
+            mission_dir=mission_dir,
+            mission_slug=_SLUG,
+            topology=MissionTopology.SINGLE_BRANCH,
+            write_branch="main",
+        )
+        _prepare(feature_dir, _request(to_lane="for_review", owned=fact), Lane.IN_PROGRESS, **fakes.kwargs())
+        assert fakes.resolver_calls[0]["owned"] is fact
+
+    def test_batch_of_owned_requests_each_thread_their_own_fact(self, feature_dir: Path, tmp_path: Path) -> None:
+        """review cycle 1 MEDIUM-6 regression guard (re-pointed by WP18 from the
+        retired bare-root shape): a MULTI-request batch where each member carries
+        its own fact must thread EACH request's own fact to the resolver.
+        """
+        from mission_runtime.context import MissionTopology
+        from tests._owned_fixtures import mint_test_fact
+
+        fakes = _Fakes()
+        facts = []
+        for name in ("owned-a", "owned-b"):
+            owned_root = tmp_path / name
+            mission_dir = owned_root / "kitty-specs" / _SLUG
+            mission_dir.mkdir(parents=True)
+            facts.append(
+                mint_test_fact(
+                    repository_root=tmp_path / "primary",
+                    owned_root=owned_root,
+                    mission_dir=mission_dir,
+                    mission_slug=_SLUG,
+                    write_branch="main",
+                    topology=MissionTopology.SINGLE_BRANCH,
+                )
+            )
+        for fact in facts:
+            _prepare(feature_dir, _request(to_lane="for_review", owned=fact), Lane.IN_PROGRESS, **fakes.kwargs())
+        assert [call["owned"] for call in fakes.resolver_calls] == facts
 
 
 class TestEventConstruction:
@@ -458,3 +507,113 @@ def test_batch_emit_reads_log_once_for_the_whole_batch(feature_dir: Path, monkey
     assert counters.appends == 1
     assert counters.derive == 1
     assert counters.reads_before_append == 1
+
+
+# ── WP03 (mixed-lane-authorship-soundness-01M3M7Y0, FR-001/T015): lane-head
+#    stamping through prepare_transition itself (pure -- no git, no I/O). ──
+
+
+class TestLaneHeadStamping:
+    def test_none_probe_means_no_stamp(self, feature_dir: Path) -> None:
+        """``lane_head_probe`` defaults to ``None`` -- P-1 (the pipeline never defaults to a real probe)."""
+        prepared = _prepare(feature_dir, _request(feature_dir=feature_dir, policy_metadata={"agent": "claude"}), Lane.PLANNED)
+        assert prepared.event is not None
+        assert prepared.event.policy_metadata == {"agent": "claude"}
+
+    def test_probe_called_once_with_expected_args_and_stamps_the_event(self, feature_dir: Path) -> None:
+        calls: list[dict[str, Any]] = []
+
+        def fake_probe(*, repo_root: Path, mission_slug: str, wp_id: str, owned: object = None) -> str | None:
+            calls.append({"repo_root": repo_root, "mission_slug": mission_slug, "wp_id": wp_id, "owned": owned})
+            return "deadbeef" * 5
+
+        repo_root = feature_dir.parent.parent
+        prepared = _prepare(
+            feature_dir,
+            _request(feature_dir=feature_dir, policy_metadata={"agent": "claude"}, repo_root=repo_root),
+            Lane.PLANNED,
+            lane_head_probe=fake_probe,
+        )
+        assert prepared.event is not None
+        assert prepared.event.policy_metadata == {"agent": "claude", "lane_head": "deadbeef" * 5}
+        assert calls == [{"repo_root": repo_root, "mission_slug": _SLUG, "wp_id": "WP01", "owned": None}]
+
+    def test_probe_returning_none_leaves_policy_metadata_untouched(self, feature_dir: Path) -> None:
+        prepared = _prepare(
+            feature_dir,
+            _request(feature_dir=feature_dir, policy_metadata={"agent": "claude"}, repo_root=feature_dir),
+            Lane.PLANNED,
+            lane_head_probe=lambda **_: None,
+        )
+        assert prepared.event is not None
+        assert prepared.event.policy_metadata == {"agent": "claude"}
+
+    def test_no_stamp_persists_byte_identically_to_no_probe_injected(self, feature_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No stamp (``None`` probe vs. a probe that finds nothing) must build the identical event."""
+        monkeypatch.setattr(emit_module, "_generate_ulid", lambda: "01FIXEDULIDFORCOMPARISON1")
+        request_kwargs: dict[str, Any] = {"feature_dir": feature_dir, "policy_metadata": {"agent": "claude"}, "repo_root": feature_dir}
+
+        baseline = _prepare(feature_dir, _request(**request_kwargs), Lane.PLANNED, at="2026-01-01T00:00:00+00:00")
+        with_probe_finding_nothing = _prepare(
+            feature_dir,
+            _request(**request_kwargs),
+            Lane.PLANNED,
+            at="2026-01-01T00:00:00+00:00",
+            lane_head_probe=lambda **_: None,
+        )
+        assert baseline.event is not None
+        assert with_probe_finding_nothing.event is not None
+        assert baseline.event.to_dict() == with_probe_finding_nothing.event.to_dict()
+
+    def test_request_repo_root_is_preferred_over_the_repo_root_kwarg(self, feature_dir: Path) -> None:
+        calls: list[Path] = []
+
+        def fake_probe(*, repo_root: Path, mission_slug: str, wp_id: str, owned: object = None) -> str | None:
+            calls.append(repo_root)
+            return None
+
+        request_root = feature_dir / "request-root"
+        kwarg_root = feature_dir / "kwarg-root"
+        _prepare(
+            feature_dir,
+            _request(feature_dir=feature_dir, repo_root=request_root),
+            Lane.PLANNED,
+            lane_head_probe=fake_probe,
+            repo_root=kwarg_root,
+        )
+        assert calls == [request_root]
+
+    def test_repo_root_kwarg_is_the_fallback_when_request_repo_root_is_none(self, feature_dir: Path) -> None:
+        calls: list[Path | None] = []
+
+        def fake_probe(*, repo_root: Path, mission_slug: str, wp_id: str, owned: object = None) -> str | None:
+            calls.append(repo_root)
+            return None
+
+        kwarg_root = feature_dir / "kwarg-root"
+        _prepare(
+            feature_dir,
+            _request(feature_dir=feature_dir, repo_root=None),
+            Lane.PLANNED,
+            lane_head_probe=fake_probe,
+            repo_root=kwarg_root,
+        )
+        assert calls == [kwarg_root]
+
+    def test_probe_not_called_when_no_repo_root_is_available(self, feature_dir: Path) -> None:
+        calls: list[Path] = []
+
+        def fake_probe(*, repo_root: Path, mission_slug: str, wp_id: str, owned: object = None) -> str | None:
+            calls.append(repo_root)
+            return "deadbeef" * 5
+
+        prepared = _prepare(
+            feature_dir,
+            _request(feature_dir=feature_dir, repo_root=None, policy_metadata={"agent": "claude"}),
+            Lane.PLANNED,
+            lane_head_probe=fake_probe,
+            repo_root=None,
+        )
+        assert calls == []
+        assert prepared.event is not None
+        assert prepared.event.policy_metadata == {"agent": "claude"}

@@ -1,8 +1,8 @@
 ---
 title: 'CI and Architectural Gate Mechanics'
-description: 'What trips each spec-kitty CI gate — testing and marker gates, the architectural battery, docs-freshness registration, and accept-to-merge close-out — with symptom and repro.'
+description: 'What trips each spec-kitty CI gate — marker gates, the architectural battery, docs-freshness registration, and accept-to-consolidate close-out — with symptom and repro.'
 doc_status: active
-updated: '2026-09-26'
+updated: '2026-10-01'
 audience: docs/context/audience/internal/maintainer.md
 type: reference
 related:
@@ -41,10 +41,43 @@ Two habits defuse most of this class:
   e.g. a marker-scoped shard runs `-m "fast and not windows_ci"`, so a test
   missing the `fast` marker is silently deselected there even though it passes
   when you name it directly.
-- Before declaring a branch green, run the relevant architectural tests over the
-  **rebased tip**. The `tests/architectural/` suite is the whole safety net;
-  running the targeted gate file first is faster, and the full suite is the final
-  check.
+- Before declaring a branch green, run the architectural gate files your change
+  implicates over the **rebased tip**. Do not sweep the whole
+  `tests/architectural/` directory in mission work ([`NO_FULL_HEAVY_SUITES_IN_MISSION`](../../../packs/internal/directives/no-full-heavy-suites-in-mission.directive.yaml)); CI runs
+  the whole battery for you: the always-on `architectural-fast` job plus the two
+  `architectural-heavy` legs on code and CI-config PRs.
+
+Since mission `ci-runtime-stabilisation` ([#5510](https://github.com/spec-kitty/spec-kitty/issues/5510)),
+five things about that pipeline are worth knowing before you read a red check:
+
+- **The battery has three parts.** `architectural-fast` is always on (docs-only PRs
+  included). Its roster of deterministic ratchet and census gates is held in
+  `.github/ci-module-registry.yml` under `special_tiers.architectural.fast_gate`,
+  with a per-file budget. `architectural-heavy` is one job key with a two-leg
+  matrix (`--battery-part 1/2` and `2/2`). The three parts are file-disjoint and
+  together cover the base selection exactly, which
+  `tests/architectural/test_battery_partition_proof.py` proves statically.
+- **CI-config changes select the heavy battery.** The router path group
+  `ci_config` (workflows, composite actions, `scripts/ci/**`, `pytest.ini`,
+  `pyproject.toml`, `Makefile`, the registry and the shard timings file) gates the
+  heavy battery and no other job.
+- **Corpus tests have one advisory owner.** `packs.yml` runs the `-m corpus`
+  suite as the advisory job `built-in / -m corpus suite (advisory)`. The 40
+  corpus node-ids that have no other blocking per-PR home run blocking in the
+  router job `tests (corpus-blocking)`. The router jobs `tests (cli)`,
+  `tests (status)`, `tests (consolidation)` and `tests (corpus)` no longer exist;
+  the `cli`, `status` and `consolidation` module rows in `ci-modules.yml` are now
+  their only homes.
+- **A nightly backstop runs the whole battery.** `ci-nightly.yml` job
+  `architectural-backstop` executes the full base selection with no partition
+  plugin, so a green nightly means the battery ran (see the amendment to
+  [ADR 2026-09-26-1](../../adr/3.x/2026-09-26-1-ci-coverage-honesty.md)).
+- **A `ready_for_review` run can skip on prior evidence.** When the same workflow
+  already went green for the identical tested key, the selection step is
+  suppressed and the required gates post success. A re-run always executes. See
+  [Skip-if-green on ready-for-review](#skip-if-green-on-ready-for-review) below
+  and the amendment to
+  [ADR 2026-09-23-1](../../adr/3.x/2026-09-23-1-auto-merge-required-checks-gate.md).
 
 The rest of this page groups gates by the change that trips them.
 
@@ -111,13 +144,15 @@ not line up with the shard that is supposed to run it.
 
 ### New `contracts/*.md` YAML blocks need a round-trip skip marker
 
-- **Trips it:** the corpus shard (`tests-corpus`, driven by
-  `ci-router.yml`) runs `tests/contract/test_example_round_trip.py`, which walks
+- **Trips it:** the router job `tests (corpus-blocking)` (job key
+  `tests-corpus-blocking` in `ci-router.yml`) runs
+  `tests/contract/test_example_round_trip.py`, which walks
   **every** `kitty-specs/*/contracts/*.md` and collects each fenced ` ```yaml `
   block as a contract-example case. A block in a non-legacy file that is neither
   executable nor marked as an illustration fails.
 - **Symptom:** `test_contract_example_round_trip[...MISSING_FRONTMATTER]` fails,
-  reddening the corpus shard. A local run of `tests/ci` + `tests/architectural`
+  reddening `tests (corpus-blocking)`. The Packs advisory corpus job deselects
+  this file, so a red here is blocking, not advisory. A local run of `tests/ci` + `tests/architectural`
   (the obvious blast radius for a CI change) does **not** cover
   `tests/contract/`, so illustrative YAML passes locally and only reds on CI.
 - **Fix / repro:** tag each YAML block with one of, as its first line inside the
@@ -150,9 +185,10 @@ not line up with the shard that is supposed to run it.
 ## The architectural gate battery
 
 Adding new `src/` symbols and new test files trips a battery of architectural
-gates that each pass in isolation but only surface together on CI's
-architectural shards (a long-running job whose failure short-circuits the router
-gate). Pre-run the targeted gate files before pushing. A useful invocation base
+gates that each pass in isolation but only surface together in CI's
+architectural jobs: the always-on `architectural-fast` job and the two legs of
+`architectural-heavy` (a code-scoped job whose failure reds the router gate).
+Pre-run the targeted gate files before pushing. A useful invocation base
 for these is `PYTHONPATH=src -o addopts=""` so collection matches CI.
 
 - **Dead-symbol gate** (`tests/architectural/test_no_dead_symbols.py`): a new
@@ -183,13 +219,87 @@ for these is `PYTHONPATH=src -o addopts=""` so collection matches CI.
   assertion (`len(modules) <= N`) passes locally and false-reds on CI. Assert a
   specific module's presence or absence, never an absolute count.
 
-### Renaming a symbol whose body is allowlisted
+### Fast roster, shard legs, and the partition proof
 
-Renaming or editing a symbol tracked in the dead-symbol allowlist stales its
-content hash (the allowlist keys entries by a body hash). Refresh it with the
-project's dead-symbol hash-refresh tool, which is fail-closed — it only refreshes
-entries that are still genuinely dead and never adds new ones. Never weaken the
-gate to get past it.
+The battery base selection is `tests/architectural` with the marker expression
+`not performance and not stress and not timing`, minus the four files that other
+always-on lanes own (`test_no_legacy_terminology.py`, `test_layer_rules.py`,
+`test_pyproject_shape.py`, `test_archive_root_byte_identical.py`). It runs as:
+
+| Part | Job (display name) | Selection | When |
+| --- | --- | --- | --- |
+| Fast | `architectural fast gates (ratchet/census, always-on)` | `--battery-part fast`: the registry roster | every PR shape |
+| Heavy leg 1 | `architectural battery (heavy, code-scoped) 1/2` | `--battery-part 1/2` | code, `ci_config` or `architectural` path changes, not prose-only |
+| Heavy leg 2 | `architectural battery (heavy, code-scoped) 2/2` | `--battery-part 2/2` | same as leg 1 |
+| Backstop | `Architectural battery backstop (nightly-only, #5510)` | the base, no partition flag | nightly |
+
+- **The roster is registry-held.** Each entry in
+  `special_tiers.architectural.fast_gate.roster` carries a path, a
+  `budget_seconds` and a reason. A file earns a roster slot only if it is a
+  deterministic static gate, so a new slow or CLI-round-trip file belongs in the
+  heavy legs. The budgets are checked statically against the committed timings by
+  `tests/ci/test_battery_roster_budgets.py`, never against wall-clock time.
+- **Adding or moving a battery test file** needs no workflow edit: the plugin
+  `scripts/ci/battery_partition_plugin.py` assigns each file to exactly one part
+  from the per-file timings in `.github/ci-shard-timings.json`. A file with no
+  timing gets the median weight, and a timing-set mismatch prints a `::warning::`
+  rather than silently using uniform weights.
+- **A partition-proof red** means a file is in two parts or in none. The proof
+  (`tests/architectural/test_battery_partition_proof.py`) evaluates the three
+  literal `--battery-part` commands, so fix the roster or the timings, not the
+  proof.
+- **Worker count** is a literal `-n 4` in every CI battery command; see
+  [CI worker policy](../testing/testing-parallel.md#ci-worker-policy-and-the-nightly-architectural-backstop).
+
+### Skip-if-green on ready-for-review
+
+When a draft PR is marked ready for review, the head SHA has usually already been
+tested. The selection jobs (router `changes`, CI Modules `generate-matrix`, Packs
+`changes`) therefore run `scripts/ci/green_match.py decide` first. It suppresses
+the path-filter step, and so every path-gated job, only when all of these hold:
+
+- the event is a `pull_request` with the action `ready_for_review`, on the first
+  attempt of the run;
+- a completed, successful run of the same workflow exists for the same head SHA;
+- that run carries a non-expired marker artifact `ci-tested-key-pr<N>-base-<sha>`
+  for the identical tested key `(workflow file, PR, head SHA, first parent of the
+  merge commit the run tested)`.
+
+The required contexts `router gate` and `CI Modules gate` still post success. On a
+skip run the always-on lanes and `prose-scan` still run, and `tests (docs)` still
+runs on a prose-only PR.
+
+- **Symptom of a surprise skip:** a `ready_for_review` run finished with every path-gated
+  shard skipped, and the step summary names a matched run.
+- **Escape hatch:** re-run the workflow. Attempt 2 always executes.
+- **Never suppressed:** push, `workflow_dispatch`, `workflow_call`, schedule, any
+  other `pull_request` action, a failed, cancelled or in-progress prior run, a
+  moved base, and any lookup error (the helper runs normally and warns).
+- **CI Aggregate** re-points to the matched CI Modules run after re-verifying it,
+  and fails with "re-run CI Modules to execute" if it cannot. Re-run CI Modules,
+  not Aggregate.
+
+### Moving or renaming a symbol that is dead-symbol allowlisted
+
+The dead-symbol allowlist lives in `tests/architectural/dead_symbol_allowlist.yaml`
+and is keyed by `(module, name)`: `module` is the module whose `__all__` declares
+the name. No body hash is stored
+([ADR 2026-10-01-1](../../adr/4.x/2026-10-01-1-dead-symbol-allowlist-module-name-identity.md)).
+
+- **Editing the body** of an allowlisted symbol costs nothing: no allowlist edit.
+- **Renaming or moving** one makes the gate report the old entry `GONE` (for a
+  move, with a "probably moved to `X`" hint) and the new location as an
+  offender. Update `module:` or `name:` of that entry in the YAML file.
+- **Adding an entry** needs a declared `category_*`, a rationale (its own or
+  inherited from the category -- see
+  [declaring a new category](../how-to/add-architectural-gate-exemption.md#declaring-a-new-category)),
+  an `issue` where the category sets `requires_issue: true`, and a raised
+  `test_no_dead_symbols` leaf in `tests/architectural/_baselines.yaml`
+  (`allowlist_entries`, or `widened_grandfathered_470` for the widened section).
+  Both leaves are shrink-only caps. Try wiring the symbol, dropping it from
+  `__all__` or deleting it first.
+
+Never weaken the gate to get past it.
 
 ### The `ruff format` exclude ratchet has a twin
 
@@ -259,6 +369,9 @@ guard (`tests/architectural/test_module_shard_registry.py`,
 Adding or moving a `docs/**` page trips several documentation gates that draw
 from separate committed catalogs; fixing one leaves the others red.
 
+The prose of those pages is linted by a separate, always-on job: see
+[`docs-lint`](#docs-lint).
+
 ### A new docs page needs triple registration plus a description band
 
 - **Trips it:** a new `docs/**/*.md` page that is not registered everywhere.
@@ -271,11 +384,14 @@ from separate committed catalogs; fixing one leaves the others red.
   band:
   1. **Curated section index** — hand-add the page to its section's `index.md`
      (satisfies the index-completeness rule).
-  2. **Page inventory** — regenerate `docs/development/3-2-page-inventory.yaml`
-     via `scripts/docs/inventory_lockfile.py`. Its `--write` guard refuses a path
-     under `docs/`, so write to a temp file and copy it over.
+  2. **Page inventory** — regenerate `docs/development/page-inventory.yaml`
+     in place with `scripts/docs/inventory_lockfile.py --write <that path>` (run
+     with `PYTHONPATH=.`). The script does not refuse a
+     path under `docs/` (its `--help` text and module docstring still say it
+     never writes there; the code does not enforce that), so no temp-file copy
+     is needed.
   3. **Retrieval index** — regenerate
-     `docs/development/3-2-docs-retrieval-index.yaml` via
+     `docs/development/docs-retrieval-index.yaml` via
      `scripts/docs/docs_index.py --write` (this one writes in place).
   4. **Frontmatter `description`** — a hard **50–180 character** band, enforced by
      `scripts/docs/description_length_check.py` and the docs SEO tests. Both
@@ -291,6 +407,56 @@ from separate committed catalogs; fixing one leaves the others red.
   regeneration. An ADR's frontmatter needs `date:`, `updated:`, and a 50–180
   character `description`.
 
+### `docs-lint`
+
+- **Trips it:** a typo or British spelling in docs prose, or a changelog
+  `[Unreleased]` entry that breaks the house style. Any PR can trip it, because
+  the job has no path filter.
+- **Job:** `docs-lint` in `.github/workflows/ci-router.yml` (display name "docs
+  lint (spelling + changelog style, always-on)"). It is listed in the
+  `router-gate` job's `needs`, so a red `docs-lint` blocks the merge. It is
+  **blocking**: neither command's exit code is masked.
+- **Why always-on:** its inputs span `docs/**`, `README.md`,
+  `packs/built-in/**/*.md`, `pyproject.toml` (the `[tool.codespell]` table and
+  the pinned `codespell`) and `uv.lock`. No single router path group covers all
+  of them, so a path filter would let some edits skip the check.
+- **What it runs:** `uv sync --frozen`, then
+  `python -m scripts.docs.check_spelling` (typo, US-spelling and Unreleased
+  passes) and `python -m scripts.docs.check_changelog_style`. It runs **no
+  pytest**. The planted-violation and live-tree tests for the two scripts
+  (`tests/docs/test_check_spelling.py`, `tests/docs/test_changelog_style.py`,
+  `tests/docs/test_docs_spelling_live.py`) run in the `tests-docs` job.
+- **Exit codes:** `0` clean; `1` findings; `2` the check could not run or could
+  not prove it looked at anything: a usage error, `codespell` missing, no
+  `[tool.codespell]` table in `pyproject.toml`, an unreadable changelog (both
+  scripts), a `typo` or `us` pass that scanned 0 files, or an `unreleased`
+  scratch file that a `[tool.codespell]` `skip` glob would drop. A changelog with
+  no `[Unreleased]` section is `0` (nothing to check). The changelog guard also
+  exits `0` on warnings alone.
+- **Scope:** Markdown only. `docs/archive/`, `docs/reports/`, `docs/plans/` and
+  the generated CLI reference (`docs/api/cli-commands.md`) are skipped through
+  the `[tool.codespell]` `skip` list, so a finding never comes from them. A
+  relative `--changelog` resolves against the repository root in both scripts
+  (against `--repo-root` for the spelling check), not the current directory.
+- **Symptom:** the job log lists one finding per line as
+  `path:line: [rule] ... — fix`, ending in a summary line. It is not one of the
+  docs-freshness or registration errors above. The guard's rules include
+  `bullet-marker` (a column-0 `* ` or `+ ` bullet) and banned-token checks on
+  prose between a `###`/`####` heading and its first bullet; the how-to lists
+  every rule and the false-positive shapes (`WP-D-1`, `SC-2086`,
+  `DEFAULT-branch`) to put in backticks.
+- **Fix / repro:** `make docs-lint` from the repository root reproduces the job
+  (it runs the same two commands). The how-to has the steps: [run the checks,
+  allow a word, exempt a quoted literal, and read a
+  failure](../how-to/review-gates.md#changelog-update-and-style). Never run bare
+  `codespell`, which scans the whole repository.
+- **Owning files:** `scripts/docs/check_spelling.py`,
+  `scripts/docs/check_changelog_style.py`, and the `[tool.codespell]` table
+  (`skip`, `ignore-words-list`) plus the exact `codespell==2.4.3` pin in
+  `pyproject.toml`. The pin is exact on purpose: a new `codespell` release
+  changes its dictionary, so bump it deliberately, together with the docs it
+  newly flags.
+
 ### Touching any docs path can surface a pre-existing docs-test flake
 
 - **Trips it:** touching any `docs/**` path flips the docs-test path filter,
@@ -301,6 +467,15 @@ from separate committed catalogs; fixing one leaves the others red.
 - **Fix / repro:** classify it as pre-existing (reproduce on the merge base),
   then fix perf flakes at the root with warm-run discipline (discard the cold
   pass, assert the fastest of several warm runs); never retry-to-green.
+
+### Where the docs site deploys from
+
+`docs.spec-kitty.ai` is deployed by `.github/workflows/docs-pages.yml` from
+this repository's `main`. The workflow runs on pushes to `main` that touch
+`docs/**` (and a few docs-tooling paths) or on manual dispatch. It first probes
+whether GitHub Pages is configured and skips cleanly if not; the deploy job
+itself runs only for `spec-kitty/spec-kitty` on `refs/heads/main`. A
+`workflow_dispatch` on another branch builds but does not deploy.
 
 ### The GitHub Pages docsite build needs `PYTHONPATH`
 
@@ -318,34 +493,25 @@ from separate committed catalogs; fixing one leaves the others red.
   `workflow_dispatch` on the branch, where the build runs and the deploy stays
   skipped off `main`.
 
-## Accept-to-merge consolidation gates
+## Accept-to-consolidate gates
 
-The `accept` → `merge` close-out has several gates that block silently until fed
+The `accept` → `consolidate` close-out has several gates that block silently until fed
 exactly what they expect.
 
-### The issue-matrix verdict gate fires on every WP approval
+### The issue-matrix verdict gate blocks WP approval
 
-- **Trips it:** `move-task <WP> --to approved` — on *every* WP, including one with
-  no issue references — requires a verdict for **every `#NNN`** referenced
-  anywhere in the mission's `spec.md` **and** `research.md` (including
-  out-of-scope, deferred, and already-closed references).
+- **Trips it:** `move-task <WP> --to approved` when a gating `#NNN` reference in
+  the mission's artifacts has no verdict row in `issue-matrix.json`. Not every
+  reference gates: context-only and PR/commit references are recorded but do
+  not block.
 - **Symptom:** the approval is blocked, and the error lists the missing rows.
-- **Fix:** this is orchestrator-level bookkeeping — seed the whole matrix up
-  front. Set verdicts with `spec-kitty agent issue-verdict --mission <m> --issue
-  "#NNN" --verdict <v> --actor <a> [--wp WP##] --evidence-ref "..."`. Verdict
-  values:
-  - `in-mission` — the issue is owned and being fixed by a WP in this mission
-    (the honest interim state while WPs are in progress; not fabrication).
-  - `deferred-with-followup` — out of scope; the evidence-ref **must** contain a
-    `#NNN` or `Follow-up:` handle or the gate rejects it.
-  - `verified-already-fixed` — a closed root-cause issue the mission relies on.
-  - `fixed` — completed in-mission, set at accept once the WP is done.
-
-  The per-WP reviewer should **refuse to fabricate** verdicts for unfixed issues
-  — that is correct behavior, not a blocker; the orchestrator fills them honestly.
-  At accept, flip the `in-mission` rows to `fixed` / `verified-already-fixed`. The
-  matrix is a dict keyed by `#NNN` under `rows` in `issue-matrix.json` on the
-  coordination partition (the `.md` form is legacy — do not create it).
+- **Fix:** seed the matrix up front with `spec-kitty agent issue-verdict`. The
+  verdict values, which references gate, and the evidence-token rule for
+  `deferred-with-followup` are documented once, in the
+  [Issue-Matrix Verdict Reference](issue-matrix-verdicts.md). The per-WP
+  reviewer should **refuse to fabricate** verdicts for unfixed issues; the
+  orchestrator fills them honestly and flips `in-mission` rows to a terminal
+  verdict at accept.
 
 ### The other close-out gates
 
@@ -358,7 +524,7 @@ exactly what they expect.
   `verified_by`, and `verified_at`, and set `overall_verdict` to `"pass"`.
   `accept` also fails on a dirty tree, so commit or clean the dossier state
   first.
-- **`spec-kitty merge` refuses a dirty coordination worktree** — commit the
+- **`spec-kitty consolidate` refuses a dirty coordination worktree** — commit the
   status files and clear ignored `.kittify/` state in the coordination worktree,
   then `--resume`.
 - **The graph-manifest check verifies the pack manifest, not just the graph

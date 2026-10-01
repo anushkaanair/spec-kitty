@@ -89,8 +89,7 @@ def expected_coverage_targets() -> list[str]:
     """The full top-level coverage-target set, derived from ``src/``.
 
     A target is importable top-level *code*: a directory holding ``__init__.py``
-    (a package) or a public single-file module (``src/doctrine.py``, the
-    ``charter.offering`` compatibility shim). Both forms are measured by the step
+    (a package) or a public single-file module. Both forms are measured by the step
     this mission retires, so both must stay measured or a file loses coverage.
     """
     targets: set[str] = set()
@@ -283,6 +282,21 @@ def test_baseline_records_its_own_provenance() -> None:
     retiring = baseline["per_file_covered"]["retiring_step"]
     assert retiring["command"], "the retiring step's per-file baseline must cite the command that produced it."
     assert retiring["files"], "the retiring step's per-file baseline is empty."
+
+
+def test_baseline_keys_requirement_mapping_as_a_package() -> None:
+    """C8 (requirement-id-grammar-01M3NRCA pre-PR fold): ``requirement_mapping``
+    became a package (WP01, grammar.py + lint.py split out of the single
+    module) but the frozen per-file baseline still keyed the retired flat
+    module path. The baseline is a point-in-time evidence snapshot (not
+    re-derived by any test here), so this pins the rename rather than
+    re-measuring: the total file count must be unchanged (a rename, not an
+    addition), and the retired flat path must be gone."""
+    baseline = _baseline()
+    files = baseline["per_file_covered"]["retiring_step"]["files"]
+    assert "src/specify_cli/requirement_mapping/__init__.py" in files
+    assert "src/specify_cli/requirement_mapping.py" not in files
+    assert len(files) == baseline["per_file_covered"]["retiring_step"]["totals"]["files"]
 
 
 def test_marker_mismatch_exception_set_is_reproducible() -> None:

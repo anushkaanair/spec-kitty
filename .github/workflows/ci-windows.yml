@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+# Fork guard: automated runs (schedule, push to main, workflow_run) are core-repo
+# only. On a fork the guarded jobs skip; pull_request and workflow_dispatch still
+# run everywhere. Pinned by tests/ci/test_fork_guard.py.
 jobs:
   changes:
     name: Detect Windows-critical changes
@@ -12,7 +15,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-    if: ${{ !contains(github.event.pull_request.labels.*.name, 'pr:deferred') && !contains(github.event.pull_request.labels.*.name, 'pr:skip-ci') }}
+    if: ${{ (github.repository == 'spec-kitty/spec-kitty' || github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') && !contains(github.event.pull_request.labels.*.name, 'pr:deferred') && !contains(github.event.pull_request.labels.*.name, 'pr:skip-ci') }}
     outputs:
       windows_critical: ${{ steps.filter.outputs.windows_critical }}
     steps:
@@ -34,11 +37,11 @@ jobs:
               - 'tests/kernel/test_paths_unified_windows_root.py'
               - 'tests/lanes/test_acceptance_matrix.py'
               - 'tests/mission/test_active_mission_handle_windows.py'
+              - 'tests/mission_runtime/test_owned_checkout.py'
               - 'tests/paths/test_windows_migrate.py'
               - 'tests/policy/test_hook_installer_execution.py'
               - 'tests/regressions/test_issue_101_utf8_startup.py'
               - 'tests/regressions/test_issue_105_hook_python_lookup.py'
-              - 'tests/regressions/test_issue_71_dashboard_empty.py'
               - 'tests/review/test_baseline.py'
               - 'tests/runtime/test_home_unit.py'
               - 'tests/specify_cli/cli/commands/test_charter_generate_autotrack.py'
@@ -143,4 +146,17 @@ jobs:
           # the real install topology users have (editable install via pipx +
           # injected pytest). Running `python -m pytest` from the host
           # setup-python interpreter would bypass the pipx venv entirely.
+          #
+          # Per-test timeout (#3143): this job inherits the single per-test
+          # timeout authority — `timeout = 240` in pytest.ini — with no flag
+          # passed here. Windows has no SIGALRM, so pytest-timeout falls back to
+          # its `thread` method (pytest.ini deliberately leaves `timeout_method`
+          # unset to allow exactly this per-platform choice). A hung windows_ci
+          # test therefore fails BY NAME with a pytest-timeout "Timeout" dump of
+          # every thread's stack after 240s, and the run continues to its
+          # summary — rather than being silently killed by the job-level
+          # `timeout-minutes: 20` above with no counter and no named test. The
+          # thread method cannot interrupt a stuck C call, so a genuinely wedged
+          # native call may still hit `timeout-minutes`; re-run such a hang on
+          # Linux (signal method) to get the counted, test-named failure.
           "$VENV_PYTHON" -m pytest -m windows_ci --maxfail=1 -v "${WINDOWS_TESTS[@]}"

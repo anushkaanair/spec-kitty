@@ -43,7 +43,8 @@ packs/internal/
 │   └── spec-kitty-tracker-labels.styleguide.yaml    # this repo's label scheme (refines planning-and-tracking)
 ├── tactics/
 │   ├── branded-deliverable.tactic.yaml              # when and how to produce a branded document
-│   └── spec-kitty-gate-non-vacuity-exemplar.tactic.yaml  # exemplar audit (refines architectural-gate-non-vacuity)
+│   ├── spec-kitty-gate-non-vacuity-exemplar.tactic.yaml  # exemplar audit (refines architectural-gate-non-vacuity)
+│   └── spec-kitty-ratchet-cost.tactic.yaml          # ratchets cost CI money on every run (refines frozen-baseline-shrink-only-ratchet)
 ├── toolguides/
 │   ├── branded-document-generation.toolguide.yaml   # the branded-PDF pipeline manifest
 │   ├── BRANDED_DOCUMENT_GENERATION.md               # its how-to guide
@@ -55,7 +56,9 @@ packs/internal/
     ├── spec-kitty-branded-pdf.py                    # the Markdown -> branded-PDF generator
     ├── spec-kitty-branded-pdf.py.asset.yaml         # its asset sidecar
     ├── test-quality-scan.py                         # static test-quality triage (runs no tests)
-    └── test-quality-scan.py.asset.yaml              # its asset sidecar
+    ├── test-quality-scan.py.asset.yaml              # its asset sidecar
+    ├── validate-pr-body.py                          # PR-body contract validator (five sections, git-grep discovery check)
+    └── validate-pr-body.py.asset.yaml               # its asset sidecar
 ```
 
 Asset sidecar `path` values are relative to this `assets/` folder (org-tier

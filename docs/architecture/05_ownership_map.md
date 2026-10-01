@@ -2,7 +2,8 @@
 title: Functional Ownership Map (demoted — narrative only)
 description: 'Historical functional-ownership narrative. Not authoritative: module boundaries are owned by the enforced pyproject wheel packages plus the test_layer_rules layer chain.'
 doc_status: superseded
-updated: '2026-09-06'
+updated: '2026-09-30'
+audience: docs/context/audience/internal/system-architect.md
 related:
 - docs/architecture/00_landscape/README.md
 - pyproject.toml
@@ -40,7 +41,7 @@ kernel <- charter <- {glossary, runtime, mission_runtime} <- specify_cli
 ```
 
 `charter.offering` holds the doctrine code the former top-level `src/doctrine/` package was
-relocated into (Convergence #3881); `src/doctrine.py` is a deprecation shim.
+relocated into (Convergence #3881); the `src/doctrine.py` deprecation shim was removed (#805).
 
 ## Client packages are consumers of upstream authoritative repos
 

@@ -144,6 +144,34 @@ def _actors_compatible(existing: object | None, requested: object | None, *, all
     return allow_generic_existing and existing_key in GENERIC_IMPLEMENTATION_ACTORS
 
 
+def _admits_implementer_of_record(
+    *,
+    feature_dir: Path,
+    mission_slug: str,
+    wp_id: str,
+    actor: ActorField,
+    repo_root: Path | None,
+) -> bool:
+    """Whether ``actor`` is ``wp_id``'s implementer of record (#5377).
+
+    Same projection ``move-task`` uses since #5196. Fails closed: any read or
+    projection failure returns ``False`` so the caller keeps refusing. An admitted
+    resume writes no event, so the reduced slot still names the reviewer while the
+    returned ``claimed_by`` names the implementer; the next ``move-task`` passes
+    through the same projection.
+    """
+    # Lazy imports: ``review_roles`` imports this module (a top-level import would
+    # cycle) and ``coordination.status_transition`` imports back into status.
+    from specify_cli.coordination.status_transition import read_events_transactional
+    from specify_cli.status.review_roles import is_latest_implementer, latest_implementer_actor
+
+    try:
+        events = read_events_transactional(feature_dir=feature_dir, mission_slug=mission_slug, repo_root=repo_root)
+        return is_latest_implementer(latest_implementer_actor(events, wp_id), actor)
+    except Exception:  # fail closed toward the existing claim-conflict refusal (#5377)
+        return False
+
+
 def start_implementation_status(
     *,
     feature_dir: Path,
@@ -154,7 +182,6 @@ def start_implementation_status(
     execution_mode: str,
     repo_root: Path | None = None,
     policy_metadata: dict[str, Any] | None = None,
-    ensure_sync_daemon: bool = True,
     allow_rework: bool = False,
     rework_reason: str = "Re-implementing after review feedback",
     annotation_delta: WPInnerStateDelta | None = None,
@@ -212,7 +239,6 @@ def start_implementation_status(
                         annotation_delta=annotation_delta,
                     ),
                 ],
-                ensure_sync_daemon=ensure_sync_daemon,
             )
             return WorkPackageStartResult(
                 wp_id,
@@ -241,7 +267,6 @@ def start_implementation_status(
                         annotation_delta=annotation_delta,
                     )
                 ],
-                ensure_sync_daemon=ensure_sync_daemon,
             )
             return WorkPackageStartResult(
                 wp_id,
@@ -254,7 +279,17 @@ def start_implementation_status(
 
         if current_lane == Lane.IN_PROGRESS:
             if not _actors_compatible(current_actor, actor, allow_generic_existing=True):
-                raise WorkPackageClaimConflict(wp_id, current_actor or "unknown", actor)
+                # #5377: after a reviewer's rework verdict the slot holds the
+                # reviewer; the implementer of record still resumes (no event).
+                if not _admits_implementer_of_record(
+                    feature_dir=feature_dir,
+                    mission_slug=mission_slug,
+                    wp_id=wp_id,
+                    actor=actor,
+                    repo_root=repo_root,
+                ):
+                    raise WorkPackageClaimConflict(wp_id, current_actor or "unknown", actor)
+                return WorkPackageStartResult(wp_id, Lane.IN_PROGRESS, Lane.IN_PROGRESS, actor, (), no_op=True, claimed_by=actor_identity_str(actor))
             return WorkPackageStartResult(wp_id, Lane.IN_PROGRESS, Lane.IN_PROGRESS, actor, (), no_op=True, claimed_by=current_actor)
 
         if allow_rework and current_lane in {Lane.FOR_REVIEW, Lane.APPROVED, Lane.IN_REVIEW}:
@@ -273,7 +308,6 @@ def start_implementation_status(
                     policy_metadata=policy_metadata,
                     annotation_delta=annotation_delta,
                 ),
-                ensure_sync_daemon=ensure_sync_daemon,
             )
             return WorkPackageStartResult(
                 wp_id,
@@ -297,7 +331,6 @@ def start_review_status(
     execution_mode: str,
     repo_root: Path | None = None,
     policy_metadata: dict[str, Any] | None = None,
-    ensure_sync_daemon: bool = True,
     review_ref: str | None = "action-review-claim",
     annotation_delta: WPInnerStateDelta | None = None,
 ) -> WorkPackageStartResult:
@@ -338,7 +371,6 @@ def start_review_status(
                     policy_metadata=policy_metadata,
                     annotation_delta=annotation_delta,
                 ),
-                ensure_sync_daemon=ensure_sync_daemon,
             )
             return WorkPackageStartResult(
                 wp_id,

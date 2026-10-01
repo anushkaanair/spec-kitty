@@ -7,7 +7,7 @@ from :mod:`mission_runtime` only (see ADR 2026-06-07-1 and
 
 WP03 grows the hardened context value object into the **doc-09 fragment /
 op-composite** model
-(``docs/plans/engineering-notes/runtime_and_state_overhaul/09-context-decomposition-model.md``).
+(``docs/archive/plans/engineering-notes/runtime_and_state_overhaul/09-context-decomposition-model.md``).
 ``MissionExecutionContext`` is NOT a flat field bag: it is a deep module whose
 hidden structure is a set of cohesive, domain-owned **value-object fragments**
 (Identity, BranchRef, Workspace, StatusSurface, ArtifactPlacement, PromptSource).
@@ -28,6 +28,7 @@ Single-derivation invariants (T009 / FR-012 / C-CTX-3): ``mid8`` is derived
 ``target_branch`` is resolved **exactly once** (carried on
 :class:`BranchRefFragment`); no other call site recomputes either value.
 """
+
 from __future__ import annotations
 
 import enum
@@ -49,10 +50,27 @@ class MissionTopology(enum.Enum):
     SINGLE_BRANCH/LANES + a `flattened` provenance mark (see spec Domain Language).
     """
 
-    SINGLE_BRANCH = "single_branch"        # no coord, no lanes
-    LANES = "lanes"                        # no coord, lanes
-    COORD = "coord"                        # coord, no lanes
+    SINGLE_BRANCH = "single_branch"  # no coord, no lanes
+    LANES = "lanes"  # no coord, lanes
+    COORD = "coord"  # coord, no lanes
     LANES_WITH_COORD = "lanes_with_coord"  # coord, lanes
+
+    @classmethod
+    def from_stored(cls, raw: object) -> MissionTopology | None:
+        """Parse a raw stored ``meta.json`` ``topology`` value; anything unusable is ``None``.
+
+        The ONE parser of the stored value (#5100): a string that is exactly one
+        member's ``.value`` yields that member; a missing key (``None``), a
+        non-string, or an unrecognised string all degrade to ``None`` -- never
+        raises, never derives. Callers read the raw value themselves
+        (``meta.get("topology")``) so this stays free of any ``meta`` shape.
+        """
+        if not isinstance(raw, str):
+            return None
+        try:
+            return cls(raw)
+        except ValueError:
+            return None
 
 
 def classify_topology(
@@ -78,6 +96,25 @@ def classify_topology(
     return MissionTopology.SINGLE_BRANCH
 
 
+def unstamped_runtime_topology(derived: MissionTopology) -> MissionTopology:
+    """Runtime topology for a mission with NO stored ``topology`` (#5100 FR-013 / #2602).
+
+    *derived* is the :func:`classify_topology` cell the caller's existing
+    un-backfilled-legacy fallback already computed. That coord-less, lane-less
+    cell is ``SINGLE_BRANCH``, which is the right answer for the explicit
+    ``migrate backfill-topology`` writer: it persists a shape an operator then
+    owns. At RUNTIME, though, ``single_branch`` is honoured only when it was
+    explicitly requested and STORED -- a derived one would collapse an
+    unstamped legacy mission's code WPs into the repo-root ``lane-planning``
+    lane at finalize and arm the ``WRITE_CHECKOUT_*`` refusals it never opted
+    into. So a derived ``SINGLE_BRANCH`` reads as ``LANES``; every other cell
+    passes through (the coord-routing answer is identical either way).
+    """
+    if derived is MissionTopology.SINGLE_BRANCH:
+        return MissionTopology.LANES
+    return derived
+
+
 @dataclass(frozen=True)
 class CommitTarget:
     """The ONE ref that artifacts + status events resolve to (ADR-2026-06-03-2).
@@ -99,27 +136,37 @@ class CommitTarget:
 # SINGLE definition: ``resolution.py`` / ``surface_resolver.py`` /
 # ``runtime_bridge.py`` / ``status_transition.py`` import it rather than restating
 # the literal ``{COORD, LANES_WITH_COORD}`` set.
-_COORD_ROUTING_TOPOLOGIES: frozenset[MissionTopology] = frozenset(
-    {MissionTopology.COORD, MissionTopology.LANES_WITH_COORD}
-)
+_COORD_ROUTING_TOPOLOGIES: frozenset[MissionTopology] = frozenset({MissionTopology.COORD, MissionTopology.LANES_WITH_COORD})
 
 
 def is_single_branch(topology: MissionTopology | None) -> bool:
-    """The SINGLE owned-placement topology predicate (#3862 item A).
+    """The SINGLE ``single_branch`` topology predicate (#3862 item A).
 
     The ONE predicate every ``single_branch`` invariant check flows through —
-    the owned-placement arms of ``mission_context_for`` /
-    ``resolve_placement_only`` / ``resolve_artifact_surface`` and the owned
-    checkout preflight (``specify_cli.core.owned_mission``) dispose against
-    this enum member rather than restating a raw ``"single_branch"`` meta
-    string or a second enum comparison, so the string and enum
+    the owned checkout preflight (``specify_cli.core.owned_mission
+    .resolve_owned_mission``, via ``_require_allowed_topology``) disposes
+    against this enum member rather than restating a raw ``"single_branch"``
+    meta string or a second enum comparison, so the string and enum
     representations cannot drift apart. A ``None`` (absent / malformed /
     degraded) stored-topology read is refused — fail-closed, the same
     refusal the owned preflight has always applied to a missing value.
 
+    owned-checkout-lifecycle-authority WP04 (FR-023, research R-16): this
+    predicate is **no longer** the placement layer's own refusal — the
+    former hoisted ``mission_runtime.resolution._require_owned_single_branch``
+    guard (which both ``resolve_placement_only`` and
+    ``resolve_artifact_surface`` called on their owned arms) is deleted.
+    Topology has exactly ONE authority: the minter's ``allowed_topologies``
+    set (WP02's ``resolve_owned_mission``), applied once, at minting — a
+    second refusal at the placement layer would refuse `next`'s owned
+    coordination-topology missions once THEY carry a fact too, which is
+    exactly the regression R-16 exists to prevent. This predicate survives
+    only as the minter-side allowed-topology building block for lifecycle
+    commands (``LIFECYCLE_OWNED_TOPOLOGIES == {SINGLE_BRANCH}``).
+
     Distinct from :func:`routes_through_coordination` (the coord-routing
-    half of the same grid): this names the owned-placement eligibility of
-    the coord-less, lane-less cell only.
+    half of the same grid): this names the ``single_branch``, coord-less,
+    lane-less cell only.
     """
     return topology is MissionTopology.SINGLE_BRANCH
 
@@ -142,6 +189,82 @@ def routes_through_coordination(topology: MissionTopology) -> bool:
     return topology in _COORD_ROUTING_TOPOLOGIES
 
 
+_SINGLE_BRANCH_CODE_LANES_UNMIGRATED = "SINGLE_BRANCH_CODE_LANES_UNMIGRATED"
+
+
+class TopologyManifestMismatch(RuntimeError):
+    """A mission's stored ``topology`` contradicts its lane manifest (#5100 IC-02).
+
+    Raised by :func:`assert_topology_matches_manifest` when ``topology`` is
+    ``SINGLE_BRANCH`` but the mission's lane manifest has a code lane —
+    Invariant T-1's violation (``data-model.md``): a ``single_branch`` mission
+    was never re-stamped to ``lanes`` after its manifest grew a code lane (the
+    #5100 write-path defect the migration `4_0_0rc5_single_branch_code_lanes_restamp`
+    repairs).
+
+    ``StructuredError``-style (a stable ``error_code`` class attribute +
+    :meth:`to_dict`) WITHOUT subclassing
+    :class:`specify_cli.core.errors.StructuredError`: that import would cross
+    the forbidden ``mission_runtime -> specify_cli`` layer edge — this
+    package sits BELOW ``specify_cli`` in the landscape
+    (``kernel <- charter <- mission_runtime <- specify_cli``,
+    ``tests/architectural/test_layer_rules.py``). Mirrors the same
+    plain-``RuntimeError`` + inline ``error_code`` idiom this module's own
+    :class:`ActionContextError` sibling (in ``mission_runtime.resolution``)
+    already uses for the same reason.
+    """
+
+    error_code: str = _SINGLE_BRANCH_CODE_LANES_UNMIGRATED
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-serializable representation for tooling (NFR-007)."""
+        return {"error_code": self.error_code, "message": str(self)}
+
+
+def assert_topology_matches_manifest(
+    topology: MissionTopology,
+    *,
+    has_code_lanes: bool,
+    mission_slug: str,
+) -> None:
+    """Fail closed when a ``SINGLE_BRANCH`` mission's manifest has code lanes.
+
+    The pure writer-chokepoint guard (#5100 IC-02 / research.md R-4): every
+    writer that would act on the new lane-presence semantics over an
+    old, un-migrated manifest must refuse rather than silently treating a
+    ``single_branch`` mission as though it had real code lanes. Takes a
+    *bool* (never the lane-manifest object) so this module keeps importing
+    **nothing** from ``specify_cli`` (layer rules —
+    ``tests/architectural/test_layer_rules.py``).
+
+    PURE and read-path-safe (C-003): no read path may call this — every
+    un-migrated mission's status/accept/doctor read must keep working, only
+    WRITER chokepoints refuse. Promoted out of module-private status and into
+    :data:`__all__` by #5100 WP04 (T020b), which wires this in as the
+    repo-root review path's unmigrated-mission guard (``agent/workflow.py``);
+    ``compute_and_write_lanes`` and ``allocate_lane_worktree`` wire it in at
+    activation (WP05, IC-03) — see ``tests/architectural/test_no_dead_symbols.py``
+    (mirrors this mission's own WP02 precedent:
+    ``lanes/claim_base.py``'s ``_claim_base_ref``/``_clear_claim_base``).
+
+    Raises:
+        TopologyManifestMismatch: *topology* is ``SINGLE_BRANCH`` and
+            *has_code_lanes* is ``True``. The message names *mission_slug*
+            and both remedies, the always-working
+            ``spec-kitty migrate backfill-topology --restamp-single-branch``
+            first and ``spec-kitty upgrade`` as the alternative (``upgrade``
+            can be a no-op where its migration is already recorded).
+    """
+    if topology is MissionTopology.SINGLE_BRANCH and has_code_lanes:
+        raise TopologyManifestMismatch(
+            f"Mission {mission_slug!r} is stamped topology=single_branch but its lane "
+            "manifest has a code lane (never re-stamped after #5100). Run "
+            "'spec-kitty migrate backfill-topology --restamp-single-branch' to fix "
+            "(or 'spec-kitty upgrade', which can be a no-op where its migration is "
+            "already recorded)."
+        )
+
+
 @dataclass(frozen=True)
 class IdentityFragment:
     """F0 — the canonical mission identity every other fragment keys on.
@@ -160,9 +283,7 @@ class IdentityFragment:
         expected = self.mission_id[:8]
         if self.mid8 != expected:
             raise ValueError(
-                "IdentityFragment.mid8 must be mission_id[:8] "
-                f"(got mid8={self.mid8!r}, mission_id={self.mission_id!r}); "
-                "mid8 is single-derived (FR-012 / C-CTX-3)."
+                f"IdentityFragment.mid8 must be mission_id[:8] (got mid8={self.mid8!r}, mission_id={self.mission_id!r}); mid8 is single-derived (FR-012 / C-CTX-3)."
             )
 
     @classmethod
@@ -363,6 +484,7 @@ __all__ = [
     "MissionExecutionContext",
     "MissionTopology",
     "StatusSurfaceFragment",
+    "TopologyManifestMismatch",
     "WorkspaceFragment",
     "classify_topology",
     "routes_through_coordination",

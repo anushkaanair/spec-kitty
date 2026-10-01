@@ -163,6 +163,11 @@ ACCOUNTED_SITES: dict[tuple[str, str], tuple[int, str]] = {
     # wrong here.
     ("src/specify_cli/cli/commands/mission_type.py", "_commit_flattened_meta"): (1, "silent-by-contract"),
     ("src/specify_cli/cli/commands/mission_type.py", "_delete_legacy_coordination_branch"): (1, "silent-by-contract"),
+    # #5100 landing (2026-09-30): the discard target branch is read only to detect a
+    # protected single_branch mission's minted branch. A missing/malformed meta means
+    # "no minted branch", so discard falls back to its legacy path, like the sibling
+    # discard reads above; a fail-closed read would block discarding a broken mission.
+    ("src/specify_cli/cli/commands/mission_type.py", "_discard_target_branch"): (1, "silent-by-contract"),
     ("src/specify_cli/cli/commands/mission_type.py", "_expected_discard_branches"): (1, "silent-by-contract"),
     ("src/specify_cli/cli/commands/mission_type.py", "_read_mission_mid8"): (1, "silent-by-contract"),
     ("src/specify_cli/cli/commands/tracker.py", "_resolve_active_feature_slug"): (1, "silent-by-contract"),
@@ -186,8 +191,6 @@ ACCOUNTED_SITES: dict[tuple[str, str], tuple[int, str]] = {
     # restored to match ``main``.)
     ("src/specify_cli/core/paths.py", "load_meta_fail_closed"): (1, "authority"),
     ("src/specify_cli/core/vcs/detection.py", "_get_locked_vcs_from_feature"): (2, "silent-by-contract"),
-    ("src/specify_cli/dashboard/scanner.py", "_read_dashboard_feature_meta"): (1, "silent-by-contract"),
-    ("src/specify_cli/dashboard/scanner.py", "_read_mission_identity"): (1, "silent-by-contract"),
     ("src/specify_cli/git/sparse_checkout.py", "_load_managed_lane_policies"): (1, "silent-by-contract"),
     ("src/specify_cli/lanes/recovery.py", "_mission_id_from_meta"): (1, "silent-by-contract"),
     ("src/specify_cli/lanes/worktree_allocator.py", "_read_coordination_branch"): (1, "silent-by-contract"),
