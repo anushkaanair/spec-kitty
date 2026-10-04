@@ -122,16 +122,20 @@ findings-disposition contract: accepted, changed, or deferred with rationale; no
   in the core-to-status direction for a status-owned key layout). Keeping both copies (rejected: the
   single-authority principle; the copies are documented duplicates).
 
-### R-5 — Characterization without patching the implement namespace
+### R-5 — Characterization without coupling assertions to internals
 
-- **Decision**: the FR-009 suite runs `implement` through `typer.testing.CliRunner` and calls the
-  command function directly on real-git fixtures, built with the helpers the existing integration
-  tests use (`tests/specify_cli/cli/commands/test_single_branch_implement_refusals.py`,
-  `tests/integration/test_wp_integrity_*`). Failure injection patches only the *external* owner
-  module of a collaborator (for example `specify_cli.status.work_package_lifecycle`), never
-  `specify_cli.cli.commands.implement*`.
-- **Rationale**: FR-009 / SC-003 require zero assertion edits across the moves, so the suite cannot
-  depend on names that move.
+- **Decision**: the FR-009 suite runs `implement` in two ways, both on real-git fixtures: through
+  `typer.testing.CliRunner`, and by calling the command function directly. The fixtures are built
+  with the helpers the existing integration tests use
+  (`tests/specify_cli/cli/commands/test_single_branch_implement_refusals.py`,
+  `tests/integration/test_wp_integrity_*`).
+- **Failure injection**: where a failure can only be induced by substituting a collaborator (the
+  claim-commit exception table, the #4888 status-start failure), the substitution target is looked
+  up in one dispatch-map fixture (logical collaborator → current dotted target). A moving WP
+  updates the map, never an assertion. The widened liveness gate checks that every mapped target
+  is live.
+- **Rationale**: FR-009 / SC-003 require zero assertion edits across the moves. Patching the owner
+  module alone does not intercept a name the command imported into its own namespace.
 
 ### R-6 — Census-scan widening proof
 
