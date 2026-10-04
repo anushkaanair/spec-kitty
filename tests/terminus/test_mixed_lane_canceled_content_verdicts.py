@@ -14,10 +14,11 @@ Every test drives the REAL ``spec-kitty consolidate`` CLI
 against a real on-disk coordination mission. Assertions are bound to the
 VERDICT BLOCK (the text from the verdict header on), and each path/wording
 pair to its own semicolon-delimited clause, so a gate that mislabels a path
-cannot pass. The exit-0 positive controls for every shape here live in
-``test_mixed_lane_canceled_content_controls.py``.
+cannot pass. ``test_mixed_lane_canceled_content_controls.py`` keeps a single smoke control;
+the per-shape exit-0 controls are pinned in ``tests/consolidation/test_wp_attribution.py``
+and ``tests/consolidation/test_reconciliation.py``.
 
-Originally the red-first real-CLI reproductions of #5046 (mission
+Originally the real-CLI reproductions of #5046 (defect fixed; permanent guards) (mission
 mixed-lane-authorship-soundness-01M3M7Y0).
 
 One smoke per behaviour family (#5618 part 2): the add/modify/delete FAIL under the

@@ -37,7 +37,7 @@ pytestmark = pytest.mark.fast
 
 # ===========================================================================
 # WP01 (review-feedback-to-implementer-01M3GKZ8, #4899) -- SC-001/SC-002
-# red-first regression battery, T001.
+# regression battery, T001 (the defect is fixed; permanent guard).
 #
 # Real-CLI, real-git harness (mirrors ``tests/integration/
 # test_review_cycle_rejection_only.py::for_review_repo``, extended one hop

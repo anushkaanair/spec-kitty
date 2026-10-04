@@ -251,7 +251,7 @@ def _isolated_git_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 # ---------------------------------------------------------------------------
-# T028.1 -- red-first: destroyed lane refuses and names the tip
+# T028.1 -- permanent guard (defect fixed): destroyed lane refuses and names the tip
 # ---------------------------------------------------------------------------
 
 
