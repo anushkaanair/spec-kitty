@@ -37,7 +37,7 @@
       "wp": null
     },
     "#5232": {
-      "evidence_ref": "<link or commit>",
+      "evidence_ref": "WP06: seam-owned typed PlanningPlacement (research.md R-1, B2*); closed by the mission PR",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -45,8 +45,8 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "unknown",
-      "wp": null
+      "verdict": "in-mission",
+      "wp": "WP06"
     },
     "#5634": {
       "evidence_ref": "<link or commit>",
