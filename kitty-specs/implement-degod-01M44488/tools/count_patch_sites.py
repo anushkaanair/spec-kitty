@@ -16,10 +16,12 @@ Reported:
 - ``object``  -- ``monkeypatch.setattr(<alias>, "name", ...)`` / ``patch.object(<alias>, "name", ...)``
   where ``<alias>`` is bound in that test file to a family module (``import ... as``,
   ``from specify_cli.cli.commands import implement as``, ``importlib.import_module``);
+- ``dispatch`` -- ``patch_collaborator(...)`` calls (the characterization dispatch-map helper):
+  each one substitutes a family name, so it counts as a patch site too;
 - ``console`` -- ``<alias>.console`` accesses (output-capture couplings to a family module);
 - ``private_imports`` -- distinct ``_private`` names imported from a family module.
 
-SC-002 compares ``string + object`` (the patch-site total) against the baseline this script
+SC-002 compares ``string + object + dispatch`` (the patch-site total) against the baseline this script
 measured on the mission base commit: 119 (95 string + 24 object; 10 console couplings; 46 distinct
 private imports). The grounding's 112 was measured over ``implement`` only with a different
 object-patch scanner.
@@ -71,12 +73,16 @@ def scan() -> dict[str, object]:
     string_hits: Counter[str] = Counter()
     object_hits: Counter[str] = Counter()
     console_hits = 0
+    dispatch_hits = 0
     private_imports: set[str] = set()
     files_string: Counter[str] = Counter()
     for path in sorted((REPO / "tests").rglob("*.py")):
         text = path.read_text(encoding="utf-8", errors="replace")
         rel = path.relative_to(REPO).as_posix()
-        for m in STRING_RE.finditer(text):
+        # The dispatch map's own target strings are counted at their use sites
+        # (``patch_collaborator`` calls), not as literals, to avoid double counting.
+        literal_text = "" if path.name == "_implement_dispatch.py" else text
+        for m in STRING_RE.finditer(literal_text):
             string_hits[f"{m.group(1)}.{m.group(2)}"] += 1
             files_string[rel] += 1
         try:
@@ -85,6 +91,11 @@ def scan() -> dict[str, object]:
             continue
         aliases = _family_aliases(tree)
         for node in ast.walk(tree):
+            if isinstance(node, ast.Call):
+                fn = node.func
+                fname = fn.attr if isinstance(fn, ast.Attribute) else getattr(fn, "id", "")
+                if fname == "patch_collaborator":
+                    dispatch_hits += 1
             if isinstance(node, ast.ImportFrom) and node.module in FAMILY_DOTTED:
                 private_imports.update(f"{node.module.rsplit('.', 1)[1]}.{a.name}" for a in node.names if a.name.startswith("_"))
             if not aliases:
@@ -95,13 +106,14 @@ def scan() -> dict[str, object]:
                     object_hits[name.value] += 1
             if isinstance(node, ast.Attribute) and node.attr == "console" and isinstance(node.value, ast.Name) and node.value.id in aliases:
                 console_hits += 1
-    total = sum(string_hits.values()) + sum(object_hits.values())
+    total = sum(string_hits.values()) + sum(object_hits.values()) + dispatch_hits
     return {
         "family": FAMILY,
         "string": sum(string_hits.values()),
         "string_distinct": len(string_hits),
         "object": sum(object_hits.values()),
         "object_distinct": len(object_hits),
+        "dispatch": dispatch_hits,
         "patch_sites_total": total,
         "console": console_hits,
         "private_imports_distinct": len(private_imports),
@@ -119,6 +131,7 @@ def main() -> int:
     print(f"family: {', '.join(result['family'])}")
     print(f"string patch targets : {result['string']} ({result['string_distinct']} distinct)")
     print(f"object patch targets : {result['object']} ({result['object_distinct']} distinct)")
+    print(f"dispatch-map patches : {result['dispatch']}")
     print(f"PATCH SITES TOTAL    : {result['patch_sites_total']}  (SC-002 baseline 119 on 2026-10-04, target <= 45)")
     print(f"console couplings    : {result['console']}")
     print(f"private imports      : {result['private_imports_distinct']} distinct")

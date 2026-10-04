@@ -26,7 +26,7 @@ def ensure_wp_claim_preconditions(
 
 ```python
 def find_wp_file(repo_root: Path, mission_slug: str, wp_id: str) -> Path: ...        # moved verbatim
-def resolve_lanes_dir(repo_root: Path, mission_slug: str) -> Path: ...                 # was implement._resolve_lanes_dir
+def resolve_lane_state_dir(repo_root: Path, mission_slug: str) -> Path: ...            # was implement._resolve_lanes_dir (distinct from lanes.persistence.resolve_lanes_dir)
 def resolve_mission_target_branch(mission_slug: str, repo_root: Path) -> str: ...      # was resolve_feature_target_branch
 ```
 - Same exceptions (`FileNotFoundError` texts) as today.
@@ -37,12 +37,14 @@ def resolve_mission_target_branch(mission_slug: str, repo_root: Path) -> str: ..
 ```python
 class BaseRefUnresolved(StructuredError): base_ref: str
 def resolve_base_ref(repo_root: Path, base_ref: str) -> tuple[str, str] | None: ...   # origin-preferred (#4969), verbatim
+# _validate_base_ref / _raise_base_ref_unresolved stay CLI-side as thin translators (tests pin typer.Exit)
 def resolve_effective_base(repo_root: Path, base: str | None, resolved_workspace) -> tuple[str | None, bool]:
     """(effective_base, ignored_on_planning_lane). Raises BaseRefUnresolved."""
 def resolve_execution_lane(resolved_workspace, lanes_feature_dir: Path, wp_id: str) -> tuple[LanesManifest | None, ExecutionLane | None]:
     """(None, None) for a repo-root planning workspace; raises ValueError / MissingLanesError as today."""
 def refuse_repo_root_checkout_if_unavailable(repo_root, mission_slug, wp_id, resolved_workspace) -> bool: ...
-def ensure_vcs_locked(feature_dir: Path) -> VcsLockOutcome:   # typed errors for missing / invalid meta.json
+def ensure_vcs_locked(feature_dir: Path) -> bool:   # True when it wrote the lock; typed errors for missing / invalid meta.json
+def git_stdout(repo_root: Path, args: list[str]) -> str: ...   # was implement._git_stdout (moved by WP05); not lifecycle_sync._git_stdout
 ```
 - The command keeps the tracker step text, the "--base is ignored …" warning and
   `_BASE_REF_UNRESOLVED_MSG`.

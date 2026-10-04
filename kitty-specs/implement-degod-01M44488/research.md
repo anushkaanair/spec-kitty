@@ -188,3 +188,34 @@ Disposition summary:
 | FR-004 only pure decisions move (alphonso, LOW) | **Accepted**: the contract lists exactly which functions move and which stay in the adapter. |
 | FR-006 `__all__` and allow-list (alphonso, LOW) | **Accepted**: FR-006 and the contract name both. |
 | Recover mode, console singleton, #3371 e2e (alphonso, LOW) | **Accepted**: spec edge cases added. |
+
+### Post-tasks squad (planner-priti planning lens, architect-alphonso feasibility lens)
+
+Both lenses' verdict was "not ready as written"; every finding is folded below.
+
+| Finding | Disposition |
+|---|---|
+| Liveness gate cannot see dispatch-map values; pre-filter `"commands.agent"` would scan zero implement files (both, HIGH) | **Changed**: WP01 T001 per-family config incl. pre-filter; T002 explicit dispatch-map liveness case with planted dead entry |
+| Mandated attribute-call style would be reported dead by the seam rule (priti, HIGH) | **Changed**: WP01 adds the attribute rule (`<alias-of-M>.<name>` reads are live); one mission-level call-style rule in every prompt |
+| Missing refusal families incl. DESTROYED_LANE / LANE_WORK_TIP_UNKNOWN through implement() (priti, HIGH) | **Changed**: characterization split into its own WP02 with all families listed |
+| SC-002 laundering via the dispatch map / dynamic targets; reduction relied on WP08 only (priti, HIGH) | **Changed**: counter counts `patch_collaborator` calls; map scope limited; dynamic targets forbidden; WP09 phase functions take `repo_root`/context as parameters; WP10 per-target reduction plan |
+| Ownership walls on ~25 test files (priti, HIGH) | **Changed**: explicit owned files per WP plus a mission rule granting mechanical re-point leeway (charter ownership-map leeway), logged |
+| `test_commit_recipes` `silently demotes` allow-list goes stale inside the #5699-red test (both, HIGH) | **Changed**: WP04 re-keys it; every WP compares the failing set to base |
+| `_git_stdout` needed by the planning adapter → circular import (both, HIGH/MED) | **Changed**: WP05 moves it to `lanes/implement_support.git_stdout` (twin of `lifecycle_sync._git_stdout` named, not merged) |
+| `--base` unresolved case cannot be no-mutation (alphonso, HIGH) | **Changed**: WP02 pins the actual post-state |
+| Typed `BaseRefUnresolved` would change tracker text and force assertion edits (alphonso, HIGH) | **Changed**: WP07 catches inline inside the create try; CLI-side `_validate_base_ref` translator kept |
+| `claim_policy_metadata` name collides with a local in workflow_executor (F823) (alphonso, HIGH) | **Changed**: WP08 imports under an alias |
+| `detect_feature_context` stays → import cycle; checkout-identity source pin unlisted (alphonso, HIGH) | **Changed**: WP09 moves it to `implement_phases`; re-points the :299–304 pins |
+| No no-CLI guard covers the receiving lower modules (alphonso, MED) | **Changed**: mission rule + FR-012 text; each WP adds coverage with a plant |
+| `is_legacy` / success line must use the same value as the arms (alphonso, MED) | **Changed**: WP06 objective |
+| `write_intent not in implement_cores` pin goes vacuous (both, MED) | **Changed**: WP06 re-points it |
+| FR-015 lifecycle rows + adapter-wiring planted break; "red on base" wording vs B2* (priti, MED) | **Changed**: WP06 rows + plant; spec FR-015 reworded |
+| SC-005 bulk-edit / operational-context / present tests unassigned (priti, MED) | **Changed**: WP09 mandatory direct tests |
+| NFR-003 measured once; suites budget unclear (priti, MED) | **Changed**: per-WP timing; characterization/reachability ≤ 60 s each (spec NFR-003) |
+| WP03 / WP08 too large (priti, MED) | **Changed**: split into WP04+WP05 and WP10+WP11 |
+| Deferred remediation items need issues (priti, MED) | **Changed**: WP12 follow-up 5 |
+| `resolve_lanes_dir` name collision; `_find_wp_file` twin; allow-list row (alphonso, MED) | **Changed**: `resolve_lane_state_dir`; twin named; row handled in WP03 |
+| Exception-visibility and OptionInfo programmatic-call details; Rich wrapping (alphonso, MED) | **Changed**: WP02 context section |
+| git-operations-matrix real path; coverage_breadth baseline; format-exclude entries (priti, LOW) | **Changed**: WP11 owned files and objectives |
+| Characterization file matched by globs of later WPs (priti, LOW) | **Changed**: mission rule — `git diff <WP02 tip>` must be empty |
+| VcsLockOutcome vs bool; test_resolve_lanes_dir ownership (alphonso, LOW) | **Changed**: contract says bool; WP03 owns it |
