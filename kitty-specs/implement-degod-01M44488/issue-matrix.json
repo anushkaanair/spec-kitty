@@ -85,7 +85,7 @@
       "wp": null
     },
     "#5673": {
-      "evidence_ref": "<link or commit>",
+      "evidence_ref": "Follow-up: #5673 stays open; WP08 extracts implement_claim.claim_commit_paths so the fix is a one-function change",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -93,8 +93,8 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "unknown",
-      "wp": null
+      "verdict": "deferred-with-followup",
+      "wp": "WP08"
     },
     "#5676": {
       "evidence_ref": "<link or commit>",
