@@ -1,5 +1,17 @@
 {
   "rows": {
+    "#1598": {
+      "evidence_ref": "Historical fix whose behaviour this mission preserves and pins (characterization / smoke tests); no work owed",
+      "fr": null,
+      "nfr": null,
+      "repo": null,
+      "sc": null,
+      "scope": null,
+      "source_file": null,
+      "title": null,
+      "verdict": "not-applicable",
+      "wp": null
+    },
     "#3371": {
       "evidence_ref": "<link or commit>",
       "fr": null,
