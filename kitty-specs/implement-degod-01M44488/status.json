@@ -1,7 +1,7 @@
 {
-  "event_count": 6,
-  "last_event_id": "01M4494850BMBNHV4YGTXZCYGZ",
-  "materialized_at": "2026-10-04T20:19:16.768740+00:00",
+  "event_count": 7,
+  "last_event_id": "01M4494A5EWFDD45DC423QXBVG",
+  "materialized_at": "2026-10-04T20:19:18.830158+00:00",
   "mission_number": "",
   "mission_slug": "implement-degod-01M44488",
   "mission_type": "software-dev",
@@ -15,7 +15,7 @@
     "for_review": 0,
     "in_progress": 0,
     "in_review": 0,
-    "planned": 6
+    "planned": 7
   },
   "work_packages": {
     "WP01": {
@@ -59,6 +59,13 @@
       "lane": "planned",
       "last_event_id": "01M4494850BMBNHV4YGTXZCYGZ",
       "last_transition_at": "2026-10-04T20:19:16.768740+00:00"
+    },
+    "WP07": {
+      "actor": "finalize-tasks",
+      "force_count": 0,
+      "lane": "planned",
+      "last_event_id": "01M4494A5EWFDD45DC423QXBVG",
+      "last_transition_at": "2026-10-04T20:19:18.830158+00:00"
     }
   }
 }
