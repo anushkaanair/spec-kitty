@@ -50,6 +50,10 @@
 | T039 | Fix `test_preparation_refuses_broken_required_inputs[unreadable]` | WP08 | [P] |
 | T040 | Fix `test_resolve_charter_path_raises_when_directory_not_readable` | WP08 | [P] |
 | T041 | Sweep the two files for other chmod-unreadable tests and validate | WP08 | [P] |
+| T042 | Reproduce the 16 root failures | WP09 | [P] |
+| T043 | Inject the failure at the I/O seam (preferred) | WP09 | [P] |
+| T044 | Skip under root only where no single seam exists | WP09 | [P] |
+| T045 | Planted breaks and validation | WP09 | [P] |
 
 ---
 
@@ -329,5 +333,38 @@ T041 Sweep the two files for other chmod-unreadable tests and validate (WP08)
 ### Risks & Mitigations
 
 - Covering guard stays green → keep the test (KEEP), record it.
+
+**Estimated prompt size**: ~240 lines
+---
+
+## Work Package WP09: Root-independent sweep of the other chmod-unreadable tests (#5622) (Priority: P3)
+
+**Goal**: #5622 asks to add the same guard to any other chmod-based unreadable-path test. A root run on the base found 16 such tests in 8 files failing under uid 0; make them root-independent. Added after first finalization when WP08's sweep surfaced the list.
+**Independent Test**: the 8 files run as uid 0 with 0 failures (base: 16 failed).
+**Prompt**: `tasks/WP09-root-independent-chmod-sweep.md`
+**Requirement Refs**: FR-007, NFR-003, C-001, SC-004
+
+### Included Subtasks
+
+T042 Reproduce the 16 root failures (WP09)
+T043 Inject the failure at the I/O seam (preferred) (WP09)
+T044 Skip under root only where no single seam exists (WP09)
+T045 Planted breaks and validation (WP09)
+
+### Implementation Notes
+
+- Same seam-injection pattern as WP08.
+
+### Parallel Opportunities
+
+- Owns disjoint files from every other WP; runs in its own lane.
+
+### Dependencies
+
+- None.
+
+### Risks & Mitigations
+
+- A global Path monkeypatch leaking to other paths: delegate to the original for non-target paths.
 
 **Estimated prompt size**: ~240 lines

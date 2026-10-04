@@ -169,6 +169,28 @@
       "parallel_group": 0
     },
     {
+      "lane_id": "lane-i",
+      "wp_ids": [
+        "WP09"
+      ],
+      "write_scope": [
+        "tests/dossier/test_hasher.py",
+        "tests/dossier/test_indexer.py",
+        "tests/kernel/test_guarded_read.py",
+        "tests/specify_cli/dossier/test_integration.py",
+        "tests/specify_cli/test_meta_read_permission_denied_regression.py",
+        "tests/specify_cli/test_mission_brief_missing_vs_corrupt.py",
+        "tests/specify_cli/upgrade/migrations/test_provision_kitty_env.py",
+        "tests/upgrade/test_migration_robustness.py"
+      ],
+      "predicted_surfaces": [
+        "api",
+        "legacy-cleanup"
+      ],
+      "depends_on_lanes": [],
+      "parallel_group": 0
+    },
+    {
       "lane_id": "lane-g",
       "wp_ids": [
         "WP07"
@@ -195,8 +217,8 @@
       "parallel_group": 1
     }
   ],
-  "computed_at": "2026-10-04T07:27:21.370089+00:00",
+  "computed_at": "2026-10-04T08:10:09.061814+00:00",
   "computed_from": "dependency_graph+ownership",
   "planning_artifact_wps": [],
-  "planning_commit_sha": "5c5fdd61c38f26895c707b99bee19fe96579e9f9"
+  "planning_commit_sha": "7049361cb3b4378e9fa495a87b9c9e8920825945"
 }
