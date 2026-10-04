@@ -32,7 +32,7 @@ from specify_cli.status import Lane, StatusEvent
 from specify_cli.status._unsafe import append_event
 from specify_cli.status.store import read_events
 
-pytestmark = pytest.mark.fast
+pytestmark = [pytest.mark.integration, pytest.mark.git_repo]
 
 
 # ===========================================================================
