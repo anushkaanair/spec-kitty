@@ -17,3 +17,7 @@ Initial approach (spec + research/code-grounding.md §2):
   PRIMARY kind. That triggered an empirical reachability study before planning #5232 instead of
   trusting the precedent. The study found the fallback reachable only via a duplicate WP prompt or a
   torn-down coordination branch.
+- 2026-10-04 — The post-spec squad corrected a wrong precedent: `mission_record_analysis` queries a
+  PRIMARY kind. That triggered an empirical reachability study before planning #5232 instead of
+  trusting the precedent. The study found the fallback reachable only via a duplicate WP prompt or a
+  torn-down coordination branch.

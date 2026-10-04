@@ -17,3 +17,7 @@ planning; the authoritative table is research/code-grounding.md §2 (D1–D10).
   are keyed on a "context unresolved" flag. A 64-state real-git characterization showed it
   byte-identical to today. The literal single-path shape (B1) changes four reachable outcomes, so
   it becomes an operator follow-up and is not taken here (C-001/C-007).
+- 2026-10-04 — R-1: #5232 is delivered as B2\*, a seam-owned typed placement whose degrade arms
+  are keyed on a "context unresolved" flag. A 64-state real-git characterization showed it
+  byte-identical to today. The literal single-path shape (B1) changes four reachable outcomes, so
+  it becomes an operator follow-up and is not taken here (C-001/C-007).

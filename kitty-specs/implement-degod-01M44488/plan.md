@@ -226,10 +226,12 @@ No charter violations to justify.
   - the CHANGELOG.
 - **Sequencing/depends-on**: IC-03, and research.md R-1.
 - **Risks**:
-  - Behaviour change in fallback states, so the FR-015 table must be accepted under C-007 first.
-  - The kind choice (research.md R-1) decides the outcome.
-  - The arm that survives must not split a flat mission's single transaction unless R-1 shows that
-    is unreachable.
+  - research.md R-1 selects B2\*, which a 64-state real-git characterization showed byte-identical
+    to today, so C-007 is not triggered.
+  - The risk is reproducing B2\* faithfully: context first, a typed unresolved-context placement, a
+    seam-owned coordination ref (`DECISION_LOG`), and the three degrade arms keyed on the typed
+    result.
+  - FR-015's committed tests re-create every reachable R-1 row.
 
 ### IC-05 — Lane selection and allocation preflight into the lanes seam
 
