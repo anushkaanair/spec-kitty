@@ -13,5 +13,7 @@
   "purpose_tldr": "Stop mislabelled and slow regression-marked tests from inflating every PR's CI time, and close two real test gaps.",
   "slug": "regression-slice-cleanup-01M42WCF",
   "target_branch": "issue-5618-regression-slice-cleanup",
-  "topology": "coord"
+  "topology": "coord",
+  "vcs": "git",
+  "vcs_locked_at": "2026-10-04T07:28:50.992473+00:00"
 }
