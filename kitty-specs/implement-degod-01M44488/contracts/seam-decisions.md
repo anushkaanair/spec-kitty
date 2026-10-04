@@ -78,7 +78,34 @@ def claim_commit_paths(*, repo_root, feature_dir, wp_file, status_artifacts: Ite
     artifacts, meta.json if present, .kittify/config.yaml if present). #5673 changes only this."""
 ```
 
-## Placement (FR-008, after research.md R-1)
+## Placement (FR-008, research.md R-1 = B2*)
 
-This section is filled from research.md R-1 when IC-04 starts: the artifact kind queried, and the
-fail-closed helper that replaces `_resolve_placement_ref` returning `None`.
+In `coordination/planning_commit.py`:
+
+```python
+@dataclass(frozen=True)
+class PlanningPlacement:
+    """The planning-artifact placement implement-claim commits under.
+
+    resolved=True  -> ref is the context placement ref (== write_target(DECISION_LOG));
+    resolved=False -> the WP action context did not resolve (ActionContextError);
+                      coordination_ref is the seam-resolved coordination ref, or None
+                      when the stored topology does not route through coordination or
+                      no coordination branch is declared.
+    """
+    resolved: bool
+    ref: CommitTarget | None          # set iff resolved
+    coordination_ref: str | None      # coord ref for the filter/destination in both cases
+
+def resolve_planning_placement(repo_root: Path, *, mission_slug: str, wp_id: str) -> PlanningPlacement:
+    """Context first (non-ActionContextError errors propagate unchanged, as today);
+    seam-owned degrade on ActionContextError; PlacementResolutionRequired when the
+    seam cannot resolve."""
+```
+
+- The adapter's arms are keyed on `placement.resolved` and `placement.coordination_ref`, never on
+  `meta.json` `coordination_branch`.
+- The identifier tuple (C-006) is still read for mission_id / mid8 / effective ids and the
+  legacy console line.
+- `_resolve_placement_ref`'s `None` contract is retired. `_resolve_claim_commit_target` is reused or
+  deleted per FR-018.

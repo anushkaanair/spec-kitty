@@ -9,7 +9,83 @@ findings-disposition contract: accepted, changed, or deferred with rationale; no
 
 ### R-1 — #5232 placement: which seam query, which surviving arm
 
-R1_PLACEHOLDER
+- **Decision**: **B2\*, a seam-owned placement with the degrade arms keyed on a typed flag.** It
+  keeps every reachable outcome byte-identical (C-007 is not triggered). It closes #5232 under the
+  issue's second acceptable shape: "a documented, tested degrade path is kept, owned by the
+  placement seam and not by `implement.py`".
+  1. Placement is still resolved by calling `resolve_action_context(action="implement")` first.
+     That keeps today's pre-commit WP-context gate, so `MissingLanesError` and `CorruptLanesError`
+     still stop implement before any commit.
+  2. On success, the placement is `artifact_placement.placement_ref`. Where both resolve it equals
+     `placement_seam(...).write_target(MissionArtifactKind.DECISION_LOG)`.
+  3. On `ActionContextError`, the result is a typed **unresolved-context placement**, not `None`.
+     Its coordination ref comes from the placement seam
+     (`write_target(DECISION_LOG)`, or a seam-level coordination-ref helper), and only when the
+     stored topology routes through coordination and the mission declares a coordination branch.
+     If the seam itself cannot resolve, `PlacementResolutionRequired` is raised with the one
+     remedy text (FR-018).
+  4. The three unresolved-context outcomes survive unchanged, keyed on that typed result instead of
+     `placement_ref is None`: the flat single transaction, the protected-planning-branch raise, and
+     the partition commit.
+  5. The decision that builds the typed placement lives in `coordination/planning_commit.py` (the
+     seam). The command-package adapter only consumes it.
+  6. What is removed:
+     - every *placement* read of `meta.json` `coordination_branch` (the `[0]` consumer of the
+       identifier tuple);
+     - the `placement_ref: CommitTarget | None = None` overload;
+     - the C-004 wording in docstrings and comments.
+  7. What is kept: `meta.json` `coordination_branch` stays as an identity input (mid8 and the
+     legacy console line, C-006 tuple).
+- **Evidence**:
+  - Setup: real-git fixtures built with the real CLI (`agent mission create` + `finalize-tasks`)
+    against this checkout.
+  - Each run is a real `spec-kitty implement WP01 --mission … --auto-commit` (and
+    `--no-auto-commit`), with a dirty PRIMARY `spec.md` plus an untracked COORD-residue trace file.
+  - Coverage: 64 states across flat/legacy, `single_branch` (including a minted mission branch),
+    `lanes`, `coord` and `lanes_with_coord`, and the lifecycle phases. About 200 runs compared on
+    exit code, console, branch deltas and `git status`.
+  - B2\* was identical to today in every state.
+  - Run by the plan-phase research delegate (`researcher-robbie`) on 2026-10-04. Its harness was
+    session-local; FR-015's committed tests re-create the reachable rows.
+- **Which artifact kind matches today's placement**:
+  - `DECISION_LOG` is the only kind whose `write_target` equals the context placement ref in every
+    lifecycle phase where both resolve.
+  - `STATUS_STATE` and the other coordination kinds diverge to the target under PUBLISHED
+    (write-side published short-circuit).
+  - `ANALYSIS_REPORT`, used by `mission_record_analysis`, is a PRIMARY kind and is the wrong
+    template.
+- **Reachability of the fallback today** (the FR-015 table seed):
+
+  | State | Reachable on the real path? | Today | B2\* |
+  |---|---|---|---|
+  | Coordination worktree unmaterialized or empty; flat topology with a coord branch; merged mission | yes | refused earlier ("WP … is not finalized"), no commit | = |
+  | Coordination branch deleted | yes | refused at `resolve_status_surface_with_anchor`, no commit | = |
+  | Coordination branch declared but never created | yes | context resolves; commit refused `DESTINATION_REF_NOT_FOUND` | = |
+  | `lanes.json` missing or corrupt | yes | `MissingLanesError` / `CorruptLanesError` escape the narrow catch; exit 1, no commit | = |
+  | Duplicate WP prompt (`WORK_PACKAGE_UNRESOLVED`), flat | yes | arm (a): 1 transaction, then a later refusal | = |
+  | Duplicate WP prompt, coordination | yes | arm (c): partition commit, then a later refusal | = |
+  | Protected coord target + `--no-auto-commit` + committed residue + duplicate WP | yes (exotic) | arm (b): `PlacementResolutionRequired`, 0 commits | = |
+  | Merged mission with coordination branch torn down, re-run | yes | proceeds (clean) / commits PRIMARY then `CoordinationBranchDeleted` (dirty) | = |
+  | Healthy, every topology | yes | resolved partition arm | = |
+
+- **Alternatives considered**:
+  - **B1**, `write_target` only and one surviving arm: changes four reachable rows.
+    - A flat duplicate-WP run goes from 1 to 2 commits.
+    - Arm (b) becomes commit-then-refuse.
+    - A merged mission with a deleted coordination branch goes from exit 0 to
+      `PlacementResolutionRequired`.
+    - A missing or corrupt `lanes.json` gives a different refusal text and commits first.
+    - Rejected under C-001; it would need an operator escalation.
+  - **B3**, context first with a seam fallback and a single arm: like B1 apart from the
+    `lanes.json` rows. Rejected for the same reason.
+  - **B2** (B2\* without the declared-branch condition): a double-fault row
+    (duplicate WP + coord topology with no declared branch) goes from 1 to 2 commits. Rejected.
+- **Consequence for INV-7** (`test_flat_legacy_none_seam_success_arms.py`): it survives with
+  its intent intact. It is re-keyed from `placement_ref=None` to the typed unresolved-context
+  placement with no coordination ref, and must still reach the flat success arm. It is not deleted.
+- **Follow-up**: the single seam-only commit path (B1) would be the literal end state #5232
+  describes. It changes four reachable outcomes, so it is filed as a follow-up for an operator
+  decision rather than taken here.
 
 ### R-2 — Where the phase sequence lives
 
