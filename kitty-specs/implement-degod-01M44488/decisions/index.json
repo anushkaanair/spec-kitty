@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {
+      "created_at": "2026-10-04T19:10:09.775072Z",
+      "decision_id": "01M4455PBFDASHQ7R9DN5ZQRMW",
+      "final_answer": "B: write-shaped placement seam, fail closed only when it cannot resolve. Resolved autonomously under the operator's semi-automatic brief (fold #5232 in, stop only on a real behaviour-change decision). Option B keeps the degrade owned by the placement seam, does not newly refuse flat missions or the unmaterialized window, and follows the mission_record_analysis precedent (#5113). Guard: a characterization test must show the write-shaped ref equals the read-shaped placement_ref wherever the latter resolves; if they diverge in a reachable case, escalate to the operator.",
+      "input_key": "c004_removal_shape",
+      "mission_id": "01M44488X6R4ZF7VQGS8YVCQZ5",
+      "mission_slug": "implement-degod-01M44488",
+      "opened_by": "cli",
+      "options": [
+        "A: fail closed on any context-resolution error",
+        "B: write-shaped placement seam, fail closed only when it cannot resolve",
+        "Other"
+      ],
+      "origin_flow": "specify",
+      "other_answer": false,
+      "question": "How should #5232 remove the C-004 meta-derived fallback: (A) make placement_ref required and fail closed on any context-resolution error, or (B) resolve through the write-shaped placement seam and fail closed only when that seam cannot resolve?",
+      "rationale": null,
+      "resolved_at": "2026-10-04T19:10:17.766774Z",
+      "resolved_by": null,
+      "slot_key": "specify.placement.c004-removal-shape",
+      "status": "resolved",
+      "step_id": null,
+      "summary_json": null
+    }
+  ],
+  "mission_id": "01M44488X6R4ZF7VQGS8YVCQZ5",
+  "version": 1
+}
