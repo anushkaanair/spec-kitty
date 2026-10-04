@@ -18,12 +18,11 @@ history:
   action: Prompt generated via /spec-kitty.tasks
 agent_profile: planner-priti
 authoritative_surface: kitty-specs/implement-degod-01M44488/
-create_intent:
-- kitty-specs/implement-degod-01M44488/issue-matrix.md
+create_intent: []
 execution_mode: planning_artifact
 model: sonnet
 owned_files:
-- kitty-specs/implement-degod-01M44488/issue-matrix.md
+- kitty-specs/implement-degod-01M44488/issue-matrix.json
 role: planner
 tags: []
 task_type: plan
