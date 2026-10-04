@@ -11,8 +11,6 @@ Structure: AAA (Arrange / Act / Assert).
 from __future__ import annotations
 
 import json
-import os
-import sys
 from pathlib import Path
 
 import pytest
@@ -221,23 +219,30 @@ def test_get_mission_id_returns_none_when_meta_json_malformed(tmp_path: Path) ->
 
 
 # ---------------------------------------------------------------------------
-# Permission-denied edge case (POSIX only)
+# Permission-denied edge case
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skipif(sys.platform == "win32", reason="chmod 000 not supported on Windows")
-def test_resolve_charter_path_raises_when_directory_not_readable(tmp_path: Path) -> None:
-    """Arrange: .kittify/charter exists but mode 000;
+def test_resolve_charter_path_raises_when_directory_not_readable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Arrange: .kittify/charter exists but stat on charter.md is denied;
     Act: resolve;
-    Assert: TaskCliError raised because charter.md is not readable."""
+    Assert: PermissionError/TaskCliError raised rather than a silent fallback.
+
+    The denial is injected at the ``Path.exists`` seam instead of ``chmod 000``:
+    root bypasses file mode bits, so the chmod form gave different verdicts by
+    uid (#5622).
+    """
     charter_dir = tmp_path / ".kittify" / "charter"
     charter_dir.mkdir(parents=True)
     charter_file = charter_dir / "charter.md"
     charter_file.write_text("# Charter\n", encoding="utf-8")
 
-    # Revoke read permissions so exists() returns False for the file
-    os.chmod(charter_dir, 0o000)
-    try:
-        with pytest.raises((TaskCliError, PermissionError)):
-            _resolve_charter_path(tmp_path)
-    finally:
-        os.chmod(charter_dir, 0o755)
+    real_exists = Path.exists
+
+    def deny_charter(self: Path) -> bool:
+        if self == charter_file:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_exists(self)
+
+    monkeypatch.setattr(Path, "exists", deny_charter)
+    with pytest.raises((TaskCliError, PermissionError)):
+        _resolve_charter_path(tmp_path)

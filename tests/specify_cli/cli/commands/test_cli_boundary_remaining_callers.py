@@ -84,7 +84,6 @@ def test_materialize_partial_failure_json(tmp_path: Path, monkeypatch: pytest.Mo
     assert payload["errors"]
 
 
-@pytest.mark.regression
 @pytest.mark.parametrize("name", ["archive", "materialize", "verify", "verify-diagnostics"])
 def test_ambiguous_selector_is_controlled_json(name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import subprocess

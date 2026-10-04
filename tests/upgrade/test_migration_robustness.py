@@ -632,22 +632,28 @@ class TestPartialMigrationRecovery:
 class TestPermissionErrors:
     pytestmark = [pytest.mark.adversarial, pytest.mark.fast]
 
-    def test_readonly_gitignore_clear_error(self, migration_project: Path) -> None:
+    def test_readonly_gitignore_clear_error(self, migration_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Read-only .gitignore causes migration to fail with a clear error message."""
         # Arrange
         gitignore = migration_project / ".gitignore"
         gitignore.write_text("kitty-specs\n", encoding="utf-8")
-        gitignore.chmod(0o444)
-        # Assumption check
-        assert not gitignore.stat().st_mode & 0o200  # not writable
-        # Act / Assert
-        try:
-            migration = RemoveKittySpecsFromGitignoreMigration()
-            result = migration.apply(migration_project)
-            assert not result.success
-            assert any("Failed to write .gitignore" in err for err in result.errors)
-        finally:
-            gitignore.chmod(0o644)
+        # Deny the write at the Path.write_text seam instead of chmod(0o444):
+        # root bypasses file mode bits, so a chmod-based setup gave a different
+        # verdict per uid (#5622).
+        real_write_text = Path.write_text
+
+        def deny_target(self: Path, *args: Any, **kwargs: Any) -> int:
+            if self == gitignore:
+                raise PermissionError(13, "Permission denied", str(self))
+            return real_write_text(self, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "write_text", deny_target)
+        # Act
+        migration = RemoveKittySpecsFromGitignoreMigration()
+        result = migration.apply(migration_project)
+        # Assert
+        assert not result.success
+        assert any("Failed to write .gitignore" in err for err in result.errors)
 
 
 class TestMigrationRegistryCompleteness:

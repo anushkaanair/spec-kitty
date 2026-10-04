@@ -10,12 +10,32 @@ Tests cover:
 
 import pytest
 import tempfile
+import builtins
 import os
 from pathlib import Path
+from typing import Any
+from specify_cli.dossier import hasher as hasher_module
 from specify_cli.dossier.hasher import hash_file, hash_file_with_validation
 
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
+
+
+def _deny_open(monkeypatch: pytest.MonkeyPatch, target: Path) -> None:
+    """Make hashing ``target`` fail with ``PermissionError`` at the ``open`` seam.
+
+    Replaces ``chmod(0)``: root bypasses file mode bits, so a chmod-based setup
+    gave a different verdict per uid (#5622). Only ``target`` is denied; every
+    other path delegates to the real ``open``.
+    """
+    real_open = builtins.open
+
+    def guarded_open(file: Any, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(file, (str, os.PathLike)) and Path(file) == target:
+            raise PermissionError(13, "Permission denied", str(file))
+        return real_open(file, *args, **kwargs)
+
+    monkeypatch.setattr(hasher_module, "open", guarded_open, raising=False)
 
 
 class TestHashFile:
@@ -89,21 +109,17 @@ class TestHashFile:
             hash_file(missing_file)
         assert "File not found" in str(exc_info.value)
 
-    def test_hash_file_permission_denied(self, tmp_path):
+    def test_hash_file_permission_denied(self, tmp_path, monkeypatch):
         """hash_file raises PermissionError for unreadable file."""
         restricted_file = tmp_path / "restricted.txt"
         restricted_file.write_text("content", encoding="utf-8")
 
         # Remove read permission (Unix only)
-        os.chmod(restricted_file, 0o000)
+        _deny_open(monkeypatch, restricted_file)
 
-        try:
-            with pytest.raises(PermissionError) as exc_info:
-                hash_file(restricted_file)
-            assert "Permission denied" in str(exc_info.value)
-        finally:
-            # Restore permission for cleanup
-            os.chmod(restricted_file, 0o644)
+        with pytest.raises(PermissionError) as exc_info:
+            hash_file(restricted_file)
+        assert "Permission denied" in str(exc_info.value)
 
     def test_hash_file_returns_lowercase_hex(self, tmp_path):
         """hash_file returns lowercase hex string."""
@@ -204,20 +220,17 @@ class TestHashFileWithValidation:
         assert hash_result is None
         assert error == "invalid_utf8"
 
-    def test_unreadable_file_returns_unreadable_error(self, tmp_path):
+    def test_unreadable_file_returns_unreadable_error(self, tmp_path, monkeypatch):
         """Unreadable file returns (None, 'unreadable')."""
         restricted_file = tmp_path / "restricted.txt"
         restricted_file.write_text("content", encoding="utf-8")
 
         # Remove read permission
-        os.chmod(restricted_file, 0o000)
+        _deny_open(monkeypatch, restricted_file)
 
-        try:
-            hash_result, error = hash_file_with_validation(restricted_file)
-            assert hash_result is None
-            assert error == "unreadable"
-        finally:
-            os.chmod(restricted_file, 0o644)
+        hash_result, error = hash_file_with_validation(restricted_file)
+        assert hash_result is None
+        assert error == "unreadable"
 
     def test_missing_file_returns_unreadable_error(self, tmp_path):
         """Missing file returns (None, 'unreadable')."""

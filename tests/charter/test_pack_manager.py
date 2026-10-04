@@ -17,8 +17,8 @@ Covers:
 
 from __future__ import annotations
 
-import os
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -94,7 +94,7 @@ def test_preparation_preserves_target_policy(tmp_path: Path, pointer: object) ->
 
 
 @pytest.mark.parametrize("problem", ["dangling", "malformed", "scalar", "unreadable", "config", "link"])
-def test_preparation_refuses_broken_required_inputs(tmp_path: Path, problem: str) -> None:
+def test_preparation_refuses_broken_required_inputs(tmp_path: Path, problem: str, monkeypatch: pytest.MonkeyPatch) -> None:
     from ruamel.yaml.error import YAMLError
     from charter.activation.pack_context import CharterPackConfigError
     from charter.activation.pack_manager import prepare_activation_write
@@ -107,7 +107,16 @@ def test_preparation_refuses_broken_required_inputs(tmp_path: Path, problem: str
     if problem != "dangling":
         target.write_text("[broken" if problem == "malformed" else "scalar" if problem == "scalar" else "metadata: {}\n", encoding="utf-8")
     if problem == "unreadable":
-        target.chmod(0)
+        # Inject the denial at the read seam instead of chmod(0): root bypasses
+        # file mode bits, so a chmod-based setup passed/failed by uid (#5622).
+        real_read_bytes = Path.read_bytes
+
+        def deny_target(self: Path) -> bytes:
+            if self == target:
+                raise PermissionError(13, "Permission denied", str(self))
+            return real_read_bytes(self)
+
+        monkeypatch.setattr(Path, "read_bytes", deny_target)
     elif problem == "config":
         config.write_text("[broken", encoding="utf-8")
     elif problem == "link":
@@ -121,7 +130,6 @@ def test_preparation_refuses_broken_required_inputs(tmp_path: Path, problem: str
         with pytest.raises(PermissionError):
             prepare_activation_write(tmp_path, {"mission_type_activations": ["research"]})
         assert target.lstat() == before_stat and config.read_bytes() == before_config
-        target.chmod(0o600)
     else:
         before = snapshot({"project": tmp_path})
         with pytest.raises((ValueError, OSError, YAMLError, CharterPackConfigError)) as caught:
@@ -802,23 +810,28 @@ class TestMissionTypeMalformedOrgLayerLoudFails:
         with pytest.raises(ValueError, match=re.escape(f"Malformed YAML in mission-type file {bad_file}")):
             manager.list_available(ctx, kind="mission-type", layer_roots={"org": org_root})
 
-    def test_unreadable_org_layer_directory_raises_naming_the_directory(self, manager: CharterPackManager, ctx: ProjectContext, tmp_path: Path) -> None:
-        if os.name != "posix" or os.geteuid() == 0:
-            pytest.skip("chmod-based unreadability needs POSIX and a non-root user")
-
+    def test_unreadable_org_layer_directory_raises_naming_the_directory(
+        self, manager: CharterPackManager, ctx: ProjectContext, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         org_root = tmp_path / "org-pack"
         mt_dir = org_root / "mission_types"
         _write_mission_type(mt_dir, "qa")
 
-        os.chmod(mt_dir, 0o000)
-        try:
-            with pytest.raises(
-                ValueError,
-                match=re.escape(f"mission-type directory exists but cannot be read: {mt_dir}"),
-            ):
-                manager.list_available(ctx, kind="mission-type", layer_roots={"org": org_root})
-        finally:
-            os.chmod(mt_dir, 0o755)
+        # Inject the denial at the listing seam instead of chmod(0): root bypasses
+        # file mode bits, so the chmod form skipped (or diverged) by uid (#5622).
+        real_iterdir = Path.iterdir
+
+        def deny_listing(self: Path) -> Iterator[Path]:
+            if self == mt_dir:
+                raise PermissionError(13, "Permission denied", str(self))
+            return real_iterdir(self)
+
+        monkeypatch.setattr(Path, "iterdir", deny_listing)
+        with pytest.raises(
+            ValueError,
+            match=re.escape(f"mission-type directory exists but cannot be read: {mt_dir}"),
+        ):
+            manager.list_available(ctx, kind="mission-type", layer_roots={"org": org_root})
 
     def test_activate_on_malformed_org_layer_type_raises_real_cause_not_generic_unknown_id(
         self, manager: CharterPackManager, ctx: ProjectContext, tmp_path: Path
