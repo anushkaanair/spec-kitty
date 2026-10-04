@@ -12,6 +12,9 @@ requirement_refs:
 planning_base_branch: issue-5618-regression-slice-cleanup
 merge_target_branch: issue-5618-regression-slice-cleanup
 branch_strategy: Planning artifacts for this mission were generated on issue-5618-regression-slice-cleanup. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5618-regression-slice-cleanup unless the human explicitly redirects the landing branch.
+base_branch: kitty/mission-regression-slice-cleanup-01M42WCF
+base_commit: f98c216117b54273851815c8d9d2b95477180331
+created_at: '2026-10-04T07:31:16.862252+00:00'
 subtasks:
 - T016
 - T017
