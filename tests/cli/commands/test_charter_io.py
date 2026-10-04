@@ -77,9 +77,9 @@ def test_parse_csv_option_splits_comma_separated_values() -> None:
 def test_parse_csv_option_filters_empty_parts() -> None:
     """Arrange: string with trailing/double commas; Act: parse; Assert: empties dropped."""
     result = _parse_csv_option("alpha,,beta,")
-    assert "alpha" in result  # type: ignore[operator]
-    assert "beta" in result  # type: ignore[operator]
-    assert "" not in result  # type: ignore[operator]
+    assert "alpha" in result
+    assert "beta" in result
+    assert "" not in result
 
 
 def test_parse_csv_option_empty_string_returns_empty_list() -> None:
