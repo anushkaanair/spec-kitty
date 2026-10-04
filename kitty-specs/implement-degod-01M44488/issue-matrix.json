@@ -61,7 +61,7 @@
       "wp": null
     },
     "#5635": {
-      "evidence_ref": "<link or commit>",
+      "evidence_ref": "Delivered across WP01-WP11 (thin command over seam-owned phases); closed by the mission PR",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -69,8 +69,8 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "unknown",
-      "wp": null
+      "verdict": "in-mission",
+      "wp": "WP09"
     },
     "#5669": {
       "evidence_ref": "<link or commit>",
