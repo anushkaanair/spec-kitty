@@ -112,6 +112,7 @@ Wrap HTML/XML tags in backticks. Use language identifiers in code blocks.
   - Prove each widened scan by planting a violation in the new module, running the gate red, then
     removing the plant (never committed).
   - Record the commands and the red output in your activity log.
+  - Record every local out-of-matrix test run (NFR-006) with its command and counts.
   - Checklist: research/code-grounding.md §1.5 and research/test-remediation.md §5 ("Gate/census edits").
 - **Tests (charter SO 4, brief).**
   - Never edit an assertion to make a move pass.
@@ -150,8 +151,11 @@ Wrap HTML/XML tags in backticks. Use language identifiers in code blocks.
   `typer` imports.
   - Extend `tests/coordination/test_commit_router_layering.py`, or the `test_layer_rules.py` rule,
     in the WP that first moves code into that module.
-  - Prove it with a plant. `lanes/implement_support.py`'s pre-existing lazy `cli.console` import
-    (~L400) is the one recorded exception; name it in the gate with its rationale.
+  - Prove it with a plant.
+  - `lanes/implement_support.py`'s pre-existing lazy `cli.console` import (~L400) is the one
+    recorded exception. Name it in the gate with the same carve-out `test_layer_rules.py` already
+    grants consolidation for `cli.console`, plus a pointer to the follow-up issue the orchestrator
+    files to drain it (charter SO 5).
 - **NFR-003 per WP.** Time the regression subset (quickstart.md §2 plus the seam and phase unit
   tests) in every WP; the budget is ≤ 30 s. The characterization and reachability suites are timed
   separately (≤ 60 s each).
@@ -209,7 +213,7 @@ Wrap HTML/XML tags in backticks. Use language identifiers in code blocks.
   `except SafeCommitHeadMismatch:` clauses before the soft-warning print.
   - The **outer** try stays in `implement()` in this WP, so that pin keeps working.
   - `_commit_wp_claim_status`'s own docstring references the pin.
-  - WP07 will move the outer try; re-point the pin there, not here, unless your change moves it.
+  - WP09 moves the outer try (T042/T043) and re-points the pin there. Do not re-point it here unless your change moves it.
 - **WS#3 allow-list.** `tests/architectural/test_no_write_side_rederivation.py:~259–268` pins
   `implement.py::_status_commit_destination_branch` by rel_path+qualname, and its twin guard at
   ~L484 pins the literal path. Re-point both to `implement_claim.py`, with a one-line rationale
@@ -296,7 +300,9 @@ entries). Run the characterization suite: unedited and green.
    `uv run --frozen mypy --strict <new/receiving src modules>`, and the C901 check.
 6. The counter: `uv run --frozen python kitty-specs/implement-degod-01M44488/tools/count_patch_sites.py`
    (before/after numbers in the activity log).
-7. Classify every red against the base commit (CLAUDE.md baseline-red gotcha).
+7. Classify every red against the base commit (CLAUDE.md baseline-red gotcha). Charter rule:
+   a pre-existing failure other than #5699 must get a GitHub issue. Record the command and the
+   failure in the activity log and hand it to the orchestrator, who files it.
    `test_commit_recipes.py::test_no_unallowed_git_commit_recipe_strings_in_src` is a known
    pre-existing red (#5699); do not chase it.
 

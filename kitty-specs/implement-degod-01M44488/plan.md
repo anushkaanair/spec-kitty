@@ -85,7 +85,7 @@ No dependency is added, upgraded or removed, so DIRECTIVE_051 supply-chain check
 | NO_FULL_HEAVY_SUITES_IN_MISSION | Targeted files and named gate files only (quickstart.md). | PASS |
 | Terminology canon | "Mission" only. "routing" is never used bare. `--mission` only. `test_no_legacy_terminology.py` runs before push. | PASS |
 
-Re-check after Phase 1: no new violations. The four new modules are siblings inside existing
+Re-check after Phase 1: no new violations. The five new modules are siblings inside existing
 packages (C-004). Complexity Tracking is therefore empty.
 
 ## Project Structure
@@ -102,7 +102,7 @@ kitty-specs/implement-degod-01M44488/
 ├── contracts/
 │   └── seam-decisions.md   # Phase 1: the seam function contracts the WPs must honour
 ├── research/               # pre-spec grounding (code-grounding.md, test-remediation.md)
-├── tools/count_patch_sites.py   # SC-002 counter (added by the first WP)
+├── tools/count_patch_sites.py   # SC-002 counter (committed at tasks time)
 ├── traces/                 # tracer files
 └── tasks.md + tasks/       # /spec-kitty.tasks output
 ```
@@ -170,7 +170,7 @@ No charter violations to justify.
 
 ### IC-02 — Context and dependency gate into the workspace and dependency-graph seams
 
-- **Purpose**: move the context reads (`find_wp_file`, the lanes dir, the target branch) into
+- **Purpose**: move the context reads (`find_wp_file`, the lane-state dir, the target branch) into
   `workspace/context.py`, and the claim-precondition decision into `core/dependency_graph.py` as a
   pure snapshot-in function.
 - **Relevant requirements**: FR-003, FR-006, NFR-002 (fix the 2 pre-existing strict errors in
@@ -183,8 +183,8 @@ No charter violations to justify.
   - Cold-import boundary: keep status imports lazy where the gate requires it.
   - Preserve the lane-map derivation `.get("lane", Lane.GENESIS)` exactly; it is pinned, not
     deduplicated.
-  - Production importers of `find_wp_file` (`implement_support`, `mission_finalize*`,
-    `status/emit`) are re-pointed.
+  - `find_wp_file` has no production importer outside `implement.py`; the other files only
+    mention it in docstrings.
 
 ### IC-03 — Planning-artifact commit split (verbatim) into coordination decisions plus a command adapter
 
@@ -241,7 +241,7 @@ No charter violations to justify.
   the printed texts.
 - **Relevant requirements**: FR-005, C-006.
 - **Affected surfaces**: `implement.py`, `lanes/implement_support.py`, `test_implement_base_flag.py`,
-  `test_implement_base_ref.py`, `test_resolve_lanes_dir.py`, `test_lane_base_honoring.py`,
+  `test_implement_base_ref.py`, `test_lane_base_honoring.py`,
   `test_single_branch_implement_refusals.py`, `dead_symbol_allowlist.yaml` (`_ensure_vcs_in_meta`
   row), and `test_no_write_side_rederivation` if a moved function hits its grammars.
 - **Sequencing/depends-on**: IC-01.

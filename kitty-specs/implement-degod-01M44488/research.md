@@ -212,10 +212,24 @@ Both lenses' verdict was "not ready as written"; every finding is folded below.
 | FR-015 lifecycle rows + adapter-wiring planted break; "red on base" wording vs B2* (priti, MED) | **Changed**: WP06 rows + plant; spec FR-015 reworded |
 | SC-005 bulk-edit / operational-context / present tests unassigned (priti, MED) | **Changed**: WP09 mandatory direct tests |
 | NFR-003 measured once; suites budget unclear (priti, MED) | **Changed**: per-WP timing; characterization/reachability ≤ 60 s each (spec NFR-003) |
-| WP03 / WP08 too large (priti, MED) | **Changed**: split into WP04+WP05 and WP10+WP11 |
+| WP03 / WP08 too large (pre-renumbering IDs; priti, MED) | **Changed**: split, now WP04+WP05 and WP10+WP11 |
 | Deferred remediation items need issues (priti, MED) | **Changed**: WP12 follow-up 5 |
 | `resolve_lanes_dir` name collision; `_find_wp_file` twin; allow-list row (alphonso, MED) | **Changed**: `resolve_lane_state_dir`; twin named; row handled in WP03 |
 | Exception-visibility and OptionInfo programmatic-call details; Rich wrapping (alphonso, MED) | **Changed**: WP02 context section |
 | git-operations-matrix real path; coverage_breadth baseline; format-exclude entries (priti, LOW) | **Changed**: WP11 owned files and objectives |
 | Characterization file matched by globs of later WPs (priti, LOW) | **Changed**: mission rule — `git diff <WP02 tip>` must be empty |
 | VcsLockOutcome vs bool; test_resolve_lanes_dir ownership (alphonso, LOW) | **Changed**: contract says bool; WP03 owns it |
+
+### Analyze step (analyst-annie): verdict ready (0 critical/high, 5 medium, 10 low)
+
+- **Folded**:
+  - I1, the WP08 pin wording now points at WP09;
+  - CV1, two refused-before-placement rows added to WP06;
+  - CH1, the cli.console carve-out cites the test_layer_rules precedent plus a follow-up issue;
+  - CH2, the pre-existing-failure issue rule is in every WP's validation;
+  - I2, the footer is the tool footer, not a model identifier;
+  - I3, I4, I5, I6, I7, I8, I9, I10;
+  - the I11 phase label;
+  - CV2, NFR-006 recording is added to the shared rules.
+- **Kept as is**: I11's `create_intent` entries for files created by earlier WPs. They are required
+  by `finalize-tasks` literal-path validation.
