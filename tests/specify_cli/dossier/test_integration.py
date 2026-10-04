@@ -75,6 +75,8 @@ def _deny_open(monkeypatch: pytest.MonkeyPatch, target: Path) -> None:
         return real_open(file, *args, **kwargs)
 
     monkeypatch.setattr(hasher_module, "open", guarded_open, raising=False)
+
+
 @pytest.fixture
 def minimal_feature_dir(tmp_path):
     """Create minimal feature with spec.md, plan.md, tasks.md."""
