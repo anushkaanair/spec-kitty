@@ -143,11 +143,12 @@ Wrap HTML/XML tags in backticks. Use language identifiers in code blocks.
 
 ## Objectives & Success Criteria
 
-- `kitty-specs/implement-degod-01M44488/issue-matrix.md` has one row per addressed issue, in the
-  repository's canonical issue-matrix format. Find it from an existing mission
-  (`ls kitty-specs/*/issue-matrix.md | head`) and the review charter context. Rows:
-  - #5635: delivered; closed by the PR.
-  - #5232: delivered (B2\*, seam-owned typed placement); closed by the PR.
+- `kitty-specs/implement-degod-01M44488/issue-matrix.json` is the canonical matrix. The orchestrator
+  seeded all 18 gating rows at task time through `spec-kitty agent issue-verdict`. Update it **only**
+  through that CLI, never by hand. Final verdicts:
+  - #5635: `in-mission` → `fixed`; closed by the PR.
+  - #5232: `in-mission` → `fixed` (B2\*, seam-owned typed placement); closed by the PR.
+  - Every row must be terminal before merge: `in-mission` is rejected at `done`.
   - #5673: shaped, not fixed (`implement_claim.claim_commit_paths`); stays open.
   - #5676: out of scope (`core/mission_creation.py`, sibling mission #5634).
   - #5669 and #3931: out of scope.
@@ -168,8 +169,8 @@ Wrap HTML/XML tags in backticks. Use language identifiers in code blocks.
 ## Subtasks & Detailed Guidance
 
 ### Subtask T052 – Issue matrix
-Follow the canonical format exactly. Each row carries an issue number, a verdict and evidence (a WP
-id or a research.md section).
+Use `spec-kitty agent issue-verdict --mission implement-degod-01M44488 --issue "#N" --verdict <v> --actor <you> --wp <WPxx> --evidence-ref "<evidence>"`.
+Flip #5635 and #5232 to `fixed`, and confirm every row is terminal.
 
 ### Subtask T053 – Follow-ups
 Draft each follow-up: title, plus a body covering why / for whom / intended effect / evidence with
@@ -178,7 +179,7 @@ orchestrator and record the returned numbers in the matrix.
 
 ## Definition of Done
 
-- [ ] Matrix rows for all six issues, with verdicts.
+- [ ] All 18 matrix rows terminal (no `in-mission`), with #5635 and #5232 `fixed`.
 - [ ] Follow-ups filed and their numbers recorded.
 
 ## Branch Strategy
