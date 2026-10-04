@@ -14,9 +14,8 @@
   "accepted_by": "claude",
   "accepted_from_commit": "2e10f6b46bd27be5ced216e51ba59c3ef9c7b72c",
   "baseline_merge_commit": "a346f7823c98322d7e23736e420b7da850cfe323",
-  "coordination_branch": "kitty/mission-regression-slice-cleanup-01M42WCF",
   "created_at": "2026-10-04T07:17:21.168423+00:00",
-  "flattened": false,
+  "flattened": true,
   "friendly_name": "Regression-slice test cleanup",
   "merged_at": "2026-10-04T09:46:34.399560+00:00",
   "merged_commit": "c97d07374db34032f09451a6d42b4dd16e719bc6",
@@ -31,7 +30,6 @@
   "slug": "regression-slice-cleanup-01M42WCF",
   "status_phase": "1",
   "target_branch": "issue-5618-regression-slice-cleanup",
-  "topology": "coord",
   "vcs": "git",
   "vcs_locked_at": "2026-10-04T07:28:50.992473+00:00"
 }
