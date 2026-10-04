@@ -132,6 +132,18 @@
       "verdict": "not-applicable",
       "wp": null
     },
+    "#5679": {
+      "evidence_ref": "Precedent degod slice cited for the slicing pattern; no work owed",
+      "fr": null,
+      "nfr": null,
+      "repo": null,
+      "sc": null,
+      "scope": null,
+      "source_file": null,
+      "title": null,
+      "verdict": "not-applicable",
+      "wp": null
+    },
     "#5699": {
       "evidence_ref": "<link or commit>",
       "fr": null,
