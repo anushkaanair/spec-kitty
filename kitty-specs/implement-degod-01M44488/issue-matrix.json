@@ -72,6 +72,18 @@
       "verdict": "in-mission",
       "wp": "WP09"
     },
+    "#5650": {
+      "evidence_ref": "Precedent degod slice cited for the slicing pattern; no work owed",
+      "fr": null,
+      "nfr": null,
+      "repo": null,
+      "sc": null,
+      "scope": null,
+      "source_file": null,
+      "title": null,
+      "verdict": "not-applicable",
+      "wp": null
+    },
     "#5669": {
       "evidence_ref": "Out of scope (spec C-005); cited for scope boundary only",
       "fr": null,
