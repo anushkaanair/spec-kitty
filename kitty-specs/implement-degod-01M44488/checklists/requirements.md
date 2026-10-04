@@ -38,3 +38,4 @@
 
 - Grounding: research/code-grounding.md (decisions D1–D10), research/test-remediation.md.
 - Decision Moment 01M4455PBFDASHQ7R9DN5ZQRMW resolved the #5232 shape (option B), with C-007 as the escalation guard.
+- Post-specify squad (architect-alphonso, reviewer-renata) verdicts: accept-with-changes; all HIGH and MEDIUM findings folded into this revision (dispositions recorded in research.md at plan).
