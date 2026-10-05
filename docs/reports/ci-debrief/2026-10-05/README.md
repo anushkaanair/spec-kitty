@@ -29,7 +29,7 @@ audience: QA lead, CEO, CTO
 
 - Decide how much of the nightly must be green for the next release, and whether `skip_nightly` stays. Since the gate arrived on 26 September, no commit could have met it.
 - Back moving nightly-only test trees into per-PR CI where they are cheap, so a red lands on the PR that caused it.
-- Approve reusing the shard-recapture token for the release gate (it needs Actions write scope), or issue a separate one.
+- Mint the new dedicated token for the release gate (`RELEASE_NIGHTLY_DISPATCH_TOKEN`, Actions write) and record its scope, so the gate can run instead of failing closed.
 
 <div style="page-break-before:always"></div>
 
@@ -90,9 +90,9 @@ Until 5 October the job could capture but not publish. Issue #5624 records the p
 
 The run's overall status is "failure" because the strict check was red, which is the designed behaviour on a drift day. The committed timings file now records capture times on 5 October for exactly those eight modules.
 
-## Planned reuse for the release gate
+## The release gate's token
 
-`release.yml` blocks a release unless `ci-nightly.yml` is green for the exact release commit (`scripts/ci/release_nightly_gate.py`, #5034). To check or start that nightly, the gate needs a token in `RELEASE_NIGHTLY_DISPATCH_TOKEN`, for the same reason as above. The plan is to reuse the recapture token. That needs **Actions write** scope on top of its current Contents and Pull requests scopes; the job already declares `actions: write`. No scope list for this secret is written down anywhere in the repository (`RELEASE_CHECKLIST.md` only says "a PAT or GitHub App token").
+`release.yml` blocks a release unless `ci-nightly.yml` is green for the exact release commit (`scripts/ci/release_nightly_gate.py`, #5034). To check or start that nightly, the gate needs a token in `RELEASE_NIGHTLY_DISPATCH_TOKEN`, for the same reason as above. It will be a **new, dedicated PAT**, separate from the recapture token, with **Actions write** scope (the job already declares `actions: write`). No scope list for this secret is written down anywhere in the repository yet (`RELEASE_CHECKLIST.md` only says "a PAT or GitHub App token"); it should be recorded when the token is minted.
 
 **What happened on 2 October.** The v4.0.0rc5 tag push (run 36965118691, 04:34 UTC) failed at the nightly gate after 15 seconds, and build and publish were skipped as designed. The gate's own log could not be retrieved for this report, so the exact reason (no green nightly, or the token) is not confirmed. Either reason would have blocked it: no nightly had been green since 15 September. The same day, commit `4e63db7e7` added a `skip_nightly` input to manual runs, and commit `a3f76f673` let publishing proceed after a gate skipped by that input. Two manual runs followed:
 
@@ -155,7 +155,7 @@ Nightly wall-clock fell from about 30 to 55 minutes in late September to about 1
 | Tests that only the nightly runs | Product changes merge green and break tests days later (#5617's diagnosis); fixes then pile into one day | #5708 | stijn-dejongh |
 | Tests that no CI job runs | `regression`-marked tests pin open defects, but no workflow runs them, so those reds are invisible | #5652 (P1) | unassigned |
 | Wall-clock budgets on shared runners | Three performance tests pass or fail depending on runner speed (2.6 to 2.7 s against a 2.5 s budget per #5617) | #5614 (P2) | stijn-dejongh |
-| The release gate depends on a token | The gate fails closed without `RELEASE_NIGHTLY_DISPATCH_TOKEN`; its scope is not documented; a waived release leaves only a log annotation, no issue or file | #5034 (closed) | operator decision |
+| The release gate depends on a token | The gate fails closed without `RELEASE_NIGHTLY_DISPATCH_TOKEN`; a new dedicated PAT is to be minted and its scope is not yet documented; a waived release leaves only a log annotation, no issue or file | #5034 (closed) | operator decision |
 | Recapture token issue still open | The token now works (5 October), but #5624 remains open | #5624 (P1) | robertDouglass, stijn-dejongh |
 | The diff-cover gate runs after merge | `CI Aggregate gate` is not a required check on PRs (ADR `2026-09-23-1`), so the 90% changed-line coverage rule is in effect enforced on `main`, not before merge | none filed | none filed |
 
