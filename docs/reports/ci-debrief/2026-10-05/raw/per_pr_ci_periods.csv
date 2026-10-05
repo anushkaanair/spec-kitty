@@ -1,0 +1,5 @@
+period,population,green_runs,median_min,p90_min,median_shards_executed,median_longest_shard_min,median_shard_runner_min
+2026-09-16..2026-09-30,"green, ran >=1 shard",547,25.8,38.1,8,22.5,120.6
+2026-09-16..2026-09-30,all green,655,24.3,37.1,7,20.6,102.3
+2026-10-02..2026-10-04,"green, ran >=1 shard",119,11.5,18.9,5,8.8,26.1
+2026-10-02..2026-10-04,all green,175,11.2,19.8,1,7.5,9.2

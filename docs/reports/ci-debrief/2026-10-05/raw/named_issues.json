@@ -1,0 +1,703 @@
+{
+  "3881": {
+    "assignees": [],
+    "author": "robertDouglass",
+    "base_ref": "main",
+    "body_excerpt": "## Purpose\n\nPromote the reviewed current `spec-kitty/EXPERIMENTAL-spec-kitty` CLI tree into the public repository, completing the convergence started by [EXPERIMENTAL #1078](https://github.com/spec-kitty/EXPERIMENTAL-spec-kitty/pull/1078).\n\nThis is a convergence promotion, not feature development.\n\n## Exact source\n\n- EXPERIMENTAL commit: `c0603fea884d286bffc49e3b574799ce96632247`\n- EXPERIMENTAL tree: `70d02dc363bacf62ee2d62b25e61b07af6de66e9`\n- Public base: `2554bd13adc289d3457681308645fe52619bca0e`\n- Public base tree equals EXPERIMENTAL #1078 tree: `1063b7ebfc12d73abda45b98ea598a8d879a7b3f`\n\nThe seven-file delta contains only CI credential/ownership cleanup, convergence documentation, release guard tests, and one test-harness opt-in. No `src/`, package metadata, dependency lock, Zeitgeist implementation, or CLI behavior changes.\n\nSource PRs:\n\n- [EXPERIMENTAL #1082](https://github.com/spec-kitty/EXPERIMENTAL-spec-kitty/pull/1082): remove obsolete private credentials from public CI paths and retire stale drift-gate guidance.\n- [EXPERIMENTAL #1080](https://github.com/spec-kitty/EXPERIMENTAL-spec-kitty/pull/1080): six-line test-only worktree-harness opt-in; no production code or assertion change.\n\n## Verification\n\nExact EXPERIMENTAL main SHA `c0603fea884d286bffc49e3b574799ce96632247`:\n\n- Full deterministic suite: [run 33984027995](https://github.com/spec-kitty/EXPERIMENTAL-spec-kitty/actions/runs/33984027995) \u2014 success, zero failures.\n- CI Quality: [run 33984027963](https://github.com/spec-kitty/EXPERIMENTAL-spec-kitty/actions/runs/33984027963) \u2014 success, including lint, lock, wheel, and clean install.\n- Windows: [run 33984027973](https://github.com/spec-kitty/EXPERIMENTAL-spec-kitty/actions/runs/33984027973) \u2014 success.\n- Protect Main: [run 33984027953](https://github.com/spec-kitty/EXPERIMENTAL-spec-kitty/actions/runs/33984027953) \u2014 success.\n\nThe public PR must merge with a merge commit so the existing public lineage and current EXPERIMENTAL lineage both remain ancestors. Post-merge, the resulting tree must equal `70d02dc363bacf62ee2d62b25e61b07af6de66e9` byte-for-byte.\n\n<!-- codesmith:footer -->\n---\n<a href=\"https://app.blacksmith.sh/Priivacy-ai/codesmith/spec-kitty/pr/3881\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://pr-comments-assets.blacksmith.sh/codesmith/view-with-codesmith-dark-v2.svg\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://pr-comments-assets.blacksmith.sh/codesmith/view-with-codesmith-light-v2.svg\"><img alt=\"View with [code]smith\" src=\"https://pr-comments-assets.blacksmith.sh/codesmith/view-with-codesmith-dark-v2.svg\"></picture></a> <a href=\"https://backend.blacksmith.sh/track/enable-autofix?expires=1791225837&installation_model_id=427282&pr_number=3881&repository=Priivacy-ai%2Fspec-kitty&return_to=https%3A%2F%2Fgithub.com%2FPriivacy-ai%2Fspec-kitty%2Fpull%2F3881&signature=e6f6170080358ac5ba6c9cf42888901a5d1a73e0bbead7478c26f5e25a4a6102\"><picture><source media=\"(prefers-color-scheme: dark)\" srcset=\"https://pr-comments-assets.blacksmith.sh/codesmith/autofix-with-codesmith-dark.svg\"><source media=\"(prefers-color-scheme: light)\" srcset=\"https://pr-comments-assets.blacksmith.sh/codesmith/autofix-with-codesmith-light.svg\"><img alt=\"Autofix with [code]smith\" src=\"https://pr-comments-assets.blacksmith.sh/codesmith/autofix-with-codesmith-dark.svg\"></picture></a>\n<sup>Need help on this PR? Tag <code>@codesmith-bot</code> with what you need. Autofix is disabled.</sup>\n\n<!-- codesmith:autofix:disabled -->\n<!-- /codesmith:footer -->",
+    "changed_files": 7,
+    "ci_runs_on_head": [
+      {
+        "actor": "robertDouglass",
+        "conclusion": "success",
+        "created_at": "2026-09-05T18:43:57Z",
+        "event": "pull_request",
+        "name": "ci-windows",
+        "triggering_actor": "robertDouglass"
+      },
+      {
+        "actor": "robertDouglass",
+        "conclusion": "success",
+        "created_at": "2026-09-05T18:43:57Z",
+        "event": "pull_request",
+        "name": "CI Quality",
+        "triggering_actor": "robertDouglass"
+      }
+    ],
+    "closed_at": "2026-09-05T18:49:09Z",
+    "created_at": "2026-09-05T18:43:53Z",
+    "draft": false,
+    "head_ref": "converge/exp-main-20260905",
+    "head_sha": "c0603fea884d286bffc49e3b574799ce96632247",
+    "kind": "pr",
+    "labels": [],
+    "merged_at": "2026-09-05T18:49:09Z",
+    "milestone": null,
+    "number": 3881,
+    "state": "closed",
+    "state_reason": null,
+    "title": "convergence: promote final EXPERIMENTAL CLI tree"
+  },
+  "3993": {
+    "assignees": [],
+    "author": "LynnColeArt",
+    "body_excerpt": "## What\n\nRestore the SonarCloud analysis job that died with the old 4,118-line `ci-quality.yml` in the convergence (commit `e8cc2f444f`, 2026-08-27). Owner ruling (Robert Douglass, #planning 2026-09-06): \"There's no discussion on Sonar, it was not meant to be permanently removed. It should be reinstated.\"\n\n## Why\n\nSince the convergence there is no coverage or new-code quality gate anywhere in this repository's CI (`AGENTS.md` \"SonarCloud was removed from CI in the convergence\" and Kent's QA note in the 2026-09-06 digest). `sonar-project.properties` and the `SONAR_TOKEN` repository secret still exist; the companion `scripts/ci/sonar_project_version.py` was swept in `7f2251d984`, and `scripts/ci/sonarcloud_branch_review.sh` plus `tests/ci/test_sonarcloud_branch_review.py` survive as orphans.\n\n## Remediation (stated)\n\n1. Add a `sonarcloud` job to `.github/workflows/ci-quality.yml` that runs `pytest --cov` for the fast tier and uploads with the official SonarCloud GitHub action, keyed by `SONAR_TOKEN`. Non-blocking (`continue-on-error: true`) for the first two weeks; the quality-gate status is reported, not required.\n2. Restore `scripts/ci/sonar_project_version.py` from `7f2251d984^` (verbatim, `git cherry-pick -x` or `git checkout <sha>^ -- path`) and wire it as before so `sonar.projectVersion` tracks `pyproject.toml`.\n3. Update `AGENTS.md` \u00a7SonarCloud to describe the reinstated job and un-orphan the branch-review helper's mention.\n4. Verify on a PR that the Sonar check appears and the project page shows new-code coverage for that PR.\n\n## Acceptance\n\n`ci-quality.yml` has a `sonarcloud` job; a PR shows the SonarCloud check; `sonar_project_version.py` exists and is tested; `AGENTS.md` no longer says Sonar is absent.\n\nPart of the CLI's launch-week hardening; refs planning#1990 (Sonar item under \"Recommendation\" in Stijn's convergence debrief).",
+    "closed_at": "2026-09-09T06:26:53Z",
+    "created_at": "2026-09-07T17:39:02Z",
+    "kind": "issue",
+    "labels": [
+      "priority:P1",
+      "type:chore"
+    ],
+    "milestone": null,
+    "number": 3993,
+    "state": "closed",
+    "state_reason": "completed",
+    "title": "ci: reinstate SonarCloud (coverage + new-code quality gate) after the convergence removed it"
+  },
+  "3995": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "base_ref": "main",
+    "body_excerpt": "## Reinstate the CI pipeline + SonarCloud \u2014 and clear the CI tech-debt it surfaces\n\n**For contributors and maintainers:** GitHub CI is back on public `main`. Since The Convergence (#3881) removed the heavyweight CI and SonarCloud, a pull request got **no real test signal on GitHub** \u2014 the sole producer was the archived EXPERIMENTAL Blacksmith producer pointing at a retired private repo, so changes had to be validated externally. This PR restores a **bounded set of path-scoped, shift-left, artifact-sharing GitHub Actions** (stock runners; no `SK_CI_TOKEN` on public jobs) plus a **net-new SonarCloud** workflow, as the sole/primary public producer \u2014 and, because this is the pipeline's first real execution, folds in the pre-existing CI/test-suite debt it surfaced so `main` lands green.\n\n### What lands \u2014 the pipeline\n\n**Seven net-new workflows** (all `workflow_dispatch`-able; PR fail-fast vs full run-all dual mode):\n\n| Workflow | Role |\n|---|---|\n| `ci-router.yml` | Two-authority path router + the single `gate_selection.py` authority (#2476) |\n| `module-tests.yml` / `ci-modules.yml` | Matrix over a committed, duration-balanced module registry |\n| `ci-aggregate.yml` | Coverage/xunit aggregation + diff-cover \u226590% gate + stale-artefact fallback |\n| `sonar.yml` | Net-new SonarCloud (nightly/dispatch, fork-safe skip-green, identity-verified) |\n| `ci-nightly.yml` | Full-mode nightly: performance/e2e + interpreter matrix (never per-PR) |\n| `packs.yml` | Built-in + internal packs lanes + retired-dir `__pycache__` sweep |\n\nMachine guarantees (P1 census oracle keeps dead/retired code out of CI; P2 shape-guard demotion; CI-integrity oracle proves no test is selected by zero gates; single gate-selection authority reused by CI and local `make ci-parity`) \u2014 unchanged from the mission delivery.\n\n---\n\n## Maintainer landing pass \u2014 rebased onto current `spec-kitty/spec-kitty` main\n\nRebased onto the current upstream base (the org relocated `Priivacy-ai` \u2192 `spec-kitty`; the branch was 62 commits behind and is now current \u2014 clean rebase, all landing folds intact). This is the **first real run** of these never-before-executed workflows, so the folds fall into: first-run workflow bugs, confirmed pre-existing `main` breakage (each byte-identical to `main` and reproduced on a full-history checkout), and the CI/perf separation the mission specifies. Each is its own `<type>(landing):` commit.\n\n**Pipeline first-run fixes:** checkout before the local `warmup` action (module-tests); `--extra lint` before ruff (ci-router `ruff`/`import-linter`); `ruff format` the PR-authored test files; provision the `ci-aggregate` diff-cover env (census oracle was import-DOA \u2192 coverage gate could never go green); rebuild the warmup venv when a cache hit restores a dangling interpreter symlink (was exit-127-ing every shard); `mode` in the warmup cache key; map `core_misc`/`execution_context` module shards to their real `test_dirs`; corpus suite selected **by marker** (`-m corpus`) with full history + parallel (was pointed at a nonexistent dir, and timing out in packs); trigger the packs built-in lane on **charter-scheme code** changes (#4010); **split the two heavy single-shard modules** (`agent` 1\u21923, `upgrade` 1\u21924) that overran the 30 m job timeout serially (LPT skew stays 0 %); **de-serialize the architectural-heavy pole** (`-n auto`, as the registry declares); **`fetch-depth: 0`** on the arch-heavy + module-shard checkouts (recovery/receipt/shrink-only ratchets `git archive` historical SHAs a shallow checkout lacks \u2014 the ratchets fail-closed on a shallow clone *by design*); drop 6 now-`ruff format`-clean files from the `[tool.ruff.format].exclude` ratchet.\n\n**Pre-existing `main` breakage folded (each byte-identical to `main`):** register `test_upgrade_preview_bootstrap.py` in the `next` shard map; drop the retired research `states` assertion; give the move-task shadow WP readable frontmatter (fail-closed dependency gate). **Two newly-running gates conflicted on the frozen `do",
+    "changed_files": 151,
+    "ci_runs_on_head": [
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-08T12:05:03Z",
+        "event": "pull_request",
+        "name": "Check Shared Package Drift",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-08T12:05:03Z",
+        "event": "pull_request",
+        "name": "Release Readiness Check",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-08T12:05:03Z",
+        "event": "pull_request",
+        "name": "CI Quality",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-08T12:05:03Z",
+        "event": "pull_request",
+        "name": "ci-windows",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "failure",
+        "created_at": "2026-09-08T12:05:03Z",
+        "event": "pull_request",
+        "name": "CI Modules",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-08T12:05:03Z",
+        "event": "pull_request",
+        "name": "Packs",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-08T12:05:03Z",
+        "event": "pull_request",
+        "name": "CI Router",
+        "triggering_actor": "stijn-dejongh"
+      }
+    ],
+    "closed_at": "2026-09-08T12:48:59Z",
+    "created_at": "2026-09-07T18:51:13Z",
+    "draft": false,
+    "head_ref": "feat/ci-pipeline-reinstatement",
+    "head_sha": "86caec8c93c8e8168b0a6003e739b33fdf72b286",
+    "kind": "pr",
+    "labels": [],
+    "merged_at": "2026-09-08T12:48:59Z",
+    "milestone": null,
+    "number": 3995,
+    "state": "closed",
+    "state_reason": null,
+    "title": "feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows"
+  },
+  "4334": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "body_excerpt": "## BLUF\n\nThe per-PR **`sonarcloud`** job in `.github/workflows/ci-quality.yml` **re-runs the fast test tier under coverage** (`make test-fast` + `--cov`) to produce its own `coverage.xml`, instead of reusing the coverage the **`CI Modules`** shard matrix already produced on the same PR. Result: **the fast tier executes twice per pull request**, on every PR, forever. Marked **P0 on inefficiency / throughput / cost** grounds (runner-minutes and PR wall-clock, multiplied across every PR), not release-correctness.\n\n## Verified (on `main`, files + lines)\n\n1. **Re-runs tests.** `ci-quality.yml` `sonarcloud` job \u2192 step *\"Run fast tier under coverage\"* runs `make test-fast` with `PYTEST_ADDOPTS=--cov=\u2026 --cov-report=xml:out/reports/coverage/coverage.xml`, then hands that file to the SonarSource scan. The job has **no `needs:`** on any test-producing job.\n2. **The matrix already ran them.** `module-tests.yml` (matrixed by `ci-modules.yml`) runs `pytest <shard> --cov=<target> --cov-report=xml:coverage-<tier>-<mod>-shard<slug>.xml` and uploads the artefacts. The fast tier is one of the matrixed tiers \u2192 duplicate execution.\n3. **Reuse is already implemented \u2014 twice.** `ci-aggregate.yml` (the diff-cover PR gate) and `sonar.yml` (nightly) both download the `CI Modules` shard artefacts and reconcile `coverage-*.xml` by basename (dedup + stale-fallback) into `sonar.python.coverage.reportPaths`; Sonar merges server-side. The per-PR job simply doesn't use this path.\n4. **Ordering.** `ci-quality` and `ci-modules` are separate workflows, both on `pull_request`, running in parallel; `ci-aggregate` runs on `workflow_run:[CI Modules] completed`. The Sonar job reports *before* the matrix finishes, so it structurally cannot reuse output it never waits for \u2014 which is why it re-runs.\n\n## Secondary defect (correctness, folds into the same fix)\n\nThe Sonar job's coverage is **fast-tier only**. Lines covered exclusively by slower tiers (which the matrix runs but `test-fast` does not) show as **uncovered** in Sonar's per-PR view, so per-PR new-code coverage is **understated** vs. the true all-tier number the aggregate/nightly compute. Reuse is both cheaper and more accurate.\n\n## Impact\n\n- **Cost:** one extra full fast-tier run + `uv sync --all-extras` on a dedicated runner, every PR.\n- **Throughput:** duplicated runner-minutes and a redundant long-pole on the PR check-suite.\n- **Signal quality:** understated per-PR coverage (above).\n\n## Recommended remediation\n\n**Fold the per-PR Sonar scan onto the existing `workflow_run:[CI Modules]` chain and delete the in-job `make test-fast` step** \u2014 consume the coverage the matrix already produced.\n\n- Add the Sonar upload either as a job in `ci-aggregate.yml` (it already reconciles the shard `coverage-*.xml` for diff-cover) or as a sibling `workflow_run`-triggered job mirroring `sonar.yml`. Pass the reconciled set as `sonar.python.coverage.reportPaths`.\n- **Delete** the \"Run fast tier under coverage\" step from `ci-quality.yml`'s `sonarcloud` job.\n- Net: fast tier runs once per PR; one coverage source of truth for all three consumers (diff-cover, per-PR Sonar, nightly Sonar); the coverage-understatement bug is fixed as a side effect.\n\n## Implementation cost / gotchas (so the picker doesn't rediscover them)\n\n- **PR decoration through `workflow_run` context.** SonarCloud PR analysis needs PR number + head/base refs, and a `workflow_run` job runs in base-repo context. Reconstruct PR metadata from the triggering run \u2014 `ci-aggregate.yml` already recovers the source run id/attempt; reuse that plumbing.\n- **Fork-PR secrets improve, don't regress.** `SONAR_TOKEN` is not exposed to fork `pull_request` runs but *is* to `workflow_run` (base context). Confirm the current job even works for fork PRs today; the move likely fixes fork-PR Sonar.\n- **Latency is acceptable:** the report lands after `CI Modules` + aggregate instead of in parallel \u2014 fine, the job is informational/non-blocking.\n\n## Governance constraints (must hold)\n\n- **PR-o",
+    "closed_at": "2026-09-14T18:44:08Z",
+    "created_at": "2026-09-14T10:27:01Z",
+    "kind": "issue",
+    "labels": [
+      "priority:P0",
+      "tech-debt"
+    ],
+    "milestone": "4.x Work",
+    "number": 4334,
+    "state": "closed",
+    "state_reason": "completed",
+    "title": "CI efficiency (P0): per-PR SonarCloud job re-runs the fast tier instead of reusing CI Modules shard coverage"
+  },
+  "4347": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "LynnColeArt",
+    "body_excerpt": "## Summary\n\nDuring merge bursts, `main`-side ci-router runs are cancelled in-progress by each successive push (`concurrency: group: ci-router-${{ github.ref }}, cancel-in-progress: true`), so **pushed content lands on main with zero terminal evaluation**. The first run that survives to completion evaluates a tree containing several unreviewed pushes at once \u2014 violations surface late and get misattributed to whichever PR/commit happens to sit at the first surviving head.\n\n## Observed instance (2026-09-14, spec-kitty main)\n\n- Six consecutive main ci-router runs cancelled 09:07\u201310:29Z (heads `7e28431798`, `3cf40734bb`, `540ac654e8`, `ecbf036328`, `08caa1e260`, `73f7ba61da`) \u2014 none reached a terminal state.\n- The first terminal main evaluation (run 34840326651 at `777c809052`, 11:51Z) failed with three defect families that had merged during the blind window \u2014 including a docs-band violation whose PR rollup showed the red gate at merge time, and a battery ratchet violation whose introducing push's own run was cancelled before evaluation. Concrete defect chain filed as the companion P1.\n- Cost goes beyond detection latency: the merge lane reads `[ci] red` on innocent open PRs (inherited from main) and is tempted into fix rounds on clean diffs.\n\nRelated second symptom from the same window (own question, may deserve its own ticket): `Priivacy-ai/spec-kitty#4328` merged with `tests (docs): FAILURE` + `router gate: FAILURE` visible in its PR rollup \u2014 required-check bookkeeping did not hold the merge. That is a ruleset/permission question, not a CI-mechanics one, but the burst window is what made it load-bearing.\n\n## Candidate shapes (design must settle before any implementer burns)\n\n1. **Stop cancelling main runs**: drop `cancel-in-progress` for `refs/heads/main` (or use a per-sha group on main). Cost: duplicated compute during bursts; benefit: every pushed head reaches terminal state.\n2. **Merge-gate bookkeeping**: refuse merges while the base ref has an in-progress (never-terminal) run for the pushed content \u2014 a required-check hold rather than a cancel.\n3. **Merged-tree preflight**: for repos with no test-ci/merge-preflight target (spec-kitty is exempt per charter), run the merged result pre-merge on the merge seam \u2014 the exact-head-green/union-red gap is the same class as the 2026-09-14 e2e merged-tree red.\n4. **Cancelled-run reconcile**: a periodic sweep that flags commits whose runs were cancelled without any terminal evaluation, and schedules a catch-up run at the next surviving head.\n\nFiled by night-watch (cron 3096cdb400cf) 2026-09-14 ~12:50Z, status:triage per the concrete-defect/class split. Companion P1: see cross-link in comments.",
+    "closed_at": "2026-09-15T18:08:55Z",
+    "created_at": "2026-09-14T12:47:49Z",
+    "kind": "issue",
+    "labels": [
+      "from:controller",
+      "priority:P1",
+      "reliability",
+      "stage:implemented",
+      "type:finding"
+    ],
+    "milestone": "4.x Work",
+    "number": 4347,
+    "state": "closed",
+    "state_reason": "completed",
+    "title": "CI cancel-cascade lets main content merge unevaluated during merge bursts (concurrency cancel-in-progress on refs/heads/main)"
+  },
+  "5034": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "body_excerpt": "## BLUF\n\nThe **CI Modules `agent` shard is never selected on `main` pushes** unless the push touches `src/specify_cli/agent_utils/**`. Because `tests/agent/` also holds cross-cutting CLI coverage of **other** subsystems (charter, in this case), any regression in that coverage is **invisible on `main`** \u2014 a green `main` does not mean those tests passed, because they never ran. This is the same class of fan-out/selection masking as #4845 (sibling under this epic).\n\nIt surfaced only because PR #5029 (an unrelated `accept` fail-closed fix) happened to select the `agent` module, exposing a real, already-shipped `charter generate --force` catalog-refresh regression that `main` had been carrying undetected.\n\n---\n\n## The gap (the main point)\n\n`agent` module selection is keyed purely on source roots (`.github/ci-module-registry.yml`):\n\n```yaml\n- module: agent\n  roots:\n  - src/specify_cli/agent_utils/**\n  ...\n  shard_count: 3\n```\n\nSo the `module-tests (agent shard N/3)` jobs run only when a `main` push touches `src/specify_cli/agent_utils/**`. But `tests/agent/` contains tests that exercise **unrelated** subsystems \u2014 e.g. `tests/agent/cli/commands/test_charter_cli.py` drives the `charter` CLI (`src/charter/**`, `src/specify_cli/cli/commands/charter/**`). A regression in those subsystems is never observed by that test on `main`, because the shard that would run it is not selected.\n\n**Evidence \u2014 the `agent` shard was NOT selected on any of the last 10 `main` \"CI Modules\" runs:**\n\n```\nrun 36153009504 | modules=[upgrade]                                                        | agent-shard=[NONE]\nrun 36112276951 | modules=[execution_context,next,specify_cli_runtime,unit]                | agent-shard=[NONE]\nrun 36096866143 | modules=[cli,core_misc,execution_context,merge,next,status,unit]         | agent-shard=[NONE]\nrun 36051860937 | modules=[cli,core_misc,execution_context,merge,next,status]              | agent-shard=[NONE]\nrun 36022551723 | modules=[cli,core_misc,execution_context,lanes,merge,next,...,status]    | agent-shard=[NONE]\nrun 35959092355 | modules=[cli,core_misc,execution_context,next,status]                    | agent-shard=[NONE]\nrun 35930394564 | modules=[charter,cli,core_misc,execution_context,merge,status,unit]      | agent-shard=[NONE]\nrun 35923775284 | modules=[lanes,merge]                                                    | agent-shard=[NONE]\nrun 35917858573 | modules=[cli,next,specify_cli_runtime]                                    | agent-shard=[NONE]\nrun 35915810442 | modules=[cli,core_misc,status]                                            | agent-shard=[NONE]\n```\n\nNote run `35930394564` selected the **`charter`** module (so `tests/charter/` ran) but still **not** `agent` \u2014 a charter regression covered *only* by a test living in `tests/agent/` slips through even on a charter-touching push. This is the \"shard router keys on the SOURCE dir; a test living in `tests/<M>/` that imports another module's changed source is silently skipped\" masking class.\n\nReproduce:\n```bash\nfor r in $(gh run list --repo spec-kitty/spec-kitty --branch main --workflow \"CI Modules\" --limit 10 --json databaseId -q '.[].databaseId'); do\n  echo \"run $r: $(gh api \"repos/spec-kitty/spec-kitty/actions/runs/$r/jobs\" -q '.jobs[]|select(.name|test(\"agent shard\"))|.name' 2>/dev/null || echo not-selected)\"\ndone\n```\n\n---\n\n## The evidence: a real regression `main` was carrying undetected\n\n`tests/agent/cli/commands/test_charter_cli.py::test_generate_force_preserves_authored_charter_yaml_sections` **fails on current `main`**. The test is hermetic (creates a tmp repo, `_git_init`, patches `find_repo_root`), so this is a genuine product regression, not flake or environment.\n\nIt seeds a stale `catalog.mission: stale-mission` into `.kittify/charter/charter.yaml`, runs `spec-kitty charter generate --force --no-from-interview`, and asserts the **derived** `catalog` section is refreshed:\n\n```\ntests/agent/cli/commands/test_charter_cli.py:402: in test_...\n    asser",
+    "closed_at": "2026-09-26T06:28:42Z",
+    "created_at": "2026-09-25T16:48:32Z",
+    "kind": "issue",
+    "labels": [
+      "domain:charter",
+      "domain:ci",
+      "priority:P2",
+      "type:bug"
+    ],
+    "milestone": null,
+    "number": 5034,
+    "state": "closed",
+    "state_reason": "completed",
+    "title": "CI: tests/agent/ shard never selected on main pushes \u2014 a charter generate --force catalog-refresh regression (#4908) went undetected (found via #5029)"
+  },
+  "5189": {
+    "assignees": [
+      "MOES-Media"
+    ],
+    "author": "stijn-dejongh",
+    "body_excerpt": "## Summary (BLUF)\n\nEvery PR that adds or removes **even one test** in a pinned module \u2014 `charter` most acutely \u2014 reds the per-PR gate `tests/architectural/test_module_length_agreement.py`, and the only way to clear it is a **real, serial, full-module measured recapture** (`python scripts/ci/capture_shard_timings.py --module charter --write`, ~18 min locally) that also churns ~5\u20136k lines of JSON. That recapture is **mandatory landing work on the PR**, not something the nightly can absorb. It has bitten two consecutive PRs.\n\n## What a maintainer hits\n\nYou touch a test in `src/charter` (add, remove, split, rename a case). CI goes red on the \"architectural battery\" shard: `test_module_length_agreement` reports the committed count in `.github/ci-shard-timings.json` disagrees with the live collected count. To land, you must run the whole-module recapture locally (~18 minutes of measured `charter` test execution), commit a large, noisy JSON diff, and re-push \u2014 for a trivial +1/-1 test-count delta.\n\n## Mechanism\n\n- `.github/ci-shard-timings.json` is the committed measured-duration authority for the CI shard matrix.\n- `tests/architectural/test_module_length_agreement.py` runs **per-PR** (in the architectural-battery shard) and fails when a pinned module's committed test count != the live collected count.\n- `charter` is pinned as a **hard exact-count invariant** (it is deliberately excluded from the mismatch allowlist so a count-preserving swap cannot mask a regression), so any change to its test count reds the gate.\n- The only remedy in the tree today is `python scripts/ci/capture_shard_timings.py --module charter --write`, which re-measures the entire `charter` module's durations (~18 min locally) and rewrites the JSON.\n\n## Evidence\n\n- **#5164** (charter `6190\u21926200`) required a recapture to land.\n- **#5175** (charter `6200\u21926201`) hit it again \u2014 consecutively. Its PR body asserted \"the nightly `capture_shard_timings` recapture reconciles it,\" which is **false for the per-PR gate**: the mismatch reds the architectural battery on the PR itself, so the recapture is mandatory landing work, not nightly-deferrable.\n\n## Root friction\n\nA per-PR gate demands an expensive, serial, full-module *measured* recapture (and a ~5\u20136k-line JSON churn) to satisfy what is really a trivial test-**count** change. The measured durations are what the nightly already owns; coupling exact-count agreement to a full remeasure at PR time is the friction.\n\n## Candidate remedies (owner decides \u2014 not prescribed)\n\nOffered as options for the owner to weigh, not a decided fix:\n\n- **(a)** Make the count-agreement check tolerant of a small delta and let the nightly own exact durations.\n- **(b)** Provide a cheap count-only recapture path that updates the committed counts without re-measuring durations.\n- **(c)** Auto-recapture the touched module in CI.\n- **(d)** Move the exact-count assertion to the nightly and keep only a coarse per-PR guard.\n\nThis is a decision for the owner; the issue records the friction and the option space.\n",
+    "closed_at": "2026-09-28T13:20:24Z",
+    "created_at": "2026-09-27T10:29:44Z",
+    "kind": "issue",
+    "labels": [
+      "domain:ci",
+      "priority:P2",
+      "tech-debt",
+      "type:chore"
+    ],
+    "milestone": "Infra & Enablers 4.x",
+    "number": 5189,
+    "state": "closed",
+    "state_reason": "completed",
+    "title": "Per-PR test_module_length_agreement forces a full ~18-min charter shard-timings recapture on any test-count change"
+  },
+  "5240": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "base_ref": "main",
+    "body_excerpt": "<!-- ccr-projects-attribution: {\"github_login\":\"stijn-dejongh\"} -->\n_Requested by **Stijn** \u00b7 [project thread](https://claude.ai/code/project/chan_01Us2fy8XuWnppAd1YGqJTxi?thread=cmsg_01Us2fy8XuWnppAd1YGqJTxiDgohcWGyaZuhFRPcBkykiZ)_\n\n## Summary\n\n- A committed/collected test-count mismatch in `.github/ci-shard-timings.json` no longer fails the per-PR architectural battery. It surfaces as a `ShardTimingsDriftWarning` in the pytest warnings summary instead.\n- `SPEC_KITTY_STRICT_SHARD_TIMINGS=1` restores the hard failure.\n- Interim relief only. The owning fix for #5189 (remedy d, claimed by @MOES-Media) replaces this switch.\n\n## Why Now\n\nAny +1/-1 test-count change in a pinned module (charter above all) redded `architectural battery (heavy, code-scoped)`, which feeds the required `router gate`, and forced a ~18-minute serial measured recapture as landing work, once per rebase (#5164, #5170 twice, #5175, #5177).\n\n## What This PR Does\n\n- `tests/architectural/test_module_length_agreement.py`: the two live-collection gates (`test_non_allowlisted_modules_agree_with_live_collection`, `test_charter_is_not_allowlisted_and_agrees`) route a mismatch through `_report_drift`, which warns by default and fails under strict mode.\n- Unchanged: the shrink-only allowlist ratchet, the stale-allowlist check, the self-mutation tests, and the `charter`-never-allowlisted invariant.\n- Three new fast tests cover the warn path, the strict path, and the env-var switch.\n\n## Effect on Existing Projects\n\n- Runtime / compatibility: none; test-only.\n- Upgrade / migration: none.\n- Operator / reviewer impact: count drift no longer blocks merge. Shards for a drifted module fall back to uniform weights in `module-tests.yml` until someone recaptures, so balance may degrade, not correctness. Nothing runs the architectural battery nightly today, so strict mode is opt-in until #5189's scheduled recapture lands.\n- Reversal: revert this one commit.\n\n## Validation\n\n- [x] Simulated charter drift (dropped one entry from `charter` durations locally, not committed):\n  - default: `pytest tests/architectural/test_module_length_agreement.py -n auto --dist loadfile` \u2192 11 passed, 2 warnings\n  - strict: same with `SPEC_KITTY_STRICT_SHARD_TIMINGS=1` \u2192 2 failed, 9 passed (the two gates)\n- [x] `pytest tests/architectural/test_module_length_agreement.py -m \"not slow\"` \u2192 8 passed\n- [x] `ruff check` and `ruff format --check` on the file: clean. `mypy` reports one `no-any-return` at `_resolve_test_dirs`, which is present on `main` too and untouched here.\n- [x] Backward compatibility impact considered\n- [x] Follow-up called out below\n\n## Tickets / Contracts\n\n| Ticket | Relationship |\n|--------|--------------|\n| #5189 | Refs (interim relief; does not close) |\n\n## Mission Artifacts\n\n- None (interim CI relief, no mission).\n\n## Follow-ups\n\n- #5189 remedy (d): scheduled recapture workflow plus the permanent per-PR shape, owned by @MOES-Media. It should delete `_STRICT_ENV_VAR` / `_report_drift` or wire strict mode into the scheduled lane.\n\n\ud83e\udd16 Generated with [Claude Code](https://claude.com/claude-code)\n\nhttps://claude.ai/code/session_019WeZibWFwF5LZxwBBtJnL9\n\n---\n_Generated by [Claude Code](https://claude.ai/code/session_019WeZibWFwF5LZxwBBtJnL9)_",
+    "changed_files": 1,
+    "ci_runs_on_head": [
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T15:18:19Z",
+        "event": "pull_request",
+        "name": "CI Router",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T15:18:19Z",
+        "event": "pull_request",
+        "name": "Packs",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T15:18:19Z",
+        "event": "pull_request",
+        "name": "CI Quality",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T15:18:19Z",
+        "event": "pull_request",
+        "name": "CI Modules",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T14:56:26Z",
+        "event": "pull_request",
+        "name": "ci-windows",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T14:56:26Z",
+        "event": "pull_request",
+        "name": "CI Modules",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T14:56:26Z",
+        "event": "pull_request",
+        "name": "Packs",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T14:56:26Z",
+        "event": "pull_request",
+        "name": "CI Quality",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-27T14:56:26Z",
+        "event": "pull_request",
+        "name": "CI Router",
+        "triggering_actor": "stijn-dejongh"
+      }
+    ],
+    "closed_at": "2026-09-27T15:37:56Z",
+    "created_at": "2026-09-27T14:56:22Z",
+    "draft": false,
+    "head_ref": "claude/unblock-5189-check-ppvcjx",
+    "head_sha": "f9616f000a8ecac9197818129417f9ca56f5adc4",
+    "kind": "pr",
+    "labels": [],
+    "merged_at": "2026-09-27T15:37:56Z",
+    "milestone": null,
+    "number": 5240,
+    "state": "closed",
+    "state_reason": null,
+    "title": "ci(tests): make shard-timings count drift non-blocking per PR (#5189 interim)"
+  },
+  "5271": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "MOES-Media",
+    "base_ref": "main",
+    "body_excerpt": "## Issue\n\nCloses #5189\n\n## Change\n\n**A PR that adds or removes a test in `charter` no longer needs an 18-minute timing recapture to land.** Count drift in `tests/architectural/test_module_length_agreement.py` now shows as a visible `ShardTimingsDriftWarning` instead of failing the build. The exact-count check still exists: a new scheduled workflow enforces it and repairs `charter`'s recorded timings by opening a PR.\n\n- **Per PR:**\n  - Drift in the two live-collection gates warns instead of failing. This absorbs the interim relief from #5240 and adds the red-first tests it lacked: one fails if the demotion is reverted, one shows the drift surfaces as a warning rather than silence, and one shows `SPEC_KITTY_STRICT_SHARD_TIMINGS=1` (exactly `\"1\"`) restores the hard failure.\n- **Nightly, `.github/workflows/ci-charter-shard-recapture.yml`** (`schedule` + `workflow_dispatch`):\n  - `recapture-charter-shard-timings` runs on `main` only.\n    - A **capture** step with no credentials re-measures `charter` with `scripts/ci/recapture_charter_shard_timings.py capture`.\n    - The capture aborts, with no PR opened, if pytest ends with exit 2\u20135 (for example a collection error) or records zero durations.\n    - Only on drift does a **publish** step, the one step given `CHARTER_SHARD_RECAPTURE_TOKEN`, re-check for an open recapture PR, commit, push to the fixed branch `ci/recapture-charter-shard-timings` and open a PR.\n    - The token reaches only the `git push` subprocess (via `GIT_CONFIG_*` env, never argv) and the `gh` subprocesses.\n    - It never force-pushes a branch that has an open PR, and it never falls back to `GITHUB_TOKEN`.\n  - `strict-shard-timings-check` runs the length gates with `SPEC_KITTY_STRICT_SHARD_TIMINGS=1`. The exact-count invariant keeps a place where it hard-fails on a schedule, so the per-PR demotion moves the check rather than removing it.\n- **Shard timings for `charter` and `agent` are recaptured in this PR** (measured, 6235 and 1558 tests), so the strict job starts green instead of on today's drift.\n\n**Maintainer action before the recapture job can work:** create the repository secret `CHARTER_SHARD_RECAPTURE_TOKEN`: a fine-grained token scoped to this repository, with Contents and Pull requests read/write, ideally from a bot account. It is needed because a PR opened with `GITHUB_TOKEN` does not trigger per-PR CI. Until the secret exists, the recapture job fails loudly at the publish step; the strict job does not need it.\n\n**Scope beyond the spec text (deliberate):**\n- Registering a workflow requires entries in `tests/architectural/_gate_coverage.py` (`WORKFLOW_FILES`) and `test_no_duplicate_suite_execution.py` (`NON_CHANGE_TRIGGERED_WORKFLOWS`).\n- Those entries shift pinned lines, so `tests/release/pinning_rule_inventory.json` is regenerated, including after the rebase over #5263.\n- The widening is recorded in the mission's `reviews/implement.ruling.md`.\n\n## Tests run\n\nOn the rebased head `30017ba7` (base `af847be7`), specific files only:\n\n```\npytest -q -n 4 --dist loadfile tests/ci/test_recapture_charter_shard_timings.py tests/ci/test_workflow_script_import_guard.py tests/ci/test_capture_shard_timings.py tests/architectural/test_module_length_agreement.py tests/architectural/test_no_duplicate_suite_execution.py tests/architectural/test_workflow_coherence.py tests/architectural/test_suite_jobs_gate_blocking.py tests/architectural/test_gate_coverage_runner_prefix.py tests/ci/test_interpreter_matrix_env_pinning.py tests/release/test_pinning_inventory_fresh.py tests/architectural/test_no_legacy_terminology.py tests/architectural/test_fast_tier_marker_completeness.py tests/architectural/test_module_shard_registry.py   # 402 passed, 1 skipped\nSPEC_KITTY_STRICT_SHARD_TIMINGS=1 pytest -q tests/architectural/test_module_length_agreement.py   # 19 passed (after the agent/charter recapture)\npytest --cov=scripts/ci tests/ci/test_recapture_charter_shard_timings.py   # 80 passed, 99% (only the sys.path guard line uncovered)\npytho",
+    "changed_files": 125,
+    "ci_runs_on_head": [
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-28T12:37:45Z",
+        "event": "pull_request",
+        "name": "CI Quality",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-28T12:37:45Z",
+        "event": "pull_request",
+        "name": "CI Modules",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-28T12:37:44Z",
+        "event": "pull_request",
+        "name": "ci-windows",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-28T12:37:44Z",
+        "event": "pull_request",
+        "name": "Release Readiness Check",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-28T12:37:44Z",
+        "event": "pull_request",
+        "name": "Packs",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-09-28T12:37:44Z",
+        "event": "pull_request",
+        "name": "CI Router",
+        "triggering_actor": "stijn-dejongh"
+      }
+    ],
+    "closed_at": "2026-09-28T13:20:22Z",
+    "created_at": "2026-09-28T09:15:03Z",
+    "draft": false,
+    "head_ref": "issue-5189-per-pr-shard-timings-recapture-friction",
+    "head_sha": "30017ba7188d303308552c525104aa88a76c3ff4",
+    "kind": "pr",
+    "labels": [
+      "ready-for-squad"
+    ],
+    "merged_at": "2026-09-28T13:20:22Z",
+    "milestone": null,
+    "number": 5271,
+    "state": "closed",
+    "state_reason": null,
+    "title": "ci(shard-timings): charter count drift warns per PR; a scheduled job recaptures and keeps strict mode (#5189)"
+  },
+  "5419": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "github-actions[bot]",
+    "body_excerpt": "The nightly `performance` suite failed on https://github.com/spec-kitty/spec-kitty/actions/runs/36665110744.\n\nThis issue was opened automatically by the nightly red -> P0 escalation (`scripts/ci/nightly_escalation.py`, FR-007). It is deduped by the hidden marker below; a later failure comments here instead of opening a duplicate, and the next green nightly for this suite closes it automatically.\n\n\n\n<!-- nightly-failure-ids: tests.performance.test_owned_checkout_perf%3A%3Atest_owned_tasks_status_median_stays_inside_its_budget tests.performance.test_owned_checkout_perf%3A%3Atest_owned_setup_plan_median_stays_inside_its_budget tests.performance.test_owned_checkout_perf%3A%3Atest_owned_context_resolve_median_stays_inside_its_budget -->\n<!-- nightly-escalation-key: performance -->\n",
+    "closed_at": null,
+    "created_at": "2026-09-30T03:58:12Z",
+    "kind": "issue",
+    "labels": [
+      "domain:ci",
+      "from:ci",
+      "priority:P0",
+      "reliability"
+    ],
+    "milestone": "4.0.0 release scope",
+    "number": 5419,
+    "state": "open",
+    "state_reason": null,
+    "title": "Nightly suite red: performance"
+  },
+  "5510": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "body_excerpt": "## Problem\n\nA 24-hour CI census (2026-09-30T05:06Z \u2192 2026-10-01T05:06Z, 837 runs / 6,564 jobs, 24,166 runner-minutes) shows:\n\n- **PR CI wallclock** p50 26 min / p90 40 min; p50 **33 min when the architectural battery runs** (81% of PR router runs). The battery is the critical-path job in 20/64 pipelines, finishing a median 11.8 min after every other test job. Battery failures are deterministic ratchet/scan gates that only report after ~16\u201325 min.\n- **The battery uses half the runner:** `-n auto` resolves to `psutil.cpu_count(logical=False)` = **2 workers on the 4-vCPU runner** (logs show only `gw0`/`gw1`). Same in Router `tests (corpus)` and Packs `built-in-corpus-suite`. Worst battery job 25:09 against a 30-min timeout.\n- **Duplicate work \u2248 2.9\u20133.5k runner-min/day (12\u201315%):**\n  - Router `tests (cli|status|consolidation)` re-run 99.9% of the CI Modules rows' tests (889/890, 1311/1318, 1460/1461 node-ids) \u2014 ~1,104 min/day, no coverage consumer.\n  - `ready_for_review` re-runs full CI on an already-green SHA (7/7 double-run pairs) \u2014 ~1,210 min/day.\n  - The corpus suite runs twice (Router + Packs, identical 1,542 tests), three times with the charter/glossary module rows; Packs measures a dead `--cov=src/doctrine`.\n  - No live oracle compares test **sets** across jobs (`test_same_tier_uniqueness` live checks retired on a stale premise; `test_no_duplicate_suite_execution` only allow-lists job names).\n- **Whole-file duplicate work inside the battery:** repeated pytest re-collections (`test_interpreter_shard_coverage`) and whole-tree scans (`test_clock_call_ban`, `test_no_dead_symbols`).\n- **No full architectural backstop:** the nightly runs `tests/architectural` only under `-m \"fast or unit\"` (664/3,561 tests, 18.6%), contradicting ADR 2026-09-26-1 (\"a green nightly means the full suite ran\") and the premise of the #5302 by-design closure. CI-config-only PRs (workflows, pytest.ini, pyproject, Makefile, module registry, shard timings) select no battery, so the gates guarding those files never run on the PR that changes them.\n- **Consolidation module shard** is a single unsplit shard, bimodal 15\u201326 / 35\u201348 min \u2014 it set the 4 longest pipelines (~52 min).\n- Registry drift: `.github/ci-module-registry.yml` still declares the battery `always_on: true`.\n\n## Ask (mission scope)\n\n1. Nightly full-battery backstop job.\n2. Battery + corpus jobs use all runner vCPUs (CI only), with headroom guards for the heaviest tests.\n3. Fast-fail split of the static ratchet gates; shard the remaining battery \u00d72 with a file-partition completeness oracle (and fail-loud on timing-length mismatch, #5092 AC2).\n4. Per-file caching of duplicate scans/collections in the heaviest battery files (findings, not ASTs).\n5. Route CI-config / cross-cutting config changes to the battery (router-two-authority amendment).\n6. Delete the duplicate Router module-path jobs; dedupe the corpus suite (Packs owns it); restore a live cross-job test-set uniqueness oracle.\n7. Skip `ready_for_review` re-runs when the head SHA already has a successful run.\n8. Split the consolidation module shard and re-capture its timings.\n9. Fix the registry drift.\n\n## Out of scope\n\n- Per-SHA concurrency for CI Modules / Packs / Aggregate on pushes to `main` (cancelled tips leave modules untested until nightly) \u2014 tracked separately under #4437.\n- Introducing xdist into the serial module shards; rewriting slow tests themselves (#5353 family).\n\nParent: #5103. Related: #3265 (folded \u2014 backstop), #3315 (corpus residue), #5092 (AC2), #5086 (consolidation recapture), #4851 (constraint: raw-source tests stay in an always-on lane), #5302, #4437, #5503 (coordinate: dead-symbol files).\n",
+    "closed_at": "2026-10-01T20:47:16Z",
+    "created_at": "2026-10-01T05:37:13Z",
+    "kind": "issue",
+    "labels": [
+      "priority:P2"
+    ],
+    "milestone": null,
+    "number": 5510,
+    "state": "closed",
+    "state_reason": "completed",
+    "title": "CI runtime: cut architectural-battery wallclock and duplicate runner-minutes without weakening gates"
+  },
+  "5559": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "body_excerpt": "Follow-up to #5510 (PR #5557, evidence `kitty-specs/ci-runtime-stabilisation-01M3TZH6/evidence/ci-measurements.md`).\n\n`tests/architectural/_gate_coverage.py::collect_universe()` runs one full `pytest --collect-only` over the whole tree in a subprocess. Several files call it independently, so under xdist `--dist loadfile` the battery pays for the same collection once per calling file:\n- `tests/architectural/test_same_tier_uniqueness.py`\n- `tests/architectural/test_fast_tier_marker_completeness.py`\n- `tests/architectural/_live_uniqueness.py`\n- `tests/ci/test_corpus_blocking_home.py` (module row)\n\nOn the PR's heavy battery leg, the `test_same_tier_uniqueness.py` fixture setup alone took 114 / 166 / 170 s over three runs, against the NFR-003 bound of 180 s for the slowest battery test and the 240 s per-test timeout.\n\n## Proposal\n\nShare one universe collection per test session across xdist workers: an on-disk cache keyed by the repo root and a content hash of the collection inputs (test files, `conftest.py`, `pytest.ini`, `pyproject.toml`), written once under a file lock and read by every caller. Keep `repo_root=` overrides (tmp-tree tests) uncached or keyed separately, and pin both the sharing and the key with the FR-006 style of tests (no green-wash across a patched root).\n",
+    "closed_at": "2026-10-04T16:48:41Z",
+    "created_at": "2026-10-01T18:38:37Z",
+    "kind": "issue",
+    "labels": [
+      "domain:ci",
+      "priority:P2"
+    ],
+    "milestone": "Infra & Enablers 4.x",
+    "number": 5559,
+    "state": "closed",
+    "state_reason": "completed",
+    "title": "Battery: share one collect_universe() collection across test files (NFR-003 margin)"
+  },
+  "5611": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "github-actions[bot]",
+    "body_excerpt": "The nightly `integration` suite failed on https://github.com/spec-kitty/spec-kitty/actions/runs/37177460494.\n\nThis issue was opened automatically by the nightly red -> P0 escalation (`scripts/ci/nightly_escalation.py`, FR-007). It is deduped by the hidden marker below; a later failure comments here instead of opening a duplicate, and the next green nightly for this suite closes it automatically.\n\nFailed tests (4):\n\n- `tests.integration.test_owned_lifecycle_acceptance_finalize::test_armed_get_main_repo_root_pin_owned_finalize` \u2014 AssertionError: post-mint get_main_repo_root reads differ from the exact ledger (observed vs allowed): {('mission_has_coordination_branch', 'resolve_topology'): 2, ('mission_has_coordination_branch', '_compose_primary_feature_dir'): 18, ('ledger_posture', 'resolve_canonical_root'): 2} != {('mission_has_coordination_branch', '_compose_primary_feature_dir'): 16, ('mission_has_coordination_branch', 'resolve_topology'): 2, ('ledger_posture', 'resolve_canonical_root'): 2}\n- `tests.integration.test_merge_lane_planning_data_loss.TestRetentionConstraintSurvivesCleanup::test_explicit_delete_override_still_reachable` \u2014 AssertionError: merge must succeed for this fixture (output: 'Notice: explicit delete overrode retention policy for branches\\nNotice: explicit delete overrode retention policy for worktrees\\nError: Refusing destructive operation (MERGE_UNSAFE_WORKTREE_DIRTY).\\n  Worktree: /tmp/spec-kitty-pytest-tmp/run-2104/popen-gw0/test_explicit_delete_override_0/.worktrees/retention-repro-01KX0000-override-01KX0000-coord\\n  Dirty entries:\\n    ?? kitty-specs/retention-repro-01KX0000-override-01KX0000/status.events.jsonl (untracked local file would be discarded by worktree removal)\\n    ?? kitty-specs/retention-repro-01KX0000-override-01KX0000/status.json (untracked local file would be discarded by worktree removal)\\n  Remediation: Commit, stash, or revert the local changes in /tmp/spec-kitty-pytest-tmp/run-2104/popen-gw0/test_explicit_delete_override_0/.worktrees/retention-repro-01KX0000-override-01KX0000-coord, then resume the operation (e.g. \\n`spec-kitty consolidate --resume`).\\nMerge aborted before any state change. Resolve the reported condition, then re-run spec-kitty consolidate.\\n', exception: SystemExit(1))\n- `tests.integration.test_placement_partition_golden_path::test_lifecycle_mutation_bookkeeping_lands_on_correct_surface[MissionTopology.COORD]` \u2014 subprocess.CalledProcessError: Command '['git', '-C', '/tmp/spec-kitty-pytest-tmp/run-2104/popen-gw0/test_lifecycle_mutation_bookke0/.worktrees/mutate-coord-01M42KE4-coord', 'commit', '-q', '-m', 'seed empty coord status log']' returned non-zero exit status 1.\n- `tests.integration.test_coord_read_residuals_proof::test_executor_status_feature_dir_stays_coord_aware` \u2014 AssertionError: NFR-001: the executor STATUS feature_dir must resolve the COORD husk; got None\n\n\n\n<!-- nightly-failure-ids: tests.integration.test_merge_lane_planning_data_loss%3A%3Atest_bare_slug_coord_mission_consolidates_onto_a_protected_target -->\n<!-- nightly-escalation-key: integration -->\n",
+    "closed_at": null,
+    "created_at": "2026-10-04T04:44:02Z",
+    "kind": "issue",
+    "labels": [
+      "domain:merge",
+      "domain:status",
+      "from:ci",
+      "priority:P0",
+      "triage:needs-investigation"
+    ],
+    "milestone": "4.0.0 release scope",
+    "number": 5611,
+    "state": "open",
+    "state_reason": null,
+    "title": "Nightly suite red: integration"
+  },
+  "5614": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "body_excerpt": "## Summary\n\nThe three wall-clock budget tests in `tests/performance/test_owned_checkout_perf.py` are flaky and slow. Whether they pass depends on the speed of the runner, not on the code under test. They should be considered for a thorough rewrite so that the environment they run on is not a determining factor in the measurement.\n\n- `test_owned_tasks_status_median_stays_inside_its_budget`\n- `test_owned_setup_plan_median_stays_inside_its_budget`\n- `test_owned_context_resolve_median_stays_inside_its_budget`\n\n## Evidence\n\nEach test starts a fresh interpreter five times per command (`python -m specify_cli ...`) and asserts the median against an absolute budget (2.0 s when the tests landed in `75e678bb1e`, PR #5445).\n\n| Nightly | Head | Per-command median | Result |\n|---|---|---|---|\n| 2026-10-01 | `f4dc26694c` | about 2.7 s | failed |\n| 2026-10-02 | `d79a12928b` | about 1.47 s | passed |\n| 2026-10-03 | `a3f76f673a` | about 1.8 s | passed |\n| 2026-10-04 | `b2c466d7d1` | 2.60 s, 2.70 s, 2.60 s | failed |\n\n- Interpreter cold start dominates the measurement. On a 32-core workstation `python -m specify_cli --version` takes 1.75 to 1.88 s, and the three owned commands about 2.1 s each. The work the tests are meant to guard is roughly 0.3 s of that.\n- Cold start has not changed since the budget landed: the `src` tree at `75e678bb1e` starts in 1.73 to 1.81 s, against 1.80 to 1.82 s now. So the failures are not a regression.\n- The ratio to `test_next_cold_start_subprocess_benchmark` in the same run stays between 1.5 and 1.8 across the four nightlies. The tests follow runner speed.\n- The sibling `tests/performance/test_cli_startup_budget_4409.py` allows 2.5 s for a bare `--help`, which does less work. Two absolute budgets for overlapping work disagree by construction.\n- Cost: the three tests run 15 fresh interpreters plus a fixture that finalizes a mission, in a suite that already takes about 14 minutes.\n\n## Interim state\n\nThe nightly-reds mission (branch `kitty/nightly-reds-2026-10-03`, tracker #5419) aligns the budget to the 2.5 s the start-up sibling already allows, by operator ruling. That removes the contradiction between the two files. It does not make the tests runner-independent: two of the four nightlies above measured 2.6 to 2.7 s, so they can still fail on a slow runner.\n\n## What a rewrite should consider\n\n1. Measure the owned-checkout work **relative to** a start-up floor taken in the same run (for example the median of `--version`), so the assertion is \"owned command costs at most N s over start-up\" and runner speed cancels out.\n2. Or assert on counts that do not depend on the clock: the number of git subprocesses and ownership validations per command. The functional half already exists in `tests/integration/test_owned_lifecycle_acceptance_e2e.py`.\n3. Decide separately whether CLI cold start should meet the charter standard (\"CLI operations must complete in < 2 seconds for typical projects\"). `-X importtime` shows `specify_cli.cli.commands.init` at about 0.69 s cumulative, of which `specify_cli.state.contract` \u2192 `runtime.next.run_index` \u2192 `runtime.next._internal_runtime` is about 0.57 s. That is product work and should not hide inside a test budget.\n4. Have one authority for the start-up budget instead of a constant per test file.\n\n## Out of scope here\n\nSuite-wide harness rework is tracked in #5353.\n",
+    "closed_at": null,
+    "created_at": "2026-10-04T06:26:42Z",
+    "kind": "issue",
+    "labels": [
+      "from:dev",
+      "priority:P2"
+    ],
+    "milestone": "Infra & Enablers 4.x",
+    "number": 5614,
+    "state": "open",
+    "state_reason": null,
+    "title": "test_owned_checkout_perf budget tests are flaky and slow: rewrite so runner speed does not decide the result"
+  },
+  "5617": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "base_ref": "main",
+    "body_excerpt": "## BLUF\n\nTest and test-support repairs for three red nightly suites. Nothing under `src/` changes. On the newest nightly ([run 37177460494](https://github.com/spec-kitty/spec-kitty/actions/runs/37177460494), head `b2c466d7d1`):\n\n- **Python 3.13 shard 3** and **`specify_cli` out-of-matrix** fail the same 9 tests. All 9 are repaired.\n- **Performance** fails 23 tests. The 20 owned-worktree e2e cases are repaired. The 3 wall-clock budget tests get a budget alignment by operator ruling and can still fail on a slow runner, so this PR does not claim that suite.\n\nFixes #5418\nFixes #5258\n\nNot claimed:\n\n- **#5419 (performance):** partly fixed. The red runs measured 2.60 to 2.70 s; the aligned budget is 2.5 s. Rewrite tracked in #5614.\n- **#5562 (shard 4):** already closed. Its only failure was the terminology guard fixed by PR #5586; shard 4 is green on the newest nightly.\n\n## What was wrong\n\nNone of the failures is a product defect or a `regression`-marked red. Each test lagged an intended, merged change. These trees run only in nightly lanes, so the pull requests that changed the product merged green.\n\n| Tests | Cause | Repair |\n|---|---|---|\n| `test_doctor_cli_surface_golden.py::test_registered_command_names_match_frozen_subcommands` | PR #5487 added `doctor run-index` | Frozen set, option table and help snapshot list it |\n| `test_doctor_skills.py::test_doctor_skills_json_error_schema_stable` | PR #5545 removed the dashboard command (15 \u2192 14) | Count read from `CANONICAL_COMMANDS`; the rest of the envelope is still one exact comparison |\n| `test_init_hybrid.py::TestHybridInstallOutputShape` (2) | same removal (7 \u2192 6 shims, 16 \u2192 15 files) | Files on disk compared with the shim registry by count and by name |\n| `test_handle_equivalence_matrix.py::test_mission_run_identity_identical_across_handle_forms` (3) | PR #5421 refuses to retype a mission (`MISSION_TYPE_CONFLICT`) | The test seeds a mission of the custom type it runs; shared fixture default and assertions unchanged |\n| `test_hosted_endpoint_session_backfill.py::TestMigrationSequencing` (2) | Applied every applicable migration to a fabricated `/any/project`; newer migrations write to the project | Presence and order from the registry; only the two migrations under test are applied, in registry order, in a temporary project |\n| `tests/e2e/test_worktree_owned_root_concurrency.py` (20) | Nightly checks out one commit; the shared snapshot builder fetched without `--update-shallow`, leaving a repository with missing parents and no shallow marker; the coordination seed probe fails closed on it | `--update-shallow` on the fetch, with a new red-first test |\n| `tests/performance/test_owned_checkout_perf.py` (3) | 2.0 s absolute budget; interpreter cold start alone is about 1.8 s | Budget read from one shared constant, 2.5 s, the value the start-up test already allowed |\n\n## The budget change\n\nThe session brief forbade raising budgets. I stopped and asked; the operator ruled to align the owned-checkout budget with the 2.5 s of `test_cli_startup_budget_4409.py`. Both files now read `CLI_COLD_START_BUDGET_SECONDS` in `tests/_perf_helpers.py`. Cold start has not regressed since the budget landed (1.73\u20131.81 s then, 1.80\u20131.82 s now). The tests remain runner-dependent.\n\n## Tests run\n\nBase `b2c466d7d1`, Python 3.11 unless stated. No whole-suite run.\n\n| Command | Result |\n|---|---|\n| The 9 nightly node ids on base | 9 failed, 3 passed |\n| The 5 repaired files + `tests/_support/test_shared_build_artifacts.py` + `test_command_installer.py` + `test_no_legacy_terminology.py`, `-n0` | 407 passed |\n| Same repaired files + all of `tests/specify_cli/upgrade` on Python 3.13.12, `-n 6 --dist loadfile` | 795 passed, 1 skipped |\n| `TestMigrationSequencing` with the full migration registry loaded: base / branch | 2 failed / 2 passed |\n| New snapshot test on the red-first commit / after the fix | 1 failed, 1 passed / 2 passed |\n| e2e case `[0]` from a depth-1 clone: base / branch (`SPEC_KITTY_RUN_PERFORMANCE=1`)",
+    "changed_files": 33,
+    "ci_runs_on_head": [],
+    "closed_at": "2026-10-04T08:03:54Z",
+    "created_at": "2026-10-04T06:56:03Z",
+    "draft": false,
+    "head_ref": "kitty/nightly-reds-2026-10-03",
+    "head_sha": "d5460a473c075225afe60ea06520fabffcc2a7a0",
+    "kind": "pr",
+    "labels": [],
+    "merged_at": "2026-10-04T08:03:54Z",
+    "milestone": null,
+    "number": 5617,
+    "state": "closed",
+    "state_reason": null,
+    "title": "test: repair the nightly shard-3, out-of-matrix and performance e2e reds"
+  },
+  "5624": {
+    "assignees": [
+      "robertDouglass",
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "body_excerpt": "## Problem\n\nThe scheduled shard-timing recapture (`.github/workflows/ci-charter-shard-recapture.yml`) captures successfully, then fails at the step \"Publish recapture PR if drifted\". The push to the proposal branch is rejected:\n\n```\nremote: Permission to spec-kitty/spec-kitty.git denied to stijn-dejongh\n```\n\nHTTP 403 on `git push --force origin HEAD:refs/heads/ci/recapture-charter-shard-timings`. Seen in runs 37182764995 and 37097776055; the last six scheduled runs all failed.\n\nThe token stored in the repository secret `CHARTER_SHARD_RECAPTURE_TOKEN` does not have write access to the repository's contents. (Inferred from the 403 on push; the token's actual scopes were not inspected.)\n\n## Impact\n\n- No recapture proposal has been opened, so drifted shard timings stay drifted and the scheduled strict agreement check stays red (the drift class reported in #5536).\n- Mission `shared-collection-and-shard-recapture-01M42V58` extends the scheduled recapture from `charter` to every registry module (#5561). That work depends on this publish path; until the token is fixed, the recapture can capture but cannot propose.\n\n## Needed (repository admin action; not fixable in code)\n\n1. Create a new token, or re-scope the existing one, with write access to repository contents and pull requests on `spec-kitty/spec-kitty`. The workflow pushes one fixed branch and runs `gh pr list` / `gh pr create`.\n2. Store it in the repository secret `CHARTER_SHARD_RECAPTURE_TOKEN`. The mission keeps that secret name.\n3. Dispatch the workflow on the primary branch (`main`) and confirm the publish step succeeds.\n\n## Acceptance criteria\n\n- A dispatched run on `main` with drift present pushes the proposal branch and opens a pull request.\n- The publish step no longer ends with a 403.\n\n## Notes\n\n- Three recent runs also ran 30m19\u201321s against the job's 30-minute cap. The mission adds a time budget for that; it is not part of this ticket.\n- After the mission lands, the proposal branch is renamed to `ci/recapture-shard-timings` and the workflow file to `ci-shard-recapture.yml`. The secret name does not change.\n\nRelated: #5536, #5561.\n\n_Generated by [Claude Code](https://claude.ai/code)_",
+    "closed_at": null,
+    "created_at": "2026-10-04T07:25:59Z",
+    "kind": "issue",
+    "labels": [
+      "domain:ci",
+      "priority:P1"
+    ],
+    "milestone": "Infra & Enablers 4.x",
+    "number": 5624,
+    "state": "open",
+    "state_reason": null,
+    "title": "Recreate or re-scope CHARTER_SHARD_RECAPTURE_TOKEN: scheduled shard-timing recapture cannot push (403)"
+  },
+  "5652": {
+    "assignees": [],
+    "author": "stijn-dejongh",
+    "body_excerpt": "Found during the landing review of #5646.\n\n## Problem\n\nNo CI job runs the `regression`-marked tests or the `tests/regression/` directory. A pinned reproduction of an open defect is therefore invisible to CI.\n\n- No workflow under `.github/workflows/` selects `-m regression` or `tests/regression/`.\n- `.github/ci-module-registry.yml` and the nightly interpreter roster (`tests/architectural/_interpreter_shard_roster.py`) do not list the directory.\n- `make test-fast` excludes the marker.\n- The only run is the local `make test-full` parallel pass.\n\n`tests/regression/README.md` and the docstring of `tests/architectural/test_marker_job_completeness.py` both describe a \"`regression tests (blocking)`\" job in `ci-quality.yml`. That job does not exist: `ci-quality.yml` has lint, wheel build, clean install, lock check and the quality gate.\n\n## Why it matters now\n\nThe landing runbook (`docs/development/how-to/pr-landing.md`, step 4) says a deliberate open-defect red is marked `regression` and lives in `tests/regression/`, so that \"a red outside `tests/regression/` is a real signal\". #5646 followed that rule for the #5651 reproduction. Before the move, the nightly integration lane ran that test and showed the red. After the move, no lane runs it.\n\nSo the convention currently hides the reds it is meant to keep honest (ADR `2026-07-17-1`, red main is honest).\n\n## Wanted\n\nA decision on the regression lane, then the wiring:\n\n- Which workflow runs `tests/regression/` (a nightly job is the smallest change; the README says per-PR and blocking).\n- Whether a red there fails the run or is reported and expected, given that each test is red by design until its issue closes.\n- How the nightly auto-escalation (`scripts/ci/nightly_escalation.py`) should treat it, so it does not open a new \"suite red\" issue for a known, pinned defect.\n- Then correct `tests/regression/README.md` and the `test_marker_job_completeness.py` docstring to match what exists.\n\nRelated: #5651 (the first test in `tests/regression/`).\n",
+    "closed_at": null,
+    "created_at": "2026-10-04T10:43:13Z",
+    "kind": "issue",
+    "labels": [
+      "domain:ci",
+      "priority:P1"
+    ],
+    "milestone": "Infra & Enablers 4.x",
+    "number": 5652,
+    "state": "open",
+    "state_reason": null,
+    "title": "CI: no job runs the regression-marked tests, so pinned open-defect reds are invisible"
+  },
+  "5688": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "base_ref": "main",
+    "body_excerpt": "## Issue\n\nCloses #5559\nCloses #5561\nCloses #5536\n\n## Change\n\nTwo CI residues of #5510 are closed, and one drift problem is given an automatic remedy.\n\n- **The full test-universe collection no longer runs inside a test under worker contention.** The two heavy architectural-battery legs and the `ci` module shard each collect once in a step before pytest; their tests read the stored result. (#5559)\n- **Every CI module's shard timings are measured.** All 20 registry modules carry durations, a test count and a capture record from the canonical producer. The mismatch allowlist is deleted. (#5561)\n- **The scheduled recapture covers every module**, not only `charter`. (#5536)\n\n### What this does not do\n\n- A first run still performs one collection per consuming job (two per pull-request update: battery leg 1/2 and the `ci` shard). The change moves it out of test setup and out of contention; it does not reduce the count. A re-run of the same commit restores the stored collection from the Actions cache.\n- **The cost of collecting did not go down; it moved.** Collecting on a CI runner takes two to four minutes; my planning figure of 35\u201345 s was wrong, and the bounds were restated (pre-test step 320 s, setup 15 s).\n- **The scheduled recapture cannot publish yet.** Its token is rejected on push (HTTP 403); see #5624. The script now fails early and names the missing permission.\n- Two items of #5561 were not done, per the triage on its parent: the duplicated floor constants are already retired, and deriving `_ROUTED_MODULES` would make its check compare a value with itself.\n\n### Measured on this pull request\n\n| Run | Job | Pre-test step | Tests that reused | Collecting test setup |\n|---|---|---|---|---|\n| 1 (`77d75cca33`) | battery 1/2 | collected, 187.3 s | 2 | 4.90 s |\n| 1 | battery 2/2 | collected, 232.6 s | 0 | n/a |\n| 1 | `ci` shard | collected, 89.6 s | 1 | 12.36 s |\n| 2 (`223781458a`) | battery 1/2 | collected, 199.5 s | 2 | 9.35 s |\n| 2 | battery 2/2 | skipped: no collecting test in the leg | n/a | n/a |\n| 2 | `ci` shard | collected, 118.5 s | 1 | 4.37 s |\n| 3 (re-run of 2) | battery 1/2 | restored from cache, reused, 0.578 s | 2 | 4.83 s |\n| 3 | `ci` shard | restored from cache, reused, 0.348 s | 1 | 4.01 s |\n\nBefore this change the collecting test's setup took 114 / 166 / 170 s. No test collected for itself in any run, and no request was bypassed for a dirty checkout. Run 1 exposed a waste (leg 2/2 collected with no collecting test in its partition), fixed before run 2. Job durations vary too much between runs to compare. Details: `kitty-specs/shared-collection-and-shard-recapture-01M42V58/evidence/ci-measurements.md`.\n\n### How it works\n\n**Stored collection** (`tests/architectural/_universe_store.py`, wired into `_gate_coverage.collect_universe`)\n\n- Key: committed tree id, interpreter, platform, installed distributions, and the `SPEC_KITTY_*` / `PYTEST_ADDOPTS` family after the operator env file is overlaid.\n- No reuse on a dirty checkout, for a patched `repo_root`, for a record whose commit or tree differs, or for a damaged or implausibly small record. A failed collection is never stored.\n- The checkout is read after the store lock is taken and again after collecting; a collection is stored only if the checkout did not move.\n\n**Pre-test step** (`scripts/ci/collect_universe_prestep.py`: `key`, `collect`, `check`, `compare`)\n\n- `collect` runs before pytest. `check` runs after it with `if: always()` and fails the job when the pre-test step stored a collection but a test then collected or bypassed. Without that, a key that never matches would stay green forever.\n- The pytest command of each job is unchanged.\n- A battery leg runs the step only when its partition holds a collecting test. On the first run leg 2/2 had none and spent 232.6 s collecting for nothing; that is fixed in this push.\n\n**Recapture** (`scripts/ci/recapture_shard_timings.py`, `.github/workflows/ci-shard-recapture.yml`)\n\n- A count-only pass finds drifted modules; only ",
+    "changed_files": 64,
+    "ci_runs_on_head": [
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-04T16:35:30Z",
+        "event": "pull_request",
+        "name": "Packs",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-04T16:35:30Z",
+        "event": "pull_request",
+        "name": "CI Modules",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-04T16:35:30Z",
+        "event": "pull_request",
+        "name": "CI Router",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-04T16:35:30Z",
+        "event": "pull_request",
+        "name": "ci-windows",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-04T16:35:30Z",
+        "event": "pull_request",
+        "name": "Release Readiness Check",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-04T16:35:30Z",
+        "event": "pull_request",
+        "name": "CI Quality",
+        "triggering_actor": "stijn-dejongh"
+      }
+    ],
+    "closed_at": "2026-10-04T16:48:40Z",
+    "created_at": "2026-10-04T14:34:09Z",
+    "draft": false,
+    "head_ref": "issue-5559-shared-collection-and-shard-recapture",
+    "head_sha": "3c196da84809b6ce5731db011491d11ebc550895",
+    "kind": "pr",
+    "labels": [],
+    "merged_at": "2026-10-04T16:48:40Z",
+    "milestone": null,
+    "number": 5688,
+    "state": "closed",
+    "state_reason": null,
+    "title": "[#5559] Collect the test universe before the tests, and put every CI module on measured shard timings"
+  },
+  "5708": {
+    "assignees": [
+      "stijn-dejongh"
+    ],
+    "author": "stijn-dejongh",
+    "body_excerpt": "## What is red\n\nNightly run https://github.com/spec-kitty/spec-kitty/actions/runs/37225822329 (main @ `9adc6880`) fails two jobs on the same test:\n\n- `Interpreter matrix shard 3 (Python 3.13, nightly-only)`\n- `specify_cli out-of-matrix trees (nightly-only)`\n\n```text\ntests/specify_cli/cli/commands/test_commit_recipes.py::test_no_unallowed_git_commit_recipe_strings_in_src\nAssertionError: Printed git-commit recipe(s) found outside the reviewed allowlist -- convert to\n_commit_recipes.safe_commit_recipe() or add a rationale to _ALLOWED_GIT_COMMIT_HITS\n```\n\n## Cause (verified on `origin/main` @ 9adc6880)\n\nThe one unallowed hit is help text, not a copy/paste recipe:\n\n```text\nsrc/specify_cli/cli/commands/_commit_message.py:13\nMESSAGE_OPTION_HELP = \"Commit message. Repeat -m to add paragraphs (joined by a blank line, as git commit does).\"\n```\n\nIt was introduced by `22994ca25` *fix(cli): keep every repeated -m on safe-commit and spec-commit (#5647)*, which landed via #5659 on 2026-10-04. There are no stale allowlist entries.\n\n## Why per-PR CI did not catch it\n\n`tests/specify_cli/cli/commands/` is not claimed by any per-PR module shard, so it only runs in the nightly \"out-of-matrix trees\" lane and on the interpreter matrix. This is the same class of gap as #5652, where tests no per-PR job runs only surface in the nightly.\n\n## Fix options\n\n1. **Minimal:** reword the help so it is not recipe-shaped (e.g. \"joined by a blank line, like git\"), or add an allowlist entry with a rationale (help prose, not a recipe).\n2. **Structural (preferred):** make the scanner recognise CLI option help or prose constants, or give the recipe scan a per-PR home by claiming `tests/specify_cli/cli/commands` in a module shard, so a regression in this gate goes red on the PR that introduces it rather than in the nightly.\n\n## Acceptance\n\n- `pytest tests/specify_cli/cli/commands/test_commit_recipes.py` is green, including the stale-entry and distinctiveness checks.\n- The next nightly's Python 3.13 shard 3 and out-of-matrix jobs are green.\n- If option 2 is taken: a planted recipe-shaped string in `src/specify_cli` fails a per-PR job.\n\nRefs #5611 (nightly red tracking), #5652, #3931 / #5078 (recipe renderer precedent).\n\n\n---\n_Generated by [Claude Code](https://claude.ai/code)_",
+    "closed_at": null,
+    "created_at": "2026-10-04T21:09:00Z",
+    "kind": "issue",
+    "labels": [
+      "domain:ci",
+      "from:ci",
+      "priority:P1"
+    ],
+    "milestone": "4.0.0 release scope",
+    "number": 5708,
+    "state": "open",
+    "state_reason": null,
+    "title": "Nightly red: commit-recipe allowlist gate flags the repeated -m help text (_commit_message.py) \u2014 py3.13 shard 3 + out-of-matrix"
+  },
+  "5730": {
+    "assignees": [],
+    "author": "stijn-dejongh",
+    "base_ref": "main",
+    "body_excerpt": "Automated recapture opened by the scheduled `ci-shard-recapture.yml` workflow (`scripts/ci/recapture_shard_timings.py`). Refreshes the drifted modules' entries in `.github/ci-shard-timings.json`.\n\n- Captured: `kernel`, `review`, `consolidation`, `agent`, `lanes`, `charter`, `execution_context`, `core_misc`\n- Failed (committed data left unchanged): none\n- Deferred (time budget spent, retried next run): none\n\nWorkflow run: `https://github.com/spec-kitty/spec-kitty/actions/runs/37266895377`. See spec-kitty#5189.",
+    "changed_files": 1,
+    "ci_runs_on_head": [
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-05T06:19:27Z",
+        "event": "pull_request",
+        "name": "CI Modules",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-05T06:19:26Z",
+        "event": "pull_request",
+        "name": "ci-windows",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-05T06:19:26Z",
+        "event": "pull_request",
+        "name": "Packs",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-05T06:19:26Z",
+        "event": "pull_request",
+        "name": "CI Quality",
+        "triggering_actor": "stijn-dejongh"
+      },
+      {
+        "actor": "stijn-dejongh",
+        "conclusion": "success",
+        "created_at": "2026-10-05T06:19:26Z",
+        "event": "pull_request",
+        "name": "CI Router",
+        "triggering_actor": "stijn-dejongh"
+      }
+    ],
+    "closed_at": "2026-10-05T06:32:52Z",
+    "created_at": "2026-10-05T06:19:23Z",
+    "draft": false,
+    "head_ref": "ci/recapture-shard-timings",
+    "head_sha": "a44b687c482d27de5c202c0af45c529d2d401475",
+    "kind": "pr",
+    "labels": [],
+    "merged_at": "2026-10-05T06:32:52Z",
+    "milestone": null,
+    "number": 5730,
+    "state": "closed",
+    "state_reason": null,
+    "title": "chore(ci): automated shard-timings recapture"
+  }
+}

@@ -1,0 +1,18 @@
+path,added_sha,added_date,added_subject,deleted_date,deleted_subject,commits_touching,exists_at_head
+.github/workflows/ci.yml,c7a245187,2026-08-29,ci: deterministic suite on Blacksmith via planning's bin/ci-run.sh -> bin/ci-post.sh (same [ci] verdict),2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,8,False
+.github/workflows/ci-router.yml,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,42,True
+.github/workflows/ci-modules.yml,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,14,True
+.github/workflows/ci-aggregate.yml,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,16,True
+.github/workflows/module-tests.yml,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,21,True
+.github/workflows/ci-nightly.yml,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,34,True
+.github/workflows/sonar.yml,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,6,True
+.github/workflows/packs.yml,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,25,True
+.github/workflows/ci-shard-recapture.yml,709320263,2026-10-04,feat(ci): recapture every drifted shard-timings module on schedule,,,1,True
+.github/workflows/ci-charter-shard-recapture.yml,cff3f086a,2026-09-28,ci(shard-timings): schedule the charter recapture workflow (WP03),2026-10-04,feat(ci): recapture every drifted shard-timings module on schedule,11,False
+.github/ci-shard-timings.json,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,32,True
+.github/ci-module-registry.yml,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,30,True
+scripts/ci/gate_selection.py,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows,,,3,True
+scripts/ci/nightly_escalation.py,1e290b09a,2026-09-26,feat(ci): nightly integration+next lane + red->deduped-P0 escalation (FR-006/007),,,5,True
+scripts/ci/release_nightly_gate.py,3d0ca4f8f,2026-09-26,feat(ci): release gates on a green nightly for the exact release SHA (FR-008),,,1,True
+scripts/ci/recapture_shard_timings.py,709320263,2026-10-04,feat(ci): recapture every drifted shard-timings module on schedule,,,1,True
+scripts/ci/capture_shard_timings.py,4c6b89cb6,2026-09-14,feat(ci): declare tests/unit and tests/specify_cli/runtime in the module registry (#4334),,,5,True

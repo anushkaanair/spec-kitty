@@ -1,0 +1,147 @@
+{
+  "modules": [
+    {
+      "captured_at": "2026-10-05T05:38:31.573224+00:00",
+      "module": "agent",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 123.422,
+      "recorded_tests": 1539
+    },
+    {
+      "captured_at": "2026-10-04T10:41:18.728480+00:00",
+      "module": "auth",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 16.41,
+      "recorded_tests": 638
+    },
+    {
+      "captured_at": "2026-10-05T05:59:09.409685+00:00",
+      "module": "charter",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 1109.605,
+      "recorded_tests": 7183
+    },
+    {
+      "captured_at": "2026-10-04T16:18:42.149099+00:00",
+      "module": "ci",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 123.977,
+      "recorded_tests": 1913
+    },
+    {
+      "captured_at": "2026-10-04T13:50:17.841481+00:00",
+      "module": "cli",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 206.315,
+      "recorded_tests": 998
+    },
+    {
+      "captured_at": "2026-10-05T05:36:23.358179+00:00",
+      "module": "consolidation",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 1020.345,
+      "recorded_tests": 1973
+    },
+    {
+      "captured_at": "2026-10-05T06:19:18.278789+00:00",
+      "module": "core_misc",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 762.365,
+      "recorded_tests": 4749
+    },
+    {
+      "captured_at": "2026-10-05T06:06:26.092946+00:00",
+      "module": "execution_context",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 426.762,
+      "recorded_tests": 4377
+    },
+    {
+      "captured_at": "2026-10-04T10:38:11.058029+00:00",
+      "module": "glossary",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 1.0,
+      "recorded_tests": 179
+    },
+    {
+      "captured_at": "2026-10-05T05:18:22.527041+00:00",
+      "module": "kernel",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 17.516,
+      "recorded_tests": 593
+    },
+    {
+      "captured_at": "2026-10-05T05:40:27.993225+00:00",
+      "module": "lanes",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 111.569,
+      "recorded_tests": 715
+    },
+    {
+      "captured_at": "2026-10-04T10:38:33.039531+00:00",
+      "module": "missions",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 9.488,
+      "recorded_tests": 336
+    },
+    {
+      "captured_at": "2026-10-04T10:55:51.223370+00:00",
+      "module": "next",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 30.702,
+      "recorded_tests": 573
+    },
+    {
+      "captured_at": "2026-10-04T10:38:13.496298+00:00",
+      "module": "post_merge",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 0.872,
+      "recorded_tests": 123
+    },
+    {
+      "captured_at": "2026-10-04T10:38:21.793053+00:00",
+      "module": "release",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 6.627,
+      "recorded_tests": 253
+    },
+    {
+      "captured_at": "2026-10-05T05:19:17.817593+00:00",
+      "module": "review",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 52.544,
+      "recorded_tests": 572
+    },
+    {
+      "captured_at": "2026-10-04T10:41:40.814062+00:00",
+      "module": "specify_cli_runtime",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 12.744,
+      "recorded_tests": 118
+    },
+    {
+      "captured_at": "2026-10-04T12:13:22.524931+00:00",
+      "module": "status",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 41.013,
+      "recorded_tests": 1850
+    },
+    {
+      "captured_at": "2026-10-04T12:13:31.846723+00:00",
+      "module": "unit",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 7.42,
+      "recorded_tests": 559
+    },
+    {
+      "captured_at": "2026-10-04T10:55:17.814988+00:00",
+      "module": "upgrade",
+      "producer": "scripts/ci/capture_shard_timings.py",
+      "recorded_seconds": 767.441,
+      "recorded_tests": 922
+    }
+  ],
+  "modules_recorded": 20,
+  "schema_version": 1.0,
+  "sum_recorded_seconds": 4848.1
+}

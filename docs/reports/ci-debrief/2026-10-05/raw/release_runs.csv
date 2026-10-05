@@ -1,0 +1,20 @@
+id,event,head_branch,created_at,conclusion,display_title
+31614131403,push,v3.2.6rc1,2026-08-12T15:46:31Z,failure,docs(freshness): register 3.2.6rc1 release notes in inventory + retri…
+31615732843,push,v3.2.6rc1,2026-08-12T16:04:22Z,failure,fix(release): exclude dormant wheel-scaffolding from doctrine-count gate
+31616554650,push,v3.2.6rc1,2026-08-12T16:14:07Z,failure,fix(release): pin hatchling build backend to 1.31.0 (Metadata-Version…
+31616995247,workflow_dispatch,main,2026-08-12T16:19:32Z,success,Publish Release
+32421675651,push,v3.2.6rc2,2026-08-20T21:53:49Z,failure,docs(changelog): cut 3.2.6rc2 (date the heading; open rc3 cycle)
+32450510971,push,v3.2.6rc2,2026-08-21T05:25:48Z,failure,fix(release): CHANGELOG top section must match pyproject rc2 (drop pr…
+32450748870,workflow_dispatch,main,2026-08-21T05:29:44Z,success,Publish Release
+33810372924,push,v3.2.6,2026-09-03T21:53:53Z,failure,release: cut 3.2.6
+33811028251,workflow_dispatch,v3.2.6,2026-09-03T22:01:48Z,success,Publish Release
+34283878967,push,v3.2.6.1,2026-09-08T22:03:10Z,success,hotfix: release 3.2.6.1 first-run recovery fixes (#4051)
+34316647052,push,v3.2.6.2,2026-09-09T05:52:30Z,success,Release 3.2.6.2 (#4112)
+34415544963,push,v3.2.7,2026-09-09T23:08:07Z,success,Release 3.2.7 (#4177)
+34765578963,push,v4.0.0rc1,2026-09-13T15:25:57Z,success,Release 4.0.0rc1 for PyPI qualification (#4256)
+34822231739,push,v4.0.0rc2,2026-09-14T08:20:35Z,success,Release 4.0.0rc2 for PyPI qualification (#4307)
+35265208808,push,v4.0.0rc3,2026-09-17T19:29:42Z,success,docs(changelog): fold minutes-mahad rename into [4.0.0rc3] ahead of t…
+35640435488,push,v4.0.0rc4,2026-09-21T18:45:20Z,success,docs(release): finalize the 4.0.0rc4 changelog section for the cut (#…
+36965118691,push,v4.0.0rc5,2026-10-02T04:34:07Z,failure,chore(release): prepare 4.0.0rc5
+36968309023,workflow_dispatch,main,2026-10-02T05:18:00Z,success,Publish Release
+36968955805,workflow_dispatch,main,2026-10-02T05:26:41Z,success,Publish Release

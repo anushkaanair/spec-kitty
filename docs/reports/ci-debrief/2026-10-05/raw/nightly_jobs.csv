@@ -1,0 +1,1533 @@
+run_id,date,event,job,conclusion,minutes
+34307451537,2026-09-09,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",success,3.0
+34307451537,2026-09-09,schedule,"Performance + heavy e2e (nightly-only,",success,10.67
+34307451537,2026-09-09,schedule,Nightly full-mode summary,success,0.03
+34433645881,2026-09-10,schedule,"Performance + heavy e2e (nightly-only,",success,10.88
+34433645881,2026-09-10,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",success,3.05
+34433645881,2026-09-10,schedule,Nightly full-mode summary,success,0.03
+34558734735,2026-09-11,schedule,"Performance + heavy e2e (nightly-only,",success,32.03
+34558734735,2026-09-11,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",success,3.0
+34558734735,2026-09-11,schedule,Nightly full-mode summary,success,0.37
+34670523508,2026-09-12,schedule,"Performance + heavy e2e (nightly-only,",success,49.45
+34670523508,2026-09-12,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",success,3.03
+34670523508,2026-09-12,schedule,Nightly full-mode summary,success,0.07
+34735693119,2026-09-13,schedule,"Performance + heavy e2e (nightly-only,",success,43.17
+34735693119,2026-09-13,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",success,2.97
+34735693119,2026-09-13,schedule,Nightly full-mode summary,success,0.05
+34803070050,2026-09-14,schedule,"Performance + heavy e2e (nightly-only,",success,46.37
+34803070050,2026-09-14,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",success,2.8
+34803070050,2026-09-14,schedule,Nightly full-mode summary,success,0.03
+34925359382,2026-09-15,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",success,3.08
+34925359382,2026-09-15,schedule,"Performance + heavy e2e (nightly-only,",success,47.43
+34925359382,2026-09-15,schedule,Nightly full-mode summary,success,0.05
+35052155441,2026-09-16,schedule,Generate full module-shard matrix (nightly-only),success,0.2
+35052155441,2026-09-16,schedule,"Performance + heavy e2e (nightly-only,",failure,49.18
+35052155441,2026-09-16,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,3.07
+35052155441,2026-09-16,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.53
+35052155441,2026-09-16,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,25.45
+35052155441,2026-09-16,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.5
+35052155441,2026-09-16,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,14.3
+35052155441,2026-09-16,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.7
+35052155441,2026-09-16,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,18.87
+35052155441,2026-09-16,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.42
+35052155441,2026-09-16,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,18.68
+35052155441,2026-09-16,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.28
+35052155441,2026-09-16,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,15.98
+35052155441,2026-09-16,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,13.73
+35052155441,2026-09-16,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.93
+35052155441,2026-09-16,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.45
+35052155441,2026-09-16,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.6
+35052155441,2026-09-16,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,21.17
+35052155441,2026-09-16,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,15.33
+35052155441,2026-09-16,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,21.87
+35052155441,2026-09-16,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.75
+35052155441,2026-09-16,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,25.1
+35052155441,2026-09-16,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,9.72
+35052155441,2026-09-16,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,16.98
+35052155441,2026-09-16,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.47
+35052155441,2026-09-16,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,10.5
+35052155441,2026-09-16,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,21.42
+35052155441,2026-09-16,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,2.67
+35052155441,2026-09-16,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,26.13
+35052155441,2026-09-16,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,22.6
+35052155441,2026-09-16,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,21.05
+35052155441,2026-09-16,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.07
+35052155441,2026-09-16,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,19.55
+35052155441,2026-09-16,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.13
+35052155441,2026-09-16,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,18.5
+35052155441,2026-09-16,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,12.2
+35052155441,2026-09-16,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.67
+35052155441,2026-09-16,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,11.82
+35052155441,2026-09-16,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,10.97
+35052155441,2026-09-16,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,13.5
+35052155441,2026-09-16,schedule,Nightly full-mode summary,success,0.05
+35178513951,2026-09-17,schedule,Generate full module-shard matrix (nightly-only),success,0.3
+35178513951,2026-09-17,schedule,"Performance + heavy e2e (nightly-only,",failure,45.53
+35178513951,2026-09-17,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,3.0
+35178513951,2026-09-17,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,21.45
+35178513951,2026-09-17,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,13.77
+35178513951,2026-09-17,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.88
+35178513951,2026-09-17,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,16.73
+35178513951,2026-09-17,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,19.58
+35178513951,2026-09-17,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,24.23
+35178513951,2026-09-17,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.9
+35178513951,2026-09-17,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.37
+35178513951,2026-09-17,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,28.87
+35178513951,2026-09-17,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.22
+35178513951,2026-09-17,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,27.03
+35178513951,2026-09-17,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.65
+35178513951,2026-09-17,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.7
+35178513951,2026-09-17,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,21.1
+35178513951,2026-09-17,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.42
+35178513951,2026-09-17,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,23.5
+35178513951,2026-09-17,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,25.42
+35178513951,2026-09-17,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,20.43
+35178513951,2026-09-17,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,13.0
+35178513951,2026-09-17,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.0
+35178513951,2026-09-17,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.4
+35178513951,2026-09-17,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.18
+35178513951,2026-09-17,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,15.02
+35178513951,2026-09-17,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,21.13
+35178513951,2026-09-17,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,5.4
+35178513951,2026-09-17,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,12.7
+35178513951,2026-09-17,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.87
+35178513951,2026-09-17,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,14.18
+35178513951,2026-09-17,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,19.17
+35178513951,2026-09-17,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,4.22
+35178513951,2026-09-17,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,18.63
+35178513951,2026-09-17,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,13.33
+35178513951,2026-09-17,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,18.63
+35178513951,2026-09-17,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,18.45
+35178513951,2026-09-17,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,25.15
+35178513951,2026-09-17,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,13.67
+35178513951,2026-09-17,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,14.32
+35178513951,2026-09-17,schedule,Nightly full-mode summary,success,0.05
+35303505691,2026-09-18,schedule,"Performance + heavy e2e + stress (nightly-only,",cancelled,62.02
+35303505691,2026-09-18,schedule,Generate full module-shard matrix (nightly-only),success,0.2
+35303505691,2026-09-18,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,3.07
+35303505691,2026-09-18,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.53
+35303505691,2026-09-18,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.75
+35303505691,2026-09-18,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,12.88
+35303505691,2026-09-18,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.33
+35303505691,2026-09-18,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,25.12
+35303505691,2026-09-18,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,5.98
+35303505691,2026-09-18,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,24.1
+35303505691,2026-09-18,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,16.48
+35303505691,2026-09-18,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,19.72
+35303505691,2026-09-18,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,15.23
+35303505691,2026-09-18,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.57
+35303505691,2026-09-18,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,21.67
+35303505691,2026-09-18,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,11.12
+35303505691,2026-09-18,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,18.03
+35303505691,2026-09-18,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,29.2
+35303505691,2026-09-18,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,17.72
+35303505691,2026-09-18,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,18.38
+35303505691,2026-09-18,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,12.55
+35303505691,2026-09-18,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,18.8
+35303505691,2026-09-18,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,13.28
+35303505691,2026-09-18,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,11.38
+35303505691,2026-09-18,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.7
+35303505691,2026-09-18,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,19.87
+35303505691,2026-09-18,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.57
+35303505691,2026-09-18,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.88
+35303505691,2026-09-18,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.23
+35303505691,2026-09-18,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.57
+35303505691,2026-09-18,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.28
+35303505691,2026-09-18,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,25.28
+35303505691,2026-09-18,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,14.08
+35303505691,2026-09-18,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,23.72
+35303505691,2026-09-18,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,7.33
+35303505691,2026-09-18,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,11.97
+35303505691,2026-09-18,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,9.12
+35303505691,2026-09-18,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.4
+35303505691,2026-09-18,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.15
+35303505691,2026-09-18,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,19.22
+35303505691,2026-09-18,schedule,Nightly full-mode summary,success,0.03
+35418733378,2026-09-19,schedule,Generate full module-shard matrix (nightly-only),success,0.23
+35418733378,2026-09-19,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,3.08
+35418733378,2026-09-19,schedule,"Performance + heavy e2e + stress (nightly-only,",cancelled,65.02
+35418733378,2026-09-19,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,26.47
+35418733378,2026-09-19,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,9.97
+35418733378,2026-09-19,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,29.95
+35418733378,2026-09-19,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,17.75
+35418733378,2026-09-19,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.38
+35418733378,2026-09-19,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.35
+35418733378,2026-09-19,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,11.38
+35418733378,2026-09-19,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,15.5
+35418733378,2026-09-19,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,15.92
+35418733378,2026-09-19,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,12.98
+35418733378,2026-09-19,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.35
+35418733378,2026-09-19,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.65
+35418733378,2026-09-19,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,13.82
+35418733378,2026-09-19,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,17.67
+35418733378,2026-09-19,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,9.5
+35418733378,2026-09-19,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.32
+35418733378,2026-09-19,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,14.67
+35418733378,2026-09-19,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.75
+35418733378,2026-09-19,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,2.85
+35418733378,2026-09-19,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,18.63
+35418733378,2026-09-19,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,26.05
+35418733378,2026-09-19,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,12.05
+35418733378,2026-09-19,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,19.32
+35418733378,2026-09-19,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,7.55
+35418733378,2026-09-19,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.67
+35418733378,2026-09-19,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,25.3
+35418733378,2026-09-19,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,18.78
+35418733378,2026-09-19,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,18.85
+35418733378,2026-09-19,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,12.17
+35418733378,2026-09-19,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,23.97
+35418733378,2026-09-19,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.55
+35418733378,2026-09-19,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,20.78
+35418733378,2026-09-19,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.35
+35418733378,2026-09-19,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.02
+35418733378,2026-09-19,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,19.52
+35418733378,2026-09-19,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.78
+35418733378,2026-09-19,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.47
+35418733378,2026-09-19,schedule,Nightly full-mode summary,success,0.05
+35486813855,2026-09-20,schedule,Generate full module-shard matrix (nightly-only),success,0.23
+35486813855,2026-09-20,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,3.08
+35486813855,2026-09-20,schedule,"Performance + heavy e2e + stress (nightly-only,",failure,47.37
+35486813855,2026-09-20,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,12.37
+35486813855,2026-09-20,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.13
+35486813855,2026-09-20,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.72
+35486813855,2026-09-20,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,12.72
+35486813855,2026-09-20,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,22.05
+35486813855,2026-09-20,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,27.13
+35486813855,2026-09-20,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,27.15
+35486813855,2026-09-20,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,16.12
+35486813855,2026-09-20,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,20.7
+35486813855,2026-09-20,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.5
+35486813855,2026-09-20,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.7
+35486813855,2026-09-20,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,24.73
+35486813855,2026-09-20,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,15.47
+35486813855,2026-09-20,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.43
+35486813855,2026-09-20,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,19.33
+35486813855,2026-09-20,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,10.3
+35486813855,2026-09-20,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,3.82
+35486813855,2026-09-20,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,26.98
+35486813855,2026-09-20,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,11.53
+35486813855,2026-09-20,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,12.68
+35486813855,2026-09-20,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.58
+35486813855,2026-09-20,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.7
+35486813855,2026-09-20,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,10.05
+35486813855,2026-09-20,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.02
+35486813855,2026-09-20,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,21.95
+35486813855,2026-09-20,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.82
+35486813855,2026-09-20,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.93
+35486813855,2026-09-20,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,20.2
+35486813855,2026-09-20,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,30.75
+35486813855,2026-09-20,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.57
+35486813855,2026-09-20,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,15.93
+35486813855,2026-09-20,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.7
+35486813855,2026-09-20,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.9
+35486813855,2026-09-20,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,17.52
+35486813855,2026-09-20,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,17.87
+35486813855,2026-09-20,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,20.2
+35486813855,2026-09-20,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,20.95
+35486813855,2026-09-20,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.78
+35486813855,2026-09-20,schedule,Nightly full-mode summary,success,0.07
+35557999753,2026-09-21,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,3.47
+35557999753,2026-09-21,schedule,"Performance + heavy e2e + stress (nightly-only,",cancelled,65.0
+35557999753,2026-09-21,schedule,Generate full module-shard matrix (nightly-only),success,0.25
+35557999753,2026-09-21,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,13.78
+35557999753,2026-09-21,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,18.75
+35557999753,2026-09-21,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,18.92
+35557999753,2026-09-21,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.93
+35557999753,2026-09-21,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.55
+35557999753,2026-09-21,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,26.17
+35557999753,2026-09-21,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.67
+35557999753,2026-09-21,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.88
+35557999753,2026-09-21,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.95
+35557999753,2026-09-21,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,19.62
+35557999753,2026-09-21,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,21.97
+35557999753,2026-09-21,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,32.28
+35557999753,2026-09-21,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,20.9
+35557999753,2026-09-21,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,21.78
+35557999753,2026-09-21,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,11.4
+35557999753,2026-09-21,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,20.52
+35557999753,2026-09-21,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,20.97
+35557999753,2026-09-21,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,14.67
+35557999753,2026-09-21,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,20.05
+35557999753,2026-09-21,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.52
+35557999753,2026-09-21,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.28
+35557999753,2026-09-21,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,11.4
+35557999753,2026-09-21,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.5
+35557999753,2026-09-21,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,13.57
+35557999753,2026-09-21,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,17.92
+35557999753,2026-09-21,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.72
+35557999753,2026-09-21,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,20.83
+35557999753,2026-09-21,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,12.98
+35557999753,2026-09-21,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.85
+35557999753,2026-09-21,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.93
+35557999753,2026-09-21,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.98
+35557999753,2026-09-21,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,15.1
+35557999753,2026-09-21,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,24.47
+35557999753,2026-09-21,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,13.4
+35557999753,2026-09-21,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.37
+35557999753,2026-09-21,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.07
+35557999753,2026-09-21,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,24.28
+35557999753,2026-09-21,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.97
+35557999753,2026-09-21,schedule,Nightly full-mode summary,success,0.05
+35683539593,2026-09-22,schedule,Generate full module-shard matrix (nightly-only),success,0.25
+35683539593,2026-09-22,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,2.85
+35683539593,2026-09-22,schedule,"Performance + heavy e2e + stress (nightly-only,",cancelled,65.02
+35683539593,2026-09-22,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.55
+35683539593,2026-09-22,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.4
+35683539593,2026-09-22,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.37
+35683539593,2026-09-22,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.12
+35683539593,2026-09-22,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,2.95
+35683539593,2026-09-22,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,15.83
+35683539593,2026-09-22,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,27.33
+35683539593,2026-09-22,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.38
+35683539593,2026-09-22,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,14.78
+35683539593,2026-09-22,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,11.9
+35683539593,2026-09-22,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,15.13
+35683539593,2026-09-22,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,27.68
+35683539593,2026-09-22,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,20.4
+35683539593,2026-09-22,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,14.42
+35683539593,2026-09-22,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.8
+35683539593,2026-09-22,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,17.62
+35683539593,2026-09-22,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,13.02
+35683539593,2026-09-22,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,15.13
+35683539593,2026-09-22,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,9.82
+35683539593,2026-09-22,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,16.37
+35683539593,2026-09-22,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,12.62
+35683539593,2026-09-22,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.67
+35683539593,2026-09-22,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,22.77
+35683539593,2026-09-22,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,13.27
+35683539593,2026-09-22,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,14.73
+35683539593,2026-09-22,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,13.25
+35683539593,2026-09-22,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.87
+35683539593,2026-09-22,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.8
+35683539593,2026-09-22,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,15.95
+35683539593,2026-09-22,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.53
+35683539593,2026-09-22,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,22.17
+35683539593,2026-09-22,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.07
+35683539593,2026-09-22,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.42
+35683539593,2026-09-22,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.97
+35683539593,2026-09-22,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.68
+35683539593,2026-09-22,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,21.22
+35683539593,2026-09-22,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,22.3
+35683539593,2026-09-22,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,12.2
+35683539593,2026-09-22,schedule,Nightly full-mode summary,success,0.05
+35756657364,2026-09-22,workflow_dispatch,"Stress suite (nightly-only,",success,4.73
+35756657364,2026-09-22,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,9.07
+35756657364,2026-09-22,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.28
+35756657364,2026-09-22,workflow_dispatch,"Performance suite (nightly-only,",failure,23.38
+35756657364,2026-09-22,workflow_dispatch,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,2.73
+35756657364,2026-09-22,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,16.8
+35756657364,2026-09-22,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,20.82
+35756657364,2026-09-22,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,21.17
+35756657364,2026-09-22,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.35
+35756657364,2026-09-22,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,27.75
+35756657364,2026-09-22,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,14.73
+35756657364,2026-09-22,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.37
+35756657364,2026-09-22,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,12.87
+35756657364,2026-09-22,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.53
+35756657364,2026-09-22,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.65
+35756657364,2026-09-22,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.2
+35756657364,2026-09-22,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.5
+35756657364,2026-09-22,workflow_dispatch,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,5.33
+35756657364,2026-09-22,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,22.25
+35756657364,2026-09-22,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,15.98
+35756657364,2026-09-22,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,22.33
+35756657364,2026-09-22,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,19.32
+35756657364,2026-09-22,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,24.5
+35756657364,2026-09-22,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,9.82
+35756657364,2026-09-22,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,15.35
+35756657364,2026-09-22,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,31.22
+35756657364,2026-09-22,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,14.62
+35756657364,2026-09-22,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,22.33
+35756657364,2026-09-22,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,24.6
+35756657364,2026-09-22,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.02
+35756657364,2026-09-22,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,11.47
+35756657364,2026-09-22,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.73
+35756657364,2026-09-22,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,12.73
+35756657364,2026-09-22,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,13.58
+35756657364,2026-09-22,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,15.57
+35756657364,2026-09-22,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,20.87
+35756657364,2026-09-22,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.6
+35756657364,2026-09-22,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.15
+35756657364,2026-09-22,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,16.78
+35756657364,2026-09-22,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,12.42
+35756657364,2026-09-22,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.95
+35756657364,2026-09-22,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.78
+35756657364,2026-09-22,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.72
+35756657364,2026-09-22,workflow_dispatch,Nightly full-mode summary,success,0.03
+35778042008,2026-09-22,workflow_dispatch,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",cancelled,55.02
+35778042008,2026-09-22,workflow_dispatch,"Performance + heavy e2e + stress (nightly-only,",cancelled,61.85
+35778042008,2026-09-22,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.28
+35778042008,2026-09-22,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.52
+35778042008,2026-09-22,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,20.08
+35778042008,2026-09-22,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.4
+35778042008,2026-09-22,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.62
+35778042008,2026-09-22,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,20.0
+35778042008,2026-09-22,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,22.47
+35778042008,2026-09-22,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,21.25
+35778042008,2026-09-22,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,22.27
+35778042008,2026-09-22,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,7.45
+35778042008,2026-09-22,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.05
+35778042008,2026-09-22,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,15.08
+35778042008,2026-09-22,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.17
+35778042008,2026-09-22,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,9.43
+35778042008,2026-09-22,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.7
+35778042008,2026-09-22,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.87
+35778042008,2026-09-22,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,18.63
+35778042008,2026-09-22,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,18.62
+35778042008,2026-09-22,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,11.83
+35778042008,2026-09-22,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,11.95
+35778042008,2026-09-22,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,27.43
+35778042008,2026-09-22,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,11.32
+35778042008,2026-09-22,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,27.77
+35778042008,2026-09-22,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,19.55
+35778042008,2026-09-22,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.63
+35778042008,2026-09-22,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,14.27
+35778042008,2026-09-22,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.98
+35778042008,2026-09-22,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,23.2
+35778042008,2026-09-22,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,20.73
+35778042008,2026-09-22,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.65
+35778042008,2026-09-22,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,15.25
+35778042008,2026-09-22,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,31.55
+35778042008,2026-09-22,workflow_dispatch,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.1
+35778042008,2026-09-22,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,3.13
+35778042008,2026-09-22,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,13.6
+35778042008,2026-09-22,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,23.27
+35778042008,2026-09-22,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,3.18
+35778042008,2026-09-22,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.22
+35778042008,2026-09-22,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,24.9
+35778042008,2026-09-22,workflow_dispatch,Nightly full-mode summary,success,0.05
+35781833461,2026-09-22,workflow_dispatch,"Performance suite (nightly-only,",failure,21.63
+35781833461,2026-09-22,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.27
+35781833461,2026-09-22,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,5.7
+35781833461,2026-09-22,workflow_dispatch,"Stress suite (nightly-only,",success,3.72
+35781833461,2026-09-22,workflow_dispatch,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,3.23
+35781833461,2026-09-22,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,15.08
+35781833461,2026-09-22,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,20.52
+35781833461,2026-09-22,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,27.18
+35781833461,2026-09-22,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.7
+35781833461,2026-09-22,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,8.03
+35781833461,2026-09-22,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,29.18
+35781833461,2026-09-22,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.5
+35781833461,2026-09-22,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,19.78
+35781833461,2026-09-22,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,12.5
+35781833461,2026-09-22,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,12.3
+35781833461,2026-09-22,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,16.03
+35781833461,2026-09-22,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.55
+35781833461,2026-09-22,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,20.68
+35781833461,2026-09-22,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.65
+35781833461,2026-09-22,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,20.73
+35781833461,2026-09-22,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,22.5
+35781833461,2026-09-22,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.67
+35781833461,2026-09-22,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.57
+35781833461,2026-09-22,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.9
+35781833461,2026-09-22,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,17.92
+35781833461,2026-09-22,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,12.4
+35781833461,2026-09-22,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,20.42
+35781833461,2026-09-22,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.45
+35781833461,2026-09-22,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,15.92
+35781833461,2026-09-22,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,29.95
+35781833461,2026-09-22,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,13.97
+35781833461,2026-09-22,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,2.65
+35781833461,2026-09-22,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,15.6
+35781833461,2026-09-22,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,20.97
+35781833461,2026-09-22,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,18.22
+35781833461,2026-09-22,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,15.97
+35781833461,2026-09-22,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.03
+35781833461,2026-09-22,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.77
+35781833461,2026-09-22,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,12.73
+35781833461,2026-09-22,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.43
+35781833461,2026-09-22,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.77
+35781833461,2026-09-22,workflow_dispatch,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.43
+35781833461,2026-09-22,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,5.53
+35781833461,2026-09-22,workflow_dispatch,Nightly full-mode summary,success,0.07
+35788021368,2026-09-22,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.25
+35788021368,2026-09-22,workflow_dispatch,"Performance + heavy e2e + stress (nightly-only,",cancelled,65.0
+35788021368,2026-09-22,workflow_dispatch,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",cancelled,55.0
+35788021368,2026-09-22,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,22.93
+35788021368,2026-09-22,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.72
+35788021368,2026-09-22,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,20.62
+35788021368,2026-09-22,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,26.52
+35788021368,2026-09-22,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,11.48
+35788021368,2026-09-22,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,20.48
+35788021368,2026-09-22,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.58
+35788021368,2026-09-22,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,16.78
+35788021368,2026-09-22,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.32
+35788021368,2026-09-22,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,16.12
+35788021368,2026-09-22,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,19.23
+35788021368,2026-09-22,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,10.63
+35788021368,2026-09-22,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,27.65
+35788021368,2026-09-22,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.55
+35788021368,2026-09-22,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,19.3
+35788021368,2026-09-22,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,15.43
+35788021368,2026-09-22,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,24.47
+35788021368,2026-09-22,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.5
+35788021368,2026-09-22,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,20.43
+35788021368,2026-09-22,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,22.92
+35788021368,2026-09-22,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,19.15
+35788021368,2026-09-22,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.77
+35788021368,2026-09-22,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,12.38
+35788021368,2026-09-22,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,12.58
+35788021368,2026-09-22,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.97
+35788021368,2026-09-22,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.32
+35788021368,2026-09-22,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,17.28
+35788021368,2026-09-22,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.8
+35788021368,2026-09-22,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,10.42
+35788021368,2026-09-22,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,26.65
+35788021368,2026-09-22,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.8
+35788021368,2026-09-22,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,15.82
+35788021368,2026-09-22,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.28
+35788021368,2026-09-22,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,13.17
+35788021368,2026-09-22,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,15.53
+35788021368,2026-09-22,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.58
+35788021368,2026-09-22,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.02
+35788021368,2026-09-22,workflow_dispatch,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,6.43
+35788021368,2026-09-22,workflow_dispatch,Nightly full-mode summary,success,0.07
+35814752502,2026-09-23,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",failure,3.3
+35814752502,2026-09-23,schedule,Generate full module-shard matrix (nightly-only),success,0.22
+35814752502,2026-09-23,schedule,"Performance + heavy e2e + stress (nightly-only,",cancelled,65.0
+35814752502,2026-09-23,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,12.32
+35814752502,2026-09-23,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.9
+35814752502,2026-09-23,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.95
+35814752502,2026-09-23,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.02
+35814752502,2026-09-23,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.8
+35814752502,2026-09-23,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.52
+35814752502,2026-09-23,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,19.97
+35814752502,2026-09-23,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.8
+35814752502,2026-09-23,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,13.08
+35814752502,2026-09-23,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,25.8
+35814752502,2026-09-23,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,21.57
+35814752502,2026-09-23,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,15.88
+35814752502,2026-09-23,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.67
+35814752502,2026-09-23,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,31.62
+35814752502,2026-09-23,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,27.13
+35814752502,2026-09-23,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.43
+35814752502,2026-09-23,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.92
+35814752502,2026-09-23,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,13.38
+35814752502,2026-09-23,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,15.42
+35814752502,2026-09-23,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,9.57
+35814752502,2026-09-23,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,17.75
+35814752502,2026-09-23,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,19.57
+35814752502,2026-09-23,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.55
+35814752502,2026-09-23,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.82
+35814752502,2026-09-23,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.85
+35814752502,2026-09-23,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,4.37
+35814752502,2026-09-23,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,25.03
+35814752502,2026-09-23,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.67
+35814752502,2026-09-23,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,24.78
+35814752502,2026-09-23,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,21.45
+35814752502,2026-09-23,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,18.98
+35814752502,2026-09-23,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,24.27
+35814752502,2026-09-23,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.53
+35814752502,2026-09-23,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,20.62
+35814752502,2026-09-23,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,20.22
+35814752502,2026-09-23,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,9.45
+35814752502,2026-09-23,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,11.52
+35814752502,2026-09-23,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,21.95
+35814752502,2026-09-23,schedule,Nightly full-mode summary,success,0.03
+35951855217,2026-09-24,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",cancelled,55.0
+35951855217,2026-09-24,schedule,Generate full module-shard matrix (nightly-only),success,0.28
+35951855217,2026-09-24,schedule,"Stress suite (nightly-only,",success,5.08
+35951855217,2026-09-24,schedule,"Heavy e2e suite (nightly-only,",success,6.87
+35951855217,2026-09-24,schedule,"Performance suite (nightly-only,",failure,17.87
+35951855217,2026-09-24,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.85
+35951855217,2026-09-24,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,10.63
+35951855217,2026-09-24,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,5.32
+35951855217,2026-09-24,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,17.75
+35951855217,2026-09-24,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,14.0
+35951855217,2026-09-24,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,13.45
+35951855217,2026-09-24,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,3.27
+35951855217,2026-09-24,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,21.97
+35951855217,2026-09-24,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,14.32
+35951855217,2026-09-24,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,18.27
+35951855217,2026-09-24,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,22.93
+35951855217,2026-09-24,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,13.37
+35951855217,2026-09-24,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,28.67
+35951855217,2026-09-24,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,5.67
+35951855217,2026-09-24,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.62
+35951855217,2026-09-24,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,27.65
+35951855217,2026-09-24,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,26.73
+35951855217,2026-09-24,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,2.98
+35951855217,2026-09-24,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.7
+35951855217,2026-09-24,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,3.08
+35951855217,2026-09-24,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.4
+35951855217,2026-09-24,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.95
+35951855217,2026-09-24,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,15.42
+35951855217,2026-09-24,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,6.22
+35951855217,2026-09-24,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,15.97
+35951855217,2026-09-24,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,21.95
+35951855217,2026-09-24,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,29.38
+35951855217,2026-09-24,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.45
+35951855217,2026-09-24,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,8.07
+35951855217,2026-09-24,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.25
+35951855217,2026-09-24,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.68
+35951855217,2026-09-24,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,18.12
+35951855217,2026-09-24,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,8.03
+35951855217,2026-09-24,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,15.8
+35951855217,2026-09-24,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.8
+35951855217,2026-09-24,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,8.47
+35951855217,2026-09-24,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,10.93
+35951855217,2026-09-24,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.67
+35951855217,2026-09-24,schedule,Nightly full-mode summary,success,0.03
+36090712443,2026-09-25,schedule,"Stress suite (nightly-only,",success,5.22
+36090712443,2026-09-25,schedule,"Performance suite (nightly-only,",failure,16.63
+36090712443,2026-09-25,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",cancelled,55.0
+36090712443,2026-09-25,schedule,Generate full module-shard matrix (nightly-only),success,0.33
+36090712443,2026-09-25,schedule,"Heavy e2e suite (nightly-only,",success,7.08
+36090712443,2026-09-25,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,4.03
+36090712443,2026-09-25,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,27.33
+36090712443,2026-09-25,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,22.88
+36090712443,2026-09-25,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,17.83
+36090712443,2026-09-25,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,8.57
+36090712443,2026-09-25,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.8
+36090712443,2026-09-25,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.7
+36090712443,2026-09-25,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,12.0
+36090712443,2026-09-25,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,11.35
+36090712443,2026-09-25,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.42
+36090712443,2026-09-25,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,13.62
+36090712443,2026-09-25,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,23.37
+36090712443,2026-09-25,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.78
+36090712443,2026-09-25,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,17.4
+36090712443,2026-09-25,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,15.4
+36090712443,2026-09-25,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,17.33
+36090712443,2026-09-25,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.05
+36090712443,2026-09-25,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,10.17
+36090712443,2026-09-25,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,28.0
+36090712443,2026-09-25,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,14.83
+36090712443,2026-09-25,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,14.95
+36090712443,2026-09-25,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,15.92
+36090712443,2026-09-25,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,6.57
+36090712443,2026-09-25,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,9.97
+36090712443,2026-09-25,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.2
+36090712443,2026-09-25,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,27.58
+36090712443,2026-09-25,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,15.05
+36090712443,2026-09-25,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.35
+36090712443,2026-09-25,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,18.32
+36090712443,2026-09-25,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.28
+36090712443,2026-09-25,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,7.48
+36090712443,2026-09-25,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.38
+36090712443,2026-09-25,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.78
+36090712443,2026-09-25,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.05
+36090712443,2026-09-25,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,22.98
+36090712443,2026-09-25,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,8.88
+36090712443,2026-09-25,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.9
+36090712443,2026-09-25,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,28.83
+36090712443,2026-09-25,schedule,Nightly full-mode summary,success,0.03
+36215053547,2026-09-26,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",cancelled,55.02
+36215053547,2026-09-26,schedule,"Performance suite (nightly-only,",failure,23.72
+36215053547,2026-09-26,schedule,"Stress suite (nightly-only,",success,5.17
+36215053547,2026-09-26,schedule,"Heavy e2e suite (nightly-only,",success,7.02
+36215053547,2026-09-26,schedule,Generate full module-shard matrix (nightly-only),success,0.3
+36215053547,2026-09-26,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,9.67
+36215053547,2026-09-26,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.87
+36215053547,2026-09-26,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,8.37
+36215053547,2026-09-26,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,27.85
+36215053547,2026-09-26,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,3.72
+36215053547,2026-09-26,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,15.37
+36215053547,2026-09-26,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,18.2
+36215053547,2026-09-26,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,2.9
+36215053547,2026-09-26,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,29.1
+36215053547,2026-09-26,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.47
+36215053547,2026-09-26,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,3.05
+36215053547,2026-09-26,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,29.17
+36215053547,2026-09-26,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.7
+36215053547,2026-09-26,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,8.18
+36215053547,2026-09-26,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.27
+36215053547,2026-09-26,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.37
+36215053547,2026-09-26,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,14.62
+36215053547,2026-09-26,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,6.2
+36215053547,2026-09-26,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,5.65
+36215053547,2026-09-26,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,22.33
+36215053547,2026-09-26,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,9.52
+36215053547,2026-09-26,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,27.77
+36215053547,2026-09-26,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,15.45
+36215053547,2026-09-26,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,11.37
+36215053547,2026-09-26,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,9.77
+36215053547,2026-09-26,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,16.77
+36215053547,2026-09-26,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.73
+36215053547,2026-09-26,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.07
+36215053547,2026-09-26,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,3.88
+36215053547,2026-09-26,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,15.12
+36215053547,2026-09-26,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,24.08
+36215053547,2026-09-26,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,23.35
+36215053547,2026-09-26,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,13.43
+36215053547,2026-09-26,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,18.2
+36215053547,2026-09-26,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,29.55
+36215053547,2026-09-26,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.83
+36215053547,2026-09-26,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,12.13
+36215053547,2026-09-26,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.28
+36215053547,2026-09-26,schedule,Nightly full-mode summary,success,0.05
+36225024230,2026-09-26,workflow_dispatch,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",cancelled,55.0
+36225024230,2026-09-26,workflow_dispatch,"Stress suite (nightly-only,",success,4.43
+36225024230,2026-09-26,workflow_dispatch,"Integration + next suite (nightly-only,",failure,8.52
+36225024230,2026-09-26,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.22
+36225024230,2026-09-26,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,5.62
+36225024230,2026-09-26,workflow_dispatch,"Performance suite (nightly-only,",failure,22.68
+36225024230,2026-09-26,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.42
+36225024230,2026-09-26,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.67
+36225024230,2026-09-26,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.55
+36225024230,2026-09-26,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,8.25
+36225024230,2026-09-26,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,5.78
+36225024230,2026-09-26,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,28.47
+36225024230,2026-09-26,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,5.4
+36225024230,2026-09-26,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,18.63
+36225024230,2026-09-26,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.65
+36225024230,2026-09-26,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,11.22
+36225024230,2026-09-26,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,11.47
+36225024230,2026-09-26,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,14.7
+36225024230,2026-09-26,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,19.02
+36225024230,2026-09-26,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.68
+36225024230,2026-09-26,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,16.7
+36225024230,2026-09-26,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,17.17
+36225024230,2026-09-26,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,13.47
+36225024230,2026-09-26,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,10.77
+36225024230,2026-09-26,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.83
+36225024230,2026-09-26,workflow_dispatch,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,14.28
+36225024230,2026-09-26,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.08
+36225024230,2026-09-26,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.78
+36225024230,2026-09-26,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.32
+36225024230,2026-09-26,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,5.8
+36225024230,2026-09-26,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.7
+36225024230,2026-09-26,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.65
+36225024230,2026-09-26,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,3.73
+36225024230,2026-09-26,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,28.25
+36225024230,2026-09-26,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,23.22
+36225024230,2026-09-26,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,27.63
+36225024230,2026-09-26,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,11.95
+36225024230,2026-09-26,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,29.18
+36225024230,2026-09-26,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,13.72
+36225024230,2026-09-26,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,15.47
+36225024230,2026-09-26,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,15.5
+36225024230,2026-09-26,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.55
+36225024230,2026-09-26,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,24.05
+36225024230,2026-09-26,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,19.07
+36225024230,2026-09-26,workflow_dispatch,Nightly full-mode summary,success,0.03
+36291778285,2026-09-27,schedule,"Stress suite (nightly-only,",success,5.07
+36291778285,2026-09-27,schedule,"Performance suite (nightly-only,",failure,25.92
+36291778285,2026-09-27,schedule,Generate full module-shard matrix (nightly-only),success,0.27
+36291778285,2026-09-27,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",cancelled,55.0
+36291778285,2026-09-27,schedule,"Integration + next suite (nightly-only,",failure,7.65
+36291778285,2026-09-27,schedule,"Heavy e2e suite (nightly-only,",success,7.15
+36291778285,2026-09-27,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,10.88
+36291778285,2026-09-27,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,24.05
+36291778285,2026-09-27,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,9.93
+36291778285,2026-09-27,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.38
+36291778285,2026-09-27,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.4
+36291778285,2026-09-27,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,25.23
+36291778285,2026-09-27,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,11.68
+36291778285,2026-09-27,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,7.2
+36291778285,2026-09-27,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.45
+36291778285,2026-09-27,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,7.18
+36291778285,2026-09-27,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,26.07
+36291778285,2026-09-27,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.28
+36291778285,2026-09-27,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.63
+36291778285,2026-09-27,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,7.72
+36291778285,2026-09-27,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,17.12
+36291778285,2026-09-27,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.73
+36291778285,2026-09-27,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,15.52
+36291778285,2026-09-27,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.82
+36291778285,2026-09-27,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.67
+36291778285,2026-09-27,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,14.92
+36291778285,2026-09-27,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,15.15
+36291778285,2026-09-27,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,4.83
+36291778285,2026-09-27,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,17.83
+36291778285,2026-09-27,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,17.68
+36291778285,2026-09-27,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,26.65
+36291778285,2026-09-27,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,16.38
+36291778285,2026-09-27,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,14.02
+36291778285,2026-09-27,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.88
+36291778285,2026-09-27,schedule,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,19.67
+36291778285,2026-09-27,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,18.28
+36291778285,2026-09-27,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.65
+36291778285,2026-09-27,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.07
+36291778285,2026-09-27,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.65
+36291778285,2026-09-27,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,5.8
+36291778285,2026-09-27,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,23.25
+36291778285,2026-09-27,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,17.62
+36291778285,2026-09-27,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,15.55
+36291778285,2026-09-27,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.87
+36291778285,2026-09-27,schedule,Nightly full-mode summary,success,0.03
+36294808024,2026-09-27,workflow_dispatch,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,12.45
+36294808024,2026-09-27,workflow_dispatch,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,7.58
+36294808024,2026-09-27,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,6.95
+36294808024,2026-09-27,workflow_dispatch,"Performance suite (nightly-only,",failure,25.87
+36294808024,2026-09-27,workflow_dispatch,"Stress suite (nightly-only,",success,4.32
+36294808024,2026-09-27,workflow_dispatch,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",cancelled,49.68
+36294808024,2026-09-27,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.23
+36294808024,2026-09-27,workflow_dispatch,"Integration + next suite (nightly-only,",failure,8.47
+36294808024,2026-09-27,workflow_dispatch,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,17.83
+36294808024,2026-09-27,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,10.88
+36294808024,2026-09-27,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.73
+36294808024,2026-09-27,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.73
+36294808024,2026-09-27,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,23.63
+36294808024,2026-09-27,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,5.8
+36294808024,2026-09-27,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.8
+36294808024,2026-09-27,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,17.72
+36294808024,2026-09-27,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,14.63
+36294808024,2026-09-27,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,5.78
+36294808024,2026-09-27,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.28
+36294808024,2026-09-27,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,12.97
+36294808024,2026-09-27,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.67
+36294808024,2026-09-27,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.47
+36294808024,2026-09-27,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,12.43
+36294808024,2026-09-27,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,29.73
+36294808024,2026-09-27,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,7.53
+36294808024,2026-09-27,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,10.75
+36294808024,2026-09-27,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.85
+36294808024,2026-09-27,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,25.3
+36294808024,2026-09-27,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.17
+36294808024,2026-09-27,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,11.05
+36294808024,2026-09-27,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,9.87
+36294808024,2026-09-27,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,4.42
+36294808024,2026-09-27,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,17.27
+36294808024,2026-09-27,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,8.27
+36294808024,2026-09-27,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,24.75
+36294808024,2026-09-27,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.08
+36294808024,2026-09-27,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,29.75
+36294808024,2026-09-27,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.95
+36294808024,2026-09-27,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.77
+36294808024,2026-09-27,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,27.82
+36294808024,2026-09-27,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,28.4
+36294808024,2026-09-27,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,10.28
+36294808024,2026-09-27,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,15.47
+36294808024,2026-09-27,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,24.6
+36294808024,2026-09-27,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,13.73
+36294808024,2026-09-27,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.83
+36294808024,2026-09-27,workflow_dispatch,Nightly full-mode summary,success,0.03
+36300726806,2026-09-27,workflow_dispatch,"Stress suite (nightly-only,",success,4.27
+36300726806,2026-09-27,workflow_dispatch,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,11.22
+36300726806,2026-09-27,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,7.38
+36300726806,2026-09-27,workflow_dispatch,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,17.9
+36300726806,2026-09-27,workflow_dispatch,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,22.9
+36300726806,2026-09-27,workflow_dispatch,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,9.95
+36300726806,2026-09-27,workflow_dispatch,"Performance suite (nightly-only,",failure,26.17
+36300726806,2026-09-27,workflow_dispatch,"Integration + next suite (nightly-only,",failure,6.7
+36300726806,2026-09-27,workflow_dispatch,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",failure,13.2
+36300726806,2026-09-27,workflow_dispatch,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,7.0
+36300726806,2026-09-27,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.25
+36300726806,2026-09-27,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,27.43
+36300726806,2026-09-27,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,7.7
+36300726806,2026-09-27,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,20.73
+36300726806,2026-09-27,workflow_dispatch,module-tests (merge shard 1/1) [nightly full] / module-tests (merge shard 1/1),success,14.15
+36300726806,2026-09-27,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,11.13
+36300726806,2026-09-27,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,10.77
+36300726806,2026-09-27,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.7
+36300726806,2026-09-27,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,8.07
+36300726806,2026-09-27,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,16.1
+36300726806,2026-09-27,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.6
+36300726806,2026-09-27,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,25.38
+36300726806,2026-09-27,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,18.48
+36300726806,2026-09-27,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,15.05
+36300726806,2026-09-27,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,12.63
+36300726806,2026-09-27,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,3.6
+36300726806,2026-09-27,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.6
+36300726806,2026-09-27,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.67
+36300726806,2026-09-27,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.65
+36300726806,2026-09-27,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.62
+36300726806,2026-09-27,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,6.42
+36300726806,2026-09-27,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.83
+36300726806,2026-09-27,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,8.45
+36300726806,2026-09-27,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,8.58
+36300726806,2026-09-27,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.65
+36300726806,2026-09-27,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,17.82
+36300726806,2026-09-27,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.33
+36300726806,2026-09-27,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,4.62
+36300726806,2026-09-27,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,11.48
+36300726806,2026-09-27,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,29.82
+36300726806,2026-09-27,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,15.1
+36300726806,2026-09-27,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.83
+36300726806,2026-09-27,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,12.1
+36300726806,2026-09-27,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,17.33
+36300726806,2026-09-27,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.93
+36300726806,2026-09-27,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,29.85
+36300726806,2026-09-27,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,27.48
+36300726806,2026-09-27,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,9.7
+36300726806,2026-09-27,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,17.35
+36300726806,2026-09-27,workflow_dispatch,Nightly full-mode summary,success,0.05
+36374561241,2026-09-28,schedule,"Interpreter matrix (Python 3.13, nightly-only, FR-021)",cancelled,55.0
+36374561241,2026-09-28,schedule,"Stress suite (nightly-only,",success,5.12
+36374561241,2026-09-28,schedule,"Performance suite (nightly-only,",failure,27.25
+36374561241,2026-09-28,schedule,"Integration + next suite (nightly-only,",failure,7.15
+36374561241,2026-09-28,schedule,Generate full module-shard matrix (nightly-only),success,0.23
+36374561241,2026-09-28,schedule,"specify_cli out-of-matrix trees (nightly-only,",failure,30.92
+36374561241,2026-09-28,schedule,"Heavy e2e suite (nightly-only,",success,6.98
+36374561241,2026-09-28,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,19.18
+36374561241,2026-09-28,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.55
+36374561241,2026-09-28,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,7.42
+36374561241,2026-09-28,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.77
+36374561241,2026-09-28,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,4.33
+36374561241,2026-09-28,schedule,module-tests (consolidation shard 1/1) [nightly full] / module-tests (consolidation shard 1/1),success,21.4
+36374561241,2026-09-28,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,17.03
+36374561241,2026-09-28,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,25.53
+36374561241,2026-09-28,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,3.2
+36374561241,2026-09-28,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,14.57
+36374561241,2026-09-28,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,10.4
+36374561241,2026-09-28,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.37
+36374561241,2026-09-28,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,6.13
+36374561241,2026-09-28,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,15.17
+36374561241,2026-09-28,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.8
+36374561241,2026-09-28,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,5.83
+36374561241,2026-09-28,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,15.85
+36374561241,2026-09-28,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,13.82
+36374561241,2026-09-28,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.97
+36374561241,2026-09-28,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,14.38
+36374561241,2026-09-28,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.82
+36374561241,2026-09-28,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.28
+36374561241,2026-09-28,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.82
+36374561241,2026-09-28,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,6.02
+36374561241,2026-09-28,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,11.18
+36374561241,2026-09-28,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,30.77
+36374561241,2026-09-28,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,16.53
+36374561241,2026-09-28,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,26.38
+36374561241,2026-09-28,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,8.05
+36374561241,2026-09-28,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.73
+36374561241,2026-09-28,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,28.2
+36374561241,2026-09-28,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,15.82
+36374561241,2026-09-28,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,16.47
+36374561241,2026-09-28,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,17.72
+36374561241,2026-09-28,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,23.2
+36374561241,2026-09-28,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,13.87
+36374561241,2026-09-28,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,23.0
+36374561241,2026-09-28,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,9.0
+36374561241,2026-09-28,schedule,Nightly full-mode summary,success,0.05
+36393904544,2026-09-28,workflow_dispatch,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,13.17
+36393904544,2026-09-28,workflow_dispatch,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",failure,6.07
+36393904544,2026-09-28,workflow_dispatch,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",failure,10.58
+36393904544,2026-09-28,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.25
+36393904544,2026-09-28,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,7.32
+36393904544,2026-09-28,workflow_dispatch,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,11.15
+36393904544,2026-09-28,workflow_dispatch,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,12.98
+36393904544,2026-09-28,workflow_dispatch,"specify_cli out-of-matrix trees (nightly-only,",failure,31.2
+36393904544,2026-09-28,workflow_dispatch,"Integration + next suite (nightly-only,",failure,8.77
+36393904544,2026-09-28,workflow_dispatch,"Stress suite (nightly-only,",success,5.72
+36393904544,2026-09-28,workflow_dispatch,"Performance suite (nightly-only,",failure,26.93
+36393904544,2026-09-28,workflow_dispatch,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,22.07
+36393904544,2026-09-28,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,15.63
+36393904544,2026-09-28,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.38
+36393904544,2026-09-28,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.8
+36393904544,2026-09-28,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,18.22
+36393904544,2026-09-28,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,17.62
+36393904544,2026-09-28,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.75
+36393904544,2026-09-28,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,30.53
+36393904544,2026-09-28,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.1
+36393904544,2026-09-28,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,4.15
+36393904544,2026-09-28,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,5.82
+36393904544,2026-09-28,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,10.77
+36393904544,2026-09-28,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.43
+36393904544,2026-09-28,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,17.35
+36393904544,2026-09-28,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.6
+36393904544,2026-09-28,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,23.17
+36393904544,2026-09-28,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,12.72
+36393904544,2026-09-28,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.38
+36393904544,2026-09-28,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,10.87
+36393904544,2026-09-28,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,16.67
+36393904544,2026-09-28,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,3.85
+36393904544,2026-09-28,workflow_dispatch,module-tests (consolidation shard 1/1) [nightly full] / module-tests (consolidation shard 1/1),success,19.58
+36393904544,2026-09-28,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,25.47
+36393904544,2026-09-28,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,28.67
+36393904544,2026-09-28,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,8.23
+36393904544,2026-09-28,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,25.9
+36393904544,2026-09-28,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,13.83
+36393904544,2026-09-28,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,6.6
+36393904544,2026-09-28,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,18.68
+36393904544,2026-09-28,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,13.88
+36393904544,2026-09-28,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,8.82
+36393904544,2026-09-28,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,26.67
+36393904544,2026-09-28,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,9.92
+36393904544,2026-09-28,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,10.05
+36393904544,2026-09-28,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,22.93
+36393904544,2026-09-28,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.93
+36393904544,2026-09-28,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.83
+36393904544,2026-09-28,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,23.62
+36393904544,2026-09-28,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.55
+36393904544,2026-09-28,workflow_dispatch,Nightly full-mode summary,success,0.03
+36482214935,2026-09-28,workflow_dispatch,"Stress suite (nightly-only,",success,5.4
+36482214935,2026-09-28,workflow_dispatch,"Performance suite (nightly-only,",failure,20.8
+36482214935,2026-09-28,workflow_dispatch,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,13.0
+36482214935,2026-09-28,workflow_dispatch,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,19.38
+36482214935,2026-09-28,workflow_dispatch,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",failure,23.32
+36482214935,2026-09-28,workflow_dispatch,"specify_cli out-of-matrix trees (nightly-only,",failure,36.95
+36482214935,2026-09-28,workflow_dispatch,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",success,14.6
+36482214935,2026-09-28,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.25
+36482214935,2026-09-28,workflow_dispatch,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",failure,7.85
+36482214935,2026-09-28,workflow_dispatch,"Integration + next suite (nightly-only,",failure,8.7
+36482214935,2026-09-28,workflow_dispatch,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,13.17
+36482214935,2026-09-28,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,7.53
+36482214935,2026-09-28,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.9
+36482214935,2026-09-28,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,23.62
+36482214935,2026-09-28,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.2
+36482214935,2026-09-28,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,31.62
+36482214935,2026-09-28,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,24.88
+36482214935,2026-09-28,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,21.3
+36482214935,2026-09-28,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.23
+36482214935,2026-09-28,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,13.0
+36482214935,2026-09-28,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,4.62
+36482214935,2026-09-28,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,3.57
+36482214935,2026-09-28,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.75
+36482214935,2026-09-28,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,18.25
+36482214935,2026-09-28,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,8.53
+36482214935,2026-09-28,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,9.72
+36482214935,2026-09-28,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,11.0
+36482214935,2026-09-28,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,24.75
+36482214935,2026-09-28,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.93
+36482214935,2026-09-28,workflow_dispatch,module-tests (consolidation shard 1/1) [nightly full] / module-tests (consolidation shard 1/1),success,17.13
+36482214935,2026-09-28,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,6.53
+36482214935,2026-09-28,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.83
+36482214935,2026-09-28,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,9.62
+36482214935,2026-09-28,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,16.37
+36482214935,2026-09-28,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,12.77
+36482214935,2026-09-28,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,6.08
+36482214935,2026-09-28,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.83
+36482214935,2026-09-28,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,4.93
+36482214935,2026-09-28,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,17.67
+36482214935,2026-09-28,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,14.47
+36482214935,2026-09-28,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,11.05
+36482214935,2026-09-28,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,21.15
+36482214935,2026-09-28,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,27.65
+36482214935,2026-09-28,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,13.98
+36482214935,2026-09-28,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.98
+36482214935,2026-09-28,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,18.98
+36482214935,2026-09-28,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,25.05
+36482214935,2026-09-28,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.65
+36482214935,2026-09-28,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,16.73
+36482214935,2026-09-28,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,8.1
+36482214935,2026-09-28,workflow_dispatch,Nightly full-mode summary,success,0.05
+36517786727,2026-09-29,schedule,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,19.62
+36517786727,2026-09-29,schedule,Generate full module-shard matrix (nightly-only),success,0.27
+36517786727,2026-09-29,schedule,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,13.5
+36517786727,2026-09-29,schedule,"Stress suite (nightly-only,",success,4.68
+36517786727,2026-09-29,schedule,"Heavy e2e suite (nightly-only,",success,6.03
+36517786727,2026-09-29,schedule,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",success,14.92
+36517786727,2026-09-29,schedule,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,12.92
+36517786727,2026-09-29,schedule,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",failure,16.97
+36517786727,2026-09-29,schedule,"specify_cli out-of-matrix trees (nightly-only,",failure,22.02
+36517786727,2026-09-29,schedule,"Integration + next suite (nightly-only,",failure,7.32
+36517786727,2026-09-29,schedule,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",failure,5.43
+36517786727,2026-09-29,schedule,"Performance suite (nightly-only,",success,18.33
+36517786727,2026-09-29,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,5.22
+36517786727,2026-09-29,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,16.5
+36517786727,2026-09-29,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.93
+36517786727,2026-09-29,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.03
+36517786727,2026-09-29,schedule,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,33.65
+36517786727,2026-09-29,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,19.08
+36517786727,2026-09-29,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.95
+36517786727,2026-09-29,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,15.08
+36517786727,2026-09-29,schedule,module-tests (consolidation shard 1/1) [nightly full] / module-tests (consolidation shard 1/1),success,12.35
+36517786727,2026-09-29,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,11.0
+36517786727,2026-09-29,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.85
+36517786727,2026-09-29,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,8.82
+36517786727,2026-09-29,schedule,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,24.28
+36517786727,2026-09-29,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,12.78
+36517786727,2026-09-29,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,10.25
+36517786727,2026-09-29,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,18.02
+36517786727,2026-09-29,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,19.22
+36517786727,2026-09-29,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,9.68
+36517786727,2026-09-29,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.78
+36517786727,2026-09-29,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,18.9
+36517786727,2026-09-29,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,16.7
+36517786727,2026-09-29,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,15.9
+36517786727,2026-09-29,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.63
+36517786727,2026-09-29,schedule,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,27.25
+36517786727,2026-09-29,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,12.77
+36517786727,2026-09-29,schedule,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,15.6
+36517786727,2026-09-29,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.63
+36517786727,2026-09-29,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,9.5
+36517786727,2026-09-29,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.1
+36517786727,2026-09-29,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,13.63
+36517786727,2026-09-29,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.98
+36517786727,2026-09-29,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,10.05
+36517786727,2026-09-29,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,24.57
+36517786727,2026-09-29,schedule,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,31.77
+36517786727,2026-09-29,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,3.02
+36517786727,2026-09-29,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,4.18
+36517786727,2026-09-29,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.83
+36517786727,2026-09-29,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.22
+36517786727,2026-09-29,schedule,Nightly full-mode summary,success,0.05
+36553997695,2026-09-29,workflow_dispatch,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",success,22.62
+36553997695,2026-09-29,workflow_dispatch,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",cancelled,20.55
+36553997695,2026-09-29,workflow_dispatch,"Performance suite (nightly-only,",success,18.52
+36553997695,2026-09-29,workflow_dispatch,"Stress suite (nightly-only,",success,5.8
+36553997695,2026-09-29,workflow_dispatch,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,12.8
+36553997695,2026-09-29,workflow_dispatch,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,14.37
+36553997695,2026-09-29,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.25
+36553997695,2026-09-29,workflow_dispatch,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",failure,9.37
+36553997695,2026-09-29,workflow_dispatch,"specify_cli out-of-matrix trees (nightly-only,",cancelled,45.42
+36553997695,2026-09-29,workflow_dispatch,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,7.42
+36553997695,2026-09-29,workflow_dispatch,"Integration + next suite (nightly-only,",success,9.18
+36553997695,2026-09-29,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,7.43
+36553997695,2026-09-29,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.92
+36553997695,2026-09-29,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,18.53
+36553997695,2026-09-29,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,18.13
+36553997695,2026-09-29,workflow_dispatch,module-tests (consolidation shard 1/1) [nightly full] / module-tests (consolidation shard 1/1),success,20.0
+36553997695,2026-09-29,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.63
+36553997695,2026-09-29,workflow_dispatch,module-tests (charter shard 2/5) [nightly full] / module-tests (charter shard 2/5),success,29.7
+36553997695,2026-09-29,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,12.43
+36553997695,2026-09-29,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.4
+36553997695,2026-09-29,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,5.22
+36553997695,2026-09-29,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.12
+36553997695,2026-09-29,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,6.85
+36553997695,2026-09-29,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,2.73
+36553997695,2026-09-29,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,2.98
+36553997695,2026-09-29,workflow_dispatch,module-tests (charter shard 1/5) [nightly full] / module-tests (charter shard 1/5),success,28.88
+36553997695,2026-09-29,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,14.92
+36553997695,2026-09-29,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,8.13
+36553997695,2026-09-29,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,12.45
+36553997695,2026-09-29,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.43
+36553997695,2026-09-29,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,17.37
+36553997695,2026-09-29,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,11.8
+36553997695,2026-09-29,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,17.52
+36553997695,2026-09-29,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,17.93
+36553997695,2026-09-29,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.1
+36553997695,2026-09-29,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,4.65
+36553997695,2026-09-29,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,9.33
+36553997695,2026-09-29,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,5.98
+36553997695,2026-09-29,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,14.08
+36553997695,2026-09-29,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.65
+36553997695,2026-09-29,workflow_dispatch,module-tests (charter shard 3/5) [nightly full] / module-tests (charter shard 3/5),success,29.68
+36553997695,2026-09-29,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,13.1
+36553997695,2026-09-29,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.82
+36553997695,2026-09-29,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,6.23
+36553997695,2026-09-29,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,10.9
+36553997695,2026-09-29,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,24.4
+36553997695,2026-09-29,workflow_dispatch,module-tests (charter shard 4/5) [nightly full] / module-tests (charter shard 4/5),success,14.33
+36553997695,2026-09-29,workflow_dispatch,module-tests (charter shard 5/5) [nightly full] / module-tests (charter shard 5/5),success,15.82
+36553997695,2026-09-29,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,13.77
+36553997695,2026-09-29,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,26.73
+36553997695,2026-09-29,workflow_dispatch,Nightly full-mode summary,success,0.05
+36665110744,2026-09-30,schedule,"Performance suite (nightly-only,",failure,22.42
+36665110744,2026-09-30,schedule,"Heavy e2e suite (nightly-only,",success,5.17
+36665110744,2026-09-30,schedule,"Stress suite (nightly-only,",success,5.05
+36665110744,2026-09-30,schedule,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,7.68
+36665110744,2026-09-30,schedule,Generate full module-shard matrix (nightly-only),success,0.32
+36665110744,2026-09-30,schedule,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,16.25
+36665110744,2026-09-30,schedule,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,29.92
+36665110744,2026-09-30,schedule,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,12.27
+36665110744,2026-09-30,schedule,"specify_cli out-of-matrix trees (nightly-only,",failure,46.7
+36665110744,2026-09-30,schedule,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,20.8
+36665110744,2026-09-30,schedule,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",success,15.15
+36665110744,2026-09-30,schedule,"Integration + next suite (nightly-only,",failure,7.28
+36665110744,2026-09-30,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.58
+36665110744,2026-09-30,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.38
+36665110744,2026-09-30,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.73
+36665110744,2026-09-30,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,5.18
+36665110744,2026-09-30,schedule,module-tests (charter shard 3/7) [nightly full] / module-tests (charter shard 3/7),success,17.45
+36665110744,2026-09-30,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,10.87
+36665110744,2026-09-30,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,24.43
+36665110744,2026-09-30,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,18.02
+36665110744,2026-09-30,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,14.52
+36665110744,2026-09-30,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,18.63
+36665110744,2026-09-30,schedule,module-tests (charter shard 7/7) [nightly full] / module-tests (charter shard 7/7),success,25.08
+36665110744,2026-09-30,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.98
+36665110744,2026-09-30,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,10.75
+36665110744,2026-09-30,schedule,module-tests (charter shard 6/7) [nightly full] / module-tests (charter shard 6/7),success,29.07
+36665110744,2026-09-30,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,3.23
+36665110744,2026-09-30,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,9.58
+36665110744,2026-09-30,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,17.27
+36665110744,2026-09-30,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,3.08
+36665110744,2026-09-30,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,26.63
+36665110744,2026-09-30,schedule,module-tests (consolidation shard 1/1) [nightly full] / module-tests (consolidation shard 1/1),success,42.63
+36665110744,2026-09-30,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.12
+36665110744,2026-09-30,schedule,module-tests (charter shard 2/7) [nightly full] / module-tests (charter shard 2/7),success,15.7
+36665110744,2026-09-30,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,12.68
+36665110744,2026-09-30,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,17.97
+36665110744,2026-09-30,schedule,module-tests (charter shard 1/7) [nightly full] / module-tests (charter shard 1/7),success,28.3
+36665110744,2026-09-30,schedule,module-tests (charter shard 5/7) [nightly full] / module-tests (charter shard 5/7),success,28.57
+36665110744,2026-09-30,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,5.58
+36665110744,2026-09-30,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,8.28
+36665110744,2026-09-30,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,8.82
+36665110744,2026-09-30,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,10.72
+36665110744,2026-09-30,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,24.55
+36665110744,2026-09-30,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,4.75
+36665110744,2026-09-30,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,3.08
+36665110744,2026-09-30,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.47
+36665110744,2026-09-30,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,6.23
+36665110744,2026-09-30,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.95
+36665110744,2026-09-30,schedule,module-tests (charter shard 4/7) [nightly full] / module-tests (charter shard 4/7),success,32.15
+36665110744,2026-09-30,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,6.2
+36665110744,2026-09-30,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,13.5
+36665110744,2026-09-30,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,16.58
+36665110744,2026-09-30,schedule,Nightly full-mode summary,success,0.05
+36811585861,2026-10-01,schedule,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,18.08
+36811585861,2026-10-01,schedule,"Performance suite (nightly-only,",failure,19.58
+36811585861,2026-10-01,schedule,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,23.63
+36811585861,2026-10-01,schedule,"Heavy e2e suite (nightly-only,",success,8.03
+36811585861,2026-10-01,schedule,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",failure,15.22
+36811585861,2026-10-01,schedule,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,9.93
+36811585861,2026-10-01,schedule,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",failure,8.15
+36811585861,2026-10-01,schedule,"Stress suite (nightly-only,",success,4.48
+36811585861,2026-10-01,schedule,"Integration + next suite (nightly-only,",failure,18.47
+36811585861,2026-10-01,schedule,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,23.95
+36811585861,2026-10-01,schedule,"specify_cli out-of-matrix trees (nightly-only,",failure,46.73
+36811585861,2026-10-01,schedule,Generate full module-shard matrix (nightly-only),success,0.35
+36811585861,2026-10-01,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,18.3
+36811585861,2026-10-01,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,8.02
+36811585861,2026-10-01,schedule,module-tests (charter shard 7/7) [nightly full] / module-tests (charter shard 7/7),success,30.37
+36811585861,2026-10-01,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,19.1
+36811585861,2026-10-01,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,26.55
+36811585861,2026-10-01,schedule,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,3.25
+36811585861,2026-10-01,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.35
+36811585861,2026-10-01,schedule,module-tests (charter shard 4/7) [nightly full] / module-tests (charter shard 4/7),success,30.27
+36811585861,2026-10-01,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.98
+36811585861,2026-10-01,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,17.12
+36811585861,2026-10-01,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,8.67
+36811585861,2026-10-01,schedule,module-tests (charter shard 2/7) [nightly full] / module-tests (charter shard 2/7),success,28.48
+36811585861,2026-10-01,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.22
+36811585861,2026-10-01,schedule,module-tests (charter shard 1/7) [nightly full] / module-tests (charter shard 1/7),success,31.3
+36811585861,2026-10-01,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,16.43
+36811585861,2026-10-01,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,8.47
+36811585861,2026-10-01,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,25.63
+36811585861,2026-10-01,schedule,module-tests (charter shard 6/7) [nightly full] / module-tests (charter shard 6/7),success,29.87
+36811585861,2026-10-01,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,7.8
+36811585861,2026-10-01,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,19.97
+36811585861,2026-10-01,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.87
+36811585861,2026-10-01,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,14.28
+36811585861,2026-10-01,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,3.07
+36811585861,2026-10-01,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,9.03
+36811585861,2026-10-01,schedule,module-tests (charter shard 5/7) [nightly full] / module-tests (charter shard 5/7),success,34.9
+36811585861,2026-10-01,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,3.03
+36811585861,2026-10-01,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,6.55
+36811585861,2026-10-01,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,26.48
+36811585861,2026-10-01,schedule,module-tests (charter shard 3/7) [nightly full] / module-tests (charter shard 3/7),success,21.88
+36811585861,2026-10-01,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.95
+36811585861,2026-10-01,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,11.07
+36811585861,2026-10-01,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,14.25
+36811585861,2026-10-01,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.35
+36811585861,2026-10-01,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,4.97
+36811585861,2026-10-01,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,18.13
+36811585861,2026-10-01,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,17.4
+36811585861,2026-10-01,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,10.28
+36811585861,2026-10-01,schedule,module-tests (consolidation shard 1/1) [nightly full] / module-tests (consolidation shard 1/1),success,21.38
+36811585861,2026-10-01,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,10.27
+36811585861,2026-10-01,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.67
+36811585861,2026-10-01,schedule,Nightly full-mode summary,success,0.05
+36920764277,2026-10-01,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,6.23
+36920764277,2026-10-01,workflow_dispatch,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,9.78
+36920764277,2026-10-01,workflow_dispatch,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,16.33
+36920764277,2026-10-01,workflow_dispatch,"Stress suite (nightly-only,",success,4.07
+36920764277,2026-10-01,workflow_dispatch,"Performance suite (nightly-only,",failure,18.23
+36920764277,2026-10-01,workflow_dispatch,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",success,8.97
+36920764277,2026-10-01,workflow_dispatch,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,6.42
+36920764277,2026-10-01,workflow_dispatch,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,10.22
+36920764277,2026-10-01,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.27
+36920764277,2026-10-01,workflow_dispatch,"Integration + next suite (nightly-only,",success,4.7
+36920764277,2026-10-01,workflow_dispatch,"Architectural battery backstop (nightly-only,",success,18.38
+36920764277,2026-10-01,workflow_dispatch,"specify_cli out-of-matrix trees (nightly-only,",failure,23.85
+36920764277,2026-10-01,workflow_dispatch,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,8.65
+36920764277,2026-10-01,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,9.37
+36920764277,2026-10-01,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,8.77
+36920764277,2026-10-01,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,6.3
+36920764277,2026-10-01,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.28
+36920764277,2026-10-01,workflow_dispatch,module-tests (charter shard 4/7) [nightly full] / module-tests (charter shard 4/7),success,17.67
+36920764277,2026-10-01,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,5.47
+36920764277,2026-10-01,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,7.48
+36920764277,2026-10-01,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,10.88
+36920764277,2026-10-01,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,6.85
+36920764277,2026-10-01,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,5.4
+36920764277,2026-10-01,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,7.65
+36920764277,2026-10-01,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,4.32
+36920764277,2026-10-01,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,7.0
+36920764277,2026-10-01,workflow_dispatch,module-tests (dashboard shard 1/1) [nightly full] / module-tests (dashboard shard 1/1),success,3.32
+36920764277,2026-10-01,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,3.07
+36920764277,2026-10-01,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,3.9
+36920764277,2026-10-01,workflow_dispatch,module-tests (consolidation shard 2/2) [nightly full] / module-tests (consolidation shard 2/2),success,10.18
+36920764277,2026-10-01,workflow_dispatch,module-tests (charter shard 5/7) [nightly full] / module-tests (charter shard 5/7),success,16.48
+36920764277,2026-10-01,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.02
+36920764277,2026-10-01,workflow_dispatch,module-tests (charter shard 7/7) [nightly full] / module-tests (charter shard 7/7),success,14.68
+36920764277,2026-10-01,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,7.23
+36920764277,2026-10-01,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.63
+36920764277,2026-10-01,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.67
+36920764277,2026-10-01,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,7.72
+36920764277,2026-10-01,workflow_dispatch,module-tests (consolidation shard 1/2) [nightly full] / module-tests (consolidation shard 1/2),success,13.28
+36920764277,2026-10-01,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,3.85
+36920764277,2026-10-01,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,7.83
+36920764277,2026-10-01,workflow_dispatch,module-tests (charter shard 1/7) [nightly full] / module-tests (charter shard 1/7),success,10.7
+36920764277,2026-10-01,workflow_dispatch,module-tests (charter shard 2/7) [nightly full] / module-tests (charter shard 2/7),success,15.23
+36920764277,2026-10-01,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.2
+36920764277,2026-10-01,workflow_dispatch,module-tests (charter shard 3/7) [nightly full] / module-tests (charter shard 3/7),success,13.47
+36920764277,2026-10-01,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,5.37
+36920764277,2026-10-01,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.48
+36920764277,2026-10-01,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,9.82
+36920764277,2026-10-01,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,10.1
+36920764277,2026-10-01,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.42
+36920764277,2026-10-01,workflow_dispatch,module-tests (charter shard 6/7) [nightly full] / module-tests (charter shard 6/7),success,12.6
+36920764277,2026-10-01,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,6.22
+36920764277,2026-10-01,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,7.02
+36920764277,2026-10-01,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,10.28
+36920764277,2026-10-01,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,9.45
+36920764277,2026-10-01,workflow_dispatch,Nightly full-mode summary,success,0.07
+36960774283,2026-10-02,schedule,"Stress suite (nightly-only,",success,4.47
+36960774283,2026-10-02,schedule,"Integration + next suite (nightly-only,",success,6.97
+36960774283,2026-10-02,schedule,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,6.15
+36960774283,2026-10-02,schedule,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",failure,8.85
+36960774283,2026-10-02,schedule,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,5.97
+36960774283,2026-10-02,schedule,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,14.75
+36960774283,2026-10-02,schedule,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,10.05
+36960774283,2026-10-02,schedule,"Heavy e2e suite (nightly-only,",success,6.78
+36960774283,2026-10-02,schedule,"Architectural battery backstop (nightly-only,",success,18.0
+36960774283,2026-10-02,schedule,"Performance suite (nightly-only,",failure,13.0
+36960774283,2026-10-02,schedule,Generate full module-shard matrix (nightly-only),success,0.3
+36960774283,2026-10-02,schedule,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,9.95
+36960774283,2026-10-02,schedule,"specify_cli out-of-matrix trees (nightly-only,",failure,16.17
+36960774283,2026-10-02,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,4.35
+36960774283,2026-10-02,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,7.22
+36960774283,2026-10-02,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.58
+36960774283,2026-10-02,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,5.15
+36960774283,2026-10-02,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,6.6
+36960774283,2026-10-02,schedule,module-tests (charter shard 6/7) [nightly full] / module-tests (charter shard 6/7),success,13.0
+36960774283,2026-10-02,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,5.22
+36960774283,2026-10-02,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,8.27
+36960774283,2026-10-02,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,7.07
+36960774283,2026-10-02,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,8.15
+36960774283,2026-10-02,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,4.5
+36960774283,2026-10-02,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,7.53
+36960774283,2026-10-02,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,7.53
+36960774283,2026-10-02,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,10.15
+36960774283,2026-10-02,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.17
+36960774283,2026-10-02,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,5.6
+36960774283,2026-10-02,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.25
+36960774283,2026-10-02,schedule,module-tests (charter shard 4/7) [nightly full] / module-tests (charter shard 4/7),success,13.38
+36960774283,2026-10-02,schedule,module-tests (charter shard 7/7) [nightly full] / module-tests (charter shard 7/7),success,8.83
+36960774283,2026-10-02,schedule,module-tests (consolidation shard 2/2) [nightly full] / module-tests (consolidation shard 2/2),success,12.6
+36960774283,2026-10-02,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,6.93
+36960774283,2026-10-02,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,4.78
+36960774283,2026-10-02,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.9
+36960774283,2026-10-02,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,4.52
+36960774283,2026-10-02,schedule,module-tests (charter shard 5/7) [nightly full] / module-tests (charter shard 5/7),success,17.32
+36960774283,2026-10-02,schedule,module-tests (charter shard 1/7) [nightly full] / module-tests (charter shard 1/7),success,13.65
+36960774283,2026-10-02,schedule,module-tests (consolidation shard 1/2) [nightly full] / module-tests (consolidation shard 1/2),success,11.92
+36960774283,2026-10-02,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.73
+36960774283,2026-10-02,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,7.17
+36960774283,2026-10-02,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,8.38
+36960774283,2026-10-02,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,5.33
+36960774283,2026-10-02,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.17
+36960774283,2026-10-02,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,3.97
+36960774283,2026-10-02,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.95
+36960774283,2026-10-02,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,5.42
+36960774283,2026-10-02,schedule,module-tests (charter shard 2/7) [nightly full] / module-tests (charter shard 2/7),success,10.95
+36960774283,2026-10-02,schedule,module-tests (charter shard 3/7) [nightly full] / module-tests (charter shard 3/7),success,13.67
+36960774283,2026-10-02,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,7.12
+36960774283,2026-10-02,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.3
+36960774283,2026-10-02,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.98
+36960774283,2026-10-02,schedule,Nightly full-mode summary,success,0.03
+37094126479,2026-10-03,schedule,"Stress suite (nightly-only,",success,3.93
+37094126479,2026-10-03,schedule,"Performance suite (nightly-only,",failure,15.27
+37094126479,2026-10-03,schedule,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,7.38
+37094126479,2026-10-03,schedule,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,11.88
+37094126479,2026-10-03,schedule,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,7.93
+37094126479,2026-10-03,schedule,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,8.85
+37094126479,2026-10-03,schedule,"Heavy e2e suite (nightly-only,",success,5.55
+37094126479,2026-10-03,schedule,"Architectural battery backstop (nightly-only,",success,13.98
+37094126479,2026-10-03,schedule,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,9.78
+37094126479,2026-10-03,schedule,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",failure,7.3
+37094126479,2026-10-03,schedule,"Integration + next suite (nightly-only,",success,7.2
+37094126479,2026-10-03,schedule,Generate full module-shard matrix (nightly-only),success,0.28
+37094126479,2026-10-03,schedule,"specify_cli out-of-matrix trees (nightly-only,",failure,24.02
+37094126479,2026-10-03,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,6.55
+37094126479,2026-10-03,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.58
+37094126479,2026-10-03,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,5.43
+37094126479,2026-10-03,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,3.05
+37094126479,2026-10-03,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,4.33
+37094126479,2026-10-03,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,5.38
+37094126479,2026-10-03,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,5.27
+37094126479,2026-10-03,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,6.78
+37094126479,2026-10-03,schedule,module-tests (charter shard 1/7) [nightly full] / module-tests (charter shard 1/7),success,7.65
+37094126479,2026-10-03,schedule,module-tests (charter shard 7/7) [nightly full] / module-tests (charter shard 7/7),success,11.12
+37094126479,2026-10-03,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,7.12
+37094126479,2026-10-03,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,10.13
+37094126479,2026-10-03,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,5.97
+37094126479,2026-10-03,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,8.17
+37094126479,2026-10-03,schedule,module-tests (charter shard 6/7) [nightly full] / module-tests (charter shard 6/7),success,7.67
+37094126479,2026-10-03,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,5.68
+37094126479,2026-10-03,schedule,module-tests (consolidation shard 1/2) [nightly full] / module-tests (consolidation shard 1/2),success,7.47
+37094126479,2026-10-03,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,9.12
+37094126479,2026-10-03,schedule,module-tests (charter shard 3/7) [nightly full] / module-tests (charter shard 3/7),success,13.62
+37094126479,2026-10-03,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,5.05
+37094126479,2026-10-03,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,5.52
+37094126479,2026-10-03,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.92
+37094126479,2026-10-03,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.85
+37094126479,2026-10-03,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,7.8
+37094126479,2026-10-03,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,3.3
+37094126479,2026-10-03,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,5.13
+37094126479,2026-10-03,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.25
+37094126479,2026-10-03,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.02
+37094126479,2026-10-03,schedule,module-tests (consolidation shard 2/2) [nightly full] / module-tests (consolidation shard 2/2),success,11.92
+37094126479,2026-10-03,schedule,module-tests (charter shard 4/7) [nightly full] / module-tests (charter shard 4/7),success,13.48
+37094126479,2026-10-03,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.93
+37094126479,2026-10-03,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.92
+37094126479,2026-10-03,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,7.95
+37094126479,2026-10-03,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,4.87
+37094126479,2026-10-03,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,7.13
+37094126479,2026-10-03,schedule,module-tests (charter shard 2/7) [nightly full] / module-tests (charter shard 2/7),success,13.37
+37094126479,2026-10-03,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,5.1
+37094126479,2026-10-03,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.2
+37094126479,2026-10-03,schedule,module-tests (charter shard 5/7) [nightly full] / module-tests (charter shard 5/7),success,13.23
+37094126479,2026-10-03,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.1
+37094126479,2026-10-03,schedule,Nightly full-mode summary,success,0.03
+37177460494,2026-10-04,schedule,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,9.43
+37177460494,2026-10-04,schedule,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",success,6.38
+37177460494,2026-10-04,schedule,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,9.42
+37177460494,2026-10-04,schedule,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,10.57
+37177460494,2026-10-04,schedule,"Stress suite (nightly-only,",failure,4.42
+37177460494,2026-10-04,schedule,Generate full module-shard matrix (nightly-only),success,0.3
+37177460494,2026-10-04,schedule,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,7.02
+37177460494,2026-10-04,schedule,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,5.82
+37177460494,2026-10-04,schedule,"Heavy e2e suite (nightly-only,",success,4.57
+37177460494,2026-10-04,schedule,"Architectural battery backstop (nightly-only,",success,19.08
+37177460494,2026-10-04,schedule,"Integration + next suite (nightly-only,",failure,8.38
+37177460494,2026-10-04,schedule,"specify_cli out-of-matrix trees (nightly-only,",failure,24.55
+37177460494,2026-10-04,schedule,"Performance suite (nightly-only,",failure,15.05
+37177460494,2026-10-04,schedule,Integration marker slice (nightly-only),failure,10.22
+37177460494,2026-10-04,schedule,module-tests (charter shard 5/7) [nightly full] / module-tests (charter shard 5/7),success,12.08
+37177460494,2026-10-04,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.73
+37177460494,2026-10-04,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.22
+37177460494,2026-10-04,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,8.53
+37177460494,2026-10-04,schedule,module-tests (charter shard 6/7) [nightly full] / module-tests (charter shard 6/7),success,13.43
+37177460494,2026-10-04,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.93
+37177460494,2026-10-04,schedule,module-tests (consolidation shard 1/2) [nightly full] / module-tests (consolidation shard 1/2),success,13.75
+37177460494,2026-10-04,schedule,module-tests (charter shard 7/7) [nightly full] / module-tests (charter shard 7/7),success,11.43
+37177460494,2026-10-04,schedule,module-tests (charter shard 3/7) [nightly full] / module-tests (charter shard 3/7),success,9.67
+37177460494,2026-10-04,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,4.55
+37177460494,2026-10-04,schedule,module-tests (consolidation shard 2/2) [nightly full] / module-tests (consolidation shard 2/2),success,12.33
+37177460494,2026-10-04,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,3.93
+37177460494,2026-10-04,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,3.18
+37177460494,2026-10-04,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,5.4
+37177460494,2026-10-04,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.28
+37177460494,2026-10-04,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,4.28
+37177460494,2026-10-04,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,3.68
+37177460494,2026-10-04,schedule,module-tests (charter shard 2/7) [nightly full] / module-tests (charter shard 2/7),success,13.52
+37177460494,2026-10-04,schedule,module-tests (charter shard 1/7) [nightly full] / module-tests (charter shard 1/7),success,13.57
+37177460494,2026-10-04,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,8.28
+37177460494,2026-10-04,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.25
+37177460494,2026-10-04,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,7.43
+37177460494,2026-10-04,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,6.27
+37177460494,2026-10-04,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,8.98
+37177460494,2026-10-04,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,5.77
+37177460494,2026-10-04,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,3.63
+37177460494,2026-10-04,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,3.85
+37177460494,2026-10-04,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,7.65
+37177460494,2026-10-04,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,5.5
+37177460494,2026-10-04,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,6.63
+37177460494,2026-10-04,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,8.13
+37177460494,2026-10-04,schedule,module-tests (charter shard 4/7) [nightly full] / module-tests (charter shard 4/7),success,11.12
+37177460494,2026-10-04,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,5.53
+37177460494,2026-10-04,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,8.82
+37177460494,2026-10-04,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,5.18
+37177460494,2026-10-04,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,8.53
+37177460494,2026-10-04,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,2.93
+37177460494,2026-10-04,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,5.1
+37177460494,2026-10-04,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,6.27
+37177460494,2026-10-04,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.43
+37177460494,2026-10-04,schedule,Nightly full-mode summary,success,0.07
+37225822329,2026-10-04,workflow_dispatch,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,9.82
+37225822329,2026-10-04,workflow_dispatch,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",success,10.95
+37225822329,2026-10-04,workflow_dispatch,"Stress suite (nightly-only,",success,4.62
+37225822329,2026-10-04,workflow_dispatch,"Heavy e2e suite (nightly-only,",success,7.03
+37225822329,2026-10-04,workflow_dispatch,Generate full module-shard matrix (nightly-only),success,0.3
+37225822329,2026-10-04,workflow_dispatch,"Performance suite (nightly-only,",failure,23.02
+37225822329,2026-10-04,workflow_dispatch,Test-universe reuse equals a fresh collection (nightly),success,4.45
+37225822329,2026-10-04,workflow_dispatch,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,17.65
+37225822329,2026-10-04,workflow_dispatch,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,11.05
+37225822329,2026-10-04,workflow_dispatch,Integration marker slice (nightly-only),success,18.08
+37225822329,2026-10-04,workflow_dispatch,Open-P0 reproductions (nightly-only),success,3.97
+37225822329,2026-10-04,workflow_dispatch,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,6.08
+37225822329,2026-10-04,workflow_dispatch,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,7.38
+37225822329,2026-10-04,workflow_dispatch,"specify_cli out-of-matrix trees (nightly-only,",failure,21.8
+37225822329,2026-10-04,workflow_dispatch,"Architectural battery backstop (nightly-only,",success,19.03
+37225822329,2026-10-04,workflow_dispatch,"Integration + next suite (nightly-only,",failure,8.12
+37225822329,2026-10-04,workflow_dispatch,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,5.68
+37225822329,2026-10-04,workflow_dispatch,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,3.57
+37225822329,2026-10-04,workflow_dispatch,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,3.53
+37225822329,2026-10-04,workflow_dispatch,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,4.55
+37225822329,2026-10-04,workflow_dispatch,module-tests (charter shard 4/7) [nightly full] / module-tests (charter shard 4/7),success,15.35
+37225822329,2026-10-04,workflow_dispatch,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,3.92
+37225822329,2026-10-04,workflow_dispatch,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,5.35
+37225822329,2026-10-04,workflow_dispatch,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,4.3
+37225822329,2026-10-04,workflow_dispatch,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,3.1
+37225822329,2026-10-04,workflow_dispatch,module-tests (charter shard 7/7) [nightly full] / module-tests (charter shard 7/7),success,6.55
+37225822329,2026-10-04,workflow_dispatch,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,6.98
+37225822329,2026-10-04,workflow_dispatch,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,6.85
+37225822329,2026-10-04,workflow_dispatch,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,7.82
+37225822329,2026-10-04,workflow_dispatch,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,8.33
+37225822329,2026-10-04,workflow_dispatch,module-tests (consolidation shard 2/2) [nightly full] / module-tests (consolidation shard 2/2),success,15.1
+37225822329,2026-10-04,workflow_dispatch,module-tests (charter shard 3/7) [nightly full] / module-tests (charter shard 3/7),success,10.07
+37225822329,2026-10-04,workflow_dispatch,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,2.78
+37225822329,2026-10-04,workflow_dispatch,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,7.08
+37225822329,2026-10-04,workflow_dispatch,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,4.02
+37225822329,2026-10-04,workflow_dispatch,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,2.7
+37225822329,2026-10-04,workflow_dispatch,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,8.47
+37225822329,2026-10-04,workflow_dispatch,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,6.33
+37225822329,2026-10-04,workflow_dispatch,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,3.08
+37225822329,2026-10-04,workflow_dispatch,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,3.32
+37225822329,2026-10-04,workflow_dispatch,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.23
+37225822329,2026-10-04,workflow_dispatch,module-tests (consolidation shard 1/2) [nightly full] / module-tests (consolidation shard 1/2),success,13.87
+37225822329,2026-10-04,workflow_dispatch,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,8.28
+37225822329,2026-10-04,workflow_dispatch,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,8.53
+37225822329,2026-10-04,workflow_dispatch,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.43
+37225822329,2026-10-04,workflow_dispatch,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,8.93
+37225822329,2026-10-04,workflow_dispatch,module-tests (charter shard 2/7) [nightly full] / module-tests (charter shard 2/7),success,13.43
+37225822329,2026-10-04,workflow_dispatch,module-tests (charter shard 6/7) [nightly full] / module-tests (charter shard 6/7),success,13.12
+37225822329,2026-10-04,workflow_dispatch,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,7.68
+37225822329,2026-10-04,workflow_dispatch,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.4
+37225822329,2026-10-04,workflow_dispatch,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,3.37
+37225822329,2026-10-04,workflow_dispatch,module-tests (charter shard 1/7) [nightly full] / module-tests (charter shard 1/7),success,14.72
+37225822329,2026-10-04,workflow_dispatch,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,7.42
+37225822329,2026-10-04,workflow_dispatch,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,8.85
+37225822329,2026-10-04,workflow_dispatch,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,3.98
+37225822329,2026-10-04,workflow_dispatch,module-tests (charter shard 5/7) [nightly full] / module-tests (charter shard 5/7),success,16.53
+37225822329,2026-10-04,workflow_dispatch,Nightly full-mode summary,success,0.07
+37260536294,2026-10-05,schedule,"Interpreter matrix shard 2 (Python 3.13, nightly-only, FR-021)",success,10.43
+37260536294,2026-10-05,schedule,"Performance suite (nightly-only,",failure,23.98
+37260536294,2026-10-05,schedule,Generate full module-shard matrix (nightly-only),success,0.3
+37260536294,2026-10-05,schedule,"Interpreter matrix shard 6 (Python 3.13, nightly-only, FR-021)",success,7.38
+37260536294,2026-10-05,schedule,"Interpreter matrix shard 1 (Python 3.13, nightly-only, FR-021)",success,7.57
+37260536294,2026-10-05,schedule,Open-P0 reproductions (nightly-only),success,3.63
+37260536294,2026-10-05,schedule,"Interpreter matrix shard 3 (Python 3.13, nightly-only, FR-021)",failure,16.98
+37260536294,2026-10-05,schedule,"Stress suite (nightly-only,",success,3.63
+37260536294,2026-10-05,schedule,Test-universe reuse equals a fresh collection (nightly),success,5.38
+37260536294,2026-10-05,schedule,"Heavy e2e suite (nightly-only,",success,6.98
+37260536294,2026-10-05,schedule,Integration marker slice (nightly-only),success,12.28
+37260536294,2026-10-05,schedule,"specify_cli out-of-matrix trees (nightly-only,",failure,16.05
+37260536294,2026-10-05,schedule,"Interpreter matrix shard 4 (Python 3.13, nightly-only, FR-021)",failure,6.93
+37260536294,2026-10-05,schedule,"Architectural battery backstop (nightly-only,",success,12.47
+37260536294,2026-10-05,schedule,"Integration + next suite (nightly-only,",failure,10.6
+37260536294,2026-10-05,schedule,"Interpreter matrix shard 5 (Python 3.13, nightly-only, FR-021)",success,8.53
+37260536294,2026-10-05,schedule,module-tests (charter shard 6/7) [nightly full] / module-tests (charter shard 6/7),success,15.18
+37260536294,2026-10-05,schedule,module-tests (upgrade shard 2/4) [nightly full] / module-tests (upgrade shard 2/4),success,4.77
+37260536294,2026-10-05,schedule,module-tests (charter shard 1/7) [nightly full] / module-tests (charter shard 1/7),success,12.52
+37260536294,2026-10-05,schedule,module-tests (charter shard 4/7) [nightly full] / module-tests (charter shard 4/7),success,13.32
+37260536294,2026-10-05,schedule,module-tests (next shard 2/2) [nightly full] / module-tests (next shard 2/2),success,5.98
+37260536294,2026-10-05,schedule,module-tests (lanes shard 1/1) [nightly full] / module-tests (lanes shard 1/1),success,5.87
+37260536294,2026-10-05,schedule,module-tests (upgrade shard 3/4) [nightly full] / module-tests (upgrade shard 3/4),success,4.53
+37260536294,2026-10-05,schedule,module-tests (cli shard 1/2) [nightly full] / module-tests (cli shard 1/2),success,8.75
+37260536294,2026-10-05,schedule,module-tests (kernel shard 1/1) [nightly full] / module-tests (kernel shard 1/1),success,3.32
+37260536294,2026-10-05,schedule,module-tests (agent shard 3/3) [nightly full] / module-tests (agent shard 3/3),success,5.25
+37260536294,2026-10-05,schedule,module-tests (auth shard 1/1) [nightly full] / module-tests (auth shard 1/1),success,2.88
+37260536294,2026-10-05,schedule,module-tests (missions shard 1/1) [nightly full] / module-tests (missions shard 1/1),success,2.87
+37260536294,2026-10-05,schedule,module-tests (status shard 1/1) [nightly full] / module-tests (status shard 1/1),success,4.05
+37260536294,2026-10-05,schedule,module-tests (specify_cli_runtime shard 1/1) [nightly full] / module-tests (specify_cli_runtime shard 1/1),success,4.05
+37260536294,2026-10-05,schedule,module-tests (core_misc shard 2/5) [nightly full] / module-tests (core_misc shard 2/5),success,8.85
+37260536294,2026-10-05,schedule,module-tests (release shard 1/1) [nightly full] / module-tests (release shard 1/1),success,2.83
+37260536294,2026-10-05,schedule,module-tests (consolidation shard 1/2) [nightly full] / module-tests (consolidation shard 1/2),success,13.98
+37260536294,2026-10-05,schedule,module-tests (consolidation shard 2/2) [nightly full] / module-tests (consolidation shard 2/2),success,13.68
+37260536294,2026-10-05,schedule,module-tests (post_merge shard 1/1) [nightly full] / module-tests (post_merge shard 1/1),success,3.17
+37260536294,2026-10-05,schedule,module-tests (agent shard 1/3) [nightly full] / module-tests (agent shard 1/3),success,5.18
+37260536294,2026-10-05,schedule,module-tests (cli shard 2/2) [nightly full] / module-tests (cli shard 2/2),success,9.02
+37260536294,2026-10-05,schedule,module-tests (execution_context shard 2/3) [nightly full] / module-tests (execution_context shard 2/3),success,8.42
+37260536294,2026-10-05,schedule,module-tests (charter shard 3/7) [nightly full] / module-tests (charter shard 3/7),success,8.63
+37260536294,2026-10-05,schedule,module-tests (core_misc shard 5/5) [nightly full] / module-tests (core_misc shard 5/5),success,6.63
+37260536294,2026-10-05,schedule,module-tests (ci shard 1/1) [nightly full] / module-tests (ci shard 1/1),success,10.38
+37260536294,2026-10-05,schedule,module-tests (review shard 1/1) [nightly full] / module-tests (review shard 1/1),success,4.17
+37260536294,2026-10-05,schedule,module-tests (execution_context shard 3/3) [nightly full] / module-tests (execution_context shard 3/3),success,7.78
+37260536294,2026-10-05,schedule,module-tests (agent shard 2/3) [nightly full] / module-tests (agent shard 2/3),success,5.45
+37260536294,2026-10-05,schedule,module-tests (core_misc shard 4/5) [nightly full] / module-tests (core_misc shard 4/5),success,7.78
+37260536294,2026-10-05,schedule,module-tests (charter shard 7/7) [nightly full] / module-tests (charter shard 7/7),success,11.88
+37260536294,2026-10-05,schedule,module-tests (core_misc shard 1/5) [nightly full] / module-tests (core_misc shard 1/5),success,6.8
+37260536294,2026-10-05,schedule,module-tests (upgrade shard 1/4) [nightly full] / module-tests (upgrade shard 1/4),success,5.6
+37260536294,2026-10-05,schedule,module-tests (charter shard 5/7) [nightly full] / module-tests (charter shard 5/7),success,11.05
+37260536294,2026-10-05,schedule,module-tests (upgrade shard 4/4) [nightly full] / module-tests (upgrade shard 4/4),success,6.03
+37260536294,2026-10-05,schedule,module-tests (unit shard 1/1) [nightly full] / module-tests (unit shard 1/1),success,3.4
+37260536294,2026-10-05,schedule,module-tests (glossary shard 1/1) [nightly full] / module-tests (glossary shard 1/1),success,2.25
+37260536294,2026-10-05,schedule,module-tests (execution_context shard 1/3) [nightly full] / module-tests (execution_context shard 1/3),success,7.63
+37260536294,2026-10-05,schedule,module-tests (core_misc shard 3/5) [nightly full] / module-tests (core_misc shard 3/5),success,8.07
+37260536294,2026-10-05,schedule,module-tests (next shard 1/2) [nightly full] / module-tests (next shard 1/2),success,4.0
+37260536294,2026-10-05,schedule,module-tests (charter shard 2/7) [nightly full] / module-tests (charter shard 2/7),success,9.27
+37260536294,2026-10-05,schedule,Nightly full-mode summary,success,0.03

@@ -1,0 +1,78 @@
+{
+  "aggregate": {
+    "by_event": {
+      "workflow_dispatch": 7,
+      "workflow_run": 2116
+    },
+    "first_created": "2026-09-08T13:04:52Z",
+    "last_created": "2026-10-05T06:38:03Z",
+    "total": 2123
+  },
+  "legacy_ci": {
+    "by_event": {
+      "pull_request": 194,
+      "push": 18,
+      "workflow_dispatch": 2
+    },
+    "first_created": "2026-09-05T17:34:07Z",
+    "last_created": "2026-09-08T20:09:03Z",
+    "total": 214
+  },
+  "modules": {
+    "by_event": {
+      "pull_request": 1651,
+      "push": 471,
+      "workflow_dispatch": 1
+    },
+    "first_created": "2026-09-07T20:32:30Z",
+    "last_created": "2026-10-05T06:43:03Z",
+    "total": 2123
+  },
+  "nightly": {
+    "by_event": {
+      "schedule": 27,
+      "workflow_dispatch": 12
+    },
+    "first_created": "2026-09-09T03:31:27Z",
+    "last_created": "2026-10-05T03:43:05Z",
+    "total": 39
+  },
+  "quality": {
+    "by_event": {
+      "pull_request": 2829,
+      "push": 709,
+      "schedule": 36,
+      "workflow_dispatch": 5
+    },
+    "first_created": "2026-08-01T03:24:54Z",
+    "last_created": "2026-10-05T06:43:03Z",
+    "total": 3579
+  },
+  "recapture": {
+    "by_event": {
+      "schedule": 1
+    },
+    "first_created": "2026-10-05T05:14:33Z",
+    "last_created": "2026-10-05T05:14:33Z",
+    "total": 1
+  },
+  "release": {
+    "by_event": {
+      "push": 14,
+      "workflow_dispatch": 5
+    },
+    "first_created": "2026-08-12T15:46:31Z",
+    "last_created": "2026-10-02T05:26:41Z",
+    "total": 19
+  },
+  "router": {
+    "by_event": {
+      "pull_request": 1652,
+      "push": 470,
+      "workflow_dispatch": 6
+    },
+    "first_created": "2026-09-07T20:32:30Z",
+    "last_created": "2026-10-05T06:43:03Z",
+    "total": 2128
+  }
+}

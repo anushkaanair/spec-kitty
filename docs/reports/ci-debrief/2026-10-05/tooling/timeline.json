@@ -1,0 +1,15 @@
+[
+  {"sha": "e8cc2f444", "label": "Pre-programme\nworkflows deleted"},
+  {"issue": 3881, "label": "Convergence tree\npromoted (#3881)"},
+  {"sha": "9370ec2c2", "label": "Lean modular CI\nreinstated (#3995)"},
+  {"sha": "a3ad777c6", "label": "Per-PR SonarCloud\nback (#3993)"},
+  {"sha": "a027716ab", "label": "Sonar reuses shard\ncoverage (#4334)"},
+  {"sha": "fd6c6f14a", "label": "Test matrix\ndiff-scoped"},
+  {"sha": "1e290b09a", "label": "Red nightly opens\nP0 issues"},
+  {"sha": "3d0ca4f8f", "label": "Release needs green\nnightly (#5034)"},
+  {"issue": 5240, "label": "Per-PR drift check\nbecomes a warning"},
+  {"sha": "cff3f086a", "label": "Scheduled charter\nrecapture (#5189)"},
+  {"sha": "4e63db7e7", "label": "skip_nightly\nwaiver added"},
+  {"issue": 5688, "label": "All modules on\nmeasured timings"},
+  {"issue": 5730, "label": "First automated\nrecapture merged"}
+]

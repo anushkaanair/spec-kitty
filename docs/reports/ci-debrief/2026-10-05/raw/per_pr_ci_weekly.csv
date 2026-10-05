@@ -1,0 +1,6 @@
+week_start,pr_ci_runs,runs_with_gate_verdict,green_runs,green_median_min,green_p90_min,all_median_min,all_p90_min,median_shards_executed,max_shards_executed,median_longest_shard_min,median_shard_runner_min
+2026-09-07,226,2,1,5442.0,5442.0,6222.1,7002.2,34.0,34,23.6,428.2
+2026-09-14,531,443,293,25.0,55.3,24.5,60.2,11,38,22.6,181.5
+2026-09-21,346,346,282,23.1,33.6,22.3,33.5,7.0,38,19.9,115.2
+2026-09-28,489,487,413,13.0,38.5,15.9,37.1,7,40,12.2,112.9
+2026-10-05,20,20,20,13.4,19.2,13.4,19.2,10.5,23,9.1,91.9

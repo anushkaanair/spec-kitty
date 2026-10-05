@@ -1,0 +1,255 @@
+date,sha,week,subject
+2026-08-01,873832aa1,2026-07-27,feat(doctrine): consolidate built-in doctrine onto one fail-closed location seam + complete packs/built-in relocation
+2026-08-01,b214294a1,2026-07-27,"fix(verification): make the render-width fold, egress boundary and timeout gap provable"
+2026-08-02,095aeb775,2026-07-27,landing fold: arch gate that fast CI jobs keep their --timeout backstop
+2026-08-02,cfdb7e267,2026-07-27,ci(doctrine-charter): WP07 path-filtered workflow for doctrine/charter/invocation (#3102)
+2026-08-02,f8c618e46,2026-07-27,"fix(ci): un-inert the CLI-reference parity gate, extend charter CI path filter (WP14, FR-012/013, #3149, #3107)"
+2026-08-03,0b34f19ed,2026-08-03,landing fold: fix inert test-file registration in doctrine-charter-tests.yml
+2026-08-04,002bf7a15,2026-08-03,fix(gates): close the four architectural ratchets this branch tripped
+2026-08-04,9633cdbdf,2026-08-03,ci(landing): exclude regression-marked tests from every non-regression CI selection
+2026-08-04,ed551f32c,2026-08-03,ci(quality): route egress and tracker edits to the suites that actually cover them
+2026-08-05,035584c6a,2026-08-03,ci(landing): drop predecessor-result gating on fast-tests-core-misc
+2026-08-05,0882bd7f7,2026-08-03,ci(landing): retire the #2359 docs over-coverage from core-misc shards (docs runs only in fast-tests-docs)
+2026-08-05,0cf0ab730,2026-08-03,feat(WP05): CI shard independence
+2026-08-05,abbbc700a,2026-08-03,ci(landing): bump straggler action pins off Node-20-era majors
+2026-08-07,0bd5285f5,2026-08-03,test(landing): route consistency-check NFR-003 to the serial timing gate
+2026-08-07,73cef9bc8,2026-08-03,feat(docs): single-source the docs SEO gate and backfill ADR metadata (#1652)
+2026-08-08,00d779736,2026-08-03,ci(landing): stop the misc shard owning tests/regression (singular)
+2026-08-08,d64ce52e2,2026-08-03,feat(verdict-seam): boundary hardening follow-on to #3245
+2026-08-09,f36c84269,2026-08-03,feat(docs): harden three docs quality gates (#3253; folds #3264)
+2026-08-10,0d0c76d6f,2026-08-10,ci(landing): put repo root on PYTHONPATH for the docs-build-pr job
+2026-08-10,0ea3c61a2,2026-08-10,ci(landing): wire fast-tests-corpus into sonarcloud.needs
+2026-08-10,5ea06ade3,2026-08-10,ci(landing): scope the DocFX gate to block anchors + build errors only
+2026-08-10,7fc1f4265,2026-08-10,ci(landing): add --timeout to the fast-tests-corpus job
+2026-08-10,bf7d59020,2026-08-10,ci(landing): exempt trigger-disjoint fast-tests-corpus from same-tier uniqueness
+2026-08-10,bf915e044,2026-08-10,feat(ci): corpus data triggers + blocking corpus gate (#3008)
+2026-08-10,e0d09b88e,2026-08-10,"feat(docs): Common Docs doctrine, audience metadata, gates & redirect tooling"
+2026-08-10,f9eceb16c,2026-08-10,fix(ci): diff-scope the blocking docs dead-link gate (#3147)
+2026-08-12,177e06269,2026-08-10,test: assertively sanitize low-signal suite cruft (#3285)
+2026-08-12,33a4e4d8f,2026-08-10,fix(doctrine-schema-diagrams): retry flaky plantuml.jar download in workflows + tests
+2026-08-12,859bffd23,2026-08-10,feat(doctrine-schema-diagrams): WP01 PlantUML egress-isolation render seam + spike
+2026-08-12,c7182781c,2026-08-10,fix(release): exclude dormant wheel-scaffolding from doctrine-count gate
+2026-08-12,f6b90d34e,2026-08-10,ci(docs-pages): add src + repo root to PYTHONPATH so the Pages deploy builds
+2026-08-12,fe7ab3b56,2026-08-10,feat(doctrine-schema-diagrams): WP02 PlantUML render post-processor + workflow wiring
+2026-08-13,7923fda40,2026-08-10,fix: isolate explicit owned-checkout mission state (#3346)
+2026-08-13,cd3d6a91d,2026-08-10,Per-project sync consent ledgers — CLI half (WP01–WP10) (#3293)
+2026-08-15,2c9c3f2b5,2026-08-10,ci(modular): per-package reusable workflows for kernel/doctrine/packs + delegation-aware CI-model guards (#3447)
+2026-08-15,6374c71fb,2026-08-10,ci(regen): trust-tiered regen-assets workflow (#3447)
+2026-08-21,006aaebff,2026-08-17,fix(R2-T1): register the new retirement test in the real-port serial family
+2026-08-21,0cfa46183,2026-08-17,fix(Z1-T1): zero ruff/mypy issues; wire tests/zeitgeist_client into CI topology
+2026-08-21,f6a9bf881,2026-08-17,fix(Z6-C): route tests/zeitgeist_client into integration-tests-core-misc's misc shard
+2026-08-22,07c3458ee,2026-08-17,"chore(M2-INTEGRATION): reconcile spec-kitty repo-wide guards, CI routing and generated artifacts with the integrated M1 candidates"
+2026-08-22,3c669ba32,2026-08-17,merge(Z6-C): integrate reviewed candidate 40f6011 canonical repo identity (M2 canonical integration)
+2026-08-22,8e318aaea,2026-08-17,merge(Z1-T1): integrate reviewed candidate afa4020db (M2 canonical integration)
+2026-08-25,d3febee96,2026-08-24,test(architectural): re-pin guards to the post-transport reality
+2026-08-26,24190343d,2026-08-24,test: quarantine acceptance CLI xdist flake
+2026-08-26,40b620568,2026-08-24,fix(sync): fix round for squad/controller MAJORs on issue #5
+2026-08-27,e8cc2f444,2026-08-24,chore: delete pre-programme .github/workflows/ YAML
+2026-08-29,46ceaac65,2026-08-24,ci: system-wide gh credential helper so HOME-isolated clean-venv installs can fetch private git deps
+2026-08-29,53f09eb10,2026-08-24,ci: token-bearing system git insteadOf so env-scrubbed clean-venv install tests can fetch private deps
+2026-08-29,c7a245187,2026-08-24,ci: deterministic suite on Blacksmith via planning's bin/ci-run.sh -> bin/ci-post.sh (same [ci] verdict)
+2026-08-31,3bedbea25,2026-08-31,fix(#796): authenticate windows private dependencies
+2026-08-31,3df500fe0,2026-08-31,restore public upgrade identity and sweep hardcodes
+2026-08-31,5d24a1d5d,2026-08-31,fix(#796): grant ci-windows filter read access
+2026-08-31,c7b7d76c8,2026-08-31,fix(#796): restore interim CI producers
+2026-08-31,ca1f2a5b8,2026-08-31,fix(#796): scope windows temp override to install
+2026-08-31,da9407e31,2026-08-31,fix(#871): fail transient Pages setup errors
+2026-08-31,dd613ebf8,2026-08-31,fix(#826): restore release workflows
+2026-08-31,e26037641,2026-08-31,fix(#848): skip docs Pages when unavailable
+2026-08-31,e9a32d933,2026-08-31,fix(#796): use short windows temp paths
+2026-08-31,f4f2c1b16,2026-08-31,fix(#853): gate docs Pages deployment
+2026-09-01,59b3b4a3e,2026-08-31,de-factory shared package dependencies
+2026-09-01,aecd11b92,2026-08-31,fix: freeze quality runners and retain cutover bridge
+2026-09-01,dc94fed87,2026-08-31,Merge pull request #976 from spec-kitty/issue-826-restore-release-workflows
+2026-09-01,edd8e994b,2026-08-31,chore(release): cut 3.2.6
+2026-09-04,585d38ace,2026-08-31,fix(ci): grant actions: read on the suite job — the job token's default set does not cover the Actions API (planning#1876)
+2026-09-04,9f7179515,2026-08-31,ci(release): make downstream consumer verification advisory when unconfigured
+2026-09-04,e9ba76c63,2026-08-31,fix(ci): export GITHUB_TOKEN so the pre-suite workflow-integrity check uses the Actions job token (planning#1876)
+2026-09-05,8e26e0a41,2026-08-31,fix(convergence): separate public and private CI credentials
+2026-09-05,f10179505,2026-08-31,fix(ci): disclose path-filtered Windows no-op
+2026-09-06,7f2251d98,2026-08-31,chore(scripts): delete six orphan scripts + ruff-exclude entries
+2026-09-07,0365912f4,2026-09-07,spec(missions): specify the fsm-write-path-integrity and dead-port-disposition proto-missions
+2026-09-07,2f7b52594,2026-09-07,fix(landing): sync the lint extra before ruff in the ci-router jobs
+2026-09-07,562e5ac9a,2026-09-07,ci(release): retire the SaaS consumer comparison (#3979)
+2026-09-07,9370ec2c2,2026-09-07,feat(ci): reinstate CI pipeline + SonarCloud as lean modular artifact-sharing workflows
+2026-09-07,9ea8e49c9,2026-09-07,fix(ci): map SONAR_TOKEN to env instead of shell-interpolating (DIR-050)
+2026-09-07,a3af5a547,2026-09-07,"plan(missions): plan, decompose and review both proto-missions"
+2026-09-07,b130d4907,2026-09-07,fix(landing): provision the ci-aggregate diff-cover job env (census oracle DOA)
+2026-09-07,f3dda97a7,2026-09-07,fix(landing): checkout before the local warmup action in module-tests
+2026-09-08,001b222d4,2026-09-07,test(landing): move the consistency-check budget guard to the performance flow
+2026-09-08,10f88f83e,2026-09-07,fix(landing): de-serialize the architectural-heavy pole (registry declares it)
+2026-09-08,349b73fc0,2026-09-07,"fix(landing): split the two heavy serial module shards (agent, upgrade)"
+2026-09-08,4455c02ca,2026-09-07,[#4066] Bind coverage to tested commits and bridge Actions verdicts to the factory (#4068)
+2026-09-08,4e68d9012,2026-09-07,fix(landing): trigger the packs built-in lane on charter-scheme code changes
+2026-09-08,6ce98087b,2026-09-07,fix(landing): fetch full history where tests git-archive historical SHAs
+2026-09-08,8e8cf004c,2026-09-07,fix(landing): actually run performance tests in the ci-nightly perf lane
+2026-09-08,9e8e5c044,2026-09-07,fix(ci): authorize automatic PR verdict comments and explain API refusals (#4107)
+2026-09-08,acaabf620,2026-09-07,fix(landing): run the corpus suite by marker with full history
+2026-09-08,c1042c485,2026-09-07,fix(landing): run each module shard in parallel (heavy shards hit the 30m timeout)
+2026-09-08,d1af51c33,2026-09-07,fix(landing): stabilize aggregate module shards — dedup dirs + serial per shard
+2026-09-08,ebb041aed,2026-09-07,fix(landing): map core_misc/execution_context module shards to their real test dirs
+2026-09-08,ef0c2388b,2026-09-07,fix(upgrade): recover missing authority and disclose supporting repairs (#4082)
+2026-09-08,f2be03af4,2026-09-07,fix: forward-port reviewed first-run recovery hotfix (#4084)
+2026-09-08,fdfc32f7e,2026-09-07,fix(landing): run the packs corpus suite parallel with full history
+2026-09-09,a3ad777c6,2026-09-07,[#3993] ci: reinstate SonarCloud (coverage + new-code quality gate) (#4013)
+2026-09-09,a64284ad6,2026-09-07,[#4119] Surface main-push CI failures through fleet P0 intake (#4140)
+2026-09-09,be5b82eec,2026-09-07,ci(release): drop the private-git-dependency token step (#3991)
+2026-09-09,ce5b4db04,2026-09-07,[#4118] Reuse reports from shard executions retained by CI reruns (#4142)
+2026-09-09,fe43d6e1d,2026-09-07,fix(ci): import datetime via the kernel.clock single door (FR-012(a)) (#4172)
+2026-09-11,f3a99ce29,2026-09-07,[#4207] ci: move worktree-concurrency saturation to the nightly lane and re-ceil the router shard timeouts (#4209)
+2026-09-14,3cf40734b,2026-09-14,ci(sonar): align SonarCloud project identity to the spec-kitty org
+2026-09-14,4c6b89cb6,2026-09-14,feat(ci): declare tests/unit and tests/specify_cli/runtime in the module registry (#4334)
+2026-09-14,67c8466e0,2026-09-14,ci(security): harden release-critical GitHub Actions workflows (#4352)
+2026-09-14,a027716ab,2026-09-14,"feat(ci): retire the duplicate-measurement job, moving the per-change report onto the matrix coverage (#4334)"
+2026-09-14,a9b2d6825,2026-09-14,ci(security): harden PR-validated GitHub Actions workflows per SonarCloud (#4342) (#4355)
+2026-09-14,aac5ca40b,2026-09-14,feat(ci): measure the full package set in every module shard (#4334)
+2026-09-14,dcc250c80,2026-09-14,docs(ci): correct two stale cross-references in ci-aggregate.yml comments
+2026-09-15,067b2514d,2026-09-14,"ci: name the shard that actually failed, so one red shard stops looking like forty (#4420)"
+2026-09-15,06ddb4d65,2026-09-14,ci: bump actions/checkout to v5 (Node 24) to clear the Node 20 deprecation
+2026-09-15,3ae2d0ad2,2026-09-14,[#4386] ci: claim tests/ci in a ci module row + matching router filter group (#4428)
+2026-09-15,57fad9eca,2026-09-14,chore(ci): clear actionlint/shellcheck findings across workflows
+2026-09-15,59c523d51,2026-09-14,fix(ci): subject-safe fleet-verdict concurrency key on the CI Aggregate path
+2026-09-15,6801464db,2026-09-14,[#4537] fix(ci): skip coverage consumers for empty selections (#4538)
+2026-09-15,7270644ff,2026-09-14,fix(init): diagnose missing command skills on initialized clones (#4427)
+2026-09-15,77dc947c6,2026-09-14,fix(landing): tolerate empty-matrix placeholder in CI aggregate selector
+2026-09-15,79a93160d,2026-09-14,"fix(ci): per-SHA main concurrency + fleet-verdict fan-out cap (Stage 1: #4347, #4371)"
+2026-09-15,894ec3b1d,2026-09-14,"fix(ci): router honesty — tests-only routing + timeout-vs-cancel classification (#4454, #4208)"
+2026-09-15,8e7e3519f,2026-09-14,ci(packs): delete vestigial ignored-path filters (#4470)
+2026-09-15,8fa72a47a,2026-09-14,fix(ci): ignore skipped matrix placeholder (#4460) (#4495)
+2026-09-15,ad49fa2da,2026-09-14,ci(shards): claim tests/test_dashboard in the dashboard module row + guard test-dir coverage (#4369) (#4379)
+2026-09-15,b5304818b,2026-09-14,[#4367] resolve four suite-invocation indirection forms in the _gate_coverage gate model (#4398)
+2026-09-15,c2eb1e688,2026-09-14,"fix(ci): aggregate requires only selected shards fresh, not all 37 (#4360-B)"
+2026-09-15,cede0e381,2026-09-14,[#4392] Restore candidate CI guards and fail-closed write placement (#4405)
+2026-09-15,e1b6813b7,2026-09-14,fix(ci): re-base module-tests shard timeout ceiling on observed charter durations (#4429) (#4431)
+2026-09-15,e39490ea8,2026-09-14,"fix(ci): fold pre-merge review findings — nightly exit-5, router-gate wiring guard, mirror reachability (#4437)"
+2026-09-15,e94e713ee,2026-09-14,chore(#3994): point phase-1 critical surfaces at spec-kitty/spec-kitty (#4286)
+2026-09-15,ea28910f8,2026-09-14,fix(ci): nightly performance-and-e2e fails loud on a red suite (#4212)
+2026-09-15,fd6c6f14a,2026-09-14,feat(ci): diff-scope the module-test matrix via the single gate-selection authority
+2026-09-16,82e9ff4bc,2026-09-14,chore(landing): re-capture ci shard timings against the rebased tip
+2026-09-16,8980cd9a4,2026-09-14,ci(landing): align summarize-job checkout pin to v5.0.0
+2026-09-16,a9a3519e9,2026-09-14,feat(ci): provenance-aware source-eligibility surface for CI Aggregate (#4360-A)
+2026-09-16,c580f8806,2026-09-14,feat(ci): reactive stale-running sweep backstop (Axis 4b)
+2026-09-16,d86450061,2026-09-14,"feat(ci): infra-error terminal-cancel verdict class (Axis 4a, #4430)"
+2026-09-16,dc0694b24,2026-09-14,fix(landing): parse multi-page and malformed shard-outcome payloads
+2026-09-17,48a32f20c,2026-09-14,ci(landing): route the @stress suite to the nightly-only lane (#4698)
+2026-09-18,03d57a1c2,2026-09-14,feat(ci): decide the fate of the out-of-matrix test directories (#4374)
+2026-09-18,630cbbc13,2026-09-14,"fix(completion): regenerate stale manifest + always-on freshness gate (#4479, #4374)"
+2026-09-18,879241141,2026-09-14,docs(landing): fix stale unmapped-tests description naming now-mapped tests/auth
+2026-09-20,469d0e02d,2026-09-14,[#4365] archive-freeze: fork-clone port base for the freeze gate + always-on CI job (#4393)
+2026-09-20,cbaf8334a,2026-09-14,test(merge-safety): update merge-test fixtures for the pre-mutation preflight + register tests/orchestrator_api + tmp_path hygiene
+2026-09-21,a1c784066,2026-09-21,refactor(landing): extract the prose-scan PR verdict into a unit-tested pure function
+2026-09-21,d67c11f24,2026-09-21,feat(ci): down-route proven prose-only .py diffs off the code test matrix (#4842)
+2026-09-21,e89388aa1,2026-09-21,test(landing): claim the new tests/decisions dir in the shard registry
+2026-09-21,ed08094c0,2026-09-21,fix(landing): anchor the encoding-cookie regex to a #-leading PEP-263 cookie
+2026-09-22,d2630e408,2026-09-21,test(architectural): non-vacuous FS-op ownership-routing gate + CI registry + CHANGELOG (#4859 #4861 #4862)
+2026-09-23,3a84cf2b9,2026-09-21,chore(landing): recapture charter shard-timings against current main (6156->6161)
+2026-09-23,50777e5fc,2026-09-21,fix(ci): wire bounded retry into fleet_verdict/fleet_main reporters and scope catches to transient failures (#4882)
+2026-09-23,6d76f7e90,2026-09-21,ci(nightly): run interpreter-matrix leg on real 3.13 with all extras (#4866)
+2026-09-23,83d12541b,2026-09-21,feat(ci): add bounded artefact-visibility poll and wire it into ci-aggregate (#4882)
+2026-09-23,86b282f00,2026-09-21,fix(ci): bootstrap sys.path in wait_for_artifacts so its direct invocation imports (#4882)
+2026-09-23,8a893fd30,2026-09-21,ci(nightly): split perf/e2e/stress into independent jobs and restore charter shard-timing weighting (#4865)
+2026-09-23,cac199421,2026-09-21,feat(ci): add shared bounded retry-with-backoff primitive for reconcile jobs (#4882)
+2026-09-23,ed2cbf1b8,2026-09-21,test(ci): add module committed/collected length-agreement gate (#4865)
+2026-09-24,696052bb2,2026-09-21,ci(landing): claim tests/terminus in the module-shard registry (#5001)
+2026-09-26,1e290b09a,2026-09-21,feat(ci): nightly integration+next lane + red->deduped-P0 escalation (FR-006/007)
+2026-09-26,34b53d78e,2026-09-21,test(landing): recapture charter shard timings for the added non-vacuity tests
+2026-09-26,3d0ca4f8f,2026-09-21,feat(ci): release gates on a green nightly for the exact release SHA (FR-008)
+2026-09-26,43520a313,2026-09-21,ci: pin workflow runners to ubuntu-24.04 ahead of ubuntu-latest→26 migration
+2026-09-26,8ff94011b,2026-09-21,"feat(ci): enrol dark test dirs + retire dead integration_tests_next tier (FR-004/005/009, #4729/#4732)"
+2026-09-26,9eae01538,2026-09-21,test(landing): allow an 8.5% own-root coverage-ratio dip (#4997)
+2026-09-26,cd5dceca9,2026-09-21,fix(ci): add repo-root sys.path guard so fleet_verdict runs as a script (#5000)
+2026-09-26,e8054f499,2026-09-21,fix(ci): fail closed on unset/cancelled nightly exit + integration-next zero-collected floor (#5034)
+2026-09-26,f290c7c3a,2026-09-21,feat(ci): coverage-honesty guards + measured baseline (FR-001/002/003)
+2026-09-26,f438ffb81,2026-09-21,test(landing): re-recapture charter shard timings against current main
+2026-09-27,1938b124b,2026-09-21,test(landing): recapture charter shard timings against current main (#4589)
+2026-09-27,54888bfdb,2026-09-21,"chore(ci): recapture agent shard timings for the 7 added tests (#4899, #5024)"
+2026-09-27,963d2803d,2026-09-21,ci(nightly): run the out-of-matrix tests/specify_cli trees every night (#5201)
+2026-09-27,bf0f87aa0,2026-09-21,chore(mission): record concurrent-template-config-race-4589 mission artifacts (#4589)
+2026-09-27,c3307bf2a,2026-09-21,ci(router): run the architectural battery when tests/architectural changes
+2026-09-27,e2dcf69c8,2026-09-21,test(ci): recapture charter shard timings against current main
+2026-09-27,f5c15f9f8,2026-09-21,feat(consolidate): rename lane-consolidation `merge`→`consolidate` (#3080)
+2026-09-27,f6e18cf30,2026-09-21,test(ci): recapture charter shard timings for the added tests
+2026-09-27,f7fe20949,2026-09-21,test(ci): recapture charter shard timings for #5170's new charter tests
+2026-09-28,17c728364,2026-09-28,feat(ci): recapture charter shard timings script and coverage (WP02)
+2026-09-28,357860cf2,2026-09-28,fix(ci-nightly): pin --python on the 3.13 interpreter shards' pytest line (#3189)
+2026-09-28,39c1beaa0,2026-09-28,chore(landing): recapture agent and charter shard timings
+2026-09-28,63c914381,2026-09-28,fix(ci): fail loudly on malformed gh CLI output and subprocess failures
+2026-09-28,6cdc9be4c,2026-09-28,fix(landing): follow the #3080 merge-to-consolidation test rename in the interpreter shards
+2026-09-28,7a893bd70,2026-09-28,test(landing): enrol tests/reporting in the interpreter-shard roster (clear #5274 red-main)
+2026-09-28,83af68d46,2026-09-28,fix(landing): gate the charter recapture job to main
+2026-09-28,90066ca9c,2026-09-28,fix(landing): fail loud on non-json gh pr list output in recapture
+2026-09-28,958cbf2ee,2026-09-28,fix(landing): abort recapture on untrustworthy pytest exit codes
+2026-09-28,96b5571f3,2026-09-28,fix(ci-nightly): restore the space before --run-url in escalation invocations
+2026-09-28,9b524be7d,2026-09-28,fix(reporting): clear #5274 architectural-battery reds surfaced by #5278
+2026-09-28,b58c27aad,2026-09-28,fix(landing): widen find_open_recapture_pr to accept read-only mappings
+2026-09-28,c00389d9c,2026-09-28,docs(landing): document recapture limitations and exact-1 strict mode
+2026-09-28,cff3f086a,2026-09-28,ci(shard-timings): schedule the charter recapture workflow (WP03)
+2026-09-28,d5a041aea,2026-09-28,fix(landing): stop overriding runner default github env vars in recapture
+2026-09-28,e602b02be,2026-09-28,ci(nightly): split the Python 3.13 interpreter-matrix leg into six nightly-only shards (#4951)
+2026-09-28,ee2357317,2026-09-28,fix(landing): keep the recapture pat out of the capture environment
+2026-09-28,fab5fcd09,2026-09-28,fix(landing): correct the strict shard-timings job timeout rationale
+2026-09-28,fd284c4c7,2026-09-28,fix(ci-nightly): gate P0 escalation on main; retune consistency-check budget
+2026-09-29,3e9f5fd4e,2026-09-28,"feat(requirements): one requirement-ID grammar across finalize, map-requirements, runtime and setup-plan"
+2026-09-29,597652d9e,2026-09-28,ci(module-tests): re-derive the per-PR shard timeout cap from measured wall-clock (#5378)
+2026-09-29,6f0b01cdb,2026-09-28,ci(nightly): re-derive interpreter-shard and out-of-matrix timeout caps from measured wall-clock (#5378)
+2026-09-29,cb52110da,2026-09-28,ci(shards): claim tests/specify_cli/workspace in core_misc and nightly interpreter shard 6 (#5100)
+2026-09-29,d460f55d9,2026-09-28,ci(registry): split charter into 7 per-PR shards and recapture its durations (#5378)
+2026-09-30,03f0f8b8b,2026-09-28,fix(ci): set one per-test timeout authority in pytest.ini (#3143)
+2026-09-30,044d2280e,2026-09-28,ci: bump setup-uv to v10.0.1 to clear the Node.js 20 deprecation
+2026-09-30,11f57904b,2026-09-28,test(ci): drop the deleted tests/proof directory from the shard inventories
+2026-09-30,2a1048679,2026-09-28,ci(docs-lint): run the docs checks as an always-on blocking job (#5426)
+2026-09-30,3d2fcd8f4,2026-09-28,"chore: changelog, configuration and remaining files"
+2026-09-30,5e512ec39,2026-09-28,ci(landing): fork-guard docs-lint to conform to #5454
+2026-09-30,d2566ce44,2026-09-28,ci: run nightly and main-branch automation only on spec-kitty/spec-kitty
+2026-09-30,ee59478e0,2026-09-28,ci: drop filters for branches that no longer exist (#5428)
+2026-10-01,2533c88bb,2026-09-28,"fix(ci): head-unique green-match binding, ready_for_review-only green step, live corpus blocking home and pre-PR review folds (#5510)"
+2026-10-01,25c9e5ead,2026-09-28,"ci: extract the module shard selector, add the nightly architectural backstop and the memory sampler (#5510)"
+2026-10-01,2bb43fdad,2026-09-28,feat(ci): battery partition plugin and special_tiers.architectural registry entry (#5510)
+2026-10-01,37fa84016,2026-09-28,"test(architectural): battery partition proof, OS-tier gate model and battery timings seed (#5510)"
+2026-10-01,3d5c85d09,2026-09-28,feat(dashboard): remove the bundled dashboard (#5530)
+2026-10-01,5bd7500d0,2026-09-28,"ci(shard-timings): recapture charter, core_misc and agent timings (#5536)"
+2026-10-01,5c6001d09,2026-09-28,"ci(router): ci_config group selects the battery; drop duplicate module jobs; Packs owns the corpus (#5510, #3315)"
+2026-10-01,740e2bef6,2026-09-28,fix(ci): bind green-match candidates to the PR and head; retire transitional gate code; harden sampler (#5510)
+2026-10-01,8a581be1a,2026-09-28,"ci(nightly): file nightly reds with type Bug, from:ci, milestone and #5106 parent (#5517)"
+2026-10-01,98ad32db8,2026-09-28,feat(ci): green_match helper and CI Aggregate re-point to the matched run (#5510)
+2026-10-01,9aa4f5574,2026-09-28,"feat(ci): loud timing mismatch, file weights and battery_parts selection (#5510, #5092)"
+2026-10-01,b01950e59,2026-09-28,"ci(registry): split the consolidation row into two shards with recaptured timings (#5510, #5086)"
+2026-10-01,c6749dd61,2026-09-28,fix(dashboard): clear the CI gates the dashboard removal tripped (#5530)
+2026-10-01,dcf2e5482,2026-09-28,ci: always-on architectural-fast plus two heavy legs with four workers; wire skip-if-green (#5510)
+2026-10-02,4e63db7e7,2026-09-28,ci(release): add workflow_dispatch skip_nightly maintainer waiver
+2026-10-02,7a526cfbe,2026-09-28,feat(contracts): add structure_check for README and CHANGELOG headings (#5558)
+2026-10-02,972451390,2026-09-28,feat(contracts): add no_pytest_scan covering every contracts script including itself (#5558)
+2026-10-02,a3f76f673,2026-09-28,ci(release): publish after a waiver-skipped nightly-gate
+2026-10-02,ce7618fba,2026-09-28,"feat(contracts): add verify_pins for checksums, action pins and the install prelude (#5558)"
+2026-10-02,d074efd13,2026-09-28,feat(contracts): add codeowners_check with a tracked-file floor (#5558)
+2026-10-02,e09461350,2026-09-28,ci(contracts): list the seven content-check test modules in the corpus registry and the blocking job (#5558)
+2026-10-02,f0276fa06,2026-09-28,test(contracts): add the failing examples test for the mission-status module (#5558)
+2026-10-03,47d27459d,2026-09-28,"build(contracts): pin and install vacuum and oasdiff, check for breaking changes and build bundles twice (#5558)"
+2026-10-03,64ef83cd4,2026-09-28,ci(landing): make the contract tool tests merge-blocking through the router (#5558)
+2026-10-03,67f1e7bcf,2026-09-28,ci(contracts): add the Contracts and release workflows with their guards and the negative-case driver (#5558)
+2026-10-03,8a956af88,2026-09-28,ci(nightly): run integration tests no other lane selects
+2026-10-03,94781a849,2026-09-28,ci(landing): widen the Contracts trigger paths and stop main pushes cancelling each other (#5558)
+2026-10-03,999a41f97,2026-09-28,"feat(contracts): add the contracts/ layout, shared components and resolver tooling (#5558)"
+2026-10-03,c67cc2ad2,2026-09-28,fix(landing): close response-schema gaps in the breaking-change check (#5558)
+2026-10-03,c930ca13e,2026-09-28,ci(landing): split the contract release into a read-only build and a write-scoped publish (#5558)
+2026-10-03,cc025c206,2026-09-28,"fix(contracts): tighten the lint, negative-case and release checks, close response schemas and treat -SNAPSHOT as work in progress (#5558)"
+2026-10-03,d2f3d3d9b,2026-09-28,ci(contracts): add the Contracts workflow skeleton and pinned JVM toolchain (#5558)
+2026-10-03,f3e4b7885,2026-09-28,fix(ci): close architectural and interpreter-shard gaps
+2026-10-03,f3eb11a2e,2026-09-28,test(contracts): add the Mission Status reality check and its payload helper (#5558)
+2026-10-03,fb7c92d6f,2026-09-28,ci(nightly): name the failing tests on a red suite
+2026-10-04,04aa32b3a,2026-09-28,feat(gates): keyed on-disk store for the test-universe collection
+2026-10-04,05004fea3,2026-09-28,ci(landing): recapture the consolidation shard timings (#5613)
+2026-10-04,075f80cde,2026-09-28,ci(landing): stop quoting 40 corpus node-ids now the corpus job runs the reality check (#5558)
+2026-10-04,14bd5dbb3,2026-09-28,ci: collect the test universe before the tests start
+2026-10-04,21dcd1d96,2026-09-28,"chore(landing): recapture ci, execution_context and core_misc shard timings"
+2026-10-04,28fd8907f,2026-09-28,chore(landing): recapture the agent shard timings
+2026-10-04,341b7fa34,2026-09-28,chore(ci): recapture all module shard timings and drop the allowlist
+2026-10-04,43b66f609,2026-09-28,ci(landing): give the work package snapshot parity test a merge-blocking home (#5579)
+2026-10-04,709320263,2026-09-28,feat(ci): recapture every drifted shard-timings module on schedule
+2026-10-04,945f7b8a6,2026-09-28,test(nightly): run the integration slice in the environment it was written for
+2026-10-04,c0e202e89,2026-09-28,ci(landing): name both router jobs in the tests/contract registry reason (#5558)
+2026-10-04,eeb98e295,2026-09-28,docs(landing): bring the stored-collection docs in line with what the PR measured
+2026-10-04,ef5ce4f01,2026-09-28,chore(landing): recapture the consolidation shard timings after the slice cleanup
+2026-10-04,f37d51358,2026-09-28,ci(landing): tell a broken p0-repro run apart from an expected red
+2026-10-04,fcfc7559f,2026-09-28,ci(nightly): run open-P0 red-first reproductions only in a nightly p0-repro lane
+2026-10-05,c6564c0c0,2026-10-05,chore(ci): automated shard-timings recapture
