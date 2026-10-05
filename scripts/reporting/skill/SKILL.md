@@ -121,6 +121,22 @@ voice/Method-honesty rules — is documented in
 Follow it; re-sync the template's token subset from the package rather than
 forking values.
 
+## Where the output goes
+
+A debrief is **handed over, not committed**.
+
+- Send the PDF to the operator. Keep the collector JSON, the synthesis, charts
+  and any one-off collector script in the gitignored `work/` directory.
+- **Never commit a PDF**, and never open a pull request into `spec-kitty` (or
+  any product repository) for a debrief. `docs/reports/` in `spec-kitty` holds
+  engineering analyses, not executive debriefs; it is not a precedent.
+- When the operator wants the findings kept (open risks, a confirmed waiver, a
+  decision), write a short Markdown note under `spec-kitty-planning`
+  `reference/` (`<TOPIC>-DEBRIEF-<YYYY-MM-DD>.md`): findings, as-of and refs only,
+  no PDF and no raw-data dump.
+- If a request asks for a different placement, raise the conflict with the
+  operator before committing anything.
+
 ## Guardrails checklist (run before handing over the report)
 
 - [ ] Every tile number came from `metrics` — none typed by hand.
@@ -128,6 +144,7 @@ forking values.
 - [ ] The Method footer names the exact window/scope + as-of (from `meta`).
 - [ ] "fixed" vs "closed" distinction honoured for any issue singled out.
 - [ ] scope-mode impact tags marked preliminary unless a verify pass ran.
+- [ ] Nothing was committed to a product repository; the PDF went to the operator.
 - [ ] The Op is closed with `spec-kitty profile-invocation complete … --outcome done`.
 
 ## Doctrine home

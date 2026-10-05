@@ -21,6 +21,9 @@ exit_condition: >
   whose Method footer states the exact scope and as-of, and which follows the
   executive-debrief styleguide for shape and report-writing for voice. The Op is
   closed with its real outcome; scratch inputs live in the gitignored work/ dir.
+  Nothing from the debrief is committed to a product repository: the PDF and
+  its inputs are handed to the operator, and only durable findings, when kept
+  at all, land as a short Markdown note in the planning repository.
 steps:
   - title: Fix the scope and pick the mode
     description: >
@@ -80,3 +83,23 @@ steps:
     on_failure: >
       A brand or accuracy fault found in review goes back to the synthesis or the
       renderer, never into the shipped PDF.
+  - title: Place the output
+    description: >
+      A debrief is handed over, not committed. Send the PDF to the operator and
+      keep the collector output, synthesis, charts and any one-off collector
+      script in the gitignored work/ directory. Never commit a PDF to any
+      repository, and never open a pull request into spec-kitty (or another
+      product repository) for a debrief: report folders there add thousands of
+      lines to the product history and put throwaway scripts under the code
+      gates. When the operator wants a debrief's findings kept (open risks, a
+      confirmed waiver, a decision), write a short Markdown note under
+      spec-kitty-planning reference/, named for its date and topic, with the
+      findings, the as-of and the issue/PR refs; no PDF and no raw-data dump.
+      If a request asks for a different placement, raise the conflict with the
+      operator before committing anything.
+    actor: agent
+    on_failure: >
+      If a debrief was already pushed to a product repository, close the pull
+      request, hand the PDF to the operator and ask them to delete the branch;
+      a closed pull request keeps its commits reachable, so a force-push does
+      not remove the PDF.
