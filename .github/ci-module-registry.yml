@@ -831,6 +831,7 @@ out_of_matrix_test_dirs:
   - tests/_support/coverage_safety
   - tests/_support/git_template
   - tests/acceptance
+  - tests/acceptance/charter_pack_cutover
   - tests/adversarial
   - tests/ast_analysis
   - tests/characterization

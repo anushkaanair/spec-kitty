@@ -547,7 +547,8 @@ def build_installed_removed_skills(project: Path) -> Path:
 
 def build_lane_in_approved(project: Path) -> Path:
     # US2-7 / EC: Lane worktrees created before the upgrade
-    return build_lane_project(project).repo
+    repo: Path = build_lane_project(project).repo
+    return repo
 
 
 def build_lane_project(project: Path) -> Any:

@@ -74,7 +74,7 @@ def upgrade(project: Path, *flags: str) -> tuple[Result, dict[str, Any]]:
 
 
 def cutover_report(payload: dict[str, Any]) -> dict[str, list[str]]:
-    report = payload["migration_reports"][CUTOVER_ID]
+    report: dict[str, list[str]] = payload["migration_reports"][CUTOVER_ID]
     assert set(REPORT_KEYS) <= set(report), sorted(report)
     return report
 

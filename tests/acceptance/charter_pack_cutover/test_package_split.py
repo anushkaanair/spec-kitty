@@ -161,7 +161,7 @@ def _python_names(source: str) -> set[str]:
                 names.add(node.asname)
         elif isinstance(node, ast.ImportFrom) and node.module:
             names.update(node.module.split("."))
-        elif isinstance(node, ast.arg) or isinstance(node, ast.keyword) and node.arg:
+        elif isinstance(node, ast.arg | ast.keyword) and node.arg:
             names.add(node.arg)
     return names
 

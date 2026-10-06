@@ -151,7 +151,7 @@ def test_fr001_org_pack_preset_unioned_with_required(tmp_path: Path) -> None:
     project = _org_preset_project(tmp_path / "p")
     result = activate_preset(project, "--pack", ORG_PACK_NAME, "--preset", "team")
     assert result.exit_code == 0, describe(result)
-    charter = active_charter(project)
+    charter: dict[str, Any] = active_charter(project)
     assert sorted(charter["activated_directives"]) == sorted(["001-architectural-integrity-standard", ORG_DIRECTIVE_ID])
     assert sorted(charter["activated_tactics"]) == sorted(["acceptance-test-first", ORG_TACTIC_ID])
     assert_list_agrees(project, {"activated_tactics": charter["activated_tactics"]})
@@ -222,6 +222,7 @@ def _shape_activate(project: Path) -> dict[str, Any]:
     assert isinstance(payload["pack"], str) and isinstance(payload["preset"], str) and isinstance(payload["target_file"], str)
     assert isinstance(payload["written"], dict) and all(isinstance(v, list) for v in payload["written"].values())
     assert isinstance(payload["removed"], list)
+    assert isinstance(payload, dict)
     return payload
 
 
@@ -236,6 +237,7 @@ def _shape_pack_list(project: Path) -> dict[str, Any]:
         assert all(set(p) == {"name", "description", "path"} for p in row["presets"])
     org_rows = [r["name"] for r in payload["packs"] if r["tier"] == "org"]
     assert len(org_rows) == 2, org_rows  # control: both org packs of the fixture are listed
+    assert isinstance(payload, dict)
     return payload
 
 
@@ -245,6 +247,7 @@ def _shape_pack_path(project: Path) -> dict[str, Any]:
     payload = read_json_output(result)
     assert set(payload) == {"pack", "path", "preset"}
     assert Path(payload["path"]).name == "minimal.yaml"
+    assert isinstance(payload, dict)
     return payload
 
 
