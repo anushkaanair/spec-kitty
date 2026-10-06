@@ -98,9 +98,6 @@ owned_files:
   - "tests/architectural/test_docs_cli_reference_parity.py"
   - "tests/architectural/test_no_dead_doctrine_paths.py"
   - "tests/docs/test_charter_selection_key_teaching.py"
-  - "tests/doctrine/test_spdd_reasons_skill.py"
-  - "tests/doctrine/test_spk_show_me_skill.py"
-  - "tests/doctrine/test_spk_skill_pack.py"
   - "tests/specify_cli/skills/test_retired_charter_skills.py"
   - "tests/specify_cli/regression/_twelve_agent_baseline/claude/specify.md"
   - "tests/specify_cli/regression/_twelve_agent_baseline/gemini/specify.toml"
@@ -280,7 +277,7 @@ These are WP01 T008's skills cases (FR-008; US4 scenario 1: after upgrade, `spk-
 
 - **Purpose**: pin the new families and the retirement.
 - **Steps**:
-  1. `tests/doctrine/test_spk_skill_pack.py`: the expected name set (l.22-28 `spk-doctrine-*`, l.60 `spec-kitty-charter-doctrine`, l.187-205 alias assertions) becomes the seven new names; delete assertions that the alias skill points at the canonical one (no alias exists). `tests/doctrine/test_spdd_reasons_skill.py`, `test_spk_show_me_skill.py`: new paths.
+  1. (`tests/doctrine/**` is owned by WP23, which moves the directory; these three edits are logged follow-ups. If WP23 has already moved the directory, edit the files at their new path.) `tests/doctrine/test_spk_skill_pack.py`: the expected name set (l.22-28 `spk-doctrine-*`, l.60 `spec-kitty-charter-doctrine`, l.187-205 alias assertions) becomes the seven new names; delete assertions that the alias skill points at the canonical one (no alias exists). `tests/doctrine/test_spdd_reasons_skill.py`, `test_spk_show_me_skill.py`: new paths.
   2. `tests/architectural/test_no_dead_doctrine_paths.py:254-265`: byte-pinned asset paths move to `spk-practice-show-me/assets/…` (NFR-002 gate; keep its allowlist unchanged or shrinking).
   3. `tests/architectural/test_docs_cli_reference_parity.py:17,221-225`: the profile-subcommand guard reads `ad-hoc-profile-load/SKILL.md`; point it at `spk-charter-profile-load/SKILL.md` (and keep it non-vacuous: assert the file exists).
   4. `tests/docs/test_charter_selection_key_teaching.py:10`: path → `spk-charter-governance/SKILL.md`.
