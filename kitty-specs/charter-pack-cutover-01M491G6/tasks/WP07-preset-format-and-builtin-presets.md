@@ -46,6 +46,8 @@ history:
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter (or any user-defined profile), and behave according to its guidance before parsing the rest of this prompt.
 
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
+
 - **Profile**: `python-pedro`
 - **Role**: `implementer`
 - **Agent/tool**: `claude`
@@ -84,12 +86,12 @@ Activation presets become **pack data** with a documented, validated format (FR-
 - `default` lists **no** artifact ids and **no** `activated_kinds`; it carries only `mission_type_activations` (the built-in mission types). Every built-in artifact is therefore effective after applying it, and it cannot drift (#5323).
 - `minimal` keeps today's curated `activated_directives` / `activated_tactics` and `mission_type_activations: [software-dev]`, and **drops** `activated_kinds: [directives, tactics]` (that gate switches off six kinds the file's own comment says stay open — a defect, architecture squad B3).
 - A preset is not an `ArtifactKind`, has no URN, and is hashed by the pack manifest.
-- `charter pack validate` and `charter org validate` validate presets (malformed file or unresolvable id is named).
+- `validate_pack` validates presets (malformed file or unresolvable id is named), so `charter org validate` does now and `charter pack validate` does once WP15 creates it. The acceptance tests that invoke `charter pack validate` flip at WP15; this WP proves the behaviour with unit-level tests in its own test files and through `charter org validate`.
 - `charter org init` scaffolds an example preset.
 
 This WP does **not** apply presets (WP08), list them on the CLI (WP08), or repoint mission-type provisioning (WP09).
 
-Done when every acceptance test in `tests/acceptance/charter_pack_cutover/` marked `pending_until("WP07")` (FR-002 preset content, FR-019 format/validation/scaffold, the FR-004 discovery half) is green with the marker removed.
+Done when every acceptance test in `tests/acceptance/charter_pack_cutover/` marked `pending_until("WP07")` (FR-002 preset content; FR-019 `charter org validate`, scaffold and manifest hashing) is green with the marker removed.
 
 ## Context & Constraints
 
@@ -129,7 +131,7 @@ Do not change WP01's assertions (C-006). If an acceptance test for FR-004 needs 
 - **Purpose**: a documented contract pack authors (and the public-packs sidecar) write against.
 - **Steps**:
   1. Create `src/charter/offering/schemas/activation-preset.schema.yaml` from `contracts/activation-preset.schema.yaml`, Draft 2020-12, `additionalProperties: false`, `required: [name, description]`, `name` pattern `^[a-z][a-z0-9]*(-[a-z0-9]+)*$`, `maxLength: 64`.
-  2. Decide the governed kinds from the authority, not from the contract's illustrative enum. Verified at base (`.venv/bin/python -c "from charter.offering.artifact_kinds import ArtifactKind, CHARTER_KIND_TOKENS"`): the writable activation keys are the `YAML_KEY_MAP` values derived from `CHARTER_KIND_TOKENS` (`directive, tactic, styleguide, toolguide, paradigm, procedure, agent-profile, mission-step-contract, glossary-pack, skill, mission-type`). Presets govern those minus `skill`, `glossary_pack` (own absence contract) and `mission-type` (its own key). That leaves **eight** per-kind keys: `activated_{directives,tactics,styleguides,toolguides,paradigms,procedures,agent_profiles,mission_step_contracts}`. The contract enum also lists `anti_patterns`, `templates`, `assets`; those are **not** activation keys (`anti_pattern` is excluded from `CHARTER_KIND_TOKENS`; `template`/`asset` are not activatable), so `charter activate --preset` could not write them (`prepare_activation_write` rejects unknown keys). Exclude them, and record the deviation from the contract enum in the Activity Log.
+  2. Decide the governed kinds from the authority (orchestrator ruling, FI-S1): every kind with `ArtifactKind.activatable == True`, minus `skill` and `glossary_pack` (own absence contract); mission types have their own key. That gives **nine** per-kind keys: `activated_{directives,tactics,styleguides,toolguides,paradigms,procedures,agent_profiles,mission_step_contracts,anti_patterns}`, matching `contracts/activation-preset.schema.yaml`. `anti_pattern` is charter-activatable (#5409; `PackContext` reads `activated_anti_patterns`, `pack_context.py:173,277`) although it is excluded from the hand-authorable token set `CHARTER_KIND_TOKENS`, so derive from `ArtifactKind.activatable`, not from `CHARTER_KIND_TOKENS`. `template` and `asset` are not activatable. If `prepare_activation_write` / `ACTIVATION_YAML_KEYS` rejects `activated_anti_patterns`, record it for WP08, whose writer must write and remove it.
   3. `activated_kinds` items: every `ArtifactKind` plural (13; that is the universe `PackContext._read_activated_kinds` and `drg_activation` gate on).
   4. Because a static schema cannot import the authority, generate nothing at runtime from the YAML enum: the schema keeps the enum for documentation, and a test (T040) asserts the schema's per-kind `patternProperties` / `activated_kinds` enum equals the derived sets. If they drift, the test fails, not the user.
   5. Add a row to `src/charter/offering/schemas/README.md`'s table.
@@ -142,7 +144,7 @@ Do not change WP01's assertions (C-006). If an acceptance test for FR-004 needs 
 - **Purpose**: one charter-side loader (C-007: no `specify_cli` preset registry).
 - **Steps**:
   1. Create `src/charter/offering/packs/presets.py` with:
-     - `PRESET_GOVERNED_KINDS: tuple[ArtifactKind, ...]` derived as in T035 (from `CHARTER_KIND_TOKENS` / `ArtifactKind`, never hand-written), and `preset_activation_keys()` returning the eight `activated_<plural>` keys;
+     - `PRESET_GOVERNED_KINDS: tuple[ArtifactKind, ...]` derived as in T035 (from `ArtifactKind.activatable`, never hand-written), and `preset_activation_keys()` returning the nine `activated_<plural>` keys;
      - a frozen dataclass (or pydantic `BaseModel`, `extra="forbid"`) `ActivationPreset`: `name`, `description`, `activations: Mapping[str, tuple[str, ...]]` (only keys present in the file; absent ⇒ unrestricted; `[]` ⇒ none), `activated_kinds: tuple[str, ...] | None`, `mission_type_activations: tuple[str, ...] | None`, `source: Path`;
      - `PresetFormatError(ValueError)` carrying `path` and a message naming the offending field;
      - `load_preset_file(path: Path) -> ActivationPreset` — strict: rejects unknown keys (naming them; `activated_skills` / `activated_glossary_packs` get a message saying presets do not govern them), rejects `name` ≠ file stem, enforces the name grammar, list-of-unique-non-empty-strings values, and **no context-scoped activation entries** (an `activations:` list as in `org-charter.yaml` is rejected);
@@ -203,7 +205,7 @@ Do not change WP01's assertions (C-006). If an acceptance test for FR-004 needs 
 - **Purpose**: FR-019 "scaffolded by `charter org init`".
 - **Steps**:
   1. Put the example content in offering, not in the CLI: `presets.py` gains `EXAMPLE_PRESET_NAME = "starter"` (any grammar-valid name other than `default`/`minimal`, which would shadow nothing but confuse readers) and `render_example_preset() -> str` (valid against the schema; lists no ids, so it validates against any offering; a comment shows how to add `activated_directives`).
-  2. The minimal scaffold writer `_run_minimal_scaffold` (`src/specify_cli/cli/commands/doctrine.py:1012-1035`) writes three files; make it also write `pack_presets_dir(pack_path) / f"{EXAMPLE_PRESET_NAME}.yaml"` and print the line. Update the `org_init` docstring (`:991-1001`, "three files") and `_ORG_PACK_README_STUB` (`:936-952`, "Contents" list) to mention `presets/`. `doctrine.py` is owned by WP15/WP16 (its handlers move to `charter/` in WP15); this is a small logged follow-up edit — keep it to those lines so WP15's move carries it.
+  2. The minimal scaffold writer `_run_minimal_scaffold` (`src/specify_cli/cli/commands/doctrine.py:1012-1035`) writes three files; make it also write `pack_presets_dir(pack_path) / f"{EXAMPLE_PRESET_NAME}.yaml"` and print the line. Update the `org_init` docstring (`:991-1001`, "three files") and `_ORG_PACK_README_STUB` (`:936-952`, "Contents" list) to mention `presets/`. `doctrine.py` is owned by WP03 (upstream; WP15 moves its handlers to `charter/` and WP16 deletes it); this is a small logged follow-up edit — keep it to those lines so WP15's move carries it.
   3. The `--template` path renders a user template; do not inject a preset there.
 - **Files**: `presets.py`; logged edit in `src/specify_cli/cli/commands/doctrine.py`.
 - **Parallel?**: Yes (independent of T038 once T036 exists).
@@ -215,7 +217,7 @@ Do not change WP01's assertions (C-006). If an acceptance test for FR-004 needs 
   0. WP04 is expected to have created `tests/charter/packs/` (the home of the moved pack-tooling tests). If it does not exist, create it with an `__init__.py` like its siblings under `tests/charter/` and record that.
   1. `tests/charter/presets/test_preset_model.py`: valid file loads; each rejection (unknown key, `activated_skills`, `activated_glossary_packs`, name ≠ stem, bad grammar, >64 chars, non-list value, duplicate ids, empty string id, context-scoped `activations:` list) raises `PresetFormatError` naming the field; absent vs `[]` preserved.
   2. `test_preset_discovery.py`: pack without `presets/` → `()`; two presets sorted; `load_preset` unknown → `PresetNotFoundError` listing names; `list_offering_packs` on a tmp project with two org packs (one with presets, one without) returns built-in, both org packs in declaration order, and `project`.
-  3. `test_builtin_presets.py`: both built-in presets load; `default` has no `activated_*` and no `activated_kinds` and a non-empty `mission_type_activations`; `minimal` has no `activated_kinds`; every `minimal` id resolves; both validate against the JSON schema; **kind authority**: the schema's per-kind pattern and `activated_kinds` enum equal the derived sets, and `preset_activation_keys()` equals `ACTIVATION_YAML_KEYS` minus `{"activated_kinds", "activated_skills", "activated_glossary_packs", "mission_type_activations"}` (tests may import `charter.activation`).
+  3. `test_builtin_presets.py`: both built-in presets load; `default` has no `activated_*` and no `activated_kinds` and a non-empty `mission_type_activations`; `minimal` has no `activated_kinds`; every `minimal` id resolves; both validate against the JSON schema; **kind authority**: the schema's per-kind pattern and `activated_kinds` enum equal the derived sets, and `preset_activation_keys()` equals the `activated_<plural>` of every activatable `ArtifactKind` minus `skill` and `glossary_pack` (so it contains `activated_anti_patterns`).
   4. `test_preset_validation.py`: `validate_pack` on a tmp pack with a malformed preset, an unresolvable id, an `activated_kinds` that omits a listed kind → three errors naming file and field/id; a clean pack → no preset issues; `validate_pack(packs/built-in)` reports no preset issues; `charter org validate` (CliRunner) surfaces the same error.
   5. `test_preset_manifest_hashing.py`: a pack with presets gets `presets` entries and a different `manifest_hash`; a pack without presets has no `presets` key and an unchanged hash; changing a preset byte changes its hash.
   6. Regenerate the built-in manifest and graph with the command that exists at this point in the mission (the `charter` home lands in WP15):
@@ -251,7 +253,7 @@ Conventional subjects with `#3732`, e.g. `feat(charter): activation preset model
 
 ## Risks & Mitigations
 
-- **Offering→activation import** sneaking in through `ACTIVATION_YAML_KEYS`: derive in offering from `CHARTER_KIND_TOKENS`; compare with `ACTIVATION_YAML_KEYS` only in tests.
+- **Offering→activation import** sneaking in through `ACTIVATION_YAML_KEYS`: derive in offering from `ArtifactKind`; never import `charter.activation` from `presets.py`.
 - **Manifest churn**: regenerate, never hand-edit; packs without presets must stay byte-identical (proves the field is optional).
 - **`regenerate-graph` choking on the new `presets/` directory**: if the graph builder or a layout gate treats unknown top-level dirs as artifacts, teach it that `presets/` is not an artifact kind directory (it is not an `ArtifactKind`), with a test; record the file you touched.
 - **Validator id resolution too strict for org packs that extend a parent**: covered by T038 step 3's recorded decision; do not silently downgrade an unresolved id to an advisory.

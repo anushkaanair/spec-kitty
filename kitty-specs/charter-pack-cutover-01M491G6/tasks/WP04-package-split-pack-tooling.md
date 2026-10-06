@@ -95,6 +95,8 @@ history:
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter, and behave according to its guidance before parsing the rest of this prompt.
 
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
+
 - **Profile**: `architect-alphonso`
 - **Role**: `implementer`
 - **Agent/tool**: `claude`
@@ -128,7 +130,7 @@ Wrap HTML/XML tags in backticks. Use language identifiers on code blocks.
 
 ## ⚠️ Start condition (read before claiming)
 
-`src/charter/activation/synthesizer/manifest.py`, `src/charter/activation/project_registration.py` and `src/specify_cli/cli/commands/doctrine.py` are owned by **WP03** (write-side cutover) and edited here by steps 0a, 2 and 4. tasks.md lists WP04 as depending on WP02 only, which would let WP03 and WP04 run in parallel on those three files. The orchestrator has been asked to add WP03 as a dependency. **Do not start until WP03 is approved**; your edits to those three files are then mechanical follow-ups on a completed upstream WP (tasks.md rule), logged in the Activity Log.
+`src/charter/activation/synthesizer/manifest.py`, `src/charter/activation/project_registration.py` and `src/specify_cli/cli/commands/doctrine.py` are owned by **WP03** (write-side cutover) and edited here by steps 0a, 2 and 4. WP04 depends on WP02 and WP03, so the two never run in parallel; your edits to those three files are then mechanical follow-ups on a completed upstream WP (tasks.md rule), logged in the Activity Log.
 
 ## Context & Constraints
 
@@ -169,7 +171,7 @@ First commit: delete the `pending_until("WP04", …)` markers in `tests/acceptan
 | 5 | `sources/`, `snapshot`, `template_render/` → `specify_cli.charter_packs` (rename `OrgDoctrineSource` here or in the rename WP). | egress allowances, destructive-op `CensusKey.rel`, mutation-ownership paths, `_owned_checkout_scan` path, foreign-coverage baseline, ruff exclude ×3 |
 | 6 | Delete `src/specify_cli/doctrine/` (including `__init__`). Remove both exemptions (census and boundary) and retire the laundering tests. Move `tests/specify_cli/doctrine/*` per A.5 and update the 5 roster files together (`_gate_coverage`, `_interpreter_shard_roster`, `ci_topology_census.json`, `ci-module-registry.yml`, `ci-nightly.yml`) plus the 9 test-path ruff exclude entries. | `test_doctrine_census`, `test_runtime_charter_doctrine_boundary`, `test_module_shard_registry` / `test_gate_selection_authority` / `test_ci_collection_completeness` (roster bijection), `test_ruff_format_exclude_ratchet` |
 
-**How this WP executes the table.** Step 0c is already done (WP02 T012). This WP does **0a, 0b, 0d, 1, 2 and 4**; WP05 does **3, 5 and 6**. Because tasks.md puts the validator/assembler move (step 4) here and the org-charter move (step 3) in WP05, step 4 runs **before** step 3. That is safe with one interim: the two org-charter step functions and the composing entry are added to `src/specify_cli/doctrine/org_charter.py` here (T022), and WP05 carries them to `charter.activation.org_charter` with the rest of the module. Every gate stays green after each step. Steps 0a, 0b and 0d may run in any order; 1, 2, 4 run in order; one commit per step.
+**How this WP executes the table.** Step 0c is already done (WP02 T012). This WP does **0a, 0b, 0d, 1, 2 and 4**; WP05 does **3, 5 and 6**. Because tasks.md puts the validator/assembler move (step 4) here and the org-charter move (step 3) in WP05, step 4 runs **before** step 3. That is safe with one interim: the two org-charter step functions and the composing entries are added to `src/specify_cli/doctrine/org_charter.py` here (T022), and WP05 carries them to `charter.activation.org_charter` with the rest of the module. In this WP the `charter.packs` facade exports **only offering-side functions**; the CLI imports the two composing entries directly from `specify_cli.doctrine.org_charter`, and WP05 adds them to the facade once they live in `charter.activation`. Every gate stays green after each step. Steps 0a, 0b and 0d may run in any order; 1, 2, 4 run in order; one commit per step.
 
 ## Subtasks & Detailed Guidance
 
@@ -194,7 +196,7 @@ First commit: delete the `pending_until("WP04", …)` markers in `tests/acceptan
   1. Org-charter steps (A.3 #4, minimal fix, ruling 9 placement kept):
      - Move the bodies of `pack_validator._validate_org_charter` (`:1668`) and `pack_assembler._merge_org_charters_to_output` (`:659`) into `src/specify_cli/doctrine/org_charter.py` as public `validate_org_charter_file(path) -> list[ValidationIssue]` and `merge_org_charter_files(paths, output_dir) -> None`. Delete the dead `try/except ModuleNotFoundError` fallbacks.
      - `validate_pack(pack_dir, *, check_drg_root=True, org_charter_check: Callable[[Path], list[ValidationIssue]] | None = None)` and `assemble(..., org_charter_merge: Callable[[Sequence[Path], Path], None] | None = None)`: when the pack has an `org-charter.yaml` and no hook is given, record an explicit issue/refusal ("org charter not validated: no checker supplied"), never skip silently.
-     - Add one composing entry next to the steps: `validate_pack_with_org_charter(pack_dir, **kw)` and `assemble_pack_with_org_charter(...)`. The CLI and `charter.packs` callers use these. Pin with a test that the CLI path reaches `validate_org_charter_file` (monkeypatch it to raise and assert the CLI reports it).
+     - Add one composing entry next to the steps: `validate_pack_with_org_charter(pack_dir, **kw)` and `assemble_pack_with_org_charter(...)`. The CLI (`cli/commands/doctrine.py`, `_doctrine_collect.py`) imports them directly from `specify_cli.doctrine.org_charter` (`specify_cli` → `specify_cli` is legal). Do **not** export them from `charter.packs` here: that would be a `charter` → `specify_cli` import, which C-007 forbids and `tests/architectural/test_charter_no_specify_cli_import.py` fails. WP05 adds them to the facade when `org_charter` moves to `charter.activation` (the facade module is not under `charter/offering/`, so importing `charter.activation` there is legal). Pin with a test that the CLI path reaches `validate_org_charter_file` (monkeypatch it to raise and assert the CLI reports it).
      - If the hook split grows past about 100 lines, stop and raise the A.3 #4 alternative (validator/assembler under `charter.activation`) with the orchestrator; do not deviate silently.
   2. Pure manifest writer (A.3 #6): move `snapshot.write_pack_manifest` (`snapshot.py:454`) and its pure helpers (`_strip_credentials`, `_safe_urlsplit`, `_source_uses_query`, `_source_fingerprint`, `_snapshot_sha256`, `_iso_now`, `_manifest_artifact_counts`, `_count_artifacts`) into the manifest module (lands in offering in step 2; do this sub-step inside step 2's commit). New signature takes primitives: `write_pack_manifest(local_path, *, pack_version, etag, source_url, source_type)`. `snapshot.py` unpacks `FetchResult` and calls it through `charter.packs`. Keep `_iso_now` once (api_source has its own `_iso_now`, `api_source.py:317`; leave it). Update `tests/kernel/test_byte_identity_mapping.py:429` key to `charter.offering.packs.pack_manifest._iso_now#fetched_at`.
   3. Step 0d: add `CORE_KIND_PLURALS` (from `charter.offering.api` if exposed there, else `charter.offering.artifact_kinds`) and `resolve_relative_path_within_root` (`charter.offering.drg.org_pack_config`) to `src/charter/drg.py` `__all__`. Repoint `sources/api_source.py:25` and `snapshot.py:449` to `charter.drg`. Create `src/charter/packs.py` (docstring: "the public door for `specify_cli` to the pack model and tooling; object-identity re-exports only"). Update `tests/architectural/test_charter_facades_reexport_doctrine.py:60` (and `test_doctrine_public_surface.py` if it pins sets) for both facades.
@@ -216,7 +218,7 @@ First commit: delete the `pending_until("WP04", …)` markers in `tests/acceptan
 ### Subtask T024 – `charter.packs` facade; `charter.drg` exports; repoint `specify_cli` importers
 
 - **Steps**:
-  1. Fill `src/charter/packs.py` with the names `specify_cli` uses (find them: `grep -rn "pack_validator\|pack_assembler\|builtin_manifest\|pack_manifest" src/specify_cli`): at least `validate_pack_with_org_charter`, `assemble_pack_with_org_charter`, `ValidationResult`/issue types, `write_pack_manifest`, the built-in-manifest regenerate/check functions, `pack_document_dict` (a public name for the assembler's `_document_dict`, A.3 #8).
+  1. Fill `src/charter/packs.py` with the names `specify_cli` uses (find them: `grep -rn "pack_validator\|pack_assembler\|builtin_manifest\|pack_manifest" src/specify_cli`): offering-side functions only: at least `validate_pack`, `assemble`, `ValidationResult`/issue types, `write_pack_manifest`, the built-in-manifest regenerate/check functions, `pack_document_dict` (a public name for the assembler's `_document_dict`, A.3 #8).
   2. Repoint: `src/specify_cli/cli/commands/doctrine.py:294,415,462,721,813` (WP03-owned, mechanical; `_artifact_schema_registry` is private: expose a public facade name instead of importing a private), `src/specify_cli/cli/commands/_doctrine_collect.py` (WP02-owned, mechanical), `src/specify_cli/drg_writers/registry.py:56,196-197` (`name=` must equal the real `module.qualname`, cross-checked by `tests/architectural/test_drg_writer_discovery.py`; with the public alias decide whether the registry tracks `charter.offering.packs.pack_assembler._document_dict` or the public name, and update the gate's docstring `:124`).
   3. `snapshot.py` (still in `specify_cli.doctrine`) imports the writer from `charter.packs`.
 - **Validation**:
@@ -264,12 +266,12 @@ One commit per A.6 step (0a, 0b, 0d, 1, 2, 4) plus the red-first commit and the 
 
 - **Silent skip of the org-charter leg**: explicit issue when no hook is supplied; CLI-path test.
 - **Byte drift in manifest hashes**: golden digests in `test_hashing.py`; `test_counts_derivation`.
-- **Lazy baseline growth**: every `specify_cli` caller goes through `charter.packs`.
+- **Lazy baseline growth**: every `specify_cli` caller goes through `charter.packs`, except the two composing entries, imported from `specify_cli.doctrine.org_charter` until WP05 moves them.
 
 ## Definition of Done
 
 - [ ] Steps 0a, 0b, 0d, 1, 2, 4 done, each in its own commit with its gates green.
-- [ ] `charter.offering.packs` imports neither `charter.activation` nor `specify_cli`; `charter.packs` is the only `specify_cli` door.
+- [ ] `charter.offering.packs` imports neither `charter.activation` nor `specify_cli`; `charter.packs` imports no `specify_cli` module and exports only offering-side names; it is the only `specify_cli` door to the moved modules.
 - [ ] WP04 acceptance tests red first, green last; mechanical edits logged.
 
 ## Review Guidance

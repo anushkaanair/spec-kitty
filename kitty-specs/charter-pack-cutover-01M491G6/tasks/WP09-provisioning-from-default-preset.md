@@ -2,7 +2,7 @@
 work_package_id: "WP09"
 title: "Provisioning reads the `default` preset"
 subtasks: ["T046", "T047", "T048", "T049"]
-dependencies: ["WP07"]
+dependencies: ["WP07", "WP08", "WP10"]
 requirement_refs: ["FR-003", "FR-005"]
 task_type: "implement"
 phase: "Phase 2 - Presets and promotion"
@@ -36,6 +36,8 @@ history:
 ## ⚡ Do This First: Load Agent Profile
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter (or any user-defined profile), and behave according to its guidance before parsing the rest of this prompt.
+
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
 
 - **Profile**: `python-pedro`
 - **Role**: `implementer`
@@ -117,7 +119,7 @@ Do not edit WP01's assertions (C-006).
      - returns the list verbatim (no catalog intersection, no re-scan — keep the "copy, not re-scan" rule from `default_charter.py:24-30`).
   2. `charter generate` and upgrade: in `src/charter/activation/compiler.py`, `prepare_mission_type_activations` (`:618-647`) — replace `load_default_mission_type_activations()` with the new reader, and replace the precondition inputs `seed = _default_pack_yaml_path(None)` (`:632-633`) with the preset file path (`pack_presets_dir(built_in_root()) / "default.yaml"`, via the kernel helper), so the prepared-write CAS still observes the real seed file. Delete the module-level `from charter.activation.default_pack import load_default_mission_type_activations` (`:38`) and the lazy `_default_pack_yaml_path` import (`:620`). Update the docstrings at `:652-688` (they name `src/charter/activation/packs/default.yaml`).
   3. `init`: `src/specify_cli/provisioning/default_charter.py` — `_load_default_pack_activations` (`:87-124`) becomes a call to the new reader; delete `_DEFAULT_PACK_NAME`, the `resolve_builtin_pack_path` / `merge_pack_into_config` imports (`:51-54`) and the registry-based path resolution. Replace `merge_pack_into_config(config_data, {key: list}, force=False)` (`:166-170`) with the equivalent explicit additive write: if `mission_type_activations` is absent, set it and dump; else return `False` without touching the file. Rewrite the module docstring (`:1-40`): the surface is the built-in `default` preset; drop the rc35/registry narrative.
-  4. The upgrade path (`src/specify_cli/cli/commands/upgrade.py:445-506`, `_provision_mission_type_activations_for_upgrade` or similarly named) calls `provision_mission_type_activations` and catches `CharterPackConfigError`, returning `exc.body`. Make it also catch `DefaultPresetMissingError` the same way (T047). `upgrade.py` is not owned by this WP (WP11/WP12 change it): keep the edit to that `except` clause and the docstring lines `:466-483` that name `default_pack`; log it as a follow-up edit with rationale.
+  4. The upgrade path (`src/specify_cli/cli/commands/upgrade.py:445-506`, `_provision_mission_type_activations_for_upgrade` or similarly named) calls `provision_mission_type_activations` and catches `CharterPackConfigError`, returning `exc.body`. Make it also catch `DefaultPresetMissingError` the same way (T047). `upgrade.py` is owned by WP12, which runs after you (WP12 depends on WP09): keep the edit to that `except` clause and the docstring lines `:466-483` that name `default_pack`; log it as a follow-up edit with rationale.
   5. `src/specify_cli/upgrade/assessment.py:127` and the two skill installers (`skills/installer.py:371`, `skills/command_installer.py:835`) consume `prepare_mission_type_activations`; they need no change, but run their tests (they compare prepared writes, which now observe the preset file).
 - **Files**: `compiler.py`, `default_charter.py`; logged edit in `upgrade.py`.
 - **Parallel?**: No; T047 defines the error it raises.
@@ -156,8 +158,8 @@ Do not edit WP01's assertions (C-006).
 - **Steps**:
   1. `tests/charter/activation/test_default_preset_provisioning.py` (new): the reader returns the preset's list; missing preset file, malformed YAML, preset without the key, preset with `[]` → `DefaultPresetMissingError` with code `DEFAULT_PRESET_MISSING` (each via a tmp copy of `packs/built-in` and `SPEC_KITTY_PACKS_ROOT`); `prepare_mission_type_activations` on a project lacking the key prepares the preset's list and observes the preset file as an input; present key / authored `[]` untouched.
   2. `tests/specify_cli/cli/commands/test_init_default_preset_positive_control.py` (new): **through the `spec-kitty init` CLI**, not the provisioner function (testability squad, FR-003 row): copy `packs/built-in` to tmp, rewrite its `presets/default.yaml` `mission_type_activations` to a different valid set (for example `[software-dev, research]`), point `SPEC_KITTY_PACKS_ROOT` at it, run `init` non-interactively into a fresh dir (copy the invocation style of existing init CLI tests; skip agent setup flags as they do), assert `.kittify/config.yaml` carries exactly that set. Same test with the untouched copy asserts the shipped list (the negative half). Third case: remove the preset file → exit 1, output contains `DEFAULT_PRESET_MISSING`, no `mission_type_activations` written.
-  3. FR-003 equivalence: on a freshly `init`-ed project (agents skipped), read the activation state; apply the `default` preset's governed-key rules (no per-kind keys, no `activated_kinds`, the preset's mission types) and assert equality — "init equals `--preset default`". If WP08 has landed in your lane base, also run `charter activate --preset default` on the same project and assert 0 bytes change; if not, the acceptance suite covers it.
-  4. Update `tests/specify_cli/cli/commands/test_init_provisioning.py` (`:46-47,148-166`: `DefaultCharterPackMissingError` → `DefaultPresetMissingError`; monkeypatches of the registry path → `SPEC_KITTY_PACKS_ROOT` copies). Note: WP10 (parallel lane) deletes the rc35 identity test in this file (`test_rc35_default_charter_pack_migration_identity_and_idempotence_unchanged`, `:320-349`) because WP10 turns that migration into a recorded no-op; do not re-add or rewrite it, and expect that small hunk when integrating.
+  3. FR-003 equivalence: on a freshly `init`-ed project (agents skipped), read the activation state; apply the `default` preset's governed-key rules (no per-kind keys, no `activated_kinds`, the preset's mission types) and assert equality — "init equals `--preset default`". WP08 is upstream (WP09 depends on it): also run `charter activate --preset default` on the same project and assert 0 bytes change. The acceptance test `test_fr003_init_without_activation_equals_default_preset` drives the same comparison through the CLI.
+  4. Update `tests/specify_cli/cli/commands/test_init_provisioning.py` (`:46-47,148-166`: `DefaultCharterPackMissingError` → `DefaultPresetMissingError`; monkeypatches of the registry path → `SPEC_KITTY_PACKS_ROOT` copies). Note: WP10 (upstream; WP09 depends on it) has already deleted the rc35 identity test in this file (`test_rc35_default_charter_pack_migration_identity_and_idempotence_unchanged`, `:320-349`) because it turned that migration into a recorded no-op; do not re-add or rewrite it.
   5. Update `tests/charter/test_compiler_charter_yaml.py` and `tests/specify_cli/upgrade/test_upgrade_provisions_mission_type_activations.py` (`:418-428` monkeypatch target) to the new reader.
   6. Remove `pending_until("WP09")` markers (red-first commit) and turn them green.
 
@@ -187,7 +189,6 @@ Conventional subjects with `#3732`: `refactor(charter): mission types seeded fro
 
 - **Prepared-write CAS input drift**: `prepare_mission_type_activations` records its seed file as an observed input; the skill installers compare prepared writes (`installer.py:371`). Point the observation at the preset file in the same commit as the source switch.
 - **`SPEC_KITTY_PACKS_ROOT` in tests leaking**: use `monkeypatch.setenv`, never `os.environ` directly.
-- **Parallel lane with WP10 on `test_init_provisioning.py`**: different hunks; resolve by keeping both edits.
 
 ## Definition of Done
 

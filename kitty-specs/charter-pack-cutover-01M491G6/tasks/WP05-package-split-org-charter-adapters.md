@@ -111,6 +111,8 @@ history:
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter, and behave according to its guidance before parsing the rest of this prompt.
 
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
+
 - **Profile**: `architect-alphonso`
 - **Role**: `implementer`
 - **Agent/tool**: `claude`
@@ -149,14 +151,14 @@ Wrap HTML/XML tags in backticks. Use language identifiers on code blocks.
 - WP04 has moved the pack model and tooling to `charter.offering.packs`, created the `charter.packs` facade, extended `charter.drg`, and added `validate_org_charter_file`, `merge_org_charter_files` and the composing entries to `src/specify_cli/doctrine/org_charter.py`. Read WP04's Activity Log first.
 - **C-008 note**: `org_charter.py:45` imports `charter.activation.default_pack`, which FR-005 deletes later (WP13). WP06 (FR-015) comes after this WP, so the move **carries** that import (legal inside `charter`, A.6 step 3 "Prerequisite").
 - **No aliases (C-001)**: `config.py`'s four `import X as X` re-exports of `charter.offering.drg.org_pack_config` symbols are a laundering conduit; they are deleted, and every caller imports the real home. No `specify_cli/doctrine/__init__.py` stub, no `charter_packs/__init__.py` re-export list beyond what a package needs (keep it docstring-only unless a caller needs a name, and then prefer the submodule path).
-- Renames of identifiers (`MissingDoctrinePackError`, `OrgDoctrineSource`, …) are **not** in this WP unless A.6 says "here or in the rename WP": do the module move only and leave identifier renames to WP19–WP21, except where an identifier is a path (for example roster keys).
+- Renames of identifiers are **not** in this WP: do the module move only, except where an identifier is a path (for example roster keys). `MissingDoctrinePackError` (→ `MissingCharterPackError`) is renamed by WP20 (R2) and `OrgDoctrineSource` (→ `OrgCharterPackSource`) by WP21 (R3); WP01's `test_fr010_retired_identifiers_absent` rows pin both.
 - Code style: ruff, `ruff format`, mypy clean; complexity ≤ 15; no new suppressions.
 
 ## Ownership of moved sources
 
 `src/specify_cli/doctrine/org_charter.py`, `snapshot.py` and `sources/api_source.py` were edited and are owned by WP04. Moving them here (git mv + delete at the old path) is a mechanical rename of files owned by a completed upstream WP, which the tasks.md rule allows. Log each with a one-line rationale. The destinations are yours (`src/charter/activation/org_charter.py`, `src/specify_cli/charter_packs/**`).
 
-Other mechanical edits outside owned_files (log each): `src/specify_cli/cli/commands/_doctrine_collect.py` (WP02), `src/specify_cli/cli/commands/doctrine.py` (WP03), `src/specify_cli/cli/commands/charter/interview.py` (import line only; later owned by WP06), `tests/architectural/dead_symbol_allowlist.yaml` (WP02), `tests/architectural/charter_pack_path_allowlist.yaml` (WP03), `pyproject.toml`, `tests/specify_cli/doctrine/test_snapshot.py`, `tests/kernel/test_byte_identity_mapping.py` (WP04), docstring path references in `src/charter/activation/{_drg_helpers,activations,context_contract,default_pack,interview,org_pack_discovery,pack_manager}.py` and `src/specify_cli/upgrade/migrations/m_unify_charter_activation.py:36,106` (docstrings only; WP10 owns that migration and runs in parallel, so touch only those two docstring lines and tell WP10's lane).
+Other mechanical edits outside owned_files (log each): `src/specify_cli/cli/commands/_doctrine_collect.py` (WP02), `src/specify_cli/cli/commands/doctrine.py` (WP03), `src/specify_cli/cli/commands/charter/interview.py` (import line only; later owned by WP06), `tests/architectural/dead_symbol_allowlist.yaml` (WP02), `tests/architectural/charter_pack_path_allowlist.yaml` (WP03), `pyproject.toml`, `tests/specify_cli/doctrine/test_snapshot.py`, `tests/kernel/test_byte_identity_mapping.py` (WP04), docstring path references in `src/charter/activation/{_drg_helpers,activations,context_contract,default_pack,interview,org_pack_discovery,pack_manager}.py` and `src/specify_cli/upgrade/migrations/m_unify_charter_activation.py:36,106` (docstrings only; WP06 owns that migration and runs after you, so touch only those two docstring lines and log them).
 
 ## Branch Strategy
 
@@ -200,7 +202,8 @@ First commit: delete the `pending_until("WP05", …)` markers in `tests/acceptan
   3. Repoint `src` importers (real imports at planning time): `charter_runtime/lint/checks/org_layer.py:96`, `cli/commands/charter/context.py:77`, `cli/commands/charter/generate.py:490`, `cli/commands/charter/interview.py:205` (mechanical), `cli/commands/_doctrine_collect.py:178,1112` (mechanical), `cli/commands/doctrine.py` org paths (mechanical). `specify_cli` may import `charter.activation.*` directly (only `charter.offering` needs a facade); confirm with `test_runtime_charter_doctrine_boundary.py`.
   4. Repoint test importers and the three patch strings: `tests/cli/commands/test_charter_rendering.py:353`, `tests/cli/commands/test_charter_json_error_contract.py:164`, `tests/specify_cli/cli/commands/test_doctrine_collect.py:85`; plus `tests/specify_cli/test_provenance_integration.py:24`, `tests/charter/{test_answers_inert_and_org_union,test_directive_identity_mapping,test_iter_org_charter_docs}.py`, `tests/cli/test_doctrine_org_commands.py`, `tests/doctrine/pack_skills/test_kind_registration.py`, `tests/integration/test_org_pack_artifact_lifecycle.py`, `tests/specify_cli/cli/commands/test_charter_interview_org_prefill.py`, `tests/architectural/test_kind_table_derivation.py:23`.
   5. Re-key dead-symbol entries (org_charter ×5); ruff exclude for `org_charter_loader` (`pyproject.toml:576`).
-- **Files**: the two destinations; `config.py` and the two sources deleted; importers.
+  6. Add the two composing entries `validate_pack_with_org_charter` and `assemble_pack_with_org_charter` (now in `charter.activation.org_charter`) to the `charter.packs` facade (`src/charter/packs.py`, WP04, a logged follow-up edit), as object-identity re-exports. WP04 left them out because they lived in `specify_cli` then. The facade module is not under `charter/offering/`, so importing `charter.activation` there is legal. Repoint the CLI importers (`cli/commands/doctrine.py`, `_doctrine_collect.py`) from `specify_cli.doctrine.org_charter` to `charter.packs`, and extend `tests/charter/packs/test_charter_packs_facade.py` (WP04, logged) with the two names.
+- **Files**: the two destinations; `config.py` and the two sources deleted; importers; logged edits in `src/charter/packs.py` and its facade test.
 - **Validation**:
   - [ ] `pytest tests/architectural/test_charter_no_specify_cli_import.py tests/architectural/test_kind_table_derivation.py tests/architectural/test_layer_rules.py -q` (the moved modules import nothing from `specify_cli`).
   - [ ] `pytest tests/charter tests/doctrine tests/cli/test_doctrine_org_commands.py tests/cli/commands -q`.
@@ -219,7 +222,7 @@ First commit: delete the `pending_until("WP05", …)` markers in `tests/acceptan
      - `pyproject.toml:581-583` ruff excludes (prefer formatting and dropping);
      - `pyproject.toml:84` comment on `requests` ("HTTP client for doctrine-pack https/api sources") → charter-pack wording.
   4. B.2 literals in `snapshot.py:357,468,582` → `kernel.charter_pack_paths` constants if they are pack-relative paths; delete the matching rows in `tests/architectural/charter_pack_path_allowlist.yaml` (mechanical).
-  5. `OrgDoctrineSource`: leave the identifier for the rename WP (WP21 R3), so this commit stays a pure move; record the decision.
+  5. `OrgDoctrineSource`: leave the identifier for WP21 (R3, → `OrgCharterPackSource`), so this commit stays a pure move.
 - **Parallel?**: after T026 (step order).
 - **Validation**:
   - [ ] `pytest tests/architectural/test_egress_consent_boundary.py tests/architectural/test_destructive_op_routing.py tests/architectural/test_mutation_ownership_routing.py tests/architectural/test_owned_checkout_single_authority.py tests/architectural/test_owned_checkout_gate_selftest.py -q`.

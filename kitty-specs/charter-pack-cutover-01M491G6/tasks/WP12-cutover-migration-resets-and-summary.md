@@ -2,7 +2,7 @@
 work_package_id: "WP12"
 title: "Cutover migration II — stale lists, resets, skills, summary"
 subtasks: ["T061", "T062", "T063", "T064", "T065"]
-dependencies: ["WP07", "WP11"]
+dependencies: ["WP07", "WP08", "WP09", "WP11"]
 requirement_refs: ["FR-012", "NFR-001", "NFR-004", "SC-002"]
 task_type: "implement"
 phase: "Phase 3 - Upgrade migration"
@@ -40,6 +40,8 @@ history:
 ## ⚡ Do This First: Load Agent Profile
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter, and behave according to its guidance before parsing the rest of this prompt.
+
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
 
 - **Profile**: `python-pedro`
 - **Role**: `implementer`

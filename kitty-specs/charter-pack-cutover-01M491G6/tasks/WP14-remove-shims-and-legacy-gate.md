@@ -2,7 +2,7 @@
 work_package_id: "WP14"
 title: "Remove read-side shims; CLI-root legacy gate"
 subtasks: ["T070", "T071", "T072", "T073", "T074"]
-dependencies: ["WP12"]
+dependencies: ["WP12", "WP13"]
 requirement_refs: ["FR-011", "C-001"]
 task_type: "implement"
 phase: "Phase 4 - Removal (no aliases, no shims)"
@@ -40,6 +40,8 @@ history:
 ## ⚡ Do This First: Load Agent Profile
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter, and behave according to its guidance before parsing the rest of this prompt.
+
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
 
 - **Profile**: `python-pedro`
 - **Role**: `implementer`

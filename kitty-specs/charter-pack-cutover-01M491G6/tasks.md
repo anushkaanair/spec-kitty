@@ -10,9 +10,9 @@
 
 **Edits outside owned files**: a WP may edit a file owned by another WP only when the two cannot run in parallel lanes, i.e. one is a (transitive) dependency of the other. Record each such file with a one-line rationale under "Mechanical edits outside owned_files" in the Activity Log. Never edit a file owned by a WP that can run in a parallel lane. Ownership guards parallel lanes; sequential follow-up edits are expected.
 
-**Generated files have no owner**: `packs/built-in/pack-manifest.yaml`, `src/specify_cli/_completion_manifest.json`, `docs/api/cli-commands.md`, `docs/development/docs-retrieval-index.yaml`, regen fixtures and similar outputs are regenerated with their tool (`spec-kitty charter pack regenerate-graph` / `spec-kitty doctrine regenerate-graph` before WP15, the completion and docs generators) by whichever WP changes their inputs, and committed. Never hand-merge them; on a conflict, regenerate.
+**Generated files have no owner** (no WP lists them in `owned_files`): `packs/built-in/pack-manifest.yaml`, `src/specify_cli/_completion_manifest.json`, `docs/api/cli-commands.md`, `docs/development/docs-retrieval-index.yaml`, regen fixtures and similar outputs are regenerated with their tool (`spec-kitty charter pack regenerate-graph` / `spec-kitty doctrine regenerate-graph` before WP15, the completion and docs generators) by whichever WP changes their inputs, and committed. Never hand-merge them; on a conflict, regenerate.
 
-**Version**: no WP bumps `pyproject.toml`'s version (unreleased rc; changelog entries go under Unreleased). The CLAUDE.md "`__init__.py` change needs a version bump" rule is satisfied by the WP24 changelog entry.
+**Version**: no WP bumps `pyproject.toml`'s version (unreleased rc; changelog entries go under Unreleased). The cutover migration targets the current version, `4.0.0rc6` (`m_4_0_0rc6_charter_pack_cutover.py`). The CLAUDE.md "`__init__.py` change needs a version bump" rule is satisfied by the WP24 changelog entry.
 
 ## Subtask Index
 
@@ -240,7 +240,7 @@ T026–T029 (WP05)
 
 T030–T034 (WP06)
 
-**Dependencies**: WP05, WP17. WP06 deletes `load_default_pack_activation_ids` once its last caller is gone (`test_no_dead_symbols`); WP09 deletes the `default_pack` module.
+**Dependencies**: WP05, WP10, WP17 (WP10 neutralises the normalizer, whose `[]` writes would otherwise narrow the FR-015 upgrade row; WP17's `ActiveCharterManager` is used). WP06 deletes `load_default_pack_activation_ids` once its last caller is gone (`test_no_dead_symbols`); WP09 deletes the `default_pack` module.
 
 ## Work Package WP07: Preset format, discovery and built-in presets (Priority: P1)
 
@@ -273,7 +273,7 @@ T041–T045 (WP08)
 
 T046–T049 (WP09)
 
-**Dependencies**: WP07.
+**Dependencies**: WP07, WP08 (the FR-003 init-vs-preset test drives `charter activate --preset default`), WP10 (WP10 edits WP09's `test_init_provisioning.py`).
 
 ---
 
@@ -307,7 +307,7 @@ T055–T060 (WP11)
 
 T061–T065 (WP12)
 
-**Dependencies**: WP07, WP11.
+**Dependencies**: WP07, WP08 (its delete-capable activation writer), WP09 (WP09 edits WP12's `upgrade.py`), WP11.
 
 ---
 
@@ -331,7 +331,7 @@ T066–T069 (WP13). T066 confirms `default_pack` is gone (deleted by WP06/WP09) 
 
 T070–T074 (WP14)
 
-**Dependencies**: WP12.
+**Dependencies**: WP12, WP13 (WP13 edits WP14's `org_pack_config.py`).
 
 ## Work Package WP15: Charter homes for every doctrine command (Priority: P1)
 
@@ -365,7 +365,7 @@ T080–T082 (WP16)
 
 T083–T087 (WP17)
 
-**Dependencies**: WP05. Runs early so every later WP builds on the new names; creates `src/charter/offering/packs/retired_fields.py` (`RETIRED_PACK_FIELD`, `doctrine_pack_id` entry).
+**Dependencies**: WP05. Runs after WP05 and before every WP that uses its names (WP06, WP11 and their descendants); it never waits for a later WP; creates `src/charter/offering/packs/retired_fields.py` (`RETIRED_PACK_FIELD`, `doctrine_pack_id` entry).
 
 ## Work Package WP18: Skill families (Priority: P2)
 
@@ -385,7 +385,7 @@ T088–T091 (WP18)
 
 T092–T094 (WP19)
 
-**Dependencies**: WP14, WP16, WP17.
+**Dependencies**: WP14, WP16, WP17, WP18 (WP19 edits skill prose WP18 owns).
 
 ## Work Package WP20: Identifier rename R2 — activation (Priority: P2)
 
@@ -465,7 +465,14 @@ graph LR
   WP07 --> WP08
   WP07 --> WP09
   WP01 --> WP10 --> WP11 --> WP12
+  WP10 --> WP06
+  WP10 --> WP09
+  WP08 --> WP09
   WP07 --> WP12
+  WP08 --> WP12
+  WP09 --> WP12
+  WP13 --> WP14
+  WP18 --> WP19
   WP08 --> WP13
   WP09 --> WP13
   WP12 --> WP13
@@ -489,5 +496,5 @@ graph LR
   WP22 --> WP25
 ```
 
-**Parallel opportunities**: WP10 runs beside WP02–WP09; WP18 beside the removal phase; WP09 beside WP08.
+**Parallel opportunities**: WP10 runs beside WP02–WP05 and WP17; WP06/WP07/WP08/WP09 run beside WP11; WP18 runs beside WP13–WP16; WP23 runs beside WP24.
 **MVP**: WP01 (the suite is the contract every other WP is measured against).

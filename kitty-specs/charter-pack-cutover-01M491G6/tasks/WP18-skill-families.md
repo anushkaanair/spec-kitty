@@ -127,6 +127,8 @@ history:
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter (or any user-defined profile), and behave according to its guidance before parsing the rest of this prompt.
 
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
+
 - **Profile**: `curator-carla`
 - **Role**: `implementer`
 - **Agent/tool**: `claude`

@@ -41,6 +41,8 @@ history:
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter (or any user-defined profile), and behave according to its guidance before parsing the rest of this prompt.
 
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
+
 - **Profile**: `python-pedro`
 - **Role**: `implementer`
 - **Agent/tool**: `claude`
@@ -110,6 +112,8 @@ grep -rn 'pending_until("WP08")' tests/acceptance/charter_pack_cutover/
 git commit -m "test(charter): flip preset activation and pack list acceptance tests red (#3732)"
 ```
 
+`test_fr001_preset_with_positional_kind_exits_2` is unmarked (it passes at base, where `--preset` is an unknown option): it is a regression guard, not red-first evidence. `test_nfr003_preset_and_pack_list_latency` asserts every timed command succeeded before it compares medians, so it is red at base.
+
 The acceptance tests are the arbiter of the two open semantic points below (customised-key rule, preset that omits `mission_type_activations`). Do not edit their assertions (C-006); if they contradict the spec, stop and record it.
 
 ## Subtasks & Detailed Guidance
@@ -120,7 +124,7 @@ The acceptance tests are the arbiter of the two open semantic points below (cust
 - **Steps**:
   1. **Key removal in the single writer.** In `src/charter/activation/charter_yaml_io.py`, give `prepare_charter_yaml_section` (`:612`) a keyword `remove: Iterable[str] = ()` honoured only for `section == "activation"` (validate the names with `_validate_section`'s activation-key check; a non-activation section with `remove` is a `ValueError`); delete those keys from the document before rendering. In `src/charter/activation/pack_manager.py`, give `prepare_activation_write(repo_root, values, *, remove=())` (`:663`) the same keyword for both targets (config branch: `data.pop(key, None)`; charter branch: pass `remove=` through). `pack_manager.py` is owned by WP06 (completed upstream): a follow-up edit allowed by the tasks.md rule — log it. Update the `update_charter_yaml_section` docstring (`charter_yaml_io.py:635-670`) and the module docstring lines naming the deleted `pack_manager.merge_defaults` (`:4`, `:639`, `:659`; WP06 deleted it).
   2. Create `src/charter/activation/preset_application.py` with:
-     - `GOVERNED_KEYS`: `preset_activation_keys()` (WP07; the eight `activated_<plural>` keys) + `"activated_kinds"` + `"mission_type_activations"`. `activated_skills` and `activated_glossary_packs` are never read or written by this module (they have their own absence contract).
+     - `GOVERNED_KEYS`: `preset_activation_keys()` (WP07; the nine `activated_<plural>` keys, `activated_anti_patterns` included) + `"activated_kinds"` + `"mission_type_activations"`. The single writer must accept and remove `activated_anti_patterns`; if `prepare_activation_write` rejects it today, extend the accepted key set at its authority (not a second list), and add it to `test_activation_key_removal.py`. `activated_skills` and `activated_glossary_packs` are never read or written by this module (they have their own absence contract).
      - `PresetPlan` (frozen dataclass): `pack`, `preset`, `target_file: Path`, `written: dict[str, list[str]]`, `removed: list[str]`, `changes: dict[str, tuple[object, object]]` (key → (before, after), `None` meaning absent), `customised_changes: tuple[str, ...]`.
      - `plan_preset_application(repo_root, pack_name, preset_name) -> PresetPlan` — pure read: resolve the pack (`list_offering_packs`; unknown → `PackNotFoundError` carrying the available pack names), load the preset (`PresetNotFoundError` carrying the pack's preset names; the `project` pack ships none), resolve ids (step 3), compute the target state (step 4), diff against the current state read with `resolve_activation_write_target(repo_root)`.
      - `apply_preset_plan(repo_root, plan) -> None` — one `prepare_activation_write(repo_root, written, remove=removed)` then `apply_yaml_write(...)`; nothing else writes. If `written` and `removed` are both empty, no write at all (idempotent re-apply changes 0 bytes).
@@ -144,7 +148,8 @@ The acceptance tests are the arbiter of the two open semantic points below (cust
   2. Flag rules (usage errors exit **2**, raised as `typer.BadParameter`/`click.UsageError` so they go through Click's usage path, before any I/O):
      - `--preset` with positional `KIND`/`ARTIFACT_ID` → exit 2;
      - `--cascade` with `--preset` → exit 2 (presets do not cascade);
-     - `--pack`, `--force` or `--json` without `--preset` → exit 2 (they mean nothing on the positional path; the positional path has no JSON output today). Record this choice; if WP01's tests expect otherwise, follow them.
+     - `--pack`, `--force` or `--json` without `--preset` → exit 2 (they mean nothing on the positional path; the positional path has no JSON output today).
+     - These rules, the `--json` shapes and the `Error (<CODE>): <message>` text format are binding in `contracts/cli.md`; do not deviate from it.
      - Detect "user passed `--pack`" without comparing to the default string (use `ctx.get_parameter_source("pack")`), so `--pack built-in` alone is still an error.
   3. Put the preset flow in its own function, e.g. `_activate_preset(repo_root, pack, preset, *, force, json_output, compile_catalog, resynthesize) -> None`, called right after the `ctx.invoked_subcommand` guard. Order inside it: `resolve_write_root_or_exit(repo_root)` (worktree fail-closed, as the positional path does) → `validate_pack_config(repo_root)` (fail closed on invalid config) → `plan_preset_application` → refuse/print diff without `--force` → `apply_preset_plan` → `recompile_or_notify(repo_root, resynthesize=..., compile_catalog=...)` exactly as the positional path finishes (`:930-935`). Do not call `reproject_pack_skills` (presets never govern skills).
   4. `--resynthesize`: the positional path runs `preflight_resynthesis(repo_root, kind, artifact_id, ...)` before writing. For a preset, run the equivalent read-only check over the preset's resulting state before the write if the preflight module can express it; if not without a new abstraction, document that `--resynthesize` performs the post-write resynthesis only and record it.

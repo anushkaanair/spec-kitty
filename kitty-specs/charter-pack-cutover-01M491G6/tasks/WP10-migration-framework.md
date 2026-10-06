@@ -10,6 +10,7 @@ execution_mode: "code_change"
 owned_files:
   - "src/specify_cli/upgrade/migrations/base.py"
   - "src/specify_cli/upgrade/registry.py"
+  - "src/specify_cli/upgrade/runner.py"
   - "src/specify_cli/upgrade/migrations/m_3_2_0rc35_default_charter_pack.py"
   - "src/specify_cli/upgrade/migrations/m_3_2_x_normalize_activation_absence.py"
   - "src/specify_cli/upgrade/migrations/m_2_1_2_fix_glossary_context_skill.py"
@@ -45,6 +46,8 @@ history:
 ## ⚡ Do This First: Load Agent Profile
 
 Use the `/ad-hoc-profile-load` skill to load the agent profile specified in the frontmatter (or any user-defined profile), and behave according to its guidance before parsing the rest of this prompt.
+
+After WP18 lands, the `/ad-hoc-profile-load` skill is deleted: load profiles with `spk-charter-profile-load` instead (use whichever exists in your checkout).
 
 - **Profile**: `implementer-ivan`
 - **Role**: `implementer`
@@ -91,13 +94,13 @@ Done when every acceptance test marked `pending_until("WP10")` is green with the
 ## Context & Constraints
 
 - Read first: `spec.md` FR-012 (first sentence and the rc35 sentence), C-008, US2 AS-6; `plan.md` key design decisions 1–2; `contracts/upgrade-migration.md` ("Identity and ordering", "Neutralised migrations"); **`research/runtime-seams.md` §1** in full — §1.1 (selection/ordering today, with file:line), §1.3 (the `runs_first` decision and rejected alternatives), §1.4 (rc35 as a recorded no-op), §1.5 (the table of older migrations and the action for each).
-- This WP runs in a **parallel lane** beside WP02–WP09. It depends only on WP01. Ownership splits to watch:
+- This WP runs in a **parallel lane** beside WP02–WP05 and WP17. It depends only on WP01; WP06, WP09 and WP11 depend on it. Ownership splits to watch:
   - `m_unify_charter_activation.py`'s module-level `from charter.activation.default_pack import ...` (`:59`) is removed by **WP06**, which owns that file and rewrites its promotion. Do not edit it here. Your discovery guard (T052) therefore covers the modules this mission deletes **that WP10 is responsible for** (`specify_cli.charter_pack_registry`), and WP06 removes the other import.
-  - `tests/specify_cli/cli/commands/test_init_provisioning.py` is owned by **WP09** (parallel lane). It pins the old rc35 behaviour in one test (`test_rc35_default_charter_pack_migration_identity_and_idempotence_unchanged`, `:320-349`). Delete that one test function here as a logged out-of-ownership edit (minimal hunk; WP09 edits other hunks of the same file).
+  - `tests/specify_cli/cli/commands/test_init_provisioning.py` is owned by **WP09**, which runs after you (WP09 depends on WP10). It pins the old rc35 behaviour in one test (`test_rc35_default_charter_pack_migration_identity_and_idempotence_unchanged`, `:320-349`). Delete that one test function here as a logged out-of-ownership edit (minimal hunk; WP09 edits other hunks of the same file later).
   - `tests/architectural/charter_path_literal_allowlist.yaml:264-277` has two entries for `m_3_2_0rc35_default_charter_pack.py` (`DefaultCharterPackMigration.apply`, lines 161–162). Neutralising the body makes them stale; the gate's staleness twin-guard will fail. Remove exactly those two entries as a logged edit to the shared gate file.
 - **C-001**: neutralised migrations keep module, class and `migration_id` (old metadata stays meaningful), but lose their bodies, their helpers and their direct-call tests. No compatibility branch "in case the body is needed".
 - In-repo precedent for a recorded no-op stub: `src/specify_cli/upgrade/migrations/m_2_1_2_fix_charter_doctrine_skill.py` (22 lines). Match its shape.
-- The cutover migration itself (and `target_version = "4.0.0rc7"`, the version bump) is **WP11**, not this WP. Here you only add the mechanism and test it with planted migration classes.
+- The cutover migration itself (`m_4_0_0rc6_charter_pack_cutover.py`, `target_version = "4.0.0rc6"`, the current version; no version bump) is **WP11**, not this WP. Here you only add the mechanism and test it with planted migration classes.
 
 ## Branch Strategy
 
@@ -129,9 +132,11 @@ If WP01 assigned none to WP10 (possible: the end-to-end FR-012 rows belong to WP
      - `register()` (`:29-61`): if the class sets `runs_first` and another registered class already does, raise `ValueError` naming both classes.
      - `get_applicable()` (`:74-120`): keep the selection loop byte-for-byte; at the end return a **stable partition**: `[m for m in applicable if m.runs_first] + [m for m in applicable if not m.runs_first]`. Extract the partition into a tiny private helper so `get_applicable` stays under complexity 15.
      - `get_all()` (`:64-71`) unchanged (`tests/architectural/test_migration_chain_integrity.py` walks it and fails on any backward step).
-  3. **Version-independent selection for `runs_first`** (orchestrator decision, fixes the "stamped above the cutover version" wedge reported for WP11): a `runs_first` migration is selected whenever its `detect()` is true and it is not recorded as applied, **regardless of the `from_version`/`target_version` window**. Otherwise a project stamped at or above the cutover version that still carries legacy state would be refused by the WP14 CLI-root gate yet never migrated by `spec-kitty upgrade`. Implement it in the same helper as the partition (append a `runs_first` migration that the window excluded when `detect()` is true); add a test: project stamped above the migration's `target_version`, legacy content present → selected; same project without legacy content → not selected.
+  3. **Version-independent selection for `runs_first`** (orchestrator decision, fixes the "stamped above the cutover version" wedge reported for WP11): a `runs_first` migration is selected whenever its `detect()` is true and it is not recorded as applied, **regardless of the `from_version`/`target_version` window**.
+     - **Re-selection when recorded as applied** (orchestrator decision, AR-B4): `BaseMigration` gains a hook `structural_detect(project_path) -> bool` (default `False`). A `runs_first` migration whose `structural_detect()` is true is selected **even when `metadata.yaml` records it as applied**: in `get_applicable` and in `runner.py`'s `_apply_migration`, whose recorded-result skip (`runner.py:314-321`) runs before `detect()` today. Otherwise a teammate who pulls a committed `metadata.yaml` while untracked legacy files remain, or a merge that brings legacy state back, is wedged: the FR-011 gate refuses and `spec-kitty upgrade` skips the migration. WP11 implements the split predicate (structural part only: legacy root, legacy keys, `doctrine_pack_id`); this WP implements the selection.
+     - Test with a planted `runs_first` class: recorded as success, `structural_detect()` true → selected and applied; recorded as success, `structural_detect()` false and `detect()` true → not selected. Otherwise a project stamped at or above the cutover version that still carries legacy state would be refused by the WP14 CLI-root gate yet never migrated by `spec-kitty upgrade`. Implement it in the same helper as the partition (append a `runs_first` migration that the window excluded when `detect()` is true); add a test: project stamped above the migration's `target_version`, legacy content present → selected; same project without legacy content → not selected.
   4. Update `get_applicable`'s docstring: "Returns applicable migrations in version order, except that a `runs_first` migration is placed first and is selected on `detect()` alone, independent of the version window."
-  4. Do not touch `runner.py`: `_apply_migration` re-runs `detect()` at apply time (`runner.py:336`), so every later migration sees the post-cutover state; the worktree loop filters the same list.
+  4. Touch `runner.py` only for the re-selection rule in step 3: `_apply_migration` re-runs `detect()` at apply time (`runner.py:336`), so every later migration sees the post-cutover state; the worktree loop filters the same list.
 - **Files**: `base.py`, `registry.py`.
 - **Parallel?**: No (T054 tests it).
 - **Notes — residual to document, not fix**: same-version migrations (`target == from`) evaluate `detect()` once at selection time, before the cutover runs (`registry.py:98-117`); a project stamped exactly at such a migration's version can have it deselected in that run, and the next upgrade picks it up (runtime-seams §1.3 "Residual"). Put one sentence in the docstring.
@@ -217,8 +222,8 @@ Conventional subjects with `#3732`: `feat(upgrade): runs_first ordering in get_a
 
 - **Planted classes leaking into the global registry**: snapshot/restore fixture; never call `MigrationRegistry.clear()` without restoring.
 - **Normalizer's pointer half**: verify before deleting (T051 step 2); losing the pointer would strand migrated projects on the legacy config store.
-- **Parallel-lane hunks** in `test_init_provisioning.py` (WP09) and `charter_path_literal_allowlist.yaml` (any WP touching charter paths): keep the hunks minimal; log them.
-- **Chain gate**: you add no new `target_version`, so the terminal-version rule is unaffected; WP11 adds `4.0.0rc7` with its version bump.
+- **Out-of-ownership hunks** in `test_init_provisioning.py` (WP09, downstream) and `charter_path_literal_allowlist.yaml` (any WP touching charter paths; WP17 runs in parallel with you): keep the hunks minimal; log them.
+- **Chain gate**: you add no new `target_version`, so the terminal-version rule is unaffected; WP11 adds the cutover at the current `4.0.0rc6`, with no version bump.
 
 ## Definition of Done
 

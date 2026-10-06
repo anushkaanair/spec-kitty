@@ -23,7 +23,7 @@ The **project layer** is one flat root, `.kittify/charter-packs/`, holding the p
 |---|---|---|
 | `name` | string, matches file stem | Grammar: lowercase ASCII, starts with a letter, `[a-z0-9]` segments joined by single `-`, ≤ 64 chars. |
 | `description` | string | One line, shown by `charter pack list`. |
-| `activated_<plural>` | list of ids, optional | Absent: the preset leaves the kind unrestricted. List: allowlist (`[]` = none). Ids resolve against the whole offering. `activated_skills` and `activated_glossary_packs` are not governed by presets. |
+| `activated_<plural>` | list of ids, optional | Absent: the preset leaves the kind unrestricted. List: allowlist (`[]` = none). Ids resolve against the whole offering. Presets govern every charter-activatable kind derived from `ArtifactKind`, `activated_anti_patterns` included (#5409); `activated_skills` and `activated_glossary_packs` are not governed by presets; templates and assets are not activatable. |
 | `activated_kinds` | list of plurals, optional | Kind gate; must include every kind for which the preset lists ids. Absent: every kind. |
 | `mission_type_activations` | list of mission-type ids, optional | Written as listed; when absent the preset leaves the project key untouched. |
 
@@ -65,11 +65,11 @@ The full inventory is the FR-012 table in [spec.md](spec.md). Classes and action
 | Legacy config keys (`doctrine.org.*`, `organisation_packs`, `governance.doctrine.*`, tracker `doctrine`, answers `doctrine:`, `doctrine_pack_id`) | rename / rewrite | yes |
 | Legacy project root `.kittify/doctrine/**` | move to `.kittify/charter-packs/**`; refuse on colliding paths with different content | yes (moved paths) |
 | Path references (synthesis manifest, provenance sidecars, skills manifest `source_ref`, `.gitignore`) | rewrite path prefix | yes |
-| Stale lists (snapshot match per key), stale 8-kind gate, released `minimal` kind gate, per-artifact `[]` | reset to absent | yes, with file/key to restore |
+| Stale lists (snapshot match per key), stale 8-kind gate, released `minimal` kind gate, per-artifact `[]` | reset to absent, on the first application only (recorded) | yes, with file/key to restore |
 | Customised lists, lists equal to `minimal` per-kind content | unchanged | yes, "kept for review" / "matches preset minimal" |
 | Installed removed skills (manifested or hash-matched) | remove; new names installed | yes; edited copies kept and reported |
 
-Invariants: idempotent (second `spec-kitty upgrade` changes 0 bytes); user-chosen path values never rewritten; uncommitted content carried over by a plain filesystem move.
+Invariants: idempotent (second `spec-kitty upgrade` changes 0 bytes); the migration is re-selected whenever the structural legacy predicate holds (legacy root, legacy keys, `doctrine_pack_id`), even when recorded as applied; user-chosen path values never rewritten; uncommitted content carried over by a plain filesystem move.
 
 ## Renamed identities (FR-009, OD-1)
 
