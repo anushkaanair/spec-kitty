@@ -12,3 +12,4 @@
 ## Entries
 
 <!-- YYYY-MM-DD — 1-3 sentences: what happened, why it slowed you down. -->
+- 2026-10-06 — The stop hook demands a clean tree, but the specify contract forbids committing spec.md before it is substantive and confirmed; parked the untracked scaffold in the scratchpad until the owner confirms the requirement set.
