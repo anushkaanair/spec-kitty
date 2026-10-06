@@ -275,6 +275,8 @@ Conventional subjects with `#3732`, e.g. `feat(charter): activation preset model
 
 ## Definition of Done
 
+- [ ] `src/charter/offering/packs/presets.py` declares `__all__` (charter `__all__` Declaration Convention, binding per C-007).
+
 - [ ] Red-first commit; every `pending_until("WP07")` test green on the final commit.
 - [ ] Schema in `src/charter/offering/schemas/`, kinds derived and pinned by a test; contract-enum deviation recorded.
 - [ ] `presets.py` in offering: model, strict loader, discovery, offering-pack enumeration, example renderer, manifest enumeration; no `charter.activation` import.

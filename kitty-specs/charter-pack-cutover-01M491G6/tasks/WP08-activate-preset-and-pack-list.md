@@ -240,6 +240,8 @@ Conventional subjects with `#3732`: `feat(charter): activation-key removal in th
 
 ## Definition of Done
 
+- [ ] `src/charter/activation/preset_application.py` declares `__all__` (charter `__all__` Declaration Convention, binding per C-007).
+
 - [ ] Red-first commit; every `pending_until("WP08")` test green.
 - [ ] Removal supported in `prepare_charter_yaml_section` / `prepare_activation_write`; no second writer.
 - [ ] `charter activate --preset` with replace semantics, org union, OD-6 refusal + diff, one atomic write, flag rules (exit 2), `--json` payload per contract.

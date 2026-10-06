@@ -10,7 +10,7 @@ A directory. Identity and lineage come from the authored descriptor; content has
 | Manifest | `pack-manifest.yaml` | Generated; hashes constituents including `presets/*.yaml`; `generated_by: spec-kitty charter pack regenerate-graph`. |
 | Artifacts | `<kind dirs>/` | Unchanged. |
 | Graph | `drg/fragment.yaml` (org) / sharded graphs (built-in) | Unchanged. |
-| Enforced activations | `org-charter.yaml` (org packs) | `required_<kind>`; activation entries use `charter_pack_id` (OD-1); `schema_version` bumped; an entry with `doctrine_pack_id` is rejected naming the replacement. |
+| Enforced activations | `org-charter.yaml` (org packs) | `required_<kind>`; activation entries use `charter_pack_id` (OD-1); new and scaffolded files declare `schema_version: 2`; a `schema_version: 1` file still validates as long as it carries no retired field, so third-party org packs without activations keep loading; an entry with `doctrine_pack_id` is rejected (`RETIRED_PACK_FIELD`) naming the replacement `charter_pack_id`. |
 | Presets | `presets/<name>.yaml` | Optional; see Activation preset. |
 
 The **project layer** is one flat root, `.kittify/charter-packs/`, holding the project's own components. It belongs to the offering, is listed by `charter pack list` as `project`, and ships no presets. Its `charter_pack_id` value is `project`.

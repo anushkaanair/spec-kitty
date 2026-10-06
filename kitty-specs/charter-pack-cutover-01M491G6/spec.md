@@ -123,7 +123,7 @@ The charter interview, the org-charter union, the unify-activation upgrade step 
 - **Uncommitted edits in moved or rewritten files**: the migration carries the working-tree content over (plain filesystem move; the operator commits the result) and lists the moved paths.
 - **Windows**: the directory move tolerates a target that does not yet exist and refuses with a named path when a file is locked; covered by a `windows_ci` case.
 - **User-chosen path values containing "doctrine"** (for example `local_path: packs/doctrine-foo`): never rewritten; the rename covers vocabulary keys only.
-- **Lane worktrees created before the upgrade**: an unmigrated worktree hits the FR-011 error, whose text names the remedy (upgrade the worktree, or rebase the lane after the root upgrade).
+- **Lane worktrees created before the upgrade**: an unmigrated worktree hits the FR-011 error, whose text names the remedy (upgrade the repository root, then merge the target branch into the lane; never rebase, because a rebase loses the approval stamp).
 
 ## Requirements *(mandatory)*
 

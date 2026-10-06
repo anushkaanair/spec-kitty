@@ -94,6 +94,7 @@ Done means:
 - `m_4_0_0rc6_charter_pack_cutover.py` is registered with `migration_id = "charter_pack_cutover"`, `runs_first = True` (WP10's flag), and selected first by `MigrationRegistry.get_applicable` on a legacy fixture.
 - These inventory rows are rewritten, idempotently, with a report line each: org packs list; single-pack legacy form; `organisation_packs`; `governance.doctrine` (config.yaml, charter.yaml, standalone `governance.yaml`); tracker `doctrine` key; interview answers top-level `doctrine:`; `doctrine_pack_id` in activation entries; `.kittify/doctrine/**` move (with collision preflight); synthesis manifest paths; provenance sidecar paths; skills-manifest `source_ref`; `.gitignore` rules.
 - A second `apply()` on every WP11 fixture changes 0 bytes and `detect()` is False (NFR-004 for these rows).
+- `detect()` evaluates the reset predicates (stale lists, kind gates, `[]`) only while the migration is not recorded as applied; once applied, only the structural predicate (legacy root, legacy keys, `doctrine_pack_id`) can re-select it, so an operator restoring a deliberate `[]` never re-triggers it (analysis U1).
 - This repository has `.kittify/charter-packs/` holding the 14 formerly tracked files, no `.kittify/doctrine/`, and a `.gitignore` with no `.kittify/doctrine` rule.
 - Every WP01 acceptance test marked `pending_until("WP11")` is green.
 
