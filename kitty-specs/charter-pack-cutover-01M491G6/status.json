@@ -20,7 +20,7 @@
   "work_packages": {
     "WP01": {
       "actor": "claude",
-      "agent": "claude",
+      "agent": null,
       "agent_profile": "architect-alphonso",
       "agent_profile_version": "1.0",
       "force_count": 1,
@@ -33,6 +33,7 @@
         "Acceptance suite + golden before-sets ready: 82 passed, 244 xfailed (strict, per-WP), 1 skipped (windows_ci), 0 failed/xpassed. 26 golden sets + cli_before.json frozen at b9c2365a; FR-018 floor 2459 at fcf7a827. Two logged mechanical edits outside owned trees (corpus registry, ci-module-registry deferred bucket)."
       ],
       "provider": "__resolved_provider_absent__",
+      "review": null,
       "review_result": {
         "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP01-acceptance-suite/review-cycle-1.md",
         "reference": "review-cycle://charter-pack-cutover-01M491G6/WP01-acceptance-suite/review-cycle-1.md",
@@ -40,19 +41,19 @@
         "verdict": "changes_requested"
       },
       "role": "reviewer",
-      "shell_pid": 31575,
-      "shell_pid_created_at": "1791325085.47",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
       "subtasks": {
-        "T001": "done",
-        "T002": "done",
-        "T003": "done",
-        "T004": "done",
-        "T005": "done",
-        "T006": "done",
-        "T007": "done",
-        "T008": "done",
-        "T009": "done",
-        "T010": "done"
+        "T001": "planned",
+        "T002": "planned",
+        "T003": "planned",
+        "T004": "planned",
+        "T005": "planned",
+        "T006": "planned",
+        "T007": "planned",
+        "T008": "planned",
+        "T009": "planned",
+        "T010": "planned"
       }
     },
     "WP02": {
