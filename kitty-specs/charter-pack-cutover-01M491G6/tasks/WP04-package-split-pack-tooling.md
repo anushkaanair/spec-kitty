@@ -2,7 +2,7 @@
 work_package_id: "WP04"
 title: "Package split I — pack model and tooling to charter.offering.packs"
 subtasks: ["T021", "T022", "T023", "T024", "T025"]
-dependencies: ["WP02"]
+dependencies: ["WP02", "WP03"]
 requirement_refs: ["FR-010", "C-007"]
 task_type: "implement"
 phase: "Phase 1 - Foundations (paths, package split)"

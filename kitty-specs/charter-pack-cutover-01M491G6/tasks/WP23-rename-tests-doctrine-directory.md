@@ -2,7 +2,7 @@
 work_package_id: "WP23"
 title: "Rename `tests/doctrine/`"
 subtasks: ["T105", "T106"]
-dependencies: ["WP21"]
+dependencies: ["WP18", "WP21", "WP22"]
 requirement_refs: ["FR-010"]
 task_type: "implement"
 phase: "Phase 5 - Names"
@@ -186,7 +186,6 @@ owned_files:
   - "docs/architecture/doctrine-relationships.md"
   - "docs/architecture/04_implementation_mapping/README.md"
   - "docs/operations/p0-baseline-refresh.md"
-  - "docs/architecture/profile-load-reliability.md"
 authoritative_surface: "tests/charter_offering/"
 create_intent:
   - "tests/charter_offering/"

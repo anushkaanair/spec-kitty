@@ -2,7 +2,7 @@
 work_package_id: "WP15"
 title: "Charter homes for every doctrine command"
 subtasks: ["T075", "T076", "T077", "T078", "T079"]
-dependencies: ["WP05", "WP08"]
+dependencies: ["WP05", "WP08", "WP13", "WP14"]
 requirement_refs: ["FR-006", "SC-004"]
 task_type: "implement"
 phase: "Phase 4 - Removal (no aliases, no shims)"

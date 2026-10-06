@@ -18,13 +18,13 @@ properties:
     type: array
     uniqueItems: true
     items:
-      enum: [directives, tactics, styleguides, toolguides, paradigms, procedures, agent_profiles, mission_step_contracts, anti_patterns, templates, assets]
+      enum: [directives, tactics, styleguides, toolguides, paradigms, procedures, agent_profiles, mission_step_contracts]
   mission_type_activations:
     type: array
     uniqueItems: true
     items: { type: string, minLength: 1 }
 patternProperties:
-  "^activated_(directives|tactics|styleguides|toolguides|paradigms|procedures|agent_profiles|mission_step_contracts|anti_patterns|templates|assets)$":
+  "^activated_(directives|tactics|styleguides|toolguides|paradigms|procedures|agent_profiles|mission_step_contracts)$":
     type: array
     uniqueItems: true
     items: { type: string, minLength: 1 }

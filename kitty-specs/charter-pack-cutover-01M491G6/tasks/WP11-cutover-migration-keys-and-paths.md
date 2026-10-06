@@ -2,7 +2,7 @@
 work_package_id: "WP11"
 title: "Cutover migration I — keys, project root, path references"
 subtasks: ["T055", "T056", "T057", "T058", "T059", "T060"]
-dependencies: ["WP03", "WP10"]
+dependencies: ["WP03", "WP10", "WP17"]
 requirement_refs: ["FR-012", "NFR-004"]
 task_type: "implement"
 phase: "Phase 3 - Upgrade migration"

@@ -2,7 +2,7 @@
 work_package_id: "WP06"
 title: "Effective-set seam and fail-closed promotion"
 subtasks: ["T030", "T031", "T032", "T033", "T034"]
-dependencies: ["WP05"]
+dependencies: ["WP05", "WP17"]
 requirement_refs: ["FR-015", "C-007"]
 task_type: "implement"
 phase: "Phase 2 - Presets and promotion"
@@ -10,7 +10,6 @@ execution_mode: "code_change"
 owned_files:
   - "src/charter/activation/effective_set.py"
   - "src/charter/activation/activation_engine.py"
-  - "src/charter/activation/pack_manager.py"
   - "src/charter/activation/default_pack.py"
   - "src/specify_cli/cli/commands/charter/interview.py"
   - "src/specify_cli/cli/commands/charter/_resynthesis_preflight.py"
@@ -22,7 +21,6 @@ owned_files:
   - "tests/charter/test_pack_manager.py"
   - "tests/charter/test_activation_engine_charter_yaml.py"
   - "tests/charter/test_skill_activation.py"
-  - "tests/specify_cli/cli/commands/charter/test_resynthesize_and_hotpath.py"
   - "tests/specify_cli/cli/commands/test_charter_interview_promotion.py"
   - "tests/specify_cli/cli/commands/test_charter_resynthesis_preflight.py"
   - "tests/specify_cli/upgrade/test_unify_charter_activation_migration.py"

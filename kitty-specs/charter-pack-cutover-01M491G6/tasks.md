@@ -8,7 +8,11 @@
 
 **Per-WP test policy** (CLAUDE.md, `NO_FULL_HEAVY_SUITES_IN_MISSION`): `make test-fast`, the WP's own and touched-module tests, the owning subsystem directories (`tests/charter/` and `tests/doctrine/` whenever `src/charter/offering/**` changes), the acceptance tests the WP flips, and the specific architectural gate files it implicates. Never bare `tests/architectural/` or `make test-full`. `ruff check`, `ruff format --check --force-exclude <files>`, `mypy` on touched sources, and `pytest tests/architectural/test_no_legacy_terminology.py` before every push.
 
-**Mechanical-rename edits outside owned files**: a WP that renames a symbol or path may edit call sites in files owned by an already-completed upstream WP; record each such file with a one-line rationale in the Activity Log. Ownership below guards parallel lanes, not sequential follow-up edits.
+**Edits outside owned files**: a WP may edit a file owned by another WP only when the two cannot run in parallel lanes, i.e. one is a (transitive) dependency of the other. Record each such file with a one-line rationale under "Mechanical edits outside owned_files" in the Activity Log. Never edit a file owned by a WP that can run in a parallel lane. Ownership guards parallel lanes; sequential follow-up edits are expected.
+
+**Generated files have no owner**: `packs/built-in/pack-manifest.yaml`, `src/specify_cli/_completion_manifest.json`, `docs/api/cli-commands.md`, `docs/development/docs-retrieval-index.yaml`, regen fixtures and similar outputs are regenerated with their tool (`spec-kitty charter pack regenerate-graph` / `spec-kitty doctrine regenerate-graph` before WP15, the completion and docs generators) by whichever WP changes their inputs, and committed. Never hand-merge them; on a conflict, regenerate.
+
+**Version**: no WP bumps `pyproject.toml`'s version (unreleased rc; changelog entries go under Unreleased). The CLAUDE.md "`__init__.py` change needs a version bump" rule is satisfied by the WP24 changelog entry.
 
 ## Subtask Index
 
@@ -209,7 +213,7 @@ T020 CLI synthesize test; flip xfails (WP03)
 
 T021–T025 (WP04)
 
-**Dependencies**: WP02.
+**Dependencies**: WP02, WP03 (both edit synthesizer manifest, project registration and the doctrine command module).
 
 ## Work Package WP05: Package split II — org charter, adapters, delete `specify_cli.doctrine` (Priority: P1)
 
@@ -236,7 +240,7 @@ T026–T029 (WP05)
 
 T030–T034 (WP06)
 
-**Dependencies**: WP05.
+**Dependencies**: WP05, WP17. WP06 deletes `load_default_pack_activation_ids` once its last caller is gone (`test_no_dead_symbols`); WP09 deletes the `default_pack` module.
 
 ## Work Package WP07: Preset format, discovery and built-in presets (Priority: P1)
 
@@ -293,7 +297,7 @@ T050–T054 (WP10)
 
 T055–T060 (WP11)
 
-**Dependencies**: WP03, WP10.
+**Dependencies**: WP03, WP10, WP17 (the model reads `charter_pack_id` before the migration writes it). Removals and moves route through `specify_cli.asset_preservation` (destructive-op ownership gates).
 
 ## Work Package WP12: Cutover migration II — stale lists, resets, skills, summary (Priority: P1)
 
@@ -315,7 +319,7 @@ T061–T065 (WP12)
 **Requirement Refs**: FR-005, C-001
 **Estimated prompt size**: ~300 lines
 
-T066–T069 (WP13)
+T066–T069 (WP13). T066 confirms `default_pack` is gone (deleted by WP06/WP09) and deletes the registry and `src/charter/activation/packs/`; T068 adds `accompanies_doctrine_pack` to WP17's `retired_fields.py`.
 
 **Dependencies**: WP08, WP09, WP12.
 
@@ -337,7 +341,7 @@ T070–T074 (WP14)
 
 T075–T079 (WP15)
 
-**Dependencies**: WP05, WP08.
+**Dependencies**: WP05, WP08, WP13, WP14 (shared `charter/pack.py` and doctor tests).
 
 ## Work Package WP16: Remove the `spec-kitty doctrine` group (Priority: P1)
 
@@ -361,7 +365,7 @@ T080–T082 (WP16)
 
 T083–T087 (WP17)
 
-**Dependencies**: WP05, WP11.
+**Dependencies**: WP05. Runs early so every later WP builds on the new names; creates `src/charter/offering/packs/retired_fields.py` (`RETIRED_PACK_FIELD`, `doctrine_pack_id` entry).
 
 ## Work Package WP18: Skill families (Priority: P2)
 
@@ -381,7 +385,7 @@ T088–T091 (WP18)
 
 T092–T094 (WP19)
 
-**Dependencies**: WP14, WP17.
+**Dependencies**: WP14, WP16, WP17.
 
 ## Work Package WP20: Identifier rename R2 — activation (Priority: P2)
 
@@ -421,7 +425,7 @@ T101–T104 (WP22)
 
 T105–T106 (WP23)
 
-**Dependencies**: WP21.
+**Dependencies**: WP18, WP21, WP22 (AGENTS.md and tests WP18 edits).
 
 ---
 
@@ -454,7 +458,8 @@ T111–T114 (WP25)
 ```mermaid
 graph LR
   WP01 --> WP02 --> WP03 --> WP11
-  WP02 --> WP04 --> WP05 --> WP06 --> WP07
+  WP02 --> WP04 --> WP05 --> WP17 --> WP06 --> WP07
+  WP03 --> WP04
   WP05 --> WP15
   WP06 --> WP08
   WP07 --> WP08
@@ -468,8 +473,12 @@ graph LR
   WP08 --> WP15
   WP13 --> WP16
   WP15 --> WP16
-  WP05 --> WP17
-  WP11 --> WP17
+  WP17 --> WP11
+  WP13 --> WP15
+  WP14 --> WP15
+  WP16 --> WP19
+  WP18 --> WP23
+  WP22 --> WP23
   WP12 --> WP18
   WP14 --> WP19
   WP17 --> WP19 --> WP20 --> WP21
@@ -480,5 +489,5 @@ graph LR
   WP22 --> WP25
 ```
 
-**Parallel opportunities**: WP10 runs beside WP02–WP09; WP15 beside WP09–WP12; WP17 and WP18 beside the removal phase.
+**Parallel opportunities**: WP10 runs beside WP02–WP09; WP18 beside the removal phase; WP09 beside WP08.
 **MVP**: WP01 (the suite is the contract every other WP is measured against).

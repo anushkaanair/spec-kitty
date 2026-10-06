@@ -2,7 +2,7 @@
 work_package_id: "WP19"
 title: "Identifier rename R1 — offering, facades, kernel"
 subtasks: ["T092", "T093", "T094"]
-dependencies: ["WP14", "WP17"]
+dependencies: ["WP14", "WP16", "WP17"]
 requirement_refs: ["FR-010"]
 task_type: "implement"
 phase: "Phase 5 - Names"

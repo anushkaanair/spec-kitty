@@ -13,24 +13,24 @@ owned_files:
   - "src/charter/offering/packs/presets.py"
   - "packs/built-in/presets/default.yaml"
   - "packs/built-in/presets/minimal.yaml"
-  - "tests/charter/packs/test_preset_model.py"
-  - "tests/charter/packs/test_preset_discovery.py"
-  - "tests/charter/packs/test_builtin_presets.py"
-  - "tests/charter/packs/test_preset_validation.py"
-  - "tests/charter/packs/test_preset_manifest_hashing.py"
-  - "tests/charter/packs/test_preset_scaffold.py"
+  - "tests/charter/presets/test_preset_model.py"
+  - "tests/charter/presets/test_preset_discovery.py"
+  - "tests/charter/presets/test_builtin_presets.py"
+  - "tests/charter/presets/test_preset_validation.py"
+  - "tests/charter/presets/test_preset_manifest_hashing.py"
+  - "tests/charter/presets/test_preset_scaffold.py"
 authoritative_surface: "src/charter/offering/packs/presets.py"
 create_intent:
   - "src/charter/offering/schemas/activation-preset.schema.yaml"
   - "src/charter/offering/packs/presets.py"
   - "packs/built-in/presets/default.yaml"
   - "packs/built-in/presets/minimal.yaml"
-  - "tests/charter/packs/test_preset_model.py"
-  - "tests/charter/packs/test_preset_discovery.py"
-  - "tests/charter/packs/test_builtin_presets.py"
-  - "tests/charter/packs/test_preset_validation.py"
-  - "tests/charter/packs/test_preset_manifest_hashing.py"
-  - "tests/charter/packs/test_preset_scaffold.py"
+  - "tests/charter/presets/test_preset_model.py"
+  - "tests/charter/presets/test_preset_discovery.py"
+  - "tests/charter/presets/test_builtin_presets.py"
+  - "tests/charter/presets/test_preset_validation.py"
+  - "tests/charter/presets/test_preset_manifest_hashing.py"
+  - "tests/charter/presets/test_preset_scaffold.py"
 agent_profile: "python-pedro"
 role: "implementer"
 agent: "claude"
@@ -213,7 +213,7 @@ Do not change WP01's assertions (C-006). If an acceptance test for FR-004 needs 
 
 - **Steps**:
   0. WP04 is expected to have created `tests/charter/packs/` (the home of the moved pack-tooling tests). If it does not exist, create it with an `__init__.py` like its siblings under `tests/charter/` and record that.
-  1. `tests/charter/packs/test_preset_model.py`: valid file loads; each rejection (unknown key, `activated_skills`, `activated_glossary_packs`, name ≠ stem, bad grammar, >64 chars, non-list value, duplicate ids, empty string id, context-scoped `activations:` list) raises `PresetFormatError` naming the field; absent vs `[]` preserved.
+  1. `tests/charter/presets/test_preset_model.py`: valid file loads; each rejection (unknown key, `activated_skills`, `activated_glossary_packs`, name ≠ stem, bad grammar, >64 chars, non-list value, duplicate ids, empty string id, context-scoped `activations:` list) raises `PresetFormatError` naming the field; absent vs `[]` preserved.
   2. `test_preset_discovery.py`: pack without `presets/` → `()`; two presets sorted; `load_preset` unknown → `PresetNotFoundError` listing names; `list_offering_packs` on a tmp project with two org packs (one with presets, one without) returns built-in, both org packs in declaration order, and `project`.
   3. `test_builtin_presets.py`: both built-in presets load; `default` has no `activated_*` and no `activated_kinds` and a non-empty `mission_type_activations`; `minimal` has no `activated_kinds`; every `minimal` id resolves; both validate against the JSON schema; **kind authority**: the schema's per-kind pattern and `activated_kinds` enum equal the derived sets, and `preset_activation_keys()` equals `ACTIVATION_YAML_KEYS` minus `{"activated_kinds", "activated_skills", "activated_glossary_packs", "mission_type_activations"}` (tests may import `charter.activation`).
   4. `test_preset_validation.py`: `validate_pack` on a tmp pack with a malformed preset, an unresolvable id, an `activated_kinds` that omits a listed kind → three errors naming file and field/id; a clean pack → no preset issues; `validate_pack(packs/built-in)` reports no preset issues; `charter org validate` (CliRunner) surfaces the same error.

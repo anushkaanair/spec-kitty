@@ -43,8 +43,13 @@ categories:
 exceptions:
   # --- C-004 names kept -------------------------------------------------------
   - path: "packs/built-in/agent_profiles/doctrine-daphne.agent.yaml"
+    field_path: "profile-id"
     action: do_not_change
-    reason: "C-004: the doctrine-daphne profile keeps its id and name (owner ruling); 'doctrine' is part of a persona name, not the retired tier. URN agent_profile:doctrine-daphne stays everywhere it is referenced."
+    reason: "C-004: the doctrine-daphne profile keeps its id (owner ruling); 'doctrine' is part of a persona name, not the retired tier. URN agent_profile:doctrine-daphne stays everywhere it is referenced. The rest of the file (e.g. a stale `spec-kitty doctrine regenerate-graph` instruction) follows the categories."
+  - path: "packs/built-in/agent_profiles/doctrine-daphne.agent.yaml"
+    field_path: "name"
+    action: do_not_change
+    reason: "C-004: the display name Doctrine Daphne is kept."
   - path: "packs/built-in/directives/*039*"
     action: do_not_change
     reason: "C-004: DIRECTIVE_039 is named for a person; out of scope."

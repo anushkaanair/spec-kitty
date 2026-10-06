@@ -10,16 +10,12 @@ execution_mode: "code_change"
 owned_files:
   - "src/specify_cli/charter_pack_registry.py"
   - "src/charter/activation/packs/**"
-  - "src/charter/offering/packs/retired_fields.py"
   - "packs/built-in/pack.yaml"
   - "tests/specify_cli/test_charter_pack_registry.py"
   - "tests/specify_cli/cli/commands/charter/test_apply_compile_bridge.py"
-  - "tests/charter/test_retired_pack_fields.py"
   - "tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py"
-authoritative_surface: "src/charter/offering/packs/retired_fields.py"
+authoritative_surface: "src/specify_cli/charter_pack_registry.py"
 create_intent:
-  - "src/charter/offering/packs/retired_fields.py"
-  - "tests/charter/test_retired_pack_fields.py"
   - "tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py"
 agent_profile: "python-pedro"
 role: "implementer"
@@ -136,10 +132,10 @@ First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/
 
 - **Purpose**: OD-2: reject, never tolerate, and name the fix.
 - **Steps**:
-  1. Create `src/charter/offering/packs/retired_fields.py`:
+  1. Extend `src/charter/offering/packs/retired_fields.py` (created by WP17 with the `doctrine_pack_id` entry; logged follow-up edit — WP17 is upstream). Its shape:
      - `RETIRED_PACK_FIELD = "RETIRED_PACK_FIELD"` (the code string's only source).
      - `@dataclass(frozen=True) class RetiredField: file: str; field: str; replacement: str`.
-     - `RETIRED_PACK_FIELDS: tuple[RetiredField, ...]` with one entry now: `RetiredField(file="pack.yaml", field="accompanies_doctrine_pack", replacement="delete the field; presets ship inside the pack (presets/<name>.yaml)")`. WP17 adds `RetiredField(file="org-charter.yaml", field="doctrine_pack_id", replacement="charter_pack_id")`; design the table and lookup so that is a one-line addition.
+     - `RETIRED_PACK_FIELDS: tuple[RetiredField, ...]`: WP17 created it with `RetiredField(file="org-charter.yaml", field="doctrine_pack_id", replacement="charter_pack_id")`; add `RetiredField(file="pack.yaml", field="accompanies_doctrine_pack", replacement="delete the field; presets ship inside the pack (presets/<name>.yaml)")` (a one-line addition).
      - `class RetiredPackFieldError(ValueError)` with `code = RETIRED_PACK_FIELD`, attributes `file`, `field`, `replacement`, and a message: `<path>: field '<field>' was removed. <replacement>. See docs/migrations/charter-pack-cutover.md.`
      - `reject_retired_fields(raw: Mapping[str, Any], *, file: str, path: Path | None) -> None`.
      It lives in `charter.offering.packs` because the descriptor model is there (C-007; no import of `charter.activation`: `tests/architectural/test_charter_offering_does_not_import_activation.py`).

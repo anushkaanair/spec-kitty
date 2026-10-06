@@ -2,12 +2,14 @@
 work_package_id: "WP17"
 title: "Three meanings, three names; `charter_pack_id`"
 subtasks: ["T083", "T084", "T085", "T086", "T087"]
-dependencies: ["WP05", "WP11"]
+dependencies: ["WP05"]
 requirement_refs: ["FR-009", "FR-010"]
 task_type: "implement"
 phase: "Phase 5 - Names"
 execution_mode: "code_change"
 owned_files:
+  - "src/charter/offering/packs/retired_fields.py"
+  - "tests/charter/test_retired_pack_fields.py"
   - "src/charter/activation/pack_context.py"
   - "src/charter/activation/activations.py"
   - "src/charter/activation/consistency_check.py"
@@ -83,7 +85,9 @@ owned_files:
   - "tests/specify_cli/tool_surface/test_docs.py"
   - "tests/specify_cli/tool_surface/test_registry.py"
 authoritative_surface: "src/charter/activation/"
-create_intent: []
+create_intent:
+  - "src/charter/offering/packs/retired_fields.py"
+  - "tests/charter/test_retired_pack_fields.py"
 agent_profile: "python-pedro"
 role: "implementer"
 agent: "claude"
@@ -159,7 +163,8 @@ Done means:
 - Read: `.kittify/charter/charter.md`; `spec.md` FR-009, FR-010, OD-1, C-001, FR-018 forbidden-token list; `data-model.md` "Renamed identities"; `contracts/errors.md`; `research/runtime-seams.md` §6 (every emitter, catcher, test and golden with file:line); `occurrence_map.yaml` (`code_symbols`, `serialized_keys`, `logs_telemetry` all `rename`).
 - **Upstream**: WP05 moved org charter composition to `src/charter/activation/org_charter.py` (from `src/specify_cli/doctrine/org_charter.py`) and pack lineage to `src/charter/offering/packs/pack_lineage.py`; WP11 (T057) migrates project `charter.yaml` activation entries from `doctrine_pack_id` to `charter_pack_id`. Confirm both are done before starting.
 - **Parallel-lane caution.** Several files that carry these names are owned by WPs that may run in parallel with this one (see "Files you will touch but do not own" below). Before editing such a file, check with `spec-kitty agent tasks status` that its owning WP is `done`/`approved`. If it is not, finish your owned files first and coordinate through the orchestrator; never edit a file another lane is actively changing.
-- `RETIRED_PACK_FIELD` is introduced by **WP13** (T068) for `accompanies_doctrine_pack`. If WP13 has landed, reuse its error type/helper for `doctrine_pack_id`. If it has not, stop at T085 step 4 and ask the orchestrator to sequence WP13 first; do **not** create a second error type for the same code.
+- **This WP creates** `src/charter/offering/packs/retired_fields.py` (WP17 now runs right after WP05, before WP11 and WP13): `RETIRED_PACK_FIELD = "RETIRED_PACK_FIELD"` (the code string's only source); `@dataclass(frozen=True) class RetiredField: file: str; field: str; replacement: str`; `RETIRED_PACK_FIELDS` with the one entry `RetiredField(file="org-charter.yaml", field="doctrine_pack_id", replacement="charter_pack_id")` (WP13 later adds `accompanies_doctrine_pack` as a one-line addition); `class RetiredPackFieldError(ValueError)` with `code`, `file`, `field`, `replacement` and the message `<path>: field '<field>' was removed. <replacement>. See docs/migrations/charter-pack-cutover.md.`; and `reject_retired_fields(raw, *, file, path)`. It lives in `charter.offering.packs` (no import of `charter.activation`). Tests in `tests/charter/test_retired_pack_fields.py` (data-driven: a planted second entry is rejected the same way; positive control: an unrelated unknown field still fails with pydantic's generic error).
+- **Ordering**: this WP runs early (after WP05), so the files it renames in have not yet been changed by WP06–WP16; those WPs build on the new names. Line numbers below were measured before those WPs and will still hold.
 - C-001: no aliases. Validation diagnostics that name a replacement are allowed (that is what `RETIRED_PACK_FIELD` is).
 - Code style: ruff + mypy clean; `ruff format --check --force-exclude`; complexity ≤ 15; no new suppressions.
 
@@ -230,9 +235,9 @@ Run them; confirm red. Commit `test(acceptance): unmark WP17 FR-009 tests (red) 
 - **Purpose**: OD-1 — the activation entry names the Charter Pack it draws from.
 - **Steps**:
   1. `src/charter/activation/activations.py:217`: `ActivationEntry.doctrine_pack_id: str` → `charter_pack_id: str`; keep `model_config = ConfigDict(extra="forbid")`; update the module docstring (l.6), the YAML example (l.202), the identity-tuple docs (l.274) and the accessor at l.290. No pydantic `alias`, no `populate_by_name`.
-  2. Retired-field rejection: add a `model_validator(mode="before")` on `ActivationEntry` that, when the raw mapping contains `doctrine_pack_id`, raises the WP13 `RETIRED_PACK_FIELD` error naming file context where available, the field `doctrine_pack_id` and the replacement `charter_pack_id` (data-model.md "Charter Pack"; `contracts/errors.md`). This runs for both the project `charter.yaml` (`GovernanceConfig.activations`) and org packs (`OrgCharterPolicy.activations`). Keep the validator small; put the message construction in a helper you test directly.
+  2. Retired-field rejection: add a `model_validator(mode="before")` on `ActivationEntry` that, when the raw mapping contains `doctrine_pack_id`, raises the `RETIRED_PACK_FIELD` error from `retired_fields.py` naming file context where available, the field `doctrine_pack_id` and the replacement `charter_pack_id` (data-model.md "Charter Pack"; `contracts/errors.md`). This runs for both the project `charter.yaml` (`GovernanceConfig.activations`) and org packs (`OrgCharterPolicy.activations`). Keep the validator small; put the message construction in a helper you test directly.
   3. `src/charter/activation/org_charter.py` (WP05's moved module; follow-up): `OrgCharterPolicy.schema_version` default `1` → `2` with a docstring line: "2 (#3732): activation entries use `charter_pack_id`; `doctrine_pack_id` is rejected." Decide and record whether a file that declares `schema_version: 1` and **no** activations still validates (recommended: yes — the version documents the format; the field-level rejection is what enforces OD-1; only a `doctrine_pack_id` key fails). Update the identity-tuple docstrings (old l.179, l.677). `charter org init` scaffolding (WP15/WP07 home) should emit `schema_version: 2`: check `rg -n "schema_version" src/specify_cli/cli/commands/charter` and follow up.
-  4. Validator message: `charter pack validate` / `charter org validate` (the validator moved by WP04 to `src/charter/offering/packs/pack_validator.py`, org-charter leg via `charter.activation.org_charter.validate_org_charter_file`, WP04 A.3 #4) must surface `RETIRED_PACK_FIELD` for `doctrine_pack_id` as a named issue, not a generic pydantic "extra field" error. Add the mapping where WP13 mapped `accompanies_doctrine_pack` (follow-up in the WP04/WP05 module; log it).
+  4. Validator message: `charter pack validate` / `charter org validate` (the validator moved by WP04 to `src/charter/offering/packs/pack_validator.py`, org-charter leg via `charter.activation.org_charter.validate_org_charter_file`, WP04 A.3 #4) must surface `RETIRED_PACK_FIELD` for `doctrine_pack_id` as a named issue, not a generic pydantic "extra field" error. Add the mapping in the validator so WP13 can reuse it for `accompanies_doctrine_pack` (follow-up in the WP04/WP05 module; log it).
   5. `src/charter/offering/packs/pack_lineage.py` docstring (old l.210) and `docs/context/charter.md` field spelling: follow-ups.
   6. Persisted state: WP11's migration already rewrote project `charter.yaml`. Packs in this repository: `packs/internal/org-charter.yaml` has no activations and no `schema_version` today; bump it only if the validator requires the new version (record either way). `rg -n doctrine_pack_id packs` must stay empty.
   7. Tests: `tests/charter/test_activations.py`, `test_charter_yaml_model.py`, `test_context_activation_render.py`, `test_context_org_governance.py`, `test_context_render_seams.py`, `test_issue_5409_anti_pattern_activation.py`, `test_org_activations_reach_context.py`, `test_org_activations_resolution.py`, `test_schemas_selection.py`, `tests/cli/commands/test_charter_rendering.py`, `tests/integration/test_user_doctrine_artifact_lifecycle.py`: rename the key in fixtures. Add focused tests: (a) an entry with `charter_pack_id` validates; (b) an entry with `doctrine_pack_id` fails with `RETIRED_PACK_FIELD` naming both names, for the project model and for `OrgCharterPolicy`; (c) `charter org validate` on a pack whose `org-charter.yaml` carries `doctrine_pack_id` exits non-zero and prints the field and its replacement (US3 scenario 4).

@@ -100,7 +100,6 @@ owned_files:
   - "docs/architecture/post-merge-partition-authority.md"
   - "docs/architecture/retrospective-learning-loop.md"
   - "docs/architecture/runtime-loop.md"
-  - "docs/architecture/spdd-reasons.md"
   - "docs/architecture/trail-model.md"
   - "docs/architecture/vision/README-3.x.md"
   - "docs/context/audience/internal/lead-developer.md"

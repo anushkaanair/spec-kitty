@@ -108,7 +108,7 @@ Constraints:
 
 ## Red-first (C-006 / C-011)
 
-First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP14")' tests/acceptance/charter_pack_cutover/`): legacy-state commands fail with `LEGACY_CHARTER_STATE`, the exempt commands run, legacy keys are no longer read, `--doctrine-mode` is unknown, `doctrine_mode` is absent from JSON. WP01's flip map assigns you all `test_fr011_*` in `test_cli_surface.py` and the NFR-002 row "cr02 compat test deleted". That row conflicts with WP16, which owns and deletes `tests/architectural/test_lifted_cli_doctrine_charter_cr02_compat.py` with the doctrine group: do not delete WP16's file; ask the orchestrator to re-tag that row to WP16 and log the answer. Run, paste red output, change no assertion.
+First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP14")' tests/acceptance/charter_pack_cutover/`): legacy-state commands fail with `LEGACY_CHARTER_STATE`, the exempt commands run, legacy keys are no longer read, `--doctrine-mode` is unknown, `doctrine_mode` is absent from JSON. WP01's flip map assigns you all `test_fr011_*` in `test_cli_surface.py`. The NFR-002 row "cr02 compat test deleted" belongs to WP16, which deletes `tests/architectural/test_lifted_cli_doctrine_charter_cr02_compat.py` with the doctrine group; do not touch it. Run, paste red output, change no assertion.
 
 ## Subtasks & Detailed Guidance
 

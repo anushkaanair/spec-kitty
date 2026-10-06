@@ -96,7 +96,6 @@ owned_files:
   - "docs/guides/how-to/harnesses/windsurf.md"
   # --- tests and regenerated fixtures ---
   - "tests/architectural/test_docs_cli_reference_parity.py"
-  - "tests/architectural/test_no_dead_doctrine_paths.py"
   - "tests/docs/test_charter_selection_key_teaching.py"
   - "tests/specify_cli/skills/test_retired_charter_skills.py"
   - "tests/specify_cli/regression/_twelve_agent_baseline/claude/specify.md"
@@ -178,6 +177,7 @@ FR-008, as ruled in OD-7 (the five backing skills only; the rest of the `spec-ki
 (Mapping and moves: `occurrence_map.yaml` `moves:` FR-008 block.) Done means:
 
 - The seven new directories exist under `src/charter/offering/skills/` (the SOURCE; agent copies are generated and git-ignored here); the twelve old directories are gone (C-001: no alias skill, no "Legacy Alias" section, no redirect stub).
+- `spec-kitty-constitution-doctrine` is also added to `RETIRED_CANONICAL_SKILL_NAMES` (WP10 stops `m_3_1_1_charter_rename` from renaming it into the retired `spec-kitty-charter-doctrine`, so an old global copy would otherwise linger).
 - All twelve removed names are in `RETIRED_CANONICAL_SKILL_NAMES` (`src/specify_cli/skills/retired.py`), so user-global roots drop them on the next CLI run (`runtime/agent_skills.py:196-206`), and the upgrade finalizer's manifest reconciliation retires project-root copies.
 - No living surface (skills, both packs' sources, living docs, `src/`) names a removed skill; derived files are regenerated, not hand-edited.
 - `doctrine-daphne` is untouched (C-004).

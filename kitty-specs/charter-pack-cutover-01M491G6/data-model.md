@@ -25,7 +25,7 @@ The **project layer** is one flat root, `.kittify/charter-packs/`, holding the p
 | `description` | string | One line, shown by `charter pack list`. |
 | `activated_<plural>` | list of ids, optional | Absent: the preset leaves the kind unrestricted. List: allowlist (`[]` = none). Ids resolve against the whole offering. `activated_skills` and `activated_glossary_packs` are not governed by presets. |
 | `activated_kinds` | list of plurals, optional | Kind gate; must include every kind for which the preset lists ids. Absent: every kind. |
-| `mission_type_activations` | list of mission-type ids, optional | Written as listed. |
+| `mission_type_activations` | list of mission-type ids, optional | Written as listed; when absent the preset leaves the project key untouched. |
 
 Built-in presets:
 
@@ -50,7 +50,7 @@ Lives in `.kittify/config.yaml`, or in `.kittify/charter/charter.yaml` when `con
 ```
 read active charter (resolved target)
 compute target := preset governed keys ∪ org required_<kind>
-diff := governed keys whose value would change
+diff := governed keys whose value would change AND whose current value differs from what the built-in default preset leaves
 if diff and not --force: refuse (exit 1), print diff, write nothing
 write atomically: listed keys set; unrestricted keys removed; activated_skills / activated_glossary_packs untouched
 optional: --compile / --resynthesize
