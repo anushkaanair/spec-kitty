@@ -57,3 +57,4 @@ Use the shared template at [`docs/architecture/adr-template.md`](../../architect
 | 2026-10-05 | [a bare-slug coordination Mission has one exact directory alias set, and one directory on the target](2026-10-05-1-bare-slug-coordination-directory-alias.md) |
 | 2026-10-05 | [owned-checkout and start-up performance tests assert runner-relative ratios](2026-10-05-2-runner-relative-performance-budgets.md) |
 | 2026-10-05 | [org packs ship their own built-in override sanction](2026-10-05-3-org-packs-ship-their-builtin-override-sanction.md) |
+| 2026-10-06 | [charter offering, active charter and activation presets](2026-10-06-1-charter-offering-active-charter-and-activation-presets.md) |
