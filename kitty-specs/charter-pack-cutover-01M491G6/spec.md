@@ -153,6 +153,7 @@ The charter interview, the org-charter union and the unify-activation upgrade st
 | C-003 | Pack tiers | `packs/built-in` ships to consumers and `packs/internal` does not; nothing maintainer-only moves into `packs/built-in`. | Technical | High | Open |
 | C-004 | Names kept | The `doctrine-daphne` profile id and name, and `DIRECTIVE_039`, are unchanged. | Business | Medium | Open |
 | C-005 | Out of scope | The Walk-B half of #4573, the built-in/builtin tier spelling (#5825), #5823 and #5824 are not part of this mission. | Business | Medium | Open |
+| C-006 | Acceptance tests first | WP01 turns every FR (and the NFRs with a measurable check) into acceptance tests before any implementation WP starts. Tests for behaviour not yet built are committed as strict `xfail` naming the WP that turns them green. Every later WP takes its done-condition from those tests and flips its own `xfail`s; it does not redefine the acceptance criteria (owner ruling, 2026-10-06). | Process | High | Open |
 
 ### Key Entities
 
