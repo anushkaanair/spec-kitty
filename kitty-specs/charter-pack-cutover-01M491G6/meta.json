@@ -14,5 +14,7 @@
   "purpose_tldr": "Replace the retired doctrine-pack vocabulary with one charter vocabulary across CLI, config, skills, code and docs, with activation presets as pack data and no compatibility layer.",
   "slug": "charter-pack-cutover-01M491G6",
   "target_branch": "issue-3732-charter-pack-rename",
-  "topology": "coord"
+  "topology": "coord",
+  "vcs": "git",
+  "vcs_locked_at": "2026-10-06T19:52:25.189432+00:00"
 }
