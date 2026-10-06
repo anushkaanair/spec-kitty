@@ -129,7 +129,7 @@ These are the CLI-surface cases written by WP01 T006 for FR-007 (and the SC-004 
      rg -n "_doctrine_asset" src tests
      ```
   2. `src/specify_cli/cli/commands/__init__.py`: delete `_register_doctrine` (today l.234-251, including the CR-02 comment block), its entry in the registrar tuple (l.573) and the `"doctrine": _register_doctrine` key in the lazy registrar map (l.628). Verify no other table (lazy-command name list, help ordering) still names `"doctrine"`: `rg -n '"doctrine"' src/specify_cli/cli src/specify_cli/__init__.py`.
-  3. Delete `src/specify_cli/cli/commands/doctrine.py` with `git rm`.
+  3. Delete `src/specify_cli/cli/commands/doctrine.py` with `git rm`. The file is listed in WP03's `owned_files` (it repointed the `new` scaffold write root, `doctrine.py:650`); WP03 is upstream and done, so the deletion is a logged follow-up, not an ownership conflict.
   4. `src/specify_cli/cli/commands/_doctrine_asset.py`: if WP15 left it in place and its only consumer was the `doctrine asset` group, delete it too; if WP15 already moved its handlers under `charter/`, it is gone. If it is still imported by a `charter pack asset` home, leave it (WP21 renames it). Record which case applied.
   5. Remove every config entry that names the deleted files (these files are not owned here; they are mechanical follow-ups, log each):
      - `pyproject.toml` `[tool.ruff.format].exclude`: `"src/specify_cli/cli/commands/doctrine.py"` (l.523) and, if deleted, `_doctrine_asset.py`; also any `tests/...` exclude entries for test files you delete (`tests/cli/test_doctrine_commands.py` l.1130, `tests/specify_cli/cli/commands/test_doctrine_*.py` l.1869-1871) — `test_every_exclude_entry_exists_on_disk` fails otherwise. The ratchet count only shrinks.
