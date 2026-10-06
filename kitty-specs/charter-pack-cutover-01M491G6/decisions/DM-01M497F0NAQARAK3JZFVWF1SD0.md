@@ -4,8 +4,9 @@
 - **Origin flow:** `plan`
 - **Slot key:** `plan.migration.minimal-kind-gate`
 - **Input key:** `minimal_kind_gate`
-- **Status:** `open`
+- **Status:** `resolved`
 - **Created:** `2026-10-06T18:26:24.554861+00:00`
+- **Resolved:** `2026-10-06T18:31:32.085064+00:00`
 - **Opened by:** `cli`
 - **Other answer:** `false`
 
@@ -21,7 +22,7 @@ Projects that applied the released minimal preset carry activated_kinds: [direct
 
 ## Final answer
 
-_(none)_
+A: remove activated_kinds when it equals the released minimal value [directives, tactics] and report it (owner, 2026-10-06)
 
 ## Rationale
 
@@ -30,3 +31,4 @@ _(none)_
 ## Change log
 
 - `2026-10-06T18:26:24.554861+00:00` — opened
+- `2026-10-06T18:31:32.085064+00:00` — resolved (final_answer="A: remove activated_kinds when it equals the released minimal value [directives, tactics] and report it (owner, 2026-10-06)")

@@ -4,8 +4,9 @@
 - **Origin flow:** `plan`
 - **Slot key:** `plan.migration.normalizer-empty-lists`
 - **Input key:** `normalizer_empty_lists`
-- **Status:** `open`
+- **Status:** `resolved`
 - **Created:** `2026-10-06T18:26:19.968527+00:00`
+- **Resolved:** `2026-10-06T18:31:28.253460+00:00`
 - **Opened by:** `cli`
 - **Other answer:** `false`
 
@@ -21,7 +22,7 @@ Projects where the 3.2.6 normalize-activation-absence migration wrote [] (nothin
 
 ## Final answer
 
-_(none)_
+A: reset every per-artifact [] key to absent and name each in the upgrade summary with the command to switch the kind off again (owner, 2026-10-06)
 
 ## Rationale
 
@@ -30,3 +31,4 @@ _(none)_
 ## Change log
 
 - `2026-10-06T18:26:19.968527+00:00` — opened
+- `2026-10-06T18:31:28.253460+00:00` — resolved (final_answer="A: reset every per-artifact [] key to absent and name each in the upgrade summary with the command to switch the kind off again (owner, 2026-10-06)")
