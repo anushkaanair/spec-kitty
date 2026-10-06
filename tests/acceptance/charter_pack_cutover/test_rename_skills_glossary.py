@@ -32,7 +32,7 @@ GLOSSARY_PACK = REPO_ROOT / "packs" / "built-in" / "glossary_packs" / "spec-kitt
 NEW_TERMS = ("Charter offering", "Charter Pack", "Activation preset", "Active charter", "Project layer", "Charter Bundle")
 RETIRED_TERMS = ("Doctrine Pack", "Doctrine Pack ID", "Doctrine Catalog", "Charter Selection", "Pack Default Charter")
 #: A term both seed and pack already record as deprecated (control for the reader).
-KNOWN_DEPRECATED_TERM = "ceremony commit"
+KNOWN_DEPRECATED_TERM = "main repo"
 MISSING_ADR = "2026-08-22-2"
 CUTOVER_ADR = REPO_ROOT / "docs" / "adr" / "4.x" / "2026-10-06-1-charter-offering-active-charter-and-activation-presets.md"
 
