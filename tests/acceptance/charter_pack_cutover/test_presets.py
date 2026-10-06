@@ -413,12 +413,21 @@ def test_fr019_validate_names_malformed_file_and_unresolved_id(tmp_path: Path) -
     assert "bad.yaml" in text and "ghost.yaml" in text and "no-such-tactic" in text, describe(refused)
 
 
-MALFORMED_PRESETS: dict[str, dict[str, Any]] = {
-    "name_grammar": {"name": "Bad_Name", "description": "x"},
-    "name_not_stem": {"name": "other", "description": "x"},
-    "kinds_omit_listed": {"name": "kinds_omit_listed", "description": "x", "activated_kinds": ["directives"], "activated_tactics": ["acceptance-test-first"]},
-    "context_scoped": {"name": "context_scoped", "description": "x", "activations": [{"activation_context": {}, "artifact_id": "x"}]},
-    "skills_key": {"name": "skills_key", "description": "x", "activated_skills": ["x"]},
+#: case -> (file stem, preset body). Each case breaks exactly one rule: the stem equals the
+#: ``name`` everywhere except ``name_not_stem``, so ``name_grammar`` is refused only by the
+#: name grammar, never by the name == stem rule.
+MALFORMED_PRESETS: dict[str, tuple[str, dict[str, Any]]] = {
+    "name_grammar": ("Bad_Name", {"name": "Bad_Name", "description": "x"}),
+    "name_not_stem": ("name-not-stem", {"name": "other", "description": "x"}),
+    "kinds_omit_listed": (
+        "kinds-omit-listed",
+        {"name": "kinds-omit-listed", "description": "x", "activated_kinds": ["directives"], "activated_tactics": ["acceptance-test-first"]},
+    ),
+    "context_scoped": (
+        "context-scoped",
+        {"name": "context-scoped", "description": "x", "activations": [{"activation_context": {}, "artifact_id": "x"}]},
+    ),
+    "skills_key": ("skills-key", {"name": "skills-key", "description": "x", "activated_skills": ["x"]}),
 }
 
 
@@ -426,13 +435,11 @@ MALFORMED_PRESETS: dict[str, dict[str, Any]] = {
 @pytest.mark.integration
 @pytest.mark.parametrize("case", [pytest.param(c, marks=pending_until("WP15", "malformed preset named by `charter pack validate`")) for c in MALFORMED_PRESETS])
 def test_fr019_malformed_preset_cases(case: str, tmp_path: Path) -> None:
-    file_stem = case.replace("_", "-")
-    body = dict(MALFORMED_PRESETS[case])
-    if body["name"] == case:
-        body["name"] = file_stem
+    file_stem, body = MALFORMED_PRESETS[case]
+    assert (body["name"] == file_stem) is (case != "name_not_stem"), "each case breaks exactly one rule"
     good = _pack_with_presets(tmp_path / "good", {"valid": VALID_PRESET})
     assert run_cli(["charter", "pack", "validate", str(good)], tmp_path).exit_code == 0  # control
-    bad = _pack_with_presets(tmp_path / "bad", {"valid": VALID_PRESET, file_stem: body})
+    bad = _pack_with_presets(tmp_path / "bad", {"valid": VALID_PRESET, file_stem: dict(body)})
     refused = run_cli(["charter", "pack", "validate", str(bad)], tmp_path)
     assert refused.exit_code != 0, describe(refused)
     assert f"{file_stem}.yaml" in output_of(refused), describe(refused)
