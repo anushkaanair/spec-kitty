@@ -358,8 +358,35 @@ def _gated_groups() -> list[tuple[str, ...]]:
     return [(str(n),) for n in sorted(n for n in names if n and n not in EXEMPT_COMMANDS and not n.startswith("merge-driver"))]
 
 
+#: Internal entry points never typed by an operator (hidden Typer plumbing).
+_INTERNAL_COMMANDS = frozenset({"__force_multi_command_mode__"})
+_EXEMPT_PREFIXES = ("merge-driver-", "session-")
+
+
+def _is_exempt(name: str) -> bool:
+    return name in EXEMPT_COMMANDS or name in _INTERNAL_COMMANDS or name.startswith(_EXEMPT_PREFIXES)
+
+
+def _command_name(command: object) -> str:
+    """The CLI spelling of a registered top-level command (Typer derives it from the callback)."""
+    name = getattr(command, "name", None)
+    if name:
+        return str(name)
+    callback = getattr(command, "callback", None)
+    return str(getattr(callback, "__name__", "")).replace("_", "-")
+
+
+def _gated_commands() -> list[tuple[str, ...]]:
+    """Every non-exempt top-level command, so a new command is gated automatically."""
+    from specify_cli import app
+
+    names = {_command_name(c) for c in app.registered_commands}
+    return [(n,) for n in sorted(n for n in names if n and not _is_exempt(n))]
+
+
 def _legacy_invocations() -> list[object]:
-    rows = [*_gated_groups(), *HOT_PATHS]
+    covered = {*_gated_groups(), *_gated_commands()}
+    rows = [*_gated_groups(), *_gated_commands(), *(p for p in HOT_PATHS if p not in covered)]
     return [pytest.param(argv, id="-".join(argv), marks=pending_until("WP14", "CLI-root legacy gate")) for argv in rows]
 
 
