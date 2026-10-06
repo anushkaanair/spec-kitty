@@ -1,38 +1,53 @@
 ---
-work_package_id: "WP08"
-title: "`charter activate --preset` and `charter pack list/path`"
-subtasks: ["T041", "T042", "T043", "T044", "T045"]
-dependencies: ["WP06", "WP07"]
-requirement_refs: ["FR-001", "FR-004", "NFR-003", "SC-001"]
-task_type: "implement"
-phase: "Phase 2 - Presets and promotion"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/activation/preset_application.py"
-  - "src/charter/activation/charter_yaml_io.py"
-  - "src/specify_cli/cli/commands/charter/activate.py"
-  - "src/specify_cli/cli/commands/charter/pack.py"
-  - "tests/charter/activation/test_preset_application.py"
-  - "tests/charter/activation/test_activation_key_removal.py"
-  - "tests/specify_cli/cli/commands/charter/test_activate_preset.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_list_path.py"
-  - "tests/specify_cli/cli/commands/charter/test_preset_cli_timing.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_builtin.py"
-authoritative_surface: "src/charter/activation/preset_application.py"
-create_intent:
-  - "src/charter/activation/preset_application.py"
-  - "tests/charter/activation/test_preset_application.py"
-  - "tests/charter/activation/test_activation_key_removal.py"
-  - "tests/specify_cli/cli/commands/charter/test_activate_preset.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_list_path.py"
-  - "tests/specify_cli/cli/commands/charter/test_preset_cli_timing.py"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP08
+title: '`charter activate --preset` and `charter pack list/path`'
+dependencies:
+- WP06
+- WP07
+requirement_refs:
+- FR-001
+- FR-004
+- NFR-003
+- SC-001
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T041
+- T042
+- T043
+- T044
+- T045
+phase: Phase 2 - Presets and promotion
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/charter/activation/preset_application.py
+create_intent:
+- src/charter/activation/preset_application.py
+- tests/charter/activation/test_preset_application.py
+- tests/charter/activation/test_activation_key_removal.py
+- tests/specify_cli/cli/commands/charter/test_activate_preset.py
+- tests/specify_cli/cli/commands/charter/test_charter_pack_list_path.py
+- tests/specify_cli/cli/commands/charter/test_preset_cli_timing.py
+execution_mode: code_change
+owned_files:
+- src/charter/activation/preset_application.py
+- src/charter/activation/charter_yaml_io.py
+- src/specify_cli/cli/commands/charter/activate.py
+- src/specify_cli/cli/commands/charter/pack.py
+- tests/charter/activation/test_preset_application.py
+- tests/charter/activation/test_activation_key_removal.py
+- tests/specify_cli/cli/commands/charter/test_activate_preset.py
+- tests/specify_cli/cli/commands/charter/test_charter_pack_list_path.py
+- tests/specify_cli/cli/commands/charter/test_preset_cli_timing.py
+- tests/specify_cli/cli/commands/charter/test_charter_pack_builtin.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP08 – `charter activate --preset` and `charter pack list/path`

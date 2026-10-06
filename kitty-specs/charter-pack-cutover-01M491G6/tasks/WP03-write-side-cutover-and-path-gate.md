@@ -1,69 +1,80 @@
 ---
-work_package_id: "WP03"
-title: "Write-side cutover and path-authority gate"
-subtasks: ["T016", "T017", "T018", "T019", "T020"]
-dependencies: ["WP02"]
-requirement_refs: ["FR-016"]
-task_type: "implement"
-phase: "Phase 1 - Foundations (paths, package split)"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/activation/synthesizer/write_pipeline.py"
-  - "src/charter/activation/synthesizer/path_guard.py"
-  - "src/charter/activation/synthesizer/manifest.py"
-  - "src/charter/activation/synthesizer/reconcile.py"
-  - "src/charter/activation/synthesizer/staging.py"
-  - "src/charter/activation/synthesizer/validation_gate.py"
-  - "src/charter/activation/synthesizer/project_drg.py"
-  - "src/charter/activation/synthesizer/resynthesize_pipeline.py"
-  - "src/charter/activation/synthesizer/graph_residue.py"
-  - "src/charter/activation/synthesizer/errors.py"
-  - "src/charter/activation/synthesizer/__init__.py"
-  - "src/charter/activation/project_registration.py"
-  - "src/charter/bundle.py"
-  - "src/specify_cli/charter_runtime/freshness/computer.py"
-  - "src/specify_cli/cli/commands/charter/_fresh_doctrine.py"
-  - "src/specify_cli/cli/commands/charter/_synthesis.py"
-  - "src/specify_cli/cli/commands/charter/synthesize.py"
-  - "src/specify_cli/doctrine_synthesizer/apply.py"
-  - "src/specify_cli/cli/commands/doctrine.py"
-  - "src/specify_cli/state/contract.py"
-  - ".gitignore"
-  - ".github/workflows/ci-router.yml"
-  - "tests/architectural/test_charter_pack_path_authority.py"
-  - "tests/architectural/charter_pack_path_allowlist.yaml"
-  - "tests/charter/synthesizer/**"
-  - "tests/charter/test_project_registration.py"
-  - "tests/charter/test_synthesis_provenance_paths.py"
-  - "tests/charter/test_bundle_validate_cli.py"
-  - "tests/agent/cli/commands/test_charter_synthesize_cli.py"
-  - "tests/agent/cli/commands/test_charter_resynthesize_cli.py"
-  - "tests/cli/test_agent_status_validate_retrospective.py"
-  - "tests/doctrine_synthesizer/test_apply.py"
-  - "tests/doctrine_synthesizer/test_path_traversal_rejection.py"
-  - "tests/integration/test_charter_status_freshness.py"
-  - "tests/integration/test_charter_synthesize_built_in_only.py"
-  - "tests/integration/test_charter_synthesize_fresh.py"
-  - "tests/specify_cli/charter/test_bundle_validate_fresh_seed.py"
-  - "tests/specify_cli/charter_freshness/test_computer.py"
-  - "tests/specify_cli/charter_runtime/test_freshness_activation_visibility.py"
-  - "tests/specify_cli/charter_runtime/test_freshness_cache.py"
-  - "tests/specify_cli/charter_runtime/test_freshness_residue.py"
-  - "tests/specify_cli/cli/commands/charter/test_resynthesize_and_hotpath.py"
-  - "tests/specify_cli/cli/commands/charter/test_synthesize_cli_reconcile.py"
-  - "tests/specify_cli/cli/commands/charter/test_synthesize_freshgate_4785.py"
-  - "tests/specify_cli/cli/commands/test_doctrine_new.py"
-authoritative_surface: "src/charter/activation/synthesizer/"
-create_intent:
-  - "tests/architectural/test_charter_pack_path_authority.py"
-  - "tests/architectural/charter_pack_path_allowlist.yaml"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP03
+title: Write-side cutover and path-authority gate
+dependencies:
+- WP02
+requirement_refs:
+- FR-016
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T016
+- T017
+- T018
+- T019
+- T020
+phase: Phase 1 - Foundations (paths, package split)
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/charter/activation/synthesizer/
+create_intent:
+- tests/architectural/test_charter_pack_path_authority.py
+- tests/architectural/charter_pack_path_allowlist.yaml
+execution_mode: code_change
+owned_files:
+- src/charter/activation/synthesizer/write_pipeline.py
+- src/charter/activation/synthesizer/path_guard.py
+- src/charter/activation/synthesizer/manifest.py
+- src/charter/activation/synthesizer/reconcile.py
+- src/charter/activation/synthesizer/staging.py
+- src/charter/activation/synthesizer/validation_gate.py
+- src/charter/activation/synthesizer/project_drg.py
+- src/charter/activation/synthesizer/resynthesize_pipeline.py
+- src/charter/activation/synthesizer/graph_residue.py
+- src/charter/activation/synthesizer/errors.py
+- src/charter/activation/synthesizer/__init__.py
+- src/charter/activation/project_registration.py
+- src/charter/bundle.py
+- src/specify_cli/charter_runtime/freshness/computer.py
+- src/specify_cli/cli/commands/charter/_fresh_doctrine.py
+- src/specify_cli/cli/commands/charter/_synthesis.py
+- src/specify_cli/cli/commands/charter/synthesize.py
+- src/specify_cli/doctrine_synthesizer/apply.py
+- src/specify_cli/cli/commands/doctrine.py
+- src/specify_cli/state/contract.py
+- .gitignore
+- .github/workflows/ci-router.yml
+- tests/architectural/test_charter_pack_path_authority.py
+- tests/architectural/charter_pack_path_allowlist.yaml
+- tests/charter/synthesizer/**
+- tests/charter/test_project_registration.py
+- tests/charter/test_synthesis_provenance_paths.py
+- tests/charter/test_bundle_validate_cli.py
+- tests/agent/cli/commands/test_charter_synthesize_cli.py
+- tests/agent/cli/commands/test_charter_resynthesize_cli.py
+- tests/cli/test_agent_status_validate_retrospective.py
+- tests/doctrine_synthesizer/test_apply.py
+- tests/doctrine_synthesizer/test_path_traversal_rejection.py
+- tests/integration/test_charter_status_freshness.py
+- tests/integration/test_charter_synthesize_built_in_only.py
+- tests/integration/test_charter_synthesize_fresh.py
+- tests/specify_cli/charter/test_bundle_validate_fresh_seed.py
+- tests/specify_cli/charter_freshness/test_computer.py
+- tests/specify_cli/charter_runtime/test_freshness_activation_visibility.py
+- tests/specify_cli/charter_runtime/test_freshness_cache.py
+- tests/specify_cli/charter_runtime/test_freshness_residue.py
+- tests/specify_cli/cli/commands/charter/test_resynthesize_and_hotpath.py
+- tests/specify_cli/cli/commands/charter/test_synthesize_cli_reconcile.py
+- tests/specify_cli/cli/commands/charter/test_synthesize_freshgate_4785.py
+- tests/specify_cli/cli/commands/test_doctrine_new.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP03 – Write-side cutover and path-authority gate

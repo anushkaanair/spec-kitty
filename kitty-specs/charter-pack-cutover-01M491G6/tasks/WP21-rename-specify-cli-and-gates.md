@@ -1,105 +1,111 @@
 ---
-work_package_id: "WP21"
-title: "Identifier rename R3/R4 — specify_cli, migrations, gates"
-subtasks: ["T098", "T099", "T100"]
-dependencies: ["WP16", "WP20"]
-requirement_refs: ["FR-010"]
-task_type: "implement"
-phase: "Phase 5 - Names"
-execution_mode: "code_change"
-owned_files:
-  # R3: specify_cli command surface and neighbours (module moves own source + destination)
-  - "src/specify_cli/cli/commands/_charter_pack_collect.py"
-  - "src/specify_cli/cli/commands/_doctrine_health.py"
-  - "src/specify_cli/cli/commands/_charter_pack_health.py"
-  - "src/specify_cli/cli/commands/_profile_health_render.py"
-  - "src/specify_cli/cli/commands/charter/_fresh_project_layer.py"
-  - "src/specify_cli/cli/commands/charter/__init__.py"
-  - "src/specify_cli/cli/commands/charter/_cascade_shared.py"
-  - "src/specify_cli/cli/commands/agent_retrospect.py"
-  - "src/specify_cli/*_service_factory.py"
-  - "src/specify_cli/doctrine_synthesizer/__init__.py"
-  - "src/specify_cli/doctrine_synthesizer/conflict.py"
-  - "src/specify_cli/doctrine_synthesizer/provenance.py"
-  - "src/specify_cli/charter_pack_synthesizer/**"
-  - "src/specify_cli/charter_runtime/freshness/cache.py"
-  - "src/specify_cli/invocation/registry.py"
-  - "src/specify_cli/invocation/org_profiles.py"
-  - "src/specify_cli/skills/registry.py"
-  - "src/specify_cli/template/manager.py"
-  - "src/specify_cli/migration/rewrite_shims.py"
-  - "src/specify_cli/tool_surface/profiles/projection.py"
-  - "src/specify_cli/.contextive/governance.yml"
-  # R4: migration bodies (migration_id values never change)
-  - "src/specify_cli/upgrade/migrations/m_2_1_2_fix_orchestrator_api_skill.py"
-  - "src/specify_cli/upgrade/migrations/m_2_1_2_fix_runtime_next_skill.py"
-  - "src/specify_cli/upgrade/migrations/m_2_1_2_install_git_workflow_skill.py"
-  - "src/specify_cli/upgrade/migrations/m_2_1_2_install_mission_system_skill.py"
-  - "src/specify_cli/upgrade/migrations/m_2_1_3_restore_prompt_commands.py"
-  - "src/specify_cli/upgrade/migrations/m_2_1_4_enforce_command_file_state.py"
-  - "src/specify_cli/upgrade/migrations/m_3_2_0rc30_fix_runtime_next_result_default.py"
-  - "src/specify_cli/upgrade/migrations/m_3_2_0rc35_fix_prompt_file_workaround.py"
-  # R4: architectural gates
-  - "tests/architectural/_dead_path_scan.py"
-  - "tests/architectural/_inert_slots.py"
-  - "tests/architectural/test_charter_facades_reexport_offering.py"
-  - "tests/architectural/test_charter_sole_door_*_service.py"
-  - "tests/architectural/test_doctrine_missions_stale_path_sweep.py"
-  - "tests/architectural/test_offering_missions_stale_path_sweep.py"
-  - "tests/architectural/test_charter_offering_public_surface.py"
-  - "tests/architectural/test_kernel_no_doctrine_import.py"
-  - "tests/architectural/test_kernel_no_charter_offering_import.py"
-  - "tests/architectural/test_kernel_env_expand_no_upward_import.py"
-  - "tests/architectural/test_bridge_cores_import_boundary.py"
-  - "tests/architectural/test_clock_import_ban.py"
-  - "tests/architectural/test_ratchet_positional_anchor_ban.py"
-  - "tests/_support/wall_clock_assertions.py"
-  - "tests/architectural/test_glossary_authority_parity.py"
-  - "tests/architectural/test_glossary_pack_parity.py"
-  - "tests/architectural/test_issue_matrix_json_migration_completeness.py"
-  - "tests/architectural/test_issue_matrix_partition_guard.py"
-  - "tests/architectural/test_no_authored_applies_edge.py"
-  - "tests/architectural/test_no_shipped_layer_label.py"
-  - "tests/architectural/test_override_policy_parity.py"
-  - "tests/architectural/test_ratchet_baselines.py"
-  - "tests/architectural/test_no_dead_doctrine_paths.py"
-  # T100: tests that follow the R3/R4 renames
-  - "tests/specify_cli/cli/commands/test_charter_pack_collect.py"
-  - "tests/specify_cli/cli/commands/test_doctrine_hard_fail_surfacing.py"
-  - "tests/specify_cli/cli/commands/test_charter_pack_hard_fail_surfacing.py"
-  - "tests/specify_cli/test_*_service_factory.py"
-  - "tests/doctrine_synthesizer/__init__.py"
-  - "tests/doctrine_synthesizer/test_conflict_failclosed.py"
-  - "tests/doctrine_synthesizer/test_provenance.py"
-  - "tests/charter_pack_synthesizer/**"
-  - "tests/specify_cli/charter/test_graph_unlink_helper.py"
-  - "tests/specify_cli/test_read_seam_migration_core.py"
-  - "tests/integration/test_implement_review_retrospect_smoke.py"
-  - "tests/integration/retrospective/test_next_mission_sees_change.py"
-  - "tests/cli/test_agent_retrospect_missing_record.py"
-  - "tests/cli/test_agent_retrospect_synthesize.py"
-  - "tests/cli/commands/test_retrospect.py"
-  - "tests/retrospective/test_reducer_integration.py"
-authoritative_surface: "src/specify_cli/cli/commands/"
-create_intent:
-  - "src/specify_cli/cli/commands/_charter_pack_collect.py"
-  - "src/specify_cli/cli/commands/_charter_pack_health.py"
-  - "src/specify_cli/cli/commands/charter/_fresh_project_layer.py"
-  - "src/specify_cli/charter_pack_synthesizer/"
-  - "tests/charter_pack_synthesizer/"
-  - "tests/architectural/test_charter_facades_reexport_offering.py"
-  - "tests/architectural/test_offering_missions_stale_path_sweep.py"
-  - "tests/architectural/test_charter_offering_public_surface.py"
-  - "tests/architectural/test_kernel_no_charter_offering_import.py"
-  - "tests/specify_cli/cli/commands/test_charter_pack_collect.py"
-  - "tests/specify_cli/cli/commands/test_charter_pack_hard_fail_surfacing.py"
-agent_profile: "lexical-larry"
-role: "implementer"
-agent: "claude"
+work_package_id: WP21
+title: Identifier rename R3/R4 — specify_cli, migrations, gates
+dependencies:
+- WP16
+- WP20
+requirement_refs:
+- FR-010
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T098
+- T099
+- T100
+phase: Phase 5 - Names
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: lexical-larry
+authoritative_surface: src/specify_cli/cli/commands/
+create_intent:
+- src/specify_cli/cli/commands/_charter_pack_collect.py
+- src/specify_cli/cli/commands/_charter_pack_health.py
+- src/specify_cli/cli/commands/charter/_fresh_project_layer.py
+- src/specify_cli/charter_pack_synthesizer/
+- tests/charter_pack_synthesizer/
+- tests/architectural/test_charter_facades_reexport_offering.py
+- tests/architectural/test_offering_missions_stale_path_sweep.py
+- tests/architectural/test_charter_offering_public_surface.py
+- tests/architectural/test_kernel_no_charter_offering_import.py
+- tests/specify_cli/cli/commands/test_charter_pack_collect.py
+- tests/specify_cli/cli/commands/test_charter_pack_hard_fail_surfacing.py
+execution_mode: code_change
+owned_files:
+- src/specify_cli/cli/commands/_charter_pack_collect.py
+- src/specify_cli/cli/commands/_doctrine_health.py
+- src/specify_cli/cli/commands/_charter_pack_health.py
+- src/specify_cli/cli/commands/_profile_health_render.py
+- src/specify_cli/cli/commands/charter/_fresh_project_layer.py
+- src/specify_cli/cli/commands/charter/__init__.py
+- src/specify_cli/cli/commands/charter/_cascade_shared.py
+- src/specify_cli/cli/commands/agent_retrospect.py
+- src/specify_cli/*_service_factory.py
+- src/specify_cli/doctrine_synthesizer/__init__.py
+- src/specify_cli/doctrine_synthesizer/conflict.py
+- src/specify_cli/doctrine_synthesizer/provenance.py
+- src/specify_cli/charter_pack_synthesizer/**
+- src/specify_cli/charter_runtime/freshness/cache.py
+- src/specify_cli/invocation/registry.py
+- src/specify_cli/invocation/org_profiles.py
+- src/specify_cli/skills/registry.py
+- src/specify_cli/template/manager.py
+- src/specify_cli/migration/rewrite_shims.py
+- src/specify_cli/tool_surface/profiles/projection.py
+- src/specify_cli/.contextive/governance.yml
+- src/specify_cli/upgrade/migrations/m_2_1_2_fix_orchestrator_api_skill.py
+- src/specify_cli/upgrade/migrations/m_2_1_2_fix_runtime_next_skill.py
+- src/specify_cli/upgrade/migrations/m_2_1_2_install_git_workflow_skill.py
+- src/specify_cli/upgrade/migrations/m_2_1_2_install_mission_system_skill.py
+- src/specify_cli/upgrade/migrations/m_2_1_3_restore_prompt_commands.py
+- src/specify_cli/upgrade/migrations/m_2_1_4_enforce_command_file_state.py
+- src/specify_cli/upgrade/migrations/m_3_2_0rc30_fix_runtime_next_result_default.py
+- src/specify_cli/upgrade/migrations/m_3_2_0rc35_fix_prompt_file_workaround.py
+- tests/architectural/_dead_path_scan.py
+- tests/architectural/_inert_slots.py
+- tests/architectural/test_charter_facades_reexport_offering.py
+- tests/architectural/test_charter_sole_door_*_service.py
+- tests/architectural/test_doctrine_missions_stale_path_sweep.py
+- tests/architectural/test_offering_missions_stale_path_sweep.py
+- tests/architectural/test_charter_offering_public_surface.py
+- tests/architectural/test_kernel_no_doctrine_import.py
+- tests/architectural/test_kernel_no_charter_offering_import.py
+- tests/architectural/test_kernel_env_expand_no_upward_import.py
+- tests/architectural/test_bridge_cores_import_boundary.py
+- tests/architectural/test_clock_import_ban.py
+- tests/architectural/test_ratchet_positional_anchor_ban.py
+- tests/_support/wall_clock_assertions.py
+- tests/architectural/test_glossary_authority_parity.py
+- tests/architectural/test_glossary_pack_parity.py
+- tests/architectural/test_issue_matrix_json_migration_completeness.py
+- tests/architectural/test_issue_matrix_partition_guard.py
+- tests/architectural/test_no_authored_applies_edge.py
+- tests/architectural/test_no_shipped_layer_label.py
+- tests/architectural/test_override_policy_parity.py
+- tests/architectural/test_ratchet_baselines.py
+- tests/architectural/test_no_dead_doctrine_paths.py
+- tests/specify_cli/cli/commands/test_charter_pack_collect.py
+- tests/specify_cli/cli/commands/test_doctrine_hard_fail_surfacing.py
+- tests/specify_cli/cli/commands/test_charter_pack_hard_fail_surfacing.py
+- tests/specify_cli/test_*_service_factory.py
+- tests/doctrine_synthesizer/__init__.py
+- tests/doctrine_synthesizer/test_conflict_failclosed.py
+- tests/doctrine_synthesizer/test_provenance.py
+- tests/charter_pack_synthesizer/**
+- tests/specify_cli/charter/test_graph_unlink_helper.py
+- tests/specify_cli/test_read_seam_migration_core.py
+- tests/integration/test_implement_review_retrospect_smoke.py
+- tests/integration/retrospective/test_next_mission_sees_change.py
+- tests/cli/test_agent_retrospect_missing_record.py
+- tests/cli/test_agent_retrospect_synthesize.py
+- tests/cli/commands/test_retrospect.py
+- tests/retrospective/test_reducer_integration.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP21 – Identifier rename R3/R4 — specify_cli, migrations, gates

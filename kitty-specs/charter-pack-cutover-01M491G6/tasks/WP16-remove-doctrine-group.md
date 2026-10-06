@@ -1,42 +1,53 @@
 ---
-work_package_id: "WP16"
-title: "Remove the `spec-kitty doctrine` group"
-subtasks: ["T080", "T081", "T082"]
-dependencies: ["WP13", "WP15"]
-requirement_refs: ["FR-007", "C-001"]
-task_type: "implement"
-phase: "Phase 4 - Removal (no aliases, no shims)"
-execution_mode: "code_change"
-owned_files:
-  - "src/specify_cli/cli/commands/__init__.py"
-  - "src/specify_cli/cli/commands/mission_type.py"
-  - "src/specify_cli/cli/commands/regen.py"
-  - "src/charter/offering/shared/scoping.py"
-  - "src/charter/offering/drg/migration/hand_authored_overlay.py"
-  - "src/charter/offering/schemas/agent-profile.schema.yaml"
-  - "scripts/generate_schemas.py"
-  - "packs/built-in/tactics/common-docs-find.tactic.yaml"
-  - "packs/built-in/tactics/common-docs-write.tactic.yaml"
-  - "packs/built-in/agent_profiles/doctrine-daphne.agent.yaml"
-  - "docs/guides/how-to/governance/create-an-org-doctrine-pack.md"
-  - "docs/development/how-to/create-a-doctrine-artifact.md"
-  - "docs/architecture/doctrine-kinds.md"
-  - "docs/development/reference/ci-gate-mechanics.md"
-  - "docs/development/reference/terminology-exemptions.md"
-  - "tests/architectural/test_no_deprecated_doctrine_command_in_guidance.py"
-  - "tests/architectural/test_lifted_cli_doctrine_retirement.py"
-  - "tests/architectural/test_lifted_cli_doctrine_charter_cr02_compat.py"
-  - "tests/specify_cli/cli/test_doctrine_charter_cr02_compat.py"
-  - "tests/specify_cli/cli/test_doctrine_cli_removed.py"
-authoritative_surface: "src/specify_cli/cli/commands/"
-create_intent: []
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP16
+title: Remove the `spec-kitty doctrine` group
+dependencies:
+- WP13
+- WP15
+requirement_refs:
+- FR-007
+- C-001
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T080
+- T081
+- T082
+phase: Phase 4 - Removal (no aliases, no shims)
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/specify_cli/cli/commands/
+create_intent: []
+execution_mode: code_change
+owned_files:
+- src/specify_cli/cli/commands/__init__.py
+- src/specify_cli/cli/commands/mission_type.py
+- src/specify_cli/cli/commands/regen.py
+- src/charter/offering/shared/scoping.py
+- src/charter/offering/drg/migration/hand_authored_overlay.py
+- src/charter/offering/schemas/agent-profile.schema.yaml
+- scripts/generate_schemas.py
+- packs/built-in/tactics/common-docs-find.tactic.yaml
+- packs/built-in/tactics/common-docs-write.tactic.yaml
+- packs/built-in/agent_profiles/doctrine-daphne.agent.yaml
+- docs/guides/how-to/governance/create-an-org-doctrine-pack.md
+- docs/development/how-to/create-a-doctrine-artifact.md
+- docs/architecture/doctrine-kinds.md
+- docs/development/reference/ci-gate-mechanics.md
+- docs/development/reference/terminology-exemptions.md
+- tests/architectural/test_no_deprecated_doctrine_command_in_guidance.py
+- tests/architectural/test_lifted_cli_doctrine_retirement.py
+- tests/architectural/test_lifted_cli_doctrine_charter_cr02_compat.py
+- tests/specify_cli/cli/test_doctrine_charter_cr02_compat.py
+- tests/specify_cli/cli/test_doctrine_cli_removed.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP16 – Remove the `spec-kitty doctrine` group

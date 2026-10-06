@@ -1,45 +1,85 @@
 ---
-work_package_id: "WP01"
-title: "Acceptance suite and golden \"before\" sets"
-subtasks: ["T001", "T002", "T003", "T004", "T005", "T006", "T007", "T008", "T009", "T010"]
+work_package_id: WP01
+title: Acceptance suite and golden "before" sets
 dependencies: []
-requirement_refs: ["C-006", "NFR-001", "FR-001", "FR-002", "FR-003", "FR-004", "FR-005", "FR-006", "FR-007", "FR-008", "FR-009", "FR-010", "FR-011", "FR-012", "FR-013", "FR-014", "FR-015", "FR-016", "FR-017", "FR-018", "FR-019", "SC-001", "SC-002", "SC-003", "SC-004", "SC-005"]
-task_type: "implement"
-phase: "Phase 0 - Acceptance first"
-execution_mode: "code_change"
-owned_files:
-  - "tests/acceptance/charter_pack_cutover/**"
-  - "tests/fixtures/charter_pack_cutover/**"
-authoritative_surface: "tests/acceptance/charter_pack_cutover/"
-create_intent:
-  - "tests/acceptance/charter_pack_cutover/__init__.py"
-  - "tests/acceptance/charter_pack_cutover/conftest.py"
-  - "tests/acceptance/charter_pack_cutover/_support.py"
-  - "tests/acceptance/charter_pack_cutover/_effective_set.py"
-  - "tests/acceptance/charter_pack_cutover/_requirements.py"
-  - "tests/acceptance/charter_pack_cutover/legacy_fixtures.py"
-  - "tests/acceptance/charter_pack_cutover/generate_golden_before.py"
-  - "tests/acceptance/charter_pack_cutover/test_golden_before.py"
-  - "tests/acceptance/charter_pack_cutover/test_presets.py"
-  - "tests/acceptance/charter_pack_cutover/test_upgrade_migration.py"
-  - "tests/acceptance/charter_pack_cutover/test_cli_surface.py"
-  - "tests/acceptance/charter_pack_cutover/test_promotion.py"
-  - "tests/acceptance/charter_pack_cutover/test_rename_skills_glossary.py"
-  - "tests/acceptance/charter_pack_cutover/test_package_split.py"
-  - "tests/acceptance/charter_pack_cutover/test_project_pack_root.py"
-  - "tests/acceptance/charter_pack_cutover/test_gates_latency_messaging.py"
-  - "tests/acceptance/charter_pack_cutover/test_traceability.py"
-  - "tests/fixtures/charter_pack_cutover/default_yaml_snapshots.yaml"
-  - "tests/fixtures/charter_pack_cutover/golden_before/_meta.json"
-  - "tests/fixtures/charter_pack_cutover/cli_before.json"
-  - "tests/fixtures/charter_pack_cutover/retired_identifiers.yaml"
-agent_profile: "reviewer-renata"
-role: "implementer"
-agent: "claude"
+requirement_refs:
+- C-006
+- NFR-001
+- FR-001
+- FR-002
+- FR-003
+- FR-004
+- FR-005
+- FR-006
+- FR-007
+- FR-008
+- FR-009
+- FR-010
+- FR-011
+- FR-012
+- FR-013
+- FR-014
+- FR-015
+- FR-016
+- FR-017
+- FR-018
+- FR-019
+- SC-001
+- SC-002
+- SC-003
+- SC-004
+- SC-005
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T001
+- T002
+- T003
+- T004
+- T005
+- T006
+- T007
+- T008
+- T009
+- T010
+phase: Phase 0 - Acceptance first
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: reviewer-renata
+authoritative_surface: tests/acceptance/charter_pack_cutover/
+create_intent:
+- tests/acceptance/charter_pack_cutover/__init__.py
+- tests/acceptance/charter_pack_cutover/conftest.py
+- tests/acceptance/charter_pack_cutover/_support.py
+- tests/acceptance/charter_pack_cutover/_effective_set.py
+- tests/acceptance/charter_pack_cutover/_requirements.py
+- tests/acceptance/charter_pack_cutover/legacy_fixtures.py
+- tests/acceptance/charter_pack_cutover/generate_golden_before.py
+- tests/acceptance/charter_pack_cutover/test_golden_before.py
+- tests/acceptance/charter_pack_cutover/test_presets.py
+- tests/acceptance/charter_pack_cutover/test_upgrade_migration.py
+- tests/acceptance/charter_pack_cutover/test_cli_surface.py
+- tests/acceptance/charter_pack_cutover/test_promotion.py
+- tests/acceptance/charter_pack_cutover/test_rename_skills_glossary.py
+- tests/acceptance/charter_pack_cutover/test_package_split.py
+- tests/acceptance/charter_pack_cutover/test_project_pack_root.py
+- tests/acceptance/charter_pack_cutover/test_gates_latency_messaging.py
+- tests/acceptance/charter_pack_cutover/test_traceability.py
+- tests/fixtures/charter_pack_cutover/default_yaml_snapshots.yaml
+- tests/fixtures/charter_pack_cutover/golden_before/_meta.json
+- tests/fixtures/charter_pack_cutover/cli_before.json
+- tests/fixtures/charter_pack_cutover/retired_identifiers.yaml
+execution_mode: code_change
+owned_files:
+- tests/acceptance/charter_pack_cutover/**
+- tests/fixtures/charter_pack_cutover/**
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP01 – Acceptance suite and golden "before" sets

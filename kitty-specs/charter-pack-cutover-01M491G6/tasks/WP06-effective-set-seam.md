@@ -1,44 +1,58 @@
 ---
-work_package_id: "WP06"
-title: "Effective-set seam and fail-closed promotion"
-subtasks: ["T030", "T031", "T032", "T033", "T034"]
-dependencies: ["WP05", "WP10", "WP17"]
-requirement_refs: ["FR-015", "C-007"]
-task_type: "implement"
-phase: "Phase 2 - Presets and promotion"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/activation/effective_set.py"
-  - "src/charter/activation/activation_engine.py"
-  - "src/charter/activation/default_pack.py"
-  - "src/specify_cli/cli/commands/charter/interview.py"
-  - "src/specify_cli/cli/commands/charter/_resynthesis_preflight.py"
-  - "src/specify_cli/upgrade/migrations/m_unify_charter_activation.py"
-  - "tests/charter/activation/test_effective_set.py"
-  - "tests/charter/activation/test_promotion_fail_closed.py"
-  - "tests/charter/test_append_promotion_primitive.py"
-  - "tests/charter/test_activation_preserves_effective_4253.py"
-  - "tests/charter/test_pack_manager.py"
-  - "tests/charter/test_activation_engine_charter_yaml.py"
-  - "tests/charter/test_skill_activation.py"
-  - "tests/specify_cli/cli/commands/test_charter_interview_promotion.py"
-  - "tests/specify_cli/cli/commands/test_charter_resynthesis_preflight.py"
-  - "tests/specify_cli/upgrade/test_unify_charter_activation_migration.py"
-  - "tests/charter/test_mission_type_activation_emit.py"
-  - "tests/doctrine/test_activation_squad_lenses.py"
-  - "tests/doctrine/test_squad_procedure_single_owner.py"
-authoritative_surface: "src/charter/activation/effective_set.py"
-create_intent:
-  - "src/charter/activation/effective_set.py"
-  - "tests/charter/activation/test_effective_set.py"
-  - "tests/charter/activation/test_promotion_fail_closed.py"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP06
+title: Effective-set seam and fail-closed promotion
+dependencies:
+- WP05
+- WP10
+- WP17
+requirement_refs:
+- FR-015
+- C-007
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T030
+- T031
+- T032
+- T033
+- T034
+phase: Phase 2 - Presets and promotion
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/charter/activation/effective_set.py
+create_intent:
+- src/charter/activation/effective_set.py
+- tests/charter/activation/test_effective_set.py
+- tests/charter/activation/test_promotion_fail_closed.py
+execution_mode: code_change
+owned_files:
+- src/charter/activation/effective_set.py
+- src/charter/activation/activation_engine.py
+- src/charter/activation/default_pack.py
+- src/specify_cli/cli/commands/charter/interview.py
+- src/specify_cli/cli/commands/charter/_resynthesis_preflight.py
+- src/specify_cli/upgrade/migrations/m_unify_charter_activation.py
+- tests/charter/activation/test_effective_set.py
+- tests/charter/activation/test_promotion_fail_closed.py
+- tests/charter/test_append_promotion_primitive.py
+- tests/charter/test_activation_preserves_effective_4253.py
+- tests/charter/test_pack_manager.py
+- tests/charter/test_activation_engine_charter_yaml.py
+- tests/charter/test_skill_activation.py
+- tests/specify_cli/cli/commands/test_charter_interview_promotion.py
+- tests/specify_cli/cli/commands/test_charter_resynthesis_preflight.py
+- tests/specify_cli/upgrade/test_unify_charter_activation_migration.py
+- tests/charter/test_mission_type_activation_emit.py
+- tests/doctrine/test_activation_squad_lenses.py
+- tests/doctrine/test_squad_procedure_single_owner.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP06 – Effective-set seam and fail-closed promotion

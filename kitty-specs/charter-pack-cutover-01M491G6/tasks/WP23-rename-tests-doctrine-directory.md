@@ -1,201 +1,211 @@
 ---
-work_package_id: "WP23"
-title: "Rename `tests/doctrine/`"
-subtasks: ["T105", "T106"]
-dependencies: ["WP18", "WP21", "WP22"]
-requirement_refs: ["FR-010"]
-task_type: "implement"
-phase: "Phase 5 - Names"
-execution_mode: "code_change"
-owned_files:
-  - "tests/doctrine/agent_profiles/**"
-  - "tests/doctrine/assets/**"
-  - "tests/doctrine/directives/**"
-  - "tests/doctrine/fixtures/**"
-  - "tests/doctrine/glossary_packs/**"
-  - "tests/doctrine/mission_step_contracts/**"
-  - "tests/doctrine/missions/**"
-  - "tests/doctrine/model_task_routing/**"
-  - "tests/doctrine/paradigms/**"
-  - "tests/doctrine/procedures/**"
-  - "tests/doctrine/shared/**"
-  - "tests/doctrine/styleguides/**"
-  - "tests/doctrine/tactics/**"
-  - "tests/doctrine/toolguides/**"
-  - "tests/doctrine/__init__.py"
-  - "tests/doctrine/_builtin_inventory.py"
-  - "tests/doctrine/_relationship_graph.py"
-  - "tests/doctrine/_single_owner_detectors.py"
-  - "tests/doctrine/conftest.py"
-  - "tests/doctrine/drg/test_builtin_graph_seam.py"
-  - "tests/doctrine/drg/test_c4_and_anti_pattern_topology.py"
-  - "tests/doctrine/drg/test_cross_grain_integrity.py"
-  - "tests/doctrine/drg/test_drupal_dries_lineage.py"
-  - "tests/doctrine/drg/test_extractor_asset.py"
-  - "tests/doctrine/drg/test_glossary_node_kind.py"
-  - "tests/doctrine/drg/test_graph_sharding_equality.py"
-  - "tests/doctrine/drg/test_instantiates_edges.py"
-  - "tests/doctrine/drg/test_kind_mapping_totality.py"
-  - "tests/doctrine/drg/test_loader_multifile.py"
-  - "tests/doctrine/drg/test_mission_type_nodes.py"
-  - "tests/doctrine/drg/test_model_strictness_roundtrip.py"
-  - "tests/doctrine/drg/test_models.py"
-  - "tests/doctrine/drg/test_nodekind_artifactkind.py"
-  - "tests/doctrine/drg/test_org_drg_bridge.py"
-  - "tests/doctrine/drg/test_org_governance_failloud.py"
-  - "tests/doctrine/drg/test_org_pack_auto_emit.py"
-  - "tests/doctrine/drg/test_org_pack_config_cr04_charter_packs.py"
-  - "tests/doctrine/drg/test_org_pack_config_resolve_existing_org_roots.py"
-  - "tests/doctrine/drg/test_org_pack_config_resolve_org_dirs.py"
-  - "tests/doctrine/drg/test_org_pack_merge.py"
-  - "tests/doctrine/drg/test_org_pack_node_inference.py"
-  - "tests/doctrine/drg/test_override_policy_pack_sanctions.py"
-  - "tests/doctrine/drg/test_override_policy_predicates.py"
-  - "tests/doctrine/drg/test_profile_suggests_delivery.py"
-  - "tests/doctrine/drg/test_reachability.py"
-  - "tests/doctrine/drg/test_recursion_parity_gate.py"
-  - "tests/doctrine/drg/test_regen_roundtrip.py"
-  - "tests/doctrine/drg/test_resolve_transitive_refs.py"
-  - "tests/doctrine/drg/test_sharded_layout.py"
-  - "tests/doctrine/drg/test_shipped_graph_valid.py"
-  - "tests/doctrine/drg/test_single_owner_edges.py"
-  - "tests/doctrine/drg/test_tension_arbiters.py"
-  - "tests/doctrine/drg/test_tiered_standards_non_orphan.py"
-  - "tests/doctrine/drg/test_unknown_kind_fails_loudly.py"
-  - "tests/doctrine/drg/test_validator.py"
-  - "tests/doctrine/drg/test_validator_profile_edges.py"
-  - "tests/doctrine/drg/test_validator_structured_detection.py"
-  - "tests/doctrine/pack_skills/__init__.py"
-  - "tests/doctrine/pack_skills/conftest.py"
-  - "tests/doctrine/pack_skills/test_health.py"
-  - "tests/doctrine/pack_skills/test_models.py"
-  - "tests/doctrine/pack_skills/test_org_drg_skill_nodes.py"
-  - "tests/doctrine/pack_skills/test_repository.py"
-  - "tests/doctrine/pack_skills/test_validation.py"
-  - "tests/doctrine/test_acceptance_criteria_non_vacuity_wiring.py"
-  - "tests/doctrine/test_activation_parity_guard.py"
-  - "tests/doctrine/test_agent_profile_model_field.py"
-  - "tests/doctrine/test_api_surface_import.py"
-  - "tests/doctrine/test_artifact_compliance.py"
-  - "tests/doctrine/test_artifact_kinds.py"
-  - "tests/doctrine/test_base_org_layer.py"
-  - "tests/doctrine/test_built_in_location_authority.py"
-  - "tests/doctrine/test_builtin_cli_command_references.py"
-  - "tests/doctrine/test_capabilities.py"
-  - "tests/doctrine/test_change_scope_review_single_owner.py"
-  - "tests/doctrine/test_charter_activatable_vocabulary.py"
-  - "tests/doctrine/test_codex_dispatch_flags.py"
-  - "tests/doctrine/test_common_docs_single_owner.py"
-  - "tests/doctrine/test_debugger_debbie_artifacts.py"
-  - "tests/doctrine/test_directive_consistency.py"
-  - "tests/doctrine/test_discovery_recursion.py"
-  - "tests/doctrine/test_doctrine_health_glossary_pack.py"
-  - "tests/doctrine/test_doctrine_validate_lang_guard.py"
-  - "tests/doctrine/test_documentation_iteration_modes.py"
-  - "tests/doctrine/test_drg_merge.py"
-  - "tests/doctrine/test_drg_relations.py"
-  - "tests/doctrine/test_enriched_directives.py"
-  - "tests/doctrine/test_generic_agent_profile.py"
-  - "tests/doctrine/test_generic_artifact_language_bias.py"
-  - "tests/doctrine/test_glossary_link_integrity.py"
-  - "tests/doctrine/test_glossary_pack_kind.py"
-  - "tests/doctrine/test_human_in_charge_profile.py"
-  - "tests/doctrine/test_inline_ref_rejection.py"
-  - "tests/doctrine/test_isolation.py"
-  - "tests/doctrine/test_language_independent_tactics_unscoped.py"
-  - "tests/doctrine/test_loader_fail_closed.py"
-  - "tests/doctrine/test_mattpocock_skill_doctrine.py"
-  - "tests/doctrine/test_mission_review_skill_gate3_floor.py"
-  - "tests/doctrine/test_mission_review_skill_gate4.py"
-  - "tests/doctrine/test_mission_type_governance_isolation.py"
-  - "tests/doctrine/test_missions_root_packs_env.py"
-  - "tests/doctrine/test_model_task_routing_evaluator.py"
-  - "tests/doctrine/test_model_task_routing_loader.py"
-  - "tests/doctrine/test_model_task_routing_parity.py"
-  - "tests/doctrine/test_nested_artifact_discovery.py"
-  - "tests/doctrine/test_org_pack_delegation.py"
-  - "tests/doctrine/test_org_pack_subdir.py"
-  - "tests/doctrine/test_overlay_precedence.py"
-  - "tests/doctrine/test_overlay_recursion_loader.py"
-  - "tests/doctrine/test_owner_delivery.py"
-  - "tests/doctrine/test_pack_relocation_doctor_gate.py"
-  - "tests/doctrine/test_pack_relocation_guard.py"
-  - "tests/doctrine/test_pack_relocation_preflight.py"
-  - "tests/doctrine/test_pack_root_resolver.py"
-  - "tests/doctrine/test_package_smoke.py"
-  - "tests/doctrine/test_packaging_parity.py"
-  - "tests/doctrine/test_parse_shipped_yaml.py"
-  - "tests/doctrine/test_paula_patterns_artifacts.py"
-  - "tests/doctrine/test_post_validate_success_hook.py"
-  - "tests/doctrine/test_procedure_consistency.py"
-  - "tests/doctrine/test_profile_diagnostics.py"
-  - "tests/doctrine/test_profile_inheritance.py"
-  - "tests/doctrine/test_profile_model.py"
-  - "tests/doctrine/test_profile_repository.py"
-  - "tests/doctrine/test_profile_schema_validation.py"
-  - "tests/doctrine/test_project_charter_single_owner.py"
-  - "tests/doctrine/test_provenance_normalizer.py"
-  - "tests/doctrine/test_relation_doc_parity.py"
-  - "tests/doctrine/test_relationship_fields_rejected.py"
-  - "tests/doctrine/test_relationship_migration.py"
-  - "tests/doctrine/test_resolver.py"
-  - "tests/doctrine/test_retired_ids_absent.py"
-  - "tests/doctrine/test_retirement_table_consistency.py"
-  - "tests/doctrine/test_retrospective_drg.py"
-  - "tests/doctrine/test_rework_guidance_unforced.py"
-  - "tests/doctrine/test_role_value_object.py"
-  - "tests/doctrine/test_schema_generation_integrity.py"
-  - "tests/doctrine/test_schema_utils.py"
-  - "tests/doctrine/test_schema_validation.py"
-  - "tests/doctrine/test_served_prompts_single_owner.py"
-  - "tests/doctrine/test_service.py"
-  - "tests/doctrine/test_service_org_layer.py"
-  - "tests/doctrine/test_shipped_profiles.py"
-  - "tests/doctrine/test_spdd_reasons_artifacts.py"
-  - "tests/doctrine/test_spdd_reasons_skill.py"
-  - "tests/doctrine/test_spec_kitty_skill_content.py"
-  - "tests/doctrine/test_spk_show_me_skill.py"
-  - "tests/doctrine/test_spk_skill_pack.py"
-  - "tests/doctrine/test_structure_templates.py"
-  - "tests/doctrine/test_supply_chain_security_layer.py"
-  - "tests/doctrine/test_supply_chain_single_owner.py"
-  - "tests/doctrine/test_tactic_compliance.py"
-  - "tests/doctrine/test_task_class_map.py"
-  - "tests/doctrine/test_task_class_map_catalog_contract.py"
-  - "tests/doctrine/test_template_discovery.py"
-  - "tests/doctrine/test_testing_doctrine_single_owner.py"
-  - "tests/doctrine/test_versioning.py"
-  - "tests/doctrine/test_wheel_packaging.py"
-  - "tests/doctrine/test_wp_authoring_contract_roundtrip.py"
-  - "tests/doctrine/drg/migration/**"
-  - "tests/doctrine/drg/reachability_fixtures/**"
-  - "tests/charter_offering/**"
-  - "tests/architectural/test_ci_corpus_trigger_completeness.py"
-  - "tests/architectural/test_timing_coverage_invariant.py"
-  - "tests/architectural/_inert_slots_baseline.yaml"
-  - "tests/ci/test_corpus_blocking_home.py"
-  - "tests/next/test_discovery_step_contract.py"
-  - "tests/fixtures/mission_type_canonical/README.md"
-  - "tests/kernel/test_env_expand.py"
-  - "tests/docs/test_module_readme_lint.py"
-  - "tests/cli/test_mission_agnostic_flag.py"
-  - "tests/runtime/next/test_composed_guard_launder.py"
-  - "tests/release/coverage_breadth_evidence.md"
-  - "tests/integration/test_org_pack_chain_delivery.py"
-  - "tests/integration/test_mission_type_resolution_integration.py"
-  - "docs/architecture/doctrine-relationships.md"
-  - "docs/architecture/04_implementation_mapping/README.md"
-  - "docs/operations/p0-baseline-refresh.md"
-authoritative_surface: "tests/charter_offering/"
-create_intent:
-  - "tests/charter_offering/"
-agent_profile: "lexical-larry"
-role: "implementer"
-agent: "claude"
+work_package_id: WP23
+title: Rename `tests/doctrine/`
+dependencies:
+- WP18
+- WP21
+- WP22
+requirement_refs:
+- FR-010
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T105
+- T106
+phase: Phase 5 - Names
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: lexical-larry
+authoritative_surface: tests/charter_offering/
+create_intent:
+- tests/charter_offering/
+execution_mode: code_change
+owned_files:
+- tests/doctrine/agent_profiles/**
+- tests/doctrine/assets/**
+- tests/doctrine/directives/**
+- tests/doctrine/fixtures/**
+- tests/doctrine/glossary_packs/**
+- tests/doctrine/mission_step_contracts/**
+- tests/doctrine/missions/**
+- tests/doctrine/model_task_routing/**
+- tests/doctrine/paradigms/**
+- tests/doctrine/procedures/**
+- tests/doctrine/shared/**
+- tests/doctrine/styleguides/**
+- tests/doctrine/tactics/**
+- tests/doctrine/toolguides/**
+- tests/doctrine/__init__.py
+- tests/doctrine/_builtin_inventory.py
+- tests/doctrine/_relationship_graph.py
+- tests/doctrine/_single_owner_detectors.py
+- tests/doctrine/conftest.py
+- tests/doctrine/drg/test_builtin_graph_seam.py
+- tests/doctrine/drg/test_c4_and_anti_pattern_topology.py
+- tests/doctrine/drg/test_cross_grain_integrity.py
+- tests/doctrine/drg/test_drupal_dries_lineage.py
+- tests/doctrine/drg/test_extractor_asset.py
+- tests/doctrine/drg/test_glossary_node_kind.py
+- tests/doctrine/drg/test_graph_sharding_equality.py
+- tests/doctrine/drg/test_instantiates_edges.py
+- tests/doctrine/drg/test_kind_mapping_totality.py
+- tests/doctrine/drg/test_loader_multifile.py
+- tests/doctrine/drg/test_mission_type_nodes.py
+- tests/doctrine/drg/test_model_strictness_roundtrip.py
+- tests/doctrine/drg/test_models.py
+- tests/doctrine/drg/test_nodekind_artifactkind.py
+- tests/doctrine/drg/test_org_drg_bridge.py
+- tests/doctrine/drg/test_org_governance_failloud.py
+- tests/doctrine/drg/test_org_pack_auto_emit.py
+- tests/doctrine/drg/test_org_pack_config_cr04_charter_packs.py
+- tests/doctrine/drg/test_org_pack_config_resolve_existing_org_roots.py
+- tests/doctrine/drg/test_org_pack_config_resolve_org_dirs.py
+- tests/doctrine/drg/test_org_pack_merge.py
+- tests/doctrine/drg/test_org_pack_node_inference.py
+- tests/doctrine/drg/test_override_policy_pack_sanctions.py
+- tests/doctrine/drg/test_override_policy_predicates.py
+- tests/doctrine/drg/test_profile_suggests_delivery.py
+- tests/doctrine/drg/test_reachability.py
+- tests/doctrine/drg/test_recursion_parity_gate.py
+- tests/doctrine/drg/test_regen_roundtrip.py
+- tests/doctrine/drg/test_resolve_transitive_refs.py
+- tests/doctrine/drg/test_sharded_layout.py
+- tests/doctrine/drg/test_shipped_graph_valid.py
+- tests/doctrine/drg/test_single_owner_edges.py
+- tests/doctrine/drg/test_tension_arbiters.py
+- tests/doctrine/drg/test_tiered_standards_non_orphan.py
+- tests/doctrine/drg/test_unknown_kind_fails_loudly.py
+- tests/doctrine/drg/test_validator.py
+- tests/doctrine/drg/test_validator_profile_edges.py
+- tests/doctrine/drg/test_validator_structured_detection.py
+- tests/doctrine/pack_skills/__init__.py
+- tests/doctrine/pack_skills/conftest.py
+- tests/doctrine/pack_skills/test_health.py
+- tests/doctrine/pack_skills/test_models.py
+- tests/doctrine/pack_skills/test_org_drg_skill_nodes.py
+- tests/doctrine/pack_skills/test_repository.py
+- tests/doctrine/pack_skills/test_validation.py
+- tests/doctrine/test_acceptance_criteria_non_vacuity_wiring.py
+- tests/doctrine/test_activation_parity_guard.py
+- tests/doctrine/test_agent_profile_model_field.py
+- tests/doctrine/test_api_surface_import.py
+- tests/doctrine/test_artifact_compliance.py
+- tests/doctrine/test_artifact_kinds.py
+- tests/doctrine/test_base_org_layer.py
+- tests/doctrine/test_built_in_location_authority.py
+- tests/doctrine/test_builtin_cli_command_references.py
+- tests/doctrine/test_capabilities.py
+- tests/doctrine/test_change_scope_review_single_owner.py
+- tests/doctrine/test_charter_activatable_vocabulary.py
+- tests/doctrine/test_codex_dispatch_flags.py
+- tests/doctrine/test_common_docs_single_owner.py
+- tests/doctrine/test_debugger_debbie_artifacts.py
+- tests/doctrine/test_directive_consistency.py
+- tests/doctrine/test_discovery_recursion.py
+- tests/doctrine/test_doctrine_health_glossary_pack.py
+- tests/doctrine/test_doctrine_validate_lang_guard.py
+- tests/doctrine/test_documentation_iteration_modes.py
+- tests/doctrine/test_drg_merge.py
+- tests/doctrine/test_drg_relations.py
+- tests/doctrine/test_enriched_directives.py
+- tests/doctrine/test_generic_agent_profile.py
+- tests/doctrine/test_generic_artifact_language_bias.py
+- tests/doctrine/test_glossary_link_integrity.py
+- tests/doctrine/test_glossary_pack_kind.py
+- tests/doctrine/test_human_in_charge_profile.py
+- tests/doctrine/test_inline_ref_rejection.py
+- tests/doctrine/test_isolation.py
+- tests/doctrine/test_language_independent_tactics_unscoped.py
+- tests/doctrine/test_loader_fail_closed.py
+- tests/doctrine/test_mattpocock_skill_doctrine.py
+- tests/doctrine/test_mission_review_skill_gate3_floor.py
+- tests/doctrine/test_mission_review_skill_gate4.py
+- tests/doctrine/test_mission_type_governance_isolation.py
+- tests/doctrine/test_missions_root_packs_env.py
+- tests/doctrine/test_model_task_routing_evaluator.py
+- tests/doctrine/test_model_task_routing_loader.py
+- tests/doctrine/test_model_task_routing_parity.py
+- tests/doctrine/test_nested_artifact_discovery.py
+- tests/doctrine/test_org_pack_delegation.py
+- tests/doctrine/test_org_pack_subdir.py
+- tests/doctrine/test_overlay_precedence.py
+- tests/doctrine/test_overlay_recursion_loader.py
+- tests/doctrine/test_owner_delivery.py
+- tests/doctrine/test_pack_relocation_doctor_gate.py
+- tests/doctrine/test_pack_relocation_guard.py
+- tests/doctrine/test_pack_relocation_preflight.py
+- tests/doctrine/test_pack_root_resolver.py
+- tests/doctrine/test_package_smoke.py
+- tests/doctrine/test_packaging_parity.py
+- tests/doctrine/test_parse_shipped_yaml.py
+- tests/doctrine/test_paula_patterns_artifacts.py
+- tests/doctrine/test_post_validate_success_hook.py
+- tests/doctrine/test_procedure_consistency.py
+- tests/doctrine/test_profile_diagnostics.py
+- tests/doctrine/test_profile_inheritance.py
+- tests/doctrine/test_profile_model.py
+- tests/doctrine/test_profile_repository.py
+- tests/doctrine/test_profile_schema_validation.py
+- tests/doctrine/test_project_charter_single_owner.py
+- tests/doctrine/test_provenance_normalizer.py
+- tests/doctrine/test_relation_doc_parity.py
+- tests/doctrine/test_relationship_fields_rejected.py
+- tests/doctrine/test_relationship_migration.py
+- tests/doctrine/test_resolver.py
+- tests/doctrine/test_retired_ids_absent.py
+- tests/doctrine/test_retirement_table_consistency.py
+- tests/doctrine/test_retrospective_drg.py
+- tests/doctrine/test_rework_guidance_unforced.py
+- tests/doctrine/test_role_value_object.py
+- tests/doctrine/test_schema_generation_integrity.py
+- tests/doctrine/test_schema_utils.py
+- tests/doctrine/test_schema_validation.py
+- tests/doctrine/test_served_prompts_single_owner.py
+- tests/doctrine/test_service.py
+- tests/doctrine/test_service_org_layer.py
+- tests/doctrine/test_shipped_profiles.py
+- tests/doctrine/test_spdd_reasons_artifacts.py
+- tests/doctrine/test_spdd_reasons_skill.py
+- tests/doctrine/test_spec_kitty_skill_content.py
+- tests/doctrine/test_spk_show_me_skill.py
+- tests/doctrine/test_spk_skill_pack.py
+- tests/doctrine/test_structure_templates.py
+- tests/doctrine/test_supply_chain_security_layer.py
+- tests/doctrine/test_supply_chain_single_owner.py
+- tests/doctrine/test_tactic_compliance.py
+- tests/doctrine/test_task_class_map.py
+- tests/doctrine/test_task_class_map_catalog_contract.py
+- tests/doctrine/test_template_discovery.py
+- tests/doctrine/test_testing_doctrine_single_owner.py
+- tests/doctrine/test_versioning.py
+- tests/doctrine/test_wheel_packaging.py
+- tests/doctrine/test_wp_authoring_contract_roundtrip.py
+- tests/doctrine/drg/migration/**
+- tests/doctrine/drg/reachability_fixtures/**
+- tests/charter_offering/**
+- tests/architectural/test_ci_corpus_trigger_completeness.py
+- tests/architectural/test_timing_coverage_invariant.py
+- tests/architectural/_inert_slots_baseline.yaml
+- tests/ci/test_corpus_blocking_home.py
+- tests/next/test_discovery_step_contract.py
+- tests/fixtures/mission_type_canonical/README.md
+- tests/kernel/test_env_expand.py
+- tests/docs/test_module_readme_lint.py
+- tests/cli/test_mission_agnostic_flag.py
+- tests/runtime/next/test_composed_guard_launder.py
+- tests/release/coverage_breadth_evidence.md
+- tests/integration/test_org_pack_chain_delivery.py
+- tests/integration/test_mission_type_resolution_integration.py
+- docs/architecture/doctrine-relationships.md
+- docs/architecture/04_implementation_mapping/README.md
+- docs/operations/p0-baseline-refresh.md
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP23 – Rename `tests/doctrine/`

@@ -1,108 +1,120 @@
 ---
-work_package_id: "WP05"
-title: "Package split II — org charter, adapters, delete specify_cli.doctrine"
-subtasks: ["T026", "T027", "T028", "T029"]
-dependencies: ["WP04"]
-requirement_refs: ["FR-010", "C-007", "NFR-002"]
-task_type: "implement"
-phase: "Phase 1 - Foundations (paths, package split)"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/activation/org_charter.py"
-  - "src/charter/activation/org_charter_loader.py"
-  - "src/specify_cli/doctrine/__init__.py"
-  - "src/specify_cli/doctrine/config.py"
-  - "src/specify_cli/doctrine/org_charter_loader.py"
-  - "src/specify_cli/doctrine/sources/__init__.py"
-  - "src/specify_cli/doctrine/sources/protocol.py"
-  - "src/specify_cli/doctrine/sources/git_source.py"
-  - "src/specify_cli/doctrine/sources/https_source.py"
-  - "src/specify_cli/doctrine/template_render/__init__.py"
-  - "src/specify_cli/doctrine/template_render/ignore_copy.py"
-  - "src/specify_cli/doctrine/template_render/pipeline.py"
-  - "src/specify_cli/doctrine/template_render/resolve.py"
-  - "src/specify_cli/doctrine/template_render/substitute.py"
-  - "src/specify_cli/doctrine/template_render/validation.py"
-  - "src/specify_cli/charter_packs/**"
-  - "src/specify_cli/charter_runtime/lint/checks/org_layer.py"
-  - "src/specify_cli/cli/commands/charter/context.py"
-  - "src/specify_cli/cli/commands/charter/generate.py"
-  - "src/specify_cli/review/scope_source.py"
-  - "src/specify_cli/dossier/__init__.py"
-  - "tests/specify_cli/doctrine/__init__.py"
-  - "tests/specify_cli/doctrine/test_collision_warnings.py"
-  - "tests/specify_cli/doctrine/test_config.py"
-  - "tests/specify_cli/doctrine/test_missing_pack_policy.py"
-  - "tests/specify_cli/doctrine/test_org_charter.py"
-  - "tests/specify_cli/doctrine/test_org_charter_merge_parity.py"
-  - "tests/specify_cli/doctrine/test_org_charter_pack_context.py"
-  - "tests/specify_cli/doctrine/test_org_charter_union.py"
-  - "tests/specify_cli/doctrine/test_sources.py"
-  - "tests/specify_cli/doctrine/test_sources_security.py"
-  - "tests/specify_cli/doctrine/test_template_render_ignore_copy.py"
-  - "tests/specify_cli/doctrine/test_template_render_pipeline.py"
-  - "tests/specify_cli/doctrine/test_template_render_resolve.py"
-  - "tests/specify_cli/doctrine/test_template_render_substitute.py"
-  - "tests/specify_cli/doctrine/test_template_render_validation.py"
-  - "tests/specify_cli/charter_packs/**"
-  - "tests/charter/activation/test_org_charter.py"
-  - "tests/charter/activation/test_org_charter_merge_parity.py"
-  - "tests/charter/activation/test_org_charter_pack_context.py"
-  - "tests/charter/activation/test_org_charter_union.py"
-  - "tests/charter/activation/test_missing_pack_policy.py"
-  - "tests/charter/activation/test_org_pack_registry_paths.py"
-  - "tests/charter/test_collision_warnings.py"
-  - "tests/charter/test_answers_inert_and_org_union.py"
-  - "tests/charter/test_directive_identity_mapping.py"
-  - "tests/charter/test_iter_org_charter_docs.py"
-  - "tests/cli/test_doctrine_org_commands.py"
-  - "tests/cli/commands/test_charter_json_error_contract.py"
-  - "tests/cli/commands/test_charter_rendering.py"
-  - "tests/doctrine/pack_skills/test_kind_registration.py"
-  - "tests/integration/test_org_pack_artifact_lifecycle.py"
-  - "tests/integration/test_org_pack_subdir_e2e.py"
-  - "tests/specify_cli/cli/commands/test_doctrine_collect.py"
-  - "tests/specify_cli/cli/commands/test_charter_interview_org_prefill.py"
-  - "tests/specify_cli/test_provenance_integration.py"
-  - "tests/architectural/test_doctrine_census.py"
-  - "tests/architectural/test_runtime_charter_doctrine_boundary.py"
-  - "tests/architectural/_owned_checkout_scan.py"
-  - "tests/architectural/test_owned_checkout_gate_selftest.py"
-  - "tests/architectural/test_owned_checkout_single_authority.py"
-  - "tests/architectural/test_egress_consent_boundary.py"
-  - "tests/architectural/test_destructive_op_routing.py"
-  - "tests/architectural/test_mutation_ownership_routing.py"
-  - "tests/architectural/test_kind_table_derivation.py"
-  - "tests/architectural/_gate_coverage.py"
-  - "tests/architectural/_interpreter_shard_roster.py"
-  - "tests/architectural/ci_topology_census.json"
-  - "tests/review/test_pre_review_gate_engine.py"
-  - ".github/ci-module-registry.yml"
-  - ".github/workflows/ci-nightly.yml"
-  - ".github/ci-foreign-coverage-baseline.json"
-authoritative_surface: "src/specify_cli/charter_packs/"
-create_intent:
-  - "src/charter/activation/org_charter.py"
-  - "src/charter/activation/org_charter_loader.py"
-  - "src/specify_cli/charter_packs/__init__.py"
-  - "src/specify_cli/charter_packs/snapshot.py"
-  - "src/specify_cli/charter_packs/sources/__init__.py"
-  - "src/specify_cli/charter_packs/template_render/__init__.py"
-  - "tests/specify_cli/charter_packs/__init__.py"
-  - "tests/charter/activation/test_org_charter.py"
-  - "tests/charter/activation/test_org_charter_merge_parity.py"
-  - "tests/charter/activation/test_org_charter_pack_context.py"
-  - "tests/charter/activation/test_org_charter_union.py"
-  - "tests/charter/activation/test_missing_pack_policy.py"
-  - "tests/charter/activation/test_org_pack_registry_paths.py"
-  - "tests/charter/test_collision_warnings.py"
-agent_profile: "architect-alphonso"
-role: "implementer"
-agent: "claude"
+work_package_id: WP05
+title: Package split II — org charter, adapters, delete specify_cli.doctrine
+dependencies:
+- WP04
+requirement_refs:
+- FR-010
+- C-007
+- NFR-002
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T026
+- T027
+- T028
+- T029
+phase: Phase 1 - Foundations (paths, package split)
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: architect-alphonso
+authoritative_surface: src/specify_cli/charter_packs/
+create_intent:
+- src/charter/activation/org_charter.py
+- src/charter/activation/org_charter_loader.py
+- src/specify_cli/charter_packs/__init__.py
+- src/specify_cli/charter_packs/snapshot.py
+- src/specify_cli/charter_packs/sources/__init__.py
+- src/specify_cli/charter_packs/template_render/__init__.py
+- tests/specify_cli/charter_packs/__init__.py
+- tests/charter/activation/test_org_charter.py
+- tests/charter/activation/test_org_charter_merge_parity.py
+- tests/charter/activation/test_org_charter_pack_context.py
+- tests/charter/activation/test_org_charter_union.py
+- tests/charter/activation/test_missing_pack_policy.py
+- tests/charter/activation/test_org_pack_registry_paths.py
+- tests/charter/test_collision_warnings.py
+execution_mode: code_change
+owned_files:
+- src/charter/activation/org_charter.py
+- src/charter/activation/org_charter_loader.py
+- src/specify_cli/doctrine/__init__.py
+- src/specify_cli/doctrine/config.py
+- src/specify_cli/doctrine/org_charter_loader.py
+- src/specify_cli/doctrine/sources/__init__.py
+- src/specify_cli/doctrine/sources/protocol.py
+- src/specify_cli/doctrine/sources/git_source.py
+- src/specify_cli/doctrine/sources/https_source.py
+- src/specify_cli/doctrine/template_render/__init__.py
+- src/specify_cli/doctrine/template_render/ignore_copy.py
+- src/specify_cli/doctrine/template_render/pipeline.py
+- src/specify_cli/doctrine/template_render/resolve.py
+- src/specify_cli/doctrine/template_render/substitute.py
+- src/specify_cli/doctrine/template_render/validation.py
+- src/specify_cli/charter_packs/**
+- src/specify_cli/charter_runtime/lint/checks/org_layer.py
+- src/specify_cli/cli/commands/charter/context.py
+- src/specify_cli/cli/commands/charter/generate.py
+- src/specify_cli/review/scope_source.py
+- src/specify_cli/dossier/__init__.py
+- tests/specify_cli/doctrine/__init__.py
+- tests/specify_cli/doctrine/test_collision_warnings.py
+- tests/specify_cli/doctrine/test_config.py
+- tests/specify_cli/doctrine/test_missing_pack_policy.py
+- tests/specify_cli/doctrine/test_org_charter.py
+- tests/specify_cli/doctrine/test_org_charter_merge_parity.py
+- tests/specify_cli/doctrine/test_org_charter_pack_context.py
+- tests/specify_cli/doctrine/test_org_charter_union.py
+- tests/specify_cli/doctrine/test_sources.py
+- tests/specify_cli/doctrine/test_sources_security.py
+- tests/specify_cli/doctrine/test_template_render_ignore_copy.py
+- tests/specify_cli/doctrine/test_template_render_pipeline.py
+- tests/specify_cli/doctrine/test_template_render_resolve.py
+- tests/specify_cli/doctrine/test_template_render_substitute.py
+- tests/specify_cli/doctrine/test_template_render_validation.py
+- tests/specify_cli/charter_packs/**
+- tests/charter/activation/test_org_charter.py
+- tests/charter/activation/test_org_charter_merge_parity.py
+- tests/charter/activation/test_org_charter_pack_context.py
+- tests/charter/activation/test_org_charter_union.py
+- tests/charter/activation/test_missing_pack_policy.py
+- tests/charter/activation/test_org_pack_registry_paths.py
+- tests/charter/test_collision_warnings.py
+- tests/charter/test_answers_inert_and_org_union.py
+- tests/charter/test_directive_identity_mapping.py
+- tests/charter/test_iter_org_charter_docs.py
+- tests/cli/test_doctrine_org_commands.py
+- tests/cli/commands/test_charter_json_error_contract.py
+- tests/cli/commands/test_charter_rendering.py
+- tests/doctrine/pack_skills/test_kind_registration.py
+- tests/integration/test_org_pack_artifact_lifecycle.py
+- tests/integration/test_org_pack_subdir_e2e.py
+- tests/specify_cli/cli/commands/test_doctrine_collect.py
+- tests/specify_cli/cli/commands/test_charter_interview_org_prefill.py
+- tests/specify_cli/test_provenance_integration.py
+- tests/architectural/test_doctrine_census.py
+- tests/architectural/test_runtime_charter_doctrine_boundary.py
+- tests/architectural/_owned_checkout_scan.py
+- tests/architectural/test_owned_checkout_gate_selftest.py
+- tests/architectural/test_owned_checkout_single_authority.py
+- tests/architectural/test_egress_consent_boundary.py
+- tests/architectural/test_destructive_op_routing.py
+- tests/architectural/test_mutation_ownership_routing.py
+- tests/architectural/test_kind_table_derivation.py
+- tests/architectural/_gate_coverage.py
+- tests/architectural/_interpreter_shard_roster.py
+- tests/architectural/ci_topology_census.json
+- tests/review/test_pre_review_gate_engine.py
+- .github/ci-module-registry.yml
+- .github/workflows/ci-nightly.yml
+- .github/ci-foreign-coverage-baseline.json
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP05 – Package split II — org charter, adapters, delete `specify_cli.doctrine`

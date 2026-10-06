@@ -1,37 +1,52 @@
 ---
-work_package_id: "WP11"
-title: "Cutover migration I — keys, project root, path references"
-subtasks: ["T055", "T056", "T057", "T058", "T059", "T060"]
-dependencies: ["WP03", "WP10", "WP17"]
-requirement_refs: ["FR-012", "NFR-004"]
-task_type: "implement"
-phase: "Phase 3 - Upgrade migration"
-execution_mode: "code_change"
-owned_files:
-  - "src/specify_cli/upgrade/migrations/m_4_0_0rc6_charter_pack_cutover.py"
-  - "src/specify_cli/upgrade/migrations/_charter_pack_cutover_report.py"
-  - "src/specify_cli/migration/legacy_charter_layout.py"
-  - "tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_keys.py"
-  - "tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_paths.py"
-  - "tests/specify_cli/migration/test_legacy_charter_layout.py"
-  - ".kittify/doctrine/**"
-  - ".kittify/charter-packs/**"
-authoritative_surface: "src/specify_cli/upgrade/migrations/m_4_0_0rc6_charter_pack_cutover.py"
-create_intent:
-  - "src/specify_cli/upgrade/migrations/m_4_0_0rc6_charter_pack_cutover.py"
-  - "src/specify_cli/upgrade/migrations/_charter_pack_cutover_report.py"
-  - "src/specify_cli/migration/legacy_charter_layout.py"
-  - "tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_keys.py"
-  - "tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_paths.py"
-  - "tests/specify_cli/migration/test_legacy_charter_layout.py"
-  - ".kittify/charter-packs/**"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP11
+title: Cutover migration I — keys, project root, path references
+dependencies:
+- WP03
+- WP10
+- WP17
+requirement_refs:
+- FR-012
+- NFR-004
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T055
+- T056
+- T057
+- T058
+- T059
+- T060
+phase: Phase 3 - Upgrade migration
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/specify_cli/upgrade/migrations/m_4_0_0rc6_charter_pack_cutover.py
+create_intent:
+- src/specify_cli/upgrade/migrations/m_4_0_0rc6_charter_pack_cutover.py
+- src/specify_cli/upgrade/migrations/_charter_pack_cutover_report.py
+- src/specify_cli/migration/legacy_charter_layout.py
+- tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_keys.py
+- tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_paths.py
+- tests/specify_cli/migration/test_legacy_charter_layout.py
+- .kittify/charter-packs/**
+execution_mode: code_change
+owned_files:
+- src/specify_cli/upgrade/migrations/m_4_0_0rc6_charter_pack_cutover.py
+- src/specify_cli/upgrade/migrations/_charter_pack_cutover_report.py
+- src/specify_cli/migration/legacy_charter_layout.py
+- tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_keys.py
+- tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_paths.py
+- tests/specify_cli/migration/test_legacy_charter_layout.py
+- .kittify/doctrine/**
+- .kittify/charter-packs/**
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP11 – Cutover migration I — keys, project root, path references

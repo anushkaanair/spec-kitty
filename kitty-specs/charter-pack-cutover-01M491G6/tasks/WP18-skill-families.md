@@ -1,121 +1,125 @@
 ---
-work_package_id: "WP18"
-title: "Skill families"
-subtasks: ["T088", "T089", "T090", "T091"]
-dependencies: ["WP12"]
-requirement_refs: ["FR-008"]
-task_type: "implement"
-phase: "Phase 5 - Names"
-execution_mode: "code_change"
-owned_files:
-  # --- retired skill directories (deleted) ---
-  - "src/charter/offering/skills/spk-doctrine-charter/**"
-  - "src/charter/offering/skills/spk-doctrine-glossary/**"
-  - "src/charter/offering/skills/spk-doctrine-profile-load/**"
-  - "src/charter/offering/skills/spk-doctrine-spdd-reasons/**"
-  - "src/charter/offering/skills/spk-doctrine-bulk-edit/**"
-  - "src/charter/offering/skills/spk-doctrine-semantic-compression/**"
-  - "src/charter/offering/skills/spk-doctrine-show-me/**"
-  - "src/charter/offering/skills/spec-kitty-charter-doctrine/**"
-  - "src/charter/offering/skills/spec-kitty-glossary-context/**"
-  - "src/charter/offering/skills/spec-kitty-bulk-edit-classification/**"
-  - "src/charter/offering/skills/spec-kitty-spdd-reasons/**"
-  - "src/charter/offering/skills/ad-hoc-profile-load/**"
-  # --- new skill directories (created) ---
-  - "src/charter/offering/skills/spk-charter-governance/**"
-  - "src/charter/offering/skills/spk-charter-glossary/**"
-  - "src/charter/offering/skills/spk-charter-profile-load/**"
-  - "src/charter/offering/skills/spk-charter-spdd-reasons/**"
-  - "src/charter/offering/skills/spk-practice-bulk-edit/**"
-  - "src/charter/offering/skills/spk-practice-semantic-compression/**"
-  - "src/charter/offering/skills/spk-practice-show-me/**"
-  # --- retirement list and other skills that reference removed names ---
-  - "src/specify_cli/skills/retired.py"
-  - "src/charter/offering/skills/README.md"
-  - "src/charter/offering/skills/spec-kitty-mission-review/SKILL.md"
-  - "src/charter/offering/skills/spec-kitty/SKILL.md"
-  - "src/charter/offering/skills/spk-admin-agent-config/SKILL.md"
-  - "src/charter/offering/skills/spk-meta-skill-map/SKILL.md"
-  - "src/charter/offering/skills/spk-meta-skill-map/references/spk-skill-map.md"
-  - "src/charter/offering/skills/spk-meta-skill-authoring/SKILL.md"
-  - "src/charter/offering/skills/spk-mission-documentation/SKILL.md"
-  - "src/charter/offering/skills/spk-mission-plan/SKILL.md"
-  - "src/charter/offering/skills/spk-mission-specify/SKILL.md"
-  - "src/charter/offering/skills/spk-start-command-map/references/command-map.md"
-  - "src/charter/offering/skills/spk-start-here/SKILL.md"
-  - "src/specify_cli/upgrade/migrations/m_3_2_0rc35_kittify_profile_handoff.py"
-  # --- built-in pack sources that name removed skills ---
-  - "packs/built-in/missions/documentation/templates/task-prompt-template.md"
-  - "packs/built-in/missions/research/templates/task-prompt-template.md"
-  - "packs/built-in/missions/software-dev/templates/task-prompt-template.md"
-  - "packs/built-in/missions/mission-steps/plan/plan/prompt.md"
-  - "packs/built-in/missions/mission-steps/plan/specify/prompt.md"
-  - "packs/built-in/missions/mission-steps/software-dev/charter/prompt.md"
-  - "packs/built-in/missions/mission-steps/software-dev/implement/prompt.md"
-  - "packs/built-in/missions/mission-steps/software-dev/plan/prompt.md"
-  - "packs/built-in/missions/mission-steps/software-dev/review/prompt.md"
-  - "packs/built-in/missions/mission-steps/software-dev/specify/prompt.md"
-  - "packs/built-in/missions/mission-steps/software-dev/tasks-packages/prompt.md"
-  - "packs/built-in/missions/mission-steps/software-dev/tasks/prompt.md"
-  - "packs/built-in/tactics/reviewer-implementer-role-separation.tactic.yaml"
-  - "packs/built-in/toolguides/CONTEXTIVE.md"
-  # --- living docs that name removed skills ---
-  - "docs/api/skills/index.md"
-  - "docs/api/skills/spk-doctrine-profile-load.md"
-  - "docs/api/skills/spk-charter-profile-load.md"
-  - "docs/api/skills/spk-meta-skill-map.md"
-  - "docs/api/skills/spk-start-here.md"
-  - "docs/api/toc.yml"
-  - "docs/api/bulk-edit-gate.md"
-  - "docs/api/agent_profiles/curator-carla.md"
-  - "docs/api/agent_profiles/debugger-debbie.md"
-  - "docs/api/agent_profiles/designer-dagmar.md"
-  - "docs/api/agent_profiles/doctrine-daphne.md"
-  - "docs/api/agent_profiles/frontend-freddy.md"
-  - "docs/api/agent_profiles/generic-agent.md"
-  - "docs/api/agent_profiles/human-in-charge.md"
-  - "docs/api/agent_profiles/index.md"
-  - "docs/api/agent_profiles/node-norris.md"
-  - "docs/api/agent_profiles/randy-reducer.md"
-  - "docs/api/agent_profiles/retrospective-facilitator.md"
-  - "docs/architecture/profile-load-reliability.md"
-  - "docs/architecture/spdd-reasons.md"
-  - "docs/development/page-inventory.yaml"
-  - "docs/guides/how-to/harnesses/amazon-q.md"
-  - "docs/guides/how-to/harnesses/augment.md"
-  - "docs/guides/how-to/harnesses/claude-code.md"
-  - "docs/guides/how-to/harnesses/codex.md"
-  - "docs/guides/how-to/harnesses/copilot.md"
-  - "docs/guides/how-to/harnesses/cursor.md"
-  - "docs/guides/how-to/harnesses/gemini.md"
-  - "docs/guides/how-to/harnesses/kilocode.md"
-  - "docs/guides/how-to/harnesses/kiro.md"
-  - "docs/guides/how-to/harnesses/opencode.md"
-  - "docs/guides/how-to/harnesses/pi-tui.md"
-  - "docs/guides/how-to/harnesses/qwen.md"
-  - "docs/guides/how-to/harnesses/windsurf.md"
-  # --- tests and regenerated fixtures ---
-  - "tests/architectural/test_docs_cli_reference_parity.py"
-  - "tests/docs/test_charter_selection_key_teaching.py"
-  - "tests/specify_cli/skills/test_retired_charter_skills.py"
-authoritative_surface: "src/charter/offering/skills/"
-create_intent:
-  - "src/charter/offering/skills/spk-charter-governance"
-  - "src/charter/offering/skills/spk-charter-glossary"
-  - "src/charter/offering/skills/spk-charter-profile-load"
-  - "src/charter/offering/skills/spk-charter-spdd-reasons"
-  - "src/charter/offering/skills/spk-practice-bulk-edit"
-  - "src/charter/offering/skills/spk-practice-semantic-compression"
-  - "src/charter/offering/skills/spk-practice-show-me"
-  - "docs/api/skills/spk-charter-profile-load.md"
-  - "tests/specify_cli/skills/test_retired_charter_skills.py"
-agent_profile: "curator-carla"
-role: "implementer"
-agent: "claude"
+work_package_id: WP18
+title: Skill families
+dependencies:
+- WP12
+requirement_refs:
+- FR-008
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T088
+- T089
+- T090
+- T091
+phase: Phase 5 - Names
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: curator-carla
+authoritative_surface: src/charter/offering/skills/
+create_intent:
+- src/charter/offering/skills/spk-charter-governance
+- src/charter/offering/skills/spk-charter-glossary
+- src/charter/offering/skills/spk-charter-profile-load
+- src/charter/offering/skills/spk-charter-spdd-reasons
+- src/charter/offering/skills/spk-practice-bulk-edit
+- src/charter/offering/skills/spk-practice-semantic-compression
+- src/charter/offering/skills/spk-practice-show-me
+- docs/api/skills/spk-charter-profile-load.md
+- tests/specify_cli/skills/test_retired_charter_skills.py
+execution_mode: code_change
+owned_files:
+- src/charter/offering/skills/spk-doctrine-charter/**
+- src/charter/offering/skills/spk-doctrine-glossary/**
+- src/charter/offering/skills/spk-doctrine-profile-load/**
+- src/charter/offering/skills/spk-doctrine-spdd-reasons/**
+- src/charter/offering/skills/spk-doctrine-bulk-edit/**
+- src/charter/offering/skills/spk-doctrine-semantic-compression/**
+- src/charter/offering/skills/spk-doctrine-show-me/**
+- src/charter/offering/skills/spec-kitty-charter-doctrine/**
+- src/charter/offering/skills/spec-kitty-glossary-context/**
+- src/charter/offering/skills/spec-kitty-bulk-edit-classification/**
+- src/charter/offering/skills/spec-kitty-spdd-reasons/**
+- src/charter/offering/skills/ad-hoc-profile-load/**
+- src/charter/offering/skills/spk-charter-governance/**
+- src/charter/offering/skills/spk-charter-glossary/**
+- src/charter/offering/skills/spk-charter-profile-load/**
+- src/charter/offering/skills/spk-charter-spdd-reasons/**
+- src/charter/offering/skills/spk-practice-bulk-edit/**
+- src/charter/offering/skills/spk-practice-semantic-compression/**
+- src/charter/offering/skills/spk-practice-show-me/**
+- src/specify_cli/skills/retired.py
+- src/charter/offering/skills/README.md
+- src/charter/offering/skills/spec-kitty-mission-review/SKILL.md
+- src/charter/offering/skills/spec-kitty/SKILL.md
+- src/charter/offering/skills/spk-admin-agent-config/SKILL.md
+- src/charter/offering/skills/spk-meta-skill-map/SKILL.md
+- src/charter/offering/skills/spk-meta-skill-map/references/spk-skill-map.md
+- src/charter/offering/skills/spk-meta-skill-authoring/SKILL.md
+- src/charter/offering/skills/spk-mission-documentation/SKILL.md
+- src/charter/offering/skills/spk-mission-plan/SKILL.md
+- src/charter/offering/skills/spk-mission-specify/SKILL.md
+- src/charter/offering/skills/spk-start-command-map/references/command-map.md
+- src/charter/offering/skills/spk-start-here/SKILL.md
+- src/specify_cli/upgrade/migrations/m_3_2_0rc35_kittify_profile_handoff.py
+- packs/built-in/missions/documentation/templates/task-prompt-template.md
+- packs/built-in/missions/research/templates/task-prompt-template.md
+- packs/built-in/missions/software-dev/templates/task-prompt-template.md
+- packs/built-in/missions/mission-steps/plan/plan/prompt.md
+- packs/built-in/missions/mission-steps/plan/specify/prompt.md
+- packs/built-in/missions/mission-steps/software-dev/charter/prompt.md
+- packs/built-in/missions/mission-steps/software-dev/implement/prompt.md
+- packs/built-in/missions/mission-steps/software-dev/plan/prompt.md
+- packs/built-in/missions/mission-steps/software-dev/review/prompt.md
+- packs/built-in/missions/mission-steps/software-dev/specify/prompt.md
+- packs/built-in/missions/mission-steps/software-dev/tasks-packages/prompt.md
+- packs/built-in/missions/mission-steps/software-dev/tasks/prompt.md
+- packs/built-in/tactics/reviewer-implementer-role-separation.tactic.yaml
+- packs/built-in/toolguides/CONTEXTIVE.md
+- docs/api/skills/index.md
+- docs/api/skills/spk-doctrine-profile-load.md
+- docs/api/skills/spk-charter-profile-load.md
+- docs/api/skills/spk-meta-skill-map.md
+- docs/api/skills/spk-start-here.md
+- docs/api/toc.yml
+- docs/api/bulk-edit-gate.md
+- docs/api/agent_profiles/curator-carla.md
+- docs/api/agent_profiles/debugger-debbie.md
+- docs/api/agent_profiles/designer-dagmar.md
+- docs/api/agent_profiles/doctrine-daphne.md
+- docs/api/agent_profiles/frontend-freddy.md
+- docs/api/agent_profiles/generic-agent.md
+- docs/api/agent_profiles/human-in-charge.md
+- docs/api/agent_profiles/index.md
+- docs/api/agent_profiles/node-norris.md
+- docs/api/agent_profiles/randy-reducer.md
+- docs/api/agent_profiles/retrospective-facilitator.md
+- docs/architecture/profile-load-reliability.md
+- docs/architecture/spdd-reasons.md
+- docs/development/page-inventory.yaml
+- docs/guides/how-to/harnesses/amazon-q.md
+- docs/guides/how-to/harnesses/augment.md
+- docs/guides/how-to/harnesses/claude-code.md
+- docs/guides/how-to/harnesses/codex.md
+- docs/guides/how-to/harnesses/copilot.md
+- docs/guides/how-to/harnesses/cursor.md
+- docs/guides/how-to/harnesses/gemini.md
+- docs/guides/how-to/harnesses/kilocode.md
+- docs/guides/how-to/harnesses/kiro.md
+- docs/guides/how-to/harnesses/opencode.md
+- docs/guides/how-to/harnesses/pi-tui.md
+- docs/guides/how-to/harnesses/qwen.md
+- docs/guides/how-to/harnesses/windsurf.md
+- tests/architectural/test_docs_cli_reference_parity.py
+- tests/docs/test_charter_selection_key_teaching.py
+- tests/specify_cli/skills/test_retired_charter_skills.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP18 – Skill families

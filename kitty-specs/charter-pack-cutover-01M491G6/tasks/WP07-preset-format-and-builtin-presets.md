@@ -1,43 +1,58 @@
 ---
-work_package_id: "WP07"
-title: "Preset format, discovery and built-in presets"
-subtasks: ["T035", "T036", "T037", "T038", "T039", "T040"]
-dependencies: ["WP05", "WP06"]
-requirement_refs: ["FR-002", "FR-004", "FR-019"]
-task_type: "implement"
-phase: "Phase 2 - Presets and promotion"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/offering/schemas/activation-preset.schema.yaml"
-  - "src/charter/offering/schemas/README.md"
-  - "src/charter/offering/packs/presets.py"
-  - "packs/built-in/presets/default.yaml"
-  - "packs/built-in/presets/minimal.yaml"
-  - "tests/charter/presets/test_preset_model.py"
-  - "tests/charter/presets/test_preset_discovery.py"
-  - "tests/charter/presets/test_builtin_presets.py"
-  - "tests/charter/presets/test_preset_validation.py"
-  - "tests/charter/presets/test_preset_manifest_hashing.py"
-  - "tests/charter/presets/test_preset_scaffold.py"
-authoritative_surface: "src/charter/offering/packs/presets.py"
-create_intent:
-  - "src/charter/offering/schemas/activation-preset.schema.yaml"
-  - "src/charter/offering/packs/presets.py"
-  - "packs/built-in/presets/default.yaml"
-  - "packs/built-in/presets/minimal.yaml"
-  - "tests/charter/presets/test_preset_model.py"
-  - "tests/charter/presets/test_preset_discovery.py"
-  - "tests/charter/presets/test_builtin_presets.py"
-  - "tests/charter/presets/test_preset_validation.py"
-  - "tests/charter/presets/test_preset_manifest_hashing.py"
-  - "tests/charter/presets/test_preset_scaffold.py"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP07
+title: Preset format, discovery and built-in presets
+dependencies:
+- WP05
+- WP06
+requirement_refs:
+- FR-002
+- FR-004
+- FR-019
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T035
+- T036
+- T037
+- T038
+- T039
+- T040
+phase: Phase 2 - Presets and promotion
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/charter/offering/packs/presets.py
+create_intent:
+- src/charter/offering/schemas/activation-preset.schema.yaml
+- src/charter/offering/packs/presets.py
+- packs/built-in/presets/default.yaml
+- packs/built-in/presets/minimal.yaml
+- tests/charter/presets/test_preset_model.py
+- tests/charter/presets/test_preset_discovery.py
+- tests/charter/presets/test_builtin_presets.py
+- tests/charter/presets/test_preset_validation.py
+- tests/charter/presets/test_preset_manifest_hashing.py
+- tests/charter/presets/test_preset_scaffold.py
+execution_mode: code_change
+owned_files:
+- src/charter/offering/schemas/activation-preset.schema.yaml
+- src/charter/offering/schemas/README.md
+- src/charter/offering/packs/presets.py
+- packs/built-in/presets/default.yaml
+- packs/built-in/presets/minimal.yaml
+- tests/charter/presets/test_preset_model.py
+- tests/charter/presets/test_preset_discovery.py
+- tests/charter/presets/test_builtin_presets.py
+- tests/charter/presets/test_preset_validation.py
+- tests/charter/presets/test_preset_manifest_hashing.py
+- tests/charter/presets/test_preset_scaffold.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP07 – Preset format, discovery and built-in presets

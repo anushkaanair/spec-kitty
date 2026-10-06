@@ -1,92 +1,105 @@
 ---
-work_package_id: "WP04"
-title: "Package split I — pack model and tooling to charter.offering.packs"
-subtasks: ["T021", "T022", "T023", "T024", "T025"]
-dependencies: ["WP02", "WP03"]
-requirement_refs: ["FR-010", "C-007"]
-task_type: "implement"
-phase: "Phase 1 - Foundations (paths, package split)"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/offering/packs/__init__.py"
-  - "src/charter/offering/packs/hashing.py"
-  - "src/charter/offering/packs/extends.py"
-  - "src/charter/offering/packs/pack_descriptor.py"
-  - "src/charter/offering/packs/pack_lineage.py"
-  - "src/charter/offering/packs/pack_manifest.py"
-  - "src/charter/offering/packs/builtin_manifest.py"
-  - "src/charter/offering/packs/pack_validator.py"
-  - "src/charter/offering/packs/pack_assembler.py"
-  - "src/charter/activation/org_extends.py"
-  - "src/specify_cli/doctrine/pack_descriptor.py"
-  - "src/specify_cli/doctrine/pack_lineage.py"
-  - "src/specify_cli/doctrine/pack_manifest.py"
-  - "src/specify_cli/doctrine/builtin_manifest.py"
-  - "src/specify_cli/doctrine/pack_validator.py"
-  - "src/specify_cli/doctrine/pack_assembler.py"
-  - "src/specify_cli/doctrine/org_charter.py"
-  - "src/specify_cli/doctrine/snapshot.py"
-  - "src/specify_cli/doctrine/sources/api_source.py"
-  - "src/charter/packs.py"
-  - "src/charter/drg.py"
-  - "src/charter/__init__.py"
-  - "src/specify_cli/drg_writers/registry.py"
-  - "pyproject.toml"
-  - "tests/charter/packs/**"
-  - "tests/specify_cli/doctrine/test_pack_validator.py"
-  - "tests/specify_cli/doctrine/test_pack_validator_fragment_finding.py"
-  - "tests/specify_cli/doctrine/test_pack_validator_kind_derivation.py"
-  - "tests/specify_cli/doctrine/test_pack_assembler.py"
-  - "tests/specify_cli/doctrine/test_snapshot.py"
-  - "tests/charter/test_org_extends.py"
-  - "tests/doctrine/test_pack_lineage.py"
-  - "tests/doctrine/test_pack_id_identity.py"
-  - "tests/doctrine/test_pack_manifest_schema.py"
-  - "tests/doctrine/test_builtin_manifest.py"
-  - "tests/doctrine/test_counts_derivation.py"
-  - "tests/doctrine/test_pack_version_relocation.py"
-  - "tests/doctrine/test_charter_profile_absorption.py"
-  - "tests/doctrine/test_org_pack_augmentation.py"
-  - "tests/doctrine/test_template_asset_e2e.py"
-  - "tests/doctrine/drg/test_org_fragment_validation.py"
-  - "tests/doctrine/drg/test_sharding_silent_degrade.py"
-  - "tests/integration/test_quickstart_end_to_end.py"
-  - "tests/kernel/test_byte_identity_mapping.py"
-  - "tests/architectural/test_pack_lineage_no_parallel_resolver.py"
-  - "tests/architectural/test_pack_manifest_no_author_edit.py"
-  - "tests/architectural/test_no_dead_modules.py"
-  - "tests/architectural/_baselines.yaml"
-  - "tests/architectural/test_charter_sole_door_agent_profile_repository.py"
-  - "tests/architectural/test_drg_writer_discovery.py"
-  - "tests/architectural/test_charter_facades_reexport_doctrine.py"
-  - "tests/architectural/test_doctrine_public_surface.py"
-authoritative_surface: "src/charter/offering/packs/"
-create_intent:
-  - "src/charter/offering/packs/__init__.py"
-  - "src/charter/offering/packs/hashing.py"
-  - "src/charter/offering/packs/extends.py"
-  - "src/charter/offering/packs/pack_descriptor.py"
-  - "src/charter/offering/packs/pack_lineage.py"
-  - "src/charter/offering/packs/pack_manifest.py"
-  - "src/charter/offering/packs/builtin_manifest.py"
-  - "src/charter/offering/packs/pack_validator.py"
-  - "src/charter/offering/packs/pack_assembler.py"
-  - "src/charter/packs.py"
-  - "tests/charter/packs/__init__.py"
-  - "tests/charter/packs/test_pack_validator.py"
-  - "tests/charter/packs/test_pack_validator_fragment_finding.py"
-  - "tests/charter/packs/test_pack_validator_kind_derivation.py"
-  - "tests/charter/packs/test_pack_assembler.py"
-  - "tests/charter/packs/test_hashing.py"
-  - "tests/charter/packs/test_pack_manifest_writer.py"
-  - "tests/charter/packs/test_charter_packs_facade.py"
-agent_profile: "architect-alphonso"
-role: "implementer"
-agent: "claude"
+work_package_id: WP04
+title: Package split I — pack model and tooling to charter.offering.packs
+dependencies:
+- WP02
+- WP03
+requirement_refs:
+- FR-010
+- C-007
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T021
+- T022
+- T023
+- T024
+- T025
+phase: Phase 1 - Foundations (paths, package split)
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: architect-alphonso
+authoritative_surface: src/charter/offering/packs/
+create_intent:
+- src/charter/offering/packs/__init__.py
+- src/charter/offering/packs/hashing.py
+- src/charter/offering/packs/extends.py
+- src/charter/offering/packs/pack_descriptor.py
+- src/charter/offering/packs/pack_lineage.py
+- src/charter/offering/packs/pack_manifest.py
+- src/charter/offering/packs/builtin_manifest.py
+- src/charter/offering/packs/pack_validator.py
+- src/charter/offering/packs/pack_assembler.py
+- src/charter/packs.py
+- tests/charter/packs/__init__.py
+- tests/charter/packs/test_pack_validator.py
+- tests/charter/packs/test_pack_validator_fragment_finding.py
+- tests/charter/packs/test_pack_validator_kind_derivation.py
+- tests/charter/packs/test_pack_assembler.py
+- tests/charter/packs/test_hashing.py
+- tests/charter/packs/test_pack_manifest_writer.py
+- tests/charter/packs/test_charter_packs_facade.py
+execution_mode: code_change
+owned_files:
+- src/charter/offering/packs/__init__.py
+- src/charter/offering/packs/hashing.py
+- src/charter/offering/packs/extends.py
+- src/charter/offering/packs/pack_descriptor.py
+- src/charter/offering/packs/pack_lineage.py
+- src/charter/offering/packs/pack_manifest.py
+- src/charter/offering/packs/builtin_manifest.py
+- src/charter/offering/packs/pack_validator.py
+- src/charter/offering/packs/pack_assembler.py
+- src/charter/activation/org_extends.py
+- src/specify_cli/doctrine/pack_descriptor.py
+- src/specify_cli/doctrine/pack_lineage.py
+- src/specify_cli/doctrine/pack_manifest.py
+- src/specify_cli/doctrine/builtin_manifest.py
+- src/specify_cli/doctrine/pack_validator.py
+- src/specify_cli/doctrine/pack_assembler.py
+- src/specify_cli/doctrine/org_charter.py
+- src/specify_cli/doctrine/snapshot.py
+- src/specify_cli/doctrine/sources/api_source.py
+- src/charter/packs.py
+- src/charter/drg.py
+- src/charter/__init__.py
+- src/specify_cli/drg_writers/registry.py
+- pyproject.toml
+- tests/charter/packs/**
+- tests/specify_cli/doctrine/test_pack_validator.py
+- tests/specify_cli/doctrine/test_pack_validator_fragment_finding.py
+- tests/specify_cli/doctrine/test_pack_validator_kind_derivation.py
+- tests/specify_cli/doctrine/test_pack_assembler.py
+- tests/specify_cli/doctrine/test_snapshot.py
+- tests/charter/test_org_extends.py
+- tests/doctrine/test_pack_lineage.py
+- tests/doctrine/test_pack_id_identity.py
+- tests/doctrine/test_pack_manifest_schema.py
+- tests/doctrine/test_builtin_manifest.py
+- tests/doctrine/test_counts_derivation.py
+- tests/doctrine/test_pack_version_relocation.py
+- tests/doctrine/test_charter_profile_absorption.py
+- tests/doctrine/test_org_pack_augmentation.py
+- tests/doctrine/test_template_asset_e2e.py
+- tests/doctrine/drg/test_org_fragment_validation.py
+- tests/doctrine/drg/test_sharding_silent_degrade.py
+- tests/integration/test_quickstart_end_to_end.py
+- tests/kernel/test_byte_identity_mapping.py
+- tests/architectural/test_pack_lineage_no_parallel_resolver.py
+- tests/architectural/test_pack_manifest_no_author_edit.py
+- tests/architectural/test_no_dead_modules.py
+- tests/architectural/_baselines.yaml
+- tests/architectural/test_charter_sole_door_agent_profile_repository.py
+- tests/architectural/test_drg_writer_discovery.py
+- tests/architectural/test_charter_facades_reexport_doctrine.py
+- tests/architectural/test_doctrine_public_surface.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP04 – Package split I — pack model and tooling to `charter.offering.packs`

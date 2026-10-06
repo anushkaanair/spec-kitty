@@ -1,144 +1,153 @@
 ---
-work_package_id: "WP20"
-title: "Identifier rename R2 — activation"
-subtasks: ["T095", "T096", "T097"]
-dependencies: ["WP19"]
-requirement_refs: ["FR-010"]
-task_type: "implement"
-phase: "Phase 5 - Names"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/activation/__init__.py"
-  - "src/charter/activation/_activation_render.py"
-  - "src/charter/activation/_catalog_miss.py"
-  - "src/charter/activation/action_doctrine_bundle.py"
-  - "src/charter/activation/cascade.py"
-  - "src/charter/activation/catalog.py"
-  - "src/charter/activation/charter_md_parsing.py"
-  - "src/charter/activation/compact.py"
-  - "src/charter/activation/context.py"
-  - "src/charter/activation/context_contract.py"
-  - "src/charter/activation/context_json.py"
-  - "src/charter/activation/context_renderers/activation_block.py"
-  - "src/charter/activation/context_renderers/artifact_bodies.py"
-  - "src/charter/activation/context_renderers/authority_paths.py"
-  - "src/charter/activation/context_renderers/bootstrap_text.py"
-  - "src/charter/activation/context_renderers/catalog_diagnosis.py"
-  - "src/charter/activation/context_renderers/compact_governance.py"
-  - "src/charter/activation/context_renderers/delivery_table.py"
-  - "src/charter/activation/context_renderers/profile_sections.py"
-  - "src/charter/activation/context_renderers/reference_pointers.py"
-  - "src/charter/activation/context_renderers/selection_block.py"
-  - "src/charter/activation/context_renderers/token_budget.py"
-  - "src/charter/activation/context_result_builders.py"
-  - "src/charter/activation/context_state.py"
-  - "src/charter/activation/doctrine_service_builder.py"
-  - "src/charter/activation/invocation_context.py"
-  - "src/charter/activation/language_advisory.py"
-  - "src/charter/activation/language_scope.py"
-  - "src/charter/activation/language_vocabulary.py"
-  - "src/charter/activation/manifest_loader.py"
-  - "src/charter/activation/neutrality/__init__.py"
-  - "src/charter/activation/neutrality/language_scoped_allowlist.yaml"
-  - "src/charter/activation/neutrality/lint.py"
-  - "src/charter/activation/org_expected_artifacts.py"
-  - "src/charter/activation/org_pack_discovery.py"
-  - "src/charter/activation/profile_resolution.py"
-  - "src/charter/activation/progressive_disclosure.py"
-  - "src/charter/activation/reference_resolver.py"
-  - "src/charter/activation/resolver.py"
-  - "src/charter/activation/schemas.py"
-  - "src/charter/activation/scope_router.py"
-  - "src/charter/activation/skill_preparation.py"
-  - "src/charter/activation/synthesizer/_constants.py"
-  - "src/charter/activation/synthesizer/artifact_naming.py"
-  - "src/charter/activation/synthesizer/generated_artifact_adapter.py"
-  - "src/charter/activation/synthesizer/interview_mapping.py"
-  - "src/charter/activation/synthesizer/request.py"
-  - "src/charter/activation/template_resolver.py"
-  - "src/charter/activation/_project_root_candidates.py"
-  - "src/charter/activation/action_governance_bundle.py"
-  - "src/charter/activation/active_charter_service_builder.py"
-  - "tests/architectural/test_charter_sole_door_inner_reacharound.py"
-  - "tests/architectural/test_charter_sole_door_resolver_imports.py"
-  - "tests/architectural/test_dead_builtin_doc_paths.py"
-  - "tests/architectural/test_no_config_key_spelled_as_module_path.py"
-  - "tests/architectural/test_no_op_stable_writes.py"
-  - "tests/architectural/test_org_activation_seam.py"
-  - "tests/charter/context_renderers/test_include_selector_widening.py"
-  - "tests/charter/test_action_bundle_delivery.py"
-  - "tests/charter/test_action_bundle_tension_arbiters.py"
-  - "tests/charter/test_action_doctrine_bundle_activation.py"
-  - "tests/charter/test_action_doctrine_bundle_org_fragment.py"
-  - "tests/charter/test_action_gate_single_load.py"
-  - "tests/charter/test_activation_consumers.py"
-  - "tests/charter/test_active_languages_idempotency.py"
-  - "tests/charter/test_call_site_propagation.py"
-  - "tests/charter/test_catalog.py"
-  - "tests/charter/test_charter_context_directives_source.py"
-  - "tests/charter/test_charter_context_spdd_reasons.py"
-  - "tests/charter/test_compiler.py"
-  - "tests/charter/test_config_sourced_derivation.py"
-  - "tests/charter/test_config_stem_parity.py"
-  - "tests/charter/test_consistency_check.py"
-  - "tests/charter/test_context_authority_paths.py"
-  - "tests/charter/test_context_display_charter_md.py"
-  - "tests/charter/test_context_include_activation.py"
-  - "tests/charter/test_context_org_chain.py"
-  - "tests/charter/test_context_profile.py"
-  - "tests/charter/test_context_profile_lineage_parity.py"
-  - "tests/charter/test_context_prose_presence_pin.py"
-  - "tests/charter/test_context_unknown_language.py"
-  - "tests/charter/test_directive_unresolved_token_warning.py"
-  - "tests/charter/test_directives_additive_regression.py"
-  - "tests/charter/test_doctrine_governance_coverage.py"
-  - "tests/charter/test_doctrine_service_builder_unification.py"
-  - "tests/charter/test_drg_activation_gate.py"
-  - "tests/charter/test_emit_delivery_bind.py"
-  - "tests/charter/test_glossary_delivery_render.py"
-  - "tests/charter/test_glossary_include_activation.py"
-  - "tests/charter/test_kind_cascade_exhaustive.py"
-  - "tests/charter/test_kind_vocabulary.py"
-  - "tests/charter/test_merged_graph_on_live_path.py"
-  - "tests/charter/test_phase3_integration.py"
-  - "tests/charter/test_presence_gate_bundle_authority.py"
-  - "tests/charter/test_reference_block.py"
-  - "tests/charter/test_resolve_project_governance_single_authority.py"
-  - "tests/charter/test_resolved_mission_type_context.py"
-  - "tests/charter/test_resolver.py"
-  - "tests/charter/test_resolver_activation_gating.py"
-  - "tests/charter/test_resolver_activation_parity.py"
-  - "tests/charter/test_resolver_directive_activation_keying.py"
-  - "tests/charter/test_resolver_tier_axis_via_factory.py"
-  - "tests/charter/test_schemas.py"
-  - "tests/charter/test_schemas_additive_fields.py"
-  - "tests/charter/test_template_resolver.py"
-  - "tests/cli/commands/test_reconcile.py"
-  - "tests/docs/test_asset_resolution_wheel.py"
-  - "tests/docs/test_runtime_read_resolution.py"
-  - "tests/dossier/test_manifest.py"
-  - "tests/dossier/test_rebaseline.py"
-  - "tests/glossary/test_canonical_promotion.py"
-  - "tests/runtime/next/test_presence_filenames.py"
-  - "tests/runtime/test_resolver_unit.py"
-  - "tests/specify_cli/charter_runtime/test_boundary_heal.py"
-  - "tests/specify_cli/cli/commands/test_charter_ambiguous_directives.py"
-  - "tests/specify_cli/cli/commands/test_charter_org_directive_identity.py"
-  - "tests/specify_cli/invocation/test_org_profiles.py"
-  - "tests/specify_cli/mission_step_contracts/test_executor.py"
-  - "tests/specify_cli/skills/test_pack_skill_activation_coherence.py"
-authoritative_surface: "src/charter/activation/"
-create_intent:
-  - "src/charter/activation/_project_root_candidates.py"
-  - "src/charter/activation/action_governance_bundle.py"
-  - "src/charter/activation/active_charter_service_builder.py"
-agent_profile: "lexical-larry"
-role: "implementer"
-agent: "claude"
+work_package_id: WP20
+title: Identifier rename R2 — activation
+dependencies:
+- WP19
+requirement_refs:
+- FR-010
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T095
+- T096
+- T097
+phase: Phase 5 - Names
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: lexical-larry
+authoritative_surface: src/charter/activation/
+create_intent:
+- src/charter/activation/_project_root_candidates.py
+- src/charter/activation/action_governance_bundle.py
+- src/charter/activation/active_charter_service_builder.py
+execution_mode: code_change
+owned_files:
+- src/charter/activation/__init__.py
+- src/charter/activation/_activation_render.py
+- src/charter/activation/_catalog_miss.py
+- src/charter/activation/action_doctrine_bundle.py
+- src/charter/activation/cascade.py
+- src/charter/activation/catalog.py
+- src/charter/activation/charter_md_parsing.py
+- src/charter/activation/compact.py
+- src/charter/activation/context.py
+- src/charter/activation/context_contract.py
+- src/charter/activation/context_json.py
+- src/charter/activation/context_renderers/activation_block.py
+- src/charter/activation/context_renderers/artifact_bodies.py
+- src/charter/activation/context_renderers/authority_paths.py
+- src/charter/activation/context_renderers/bootstrap_text.py
+- src/charter/activation/context_renderers/catalog_diagnosis.py
+- src/charter/activation/context_renderers/compact_governance.py
+- src/charter/activation/context_renderers/delivery_table.py
+- src/charter/activation/context_renderers/profile_sections.py
+- src/charter/activation/context_renderers/reference_pointers.py
+- src/charter/activation/context_renderers/selection_block.py
+- src/charter/activation/context_renderers/token_budget.py
+- src/charter/activation/context_result_builders.py
+- src/charter/activation/context_state.py
+- src/charter/activation/doctrine_service_builder.py
+- src/charter/activation/invocation_context.py
+- src/charter/activation/language_advisory.py
+- src/charter/activation/language_scope.py
+- src/charter/activation/language_vocabulary.py
+- src/charter/activation/manifest_loader.py
+- src/charter/activation/neutrality/__init__.py
+- src/charter/activation/neutrality/language_scoped_allowlist.yaml
+- src/charter/activation/neutrality/lint.py
+- src/charter/activation/org_expected_artifacts.py
+- src/charter/activation/org_pack_discovery.py
+- src/charter/activation/profile_resolution.py
+- src/charter/activation/progressive_disclosure.py
+- src/charter/activation/reference_resolver.py
+- src/charter/activation/resolver.py
+- src/charter/activation/schemas.py
+- src/charter/activation/scope_router.py
+- src/charter/activation/skill_preparation.py
+- src/charter/activation/synthesizer/_constants.py
+- src/charter/activation/synthesizer/artifact_naming.py
+- src/charter/activation/synthesizer/generated_artifact_adapter.py
+- src/charter/activation/synthesizer/interview_mapping.py
+- src/charter/activation/synthesizer/request.py
+- src/charter/activation/template_resolver.py
+- src/charter/activation/_project_root_candidates.py
+- src/charter/activation/action_governance_bundle.py
+- src/charter/activation/active_charter_service_builder.py
+- tests/architectural/test_charter_sole_door_inner_reacharound.py
+- tests/architectural/test_charter_sole_door_resolver_imports.py
+- tests/architectural/test_dead_builtin_doc_paths.py
+- tests/architectural/test_no_config_key_spelled_as_module_path.py
+- tests/architectural/test_no_op_stable_writes.py
+- tests/architectural/test_org_activation_seam.py
+- tests/charter/context_renderers/test_include_selector_widening.py
+- tests/charter/test_action_bundle_delivery.py
+- tests/charter/test_action_bundle_tension_arbiters.py
+- tests/charter/test_action_doctrine_bundle_activation.py
+- tests/charter/test_action_doctrine_bundle_org_fragment.py
+- tests/charter/test_action_gate_single_load.py
+- tests/charter/test_activation_consumers.py
+- tests/charter/test_active_languages_idempotency.py
+- tests/charter/test_call_site_propagation.py
+- tests/charter/test_catalog.py
+- tests/charter/test_charter_context_directives_source.py
+- tests/charter/test_charter_context_spdd_reasons.py
+- tests/charter/test_compiler.py
+- tests/charter/test_config_sourced_derivation.py
+- tests/charter/test_config_stem_parity.py
+- tests/charter/test_consistency_check.py
+- tests/charter/test_context_authority_paths.py
+- tests/charter/test_context_display_charter_md.py
+- tests/charter/test_context_include_activation.py
+- tests/charter/test_context_org_chain.py
+- tests/charter/test_context_profile.py
+- tests/charter/test_context_profile_lineage_parity.py
+- tests/charter/test_context_prose_presence_pin.py
+- tests/charter/test_context_unknown_language.py
+- tests/charter/test_directive_unresolved_token_warning.py
+- tests/charter/test_directives_additive_regression.py
+- tests/charter/test_doctrine_governance_coverage.py
+- tests/charter/test_doctrine_service_builder_unification.py
+- tests/charter/test_drg_activation_gate.py
+- tests/charter/test_emit_delivery_bind.py
+- tests/charter/test_glossary_delivery_render.py
+- tests/charter/test_glossary_include_activation.py
+- tests/charter/test_kind_cascade_exhaustive.py
+- tests/charter/test_kind_vocabulary.py
+- tests/charter/test_merged_graph_on_live_path.py
+- tests/charter/test_phase3_integration.py
+- tests/charter/test_presence_gate_bundle_authority.py
+- tests/charter/test_reference_block.py
+- tests/charter/test_resolve_project_governance_single_authority.py
+- tests/charter/test_resolved_mission_type_context.py
+- tests/charter/test_resolver.py
+- tests/charter/test_resolver_activation_gating.py
+- tests/charter/test_resolver_activation_parity.py
+- tests/charter/test_resolver_directive_activation_keying.py
+- tests/charter/test_resolver_tier_axis_via_factory.py
+- tests/charter/test_schemas.py
+- tests/charter/test_schemas_additive_fields.py
+- tests/charter/test_template_resolver.py
+- tests/cli/commands/test_reconcile.py
+- tests/docs/test_asset_resolution_wheel.py
+- tests/docs/test_runtime_read_resolution.py
+- tests/dossier/test_manifest.py
+- tests/dossier/test_rebaseline.py
+- tests/glossary/test_canonical_promotion.py
+- tests/runtime/next/test_presence_filenames.py
+- tests/runtime/test_resolver_unit.py
+- tests/specify_cli/charter_runtime/test_boundary_heal.py
+- tests/specify_cli/cli/commands/test_charter_ambiguous_directives.py
+- tests/specify_cli/cli/commands/test_charter_org_directive_identity.py
+- tests/specify_cli/invocation/test_org_profiles.py
+- tests/specify_cli/mission_step_contracts/test_executor.py
+- tests/specify_cli/skills/test_pack_skill_activation_coherence.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP20 – Identifier rename R2 — activation

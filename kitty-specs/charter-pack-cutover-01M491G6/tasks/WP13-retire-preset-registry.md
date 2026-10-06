@@ -1,31 +1,44 @@
 ---
-work_package_id: "WP13"
-title: "Retire the preset registry and the descriptor field"
-subtasks: ["T066", "T067", "T068", "T069"]
-dependencies: ["WP08", "WP09", "WP12"]
-requirement_refs: ["FR-005", "C-001"]
-task_type: "implement"
-phase: "Phase 4 - Removal (no aliases, no shims)"
-execution_mode: "code_change"
-owned_files:
-  - "src/specify_cli/charter_pack_registry.py"
-  - "src/charter/activation/packs/**"
-  - "packs/built-in/pack.yaml"
-  - "tests/specify_cli/test_charter_pack_registry.py"
-  - "tests/specify_cli/cli/commands/charter/test_apply_compile_bridge.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py"
-  - "tests/charter/test_retired_accompanies_doctrine_pack.py"
-authoritative_surface: "src/specify_cli/charter_pack_registry.py"
-create_intent:
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py"
-  - "tests/charter/test_retired_accompanies_doctrine_pack.py"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP13
+title: Retire the preset registry and the descriptor field
+dependencies:
+- WP08
+- WP09
+- WP12
+requirement_refs:
+- FR-005
+- C-001
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T066
+- T067
+- T068
+- T069
+phase: Phase 4 - Removal (no aliases, no shims)
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/specify_cli/charter_pack_registry.py
+create_intent:
+- tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py
+- tests/charter/test_retired_accompanies_doctrine_pack.py
+execution_mode: code_change
+owned_files:
+- src/specify_cli/charter_pack_registry.py
+- src/charter/activation/packs/**
+- packs/built-in/pack.yaml
+- tests/specify_cli/test_charter_pack_registry.py
+- tests/specify_cli/cli/commands/charter/test_apply_compile_bridge.py
+- tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py
+- tests/charter/test_retired_accompanies_doctrine_pack.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP13 – Retire the preset registry and the descriptor field

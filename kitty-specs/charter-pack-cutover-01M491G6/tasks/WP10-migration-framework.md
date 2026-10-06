@@ -1,44 +1,56 @@
 ---
-work_package_id: "WP10"
-title: "Migration framework — run-first ordering and neutralised migrations"
-subtasks: ["T050", "T051", "T052", "T053", "T054"]
-dependencies: ["WP01"]
-requirement_refs: ["FR-012", "C-008"]
-task_type: "implement"
-phase: "Phase 3 - Upgrade migration"
-execution_mode: "code_change"
-owned_files:
-  - "src/specify_cli/upgrade/migrations/base.py"
-  - "src/specify_cli/upgrade/registry.py"
-  - "src/specify_cli/upgrade/runner.py"
-  - "src/specify_cli/upgrade/migrations/m_3_2_0rc35_default_charter_pack.py"
-  - "src/specify_cli/upgrade/migrations/m_3_2_x_normalize_activation_absence.py"
-  - "src/specify_cli/upgrade/migrations/m_2_1_2_fix_glossary_context_skill.py"
-  - "src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py"
-  - "src/specify_cli/upgrade/migrations/m_unify_charter_activation_finalize.py"
-  - "tests/specify_cli/upgrade/test_registry_runs_first.py"
-  - "tests/specify_cli/upgrade/test_neutralised_migrations.py"
-  - "tests/specify_cli/upgrade/test_migration_discovery_without_retired_modules.py"
-  - "tests/upgrade/test_m_3_2_0rc35_default_charter_pack.py"
-  - "tests/specify_cli/upgrade/test_normalize_activation_absence.py"
-  - "tests/specify_cli/upgrade/test_skill_update_external_symlinks.py"
-  - "tests/upgrade/test_charter_rename_migration.py"
-  - "tests/specify_cli/upgrade/migrations/test_m_3_1_1_charter_rename.py"
-  - "tests/specify_cli/upgrade/migrations/test_m_unify_charter_activation_finalize.py"
-  - "tests/upgrade/test_consolidate_charter_bundle_migration.py"
-  - "tests/charter/test_activation_vocabulary_setequal.py"
-authoritative_surface: "src/specify_cli/upgrade/registry.py"
-create_intent:
-  - "tests/specify_cli/upgrade/test_registry_runs_first.py"
-  - "tests/specify_cli/upgrade/test_neutralised_migrations.py"
-  - "tests/specify_cli/upgrade/test_migration_discovery_without_retired_modules.py"
-agent_profile: "implementer-ivan"
-role: "implementer"
-agent: "claude"
+work_package_id: WP10
+title: Migration framework — run-first ordering and neutralised migrations
+dependencies:
+- WP01
+requirement_refs:
+- FR-012
+- C-008
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T050
+- T051
+- T052
+- T053
+- T054
+phase: Phase 3 - Upgrade migration
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: implementer-ivan
+authoritative_surface: src/specify_cli/upgrade/registry.py
+create_intent:
+- tests/specify_cli/upgrade/test_registry_runs_first.py
+- tests/specify_cli/upgrade/test_neutralised_migrations.py
+- tests/specify_cli/upgrade/test_migration_discovery_without_retired_modules.py
+execution_mode: code_change
+owned_files:
+- src/specify_cli/upgrade/migrations/base.py
+- src/specify_cli/upgrade/registry.py
+- src/specify_cli/upgrade/runner.py
+- src/specify_cli/upgrade/migrations/m_3_2_0rc35_default_charter_pack.py
+- src/specify_cli/upgrade/migrations/m_3_2_x_normalize_activation_absence.py
+- src/specify_cli/upgrade/migrations/m_2_1_2_fix_glossary_context_skill.py
+- src/specify_cli/upgrade/migrations/m_3_1_1_charter_rename.py
+- src/specify_cli/upgrade/migrations/m_unify_charter_activation_finalize.py
+- tests/specify_cli/upgrade/test_registry_runs_first.py
+- tests/specify_cli/upgrade/test_neutralised_migrations.py
+- tests/specify_cli/upgrade/test_migration_discovery_without_retired_modules.py
+- tests/upgrade/test_m_3_2_0rc35_default_charter_pack.py
+- tests/specify_cli/upgrade/test_normalize_activation_absence.py
+- tests/specify_cli/upgrade/test_skill_update_external_symlinks.py
+- tests/upgrade/test_charter_rename_migration.py
+- tests/specify_cli/upgrade/migrations/test_m_3_1_1_charter_rename.py
+- tests/specify_cli/upgrade/migrations/test_m_unify_charter_activation_finalize.py
+- tests/upgrade/test_consolidate_charter_bundle_migration.py
+- tests/charter/test_activation_vocabulary_setequal.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP10 – Migration framework — run-first ordering and neutralised migrations

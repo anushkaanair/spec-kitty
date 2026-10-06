@@ -1,58 +1,70 @@
 ---
-work_package_id: "WP02"
-title: "Kernel pack paths and read-side cutover"
-subtasks: ["T011", "T012", "T013", "T014", "T015"]
-dependencies: ["WP01"]
-requirement_refs: ["FR-016", "C-007"]
-task_type: "implement"
-phase: "Phase 1 - Foundations (paths, package split)"
-execution_mode: "code_change"
-owned_files:
-  - "src/kernel/charter_pack_paths.py"
-  - "src/kernel/doctrine_root.py"
-  - "src/kernel/README.md"
-  - "tests/kernel/test_charter_pack_paths.py"
-  - "tests/kernel/test_doctrine_root.py"
-  - "src/charter/activation/layer_roots.py"
-  - "src/specify_cli/cli/commands/charter/_layer_roots.py"
-  - "tests/charter/activation/test_layer_roots.py"
-  - "src/charter/activation/_drg_helpers.py"
-  - "src/charter/activation/_doctrine_paths.py"
-  - "src/charter/activation/kind_vocabulary.py"
-  - "src/charter/activation/pack_manager.py"
-  - "src/charter/activation/mission_type_profile_repository.py"
-  - "src/charter/offering/drg/project_scan.py"
-  - "src/charter/offering/drg/override_policy.py"
-  - "src/charter/offering/service.py"
-  - "src/runtime/next/runtime_bridge_composition.py"
-  - "src/glossary/entity_pages.py"
-  - "src/specify_cli/analysis_inputs.py"
-  - "src/specify_cli/calibration/walker.py"
-  - "src/specify_cli/charter_runtime/lint/_drg.py"
-  - "src/specify_cli/charter_runtime/preflight/runner.py"
-  - "src/specify_cli/cli/commands/_doctrine_collect.py"
-  - "src/specify_cli/cli/commands/charter/_status_collectors.py"
-  - "src/specify_cli/cli/commands/charter/list_cmd.py"
-  - "src/specify_cli/cli/commands/profiles_cmd.py"
-  - "src/specify_cli/mission_loader/command.py"
-  - "src/specify_cli/mission_step_contracts/executor.py"
-  - "src/specify_cli/review/gate_bindings.py"
-  - "src/specify_cli/skills/catalog.py"
-  - "src/specify_cli/tool_surface/providers/agent_profiles.py"
-  - "tests/architectural/dead_symbol_allowlist.yaml"
-authoritative_surface: "src/kernel/charter_pack_paths.py"
-create_intent:
-  - "src/kernel/charter_pack_paths.py"
-  - "tests/kernel/test_charter_pack_paths.py"
-  - "src/charter/activation/layer_roots.py"
-  - "tests/charter/activation/test_layer_roots.py"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP02
+title: Kernel pack paths and read-side cutover
+dependencies:
+- WP01
+requirement_refs:
+- FR-016
+- C-007
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T011
+- T012
+- T013
+- T014
+- T015
+phase: Phase 1 - Foundations (paths, package split)
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/kernel/charter_pack_paths.py
+create_intent:
+- src/kernel/charter_pack_paths.py
+- tests/kernel/test_charter_pack_paths.py
+- src/charter/activation/layer_roots.py
+- tests/charter/activation/test_layer_roots.py
+execution_mode: code_change
+owned_files:
+- src/kernel/charter_pack_paths.py
+- src/kernel/doctrine_root.py
+- src/kernel/README.md
+- tests/kernel/test_charter_pack_paths.py
+- tests/kernel/test_doctrine_root.py
+- src/charter/activation/layer_roots.py
+- src/specify_cli/cli/commands/charter/_layer_roots.py
+- tests/charter/activation/test_layer_roots.py
+- src/charter/activation/_drg_helpers.py
+- src/charter/activation/_doctrine_paths.py
+- src/charter/activation/kind_vocabulary.py
+- src/charter/activation/pack_manager.py
+- src/charter/activation/mission_type_profile_repository.py
+- src/charter/offering/drg/project_scan.py
+- src/charter/offering/drg/override_policy.py
+- src/charter/offering/service.py
+- src/runtime/next/runtime_bridge_composition.py
+- src/glossary/entity_pages.py
+- src/specify_cli/analysis_inputs.py
+- src/specify_cli/calibration/walker.py
+- src/specify_cli/charter_runtime/lint/_drg.py
+- src/specify_cli/charter_runtime/preflight/runner.py
+- src/specify_cli/cli/commands/_doctrine_collect.py
+- src/specify_cli/cli/commands/charter/_status_collectors.py
+- src/specify_cli/cli/commands/charter/list_cmd.py
+- src/specify_cli/cli/commands/profiles_cmd.py
+- src/specify_cli/mission_loader/command.py
+- src/specify_cli/mission_step_contracts/executor.py
+- src/specify_cli/review/gate_bindings.py
+- src/specify_cli/skills/catalog.py
+- src/specify_cli/tool_surface/providers/agent_profiles.py
+- tests/architectural/dead_symbol_allowlist.yaml
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP02 – Kernel pack paths and read-side cutover

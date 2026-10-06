@@ -1,34 +1,47 @@
 ---
-work_package_id: "WP09"
-title: "Provisioning reads the `default` preset"
-subtasks: ["T046", "T047", "T048", "T049"]
-dependencies: ["WP07", "WP08", "WP10"]
-requirement_refs: ["FR-003", "FR-005"]
-task_type: "implement"
-phase: "Phase 2 - Presets and promotion"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/activation/compiler.py"
-  - "src/specify_cli/provisioning/default_charter.py"
-  - "src/specify_cli/provisioning/__init__.py"
-  - "src/specify_cli/cli/commands/init.py"
-  - "tests/charter/activation/test_default_preset_provisioning.py"
-  - "tests/charter/test_mission_type_activations_seed_read_parity.py"
-  - "tests/charter/test_compiler_charter_yaml.py"
-  - "tests/specify_cli/cli/commands/test_init_provisioning.py"
-  - "tests/specify_cli/cli/commands/test_init_default_preset_positive_control.py"
-  - "tests/specify_cli/upgrade/test_upgrade_provisions_mission_type_activations.py"
-authoritative_surface: "src/specify_cli/provisioning/"
-create_intent:
-  - "tests/charter/activation/test_default_preset_provisioning.py"
-  - "tests/specify_cli/cli/commands/test_init_default_preset_positive_control.py"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP09
+title: Provisioning reads the `default` preset
+dependencies:
+- WP07
+- WP08
+- WP10
+requirement_refs:
+- FR-003
+- FR-005
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T046
+- T047
+- T048
+- T049
+phase: Phase 2 - Presets and promotion
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/specify_cli/provisioning/
+create_intent:
+- tests/charter/activation/test_default_preset_provisioning.py
+- tests/specify_cli/cli/commands/test_init_default_preset_positive_control.py
+execution_mode: code_change
+owned_files:
+- src/charter/activation/compiler.py
+- src/specify_cli/provisioning/default_charter.py
+- src/specify_cli/provisioning/__init__.py
+- src/specify_cli/cli/commands/init.py
+- tests/charter/activation/test_default_preset_provisioning.py
+- tests/charter/test_mission_type_activations_seed_read_parity.py
+- tests/charter/test_compiler_charter_yaml.py
+- tests/specify_cli/cli/commands/test_init_provisioning.py
+- tests/specify_cli/cli/commands/test_init_default_preset_positive_control.py
+- tests/specify_cli/upgrade/test_upgrade_provisions_mission_type_activations.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP09 – Provisioning reads the `default` preset

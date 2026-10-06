@@ -1,145 +1,157 @@
 ---
-work_package_id: "WP19"
-title: "Identifier rename R1 — offering, facades, kernel"
-subtasks: ["T092", "T093", "T094"]
-dependencies: ["WP14", "WP16", "WP17", "WP18"]
-requirement_refs: ["FR-010"]
-task_type: "implement"
-phase: "Phase 5 - Names"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/README.md"
-  - "src/charter/assets.py"
-  - "src/charter/glossary_packs.py"
-  - "src/charter/mission_steps.py"
-  - "src/charter/missions.py"
-  - "src/charter/model_routing.py"
-  - "src/charter/offering/README.md"
-  - "src/charter/offering/__init__.py"
-  - "src/charter/offering/agent_profiles/README.md"
-  - "src/charter/offering/agent_profiles/diagnostics.py"
-  - "src/charter/offering/agent_profiles/profile.py"
-  - "src/charter/offering/agent_profiles/repository.py"
-  - "src/charter/offering/api.py"
-  - "src/charter/offering/assets/models.py"
-  - "src/charter/offering/assets/repository.py"
-  - "src/charter/offering/base.py"
-  - "src/charter/offering/directives/README.md"
-  - "src/charter/offering/directives/models.py"
-  - "src/charter/offering/directives/repository.py"
-  - "src/charter/offering/discovery_recursion.py"
-  - "src/charter/offering/drg/README.md"
-  - "src/charter/offering/drg/__init__.py"
-  - "src/charter/offering/drg/loader.py"
-  - "src/charter/offering/drg/migration/__init__.py"
-  - "src/charter/offering/drg/migration/extractor.py"
-  - "src/charter/offering/drg/migration/id_normalizer.py"
-  - "src/charter/offering/drg/models.py"
-  - "src/charter/offering/drg/org_pack_loader.py"
-  - "src/charter/offering/drg/query.py"
-  - "src/charter/offering/drg/reachability.py"
-  - "src/charter/offering/glossary_packs/__init__.py"
-  - "src/charter/offering/glossary_packs/repository.py"
-  - "src/charter/offering/missions/action_index.py"
-  - "src/charter/offering/missions/expected_artifact_manifest.py"
-  - "src/charter/offering/missions/glossary_hook.py"
-  - "src/charter/offering/missions/mission_step_repository.py"
-  - "src/charter/offering/missions/models.py"
-  - "src/charter/offering/missions/repository.py"
-  - "src/charter/offering/missions/step_contracts.py"
-  - "src/charter/offering/missions/step_offer_seam.py"
-  - "src/charter/offering/missions/step_projection.py"
-  - "src/charter/offering/model_task_routing/evaluator.py"
-  - "src/charter/offering/model_task_routing/loader.py"
-  - "src/charter/offering/pack_paths.py"
-  - "src/charter/offering/pack_skills/repository.py"
-  - "src/charter/offering/paradigms/README.md"
-  - "src/charter/offering/paradigms/models.py"
-  - "src/charter/offering/paradigms/repository.py"
-  - "src/charter/offering/procedures/models.py"
-  - "src/charter/offering/procedures/repository.py"
-  - "src/charter/offering/procedures/validation.py"
-  - "src/charter/offering/provenance.py"
-  - "src/charter/offering/resolver.py"
-  - "src/charter/offering/schemas/directive.schema.yaml"
-  - "src/charter/offering/schemas/import-candidate.schema.yaml"
-  - "src/charter/offering/schemas/mission.schema.yaml"
-  - "src/charter/offering/schemas/model-to-task_type.schema.yaml"
-  - "src/charter/offering/schemas/occurrence-map.schema.yaml"
-  - "src/charter/offering/schemas/paradigm.schema.yaml"
-  - "src/charter/offering/schemas/procedure.schema.yaml"
-  - "src/charter/offering/schemas/skill.schema.yaml"
-  - "src/charter/offering/schemas/styleguide.schema.yaml"
-  - "src/charter/offering/schemas/tactic.schema.yaml"
-  - "src/charter/offering/schemas/toolguide.schema.yaml"
-  - "src/charter/offering/shared/__init__.py"
-  - "src/charter/offering/shared/errors.py"
-  - "src/charter/offering/shared/exceptions.py"
-  - "src/charter/offering/shared/schema_utils.py"
-  - "src/charter/offering/spdd_reasons/__init__.py"
-  - "src/charter/offering/spdd_reasons/template_renderer.py"
-  - "src/charter/offering/styleguides/repository.py"
-  - "src/charter/offering/tactics/README.md"
-  - "src/charter/offering/tactics/repository.py"
-  - "src/charter/offering/template_catalog.py"
-  - "src/charter/offering/templates/README.md"
-  - "src/charter/offering/templates/agent-onboarding/decomposition-table-template.md"
-  - "src/charter/offering/templates/agent-onboarding/onboarded-artifact-set-template.md"
-  - "src/charter/offering/templates/agent-onboarding/source-agent-dossier-template.md"
-  - "src/charter/offering/templates/architecture/c4-container-mermaid-template.md"
-  - "src/charter/offering/templates/architecture/stakeholder-persona-template.md"
-  - "src/charter/offering/templates/architecture/user-journey-template.md"
-  - "src/charter/offering/templates/diagrams/plantuml/themes/plantuml-theme-bluegray-conversation-template.md"
-  - "src/charter/offering/toolguides/models.py"
-  - "src/charter/offering/toolguides/repository.py"
-  - "src/charter/offering/versioning.py"
-  - "src/charter/pack_paths.py"
-  - "src/charter/primitives.py"
-  - "src/charter/profiles.py"
-  - "src/charter/provenance.py"
-  - "src/charter/repository_protocol.py"
-  - "src/charter/resolution.py"
-  - "src/charter/spdd_reasons.py"
-  - "src/charter/template_catalog.py"
-  - "src/charter/versioning.py"
-  - "src/kernel/__init__.py"
-  - "src/kernel/errors.py"
-  - "src/kernel/glossary_runner.py"
-  - "src/kernel/glossary_types.py"
-  - "src/kernel/paths.py"
-  - "src/kernel/pyproject.toml"
-  - "src/kernel/schema_utils.py"
-  - "src/kernel/sibling_paths.py"
-  - "tests/architectural/_sole_door_scan.py"
-  - "tests/charter/test_activate_resolves_no_answers_edit.py"
-  - "tests/charter/test_builder_overlay_seam.py"
-  - "tests/charter/test_catalog_completeness_4785.py"
-  - "tests/charter/test_charter_whole_kind_invariants.py"
-  - "tests/charter/test_compiler_scope_filtered_placeholder.py"
-  - "tests/charter/test_context.py"
-  - "tests/charter/test_context_selection_render.py"
-  - "tests/charter/test_context_service_seams.py"
-  - "tests/charter/test_doctrine_service_lineage_accessor.py"
-  - "tests/charter/test_doctrine_service_unfiltered_mode.py"
-  - "tests/charter/test_mission_type_profile_override.py"
-  - "tests/charter/test_mission_type_profiles.py"
-  - "tests/charter/test_model_task_routing_resolves.py"
-  - "tests/charter/test_profile_channel_delivery.py"
-  - "tests/charter/test_repository_protocol.py"
-  - "tests/consolidation/test_profile_charter_e2e.py"
-  - "tests/docs/test_doc_status_durable.py"
-  - "tests/docs/test_docs_structural_lint.py"
-  - "tests/docs/test_touched_set_gates.py"
-  - "tests/integration/test_pack_enhances_partial_fields.py"
-authoritative_surface: "src/charter/offering/"
-create_intent: []
-agent_profile: "lexical-larry"
-role: "implementer"
-agent: "claude"
+work_package_id: WP19
+title: Identifier rename R1 — offering, facades, kernel
+dependencies:
+- WP14
+- WP16
+- WP17
+- WP18
+requirement_refs:
+- FR-010
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T092
+- T093
+- T094
+phase: Phase 5 - Names
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: lexical-larry
+authoritative_surface: src/charter/offering/
+create_intent: []
+execution_mode: code_change
+owned_files:
+- src/charter/README.md
+- src/charter/assets.py
+- src/charter/glossary_packs.py
+- src/charter/mission_steps.py
+- src/charter/missions.py
+- src/charter/model_routing.py
+- src/charter/offering/README.md
+- src/charter/offering/__init__.py
+- src/charter/offering/agent_profiles/README.md
+- src/charter/offering/agent_profiles/diagnostics.py
+- src/charter/offering/agent_profiles/profile.py
+- src/charter/offering/agent_profiles/repository.py
+- src/charter/offering/api.py
+- src/charter/offering/assets/models.py
+- src/charter/offering/assets/repository.py
+- src/charter/offering/base.py
+- src/charter/offering/directives/README.md
+- src/charter/offering/directives/models.py
+- src/charter/offering/directives/repository.py
+- src/charter/offering/discovery_recursion.py
+- src/charter/offering/drg/README.md
+- src/charter/offering/drg/__init__.py
+- src/charter/offering/drg/loader.py
+- src/charter/offering/drg/migration/__init__.py
+- src/charter/offering/drg/migration/extractor.py
+- src/charter/offering/drg/migration/id_normalizer.py
+- src/charter/offering/drg/models.py
+- src/charter/offering/drg/org_pack_loader.py
+- src/charter/offering/drg/query.py
+- src/charter/offering/drg/reachability.py
+- src/charter/offering/glossary_packs/__init__.py
+- src/charter/offering/glossary_packs/repository.py
+- src/charter/offering/missions/action_index.py
+- src/charter/offering/missions/expected_artifact_manifest.py
+- src/charter/offering/missions/glossary_hook.py
+- src/charter/offering/missions/mission_step_repository.py
+- src/charter/offering/missions/models.py
+- src/charter/offering/missions/repository.py
+- src/charter/offering/missions/step_contracts.py
+- src/charter/offering/missions/step_offer_seam.py
+- src/charter/offering/missions/step_projection.py
+- src/charter/offering/model_task_routing/evaluator.py
+- src/charter/offering/model_task_routing/loader.py
+- src/charter/offering/pack_paths.py
+- src/charter/offering/pack_skills/repository.py
+- src/charter/offering/paradigms/README.md
+- src/charter/offering/paradigms/models.py
+- src/charter/offering/paradigms/repository.py
+- src/charter/offering/procedures/models.py
+- src/charter/offering/procedures/repository.py
+- src/charter/offering/procedures/validation.py
+- src/charter/offering/provenance.py
+- src/charter/offering/resolver.py
+- src/charter/offering/schemas/directive.schema.yaml
+- src/charter/offering/schemas/import-candidate.schema.yaml
+- src/charter/offering/schemas/mission.schema.yaml
+- src/charter/offering/schemas/model-to-task_type.schema.yaml
+- src/charter/offering/schemas/occurrence-map.schema.yaml
+- src/charter/offering/schemas/paradigm.schema.yaml
+- src/charter/offering/schemas/procedure.schema.yaml
+- src/charter/offering/schemas/skill.schema.yaml
+- src/charter/offering/schemas/styleguide.schema.yaml
+- src/charter/offering/schemas/tactic.schema.yaml
+- src/charter/offering/schemas/toolguide.schema.yaml
+- src/charter/offering/shared/__init__.py
+- src/charter/offering/shared/errors.py
+- src/charter/offering/shared/exceptions.py
+- src/charter/offering/shared/schema_utils.py
+- src/charter/offering/spdd_reasons/__init__.py
+- src/charter/offering/spdd_reasons/template_renderer.py
+- src/charter/offering/styleguides/repository.py
+- src/charter/offering/tactics/README.md
+- src/charter/offering/tactics/repository.py
+- src/charter/offering/template_catalog.py
+- src/charter/offering/templates/README.md
+- src/charter/offering/templates/agent-onboarding/decomposition-table-template.md
+- src/charter/offering/templates/agent-onboarding/onboarded-artifact-set-template.md
+- src/charter/offering/templates/agent-onboarding/source-agent-dossier-template.md
+- src/charter/offering/templates/architecture/c4-container-mermaid-template.md
+- src/charter/offering/templates/architecture/stakeholder-persona-template.md
+- src/charter/offering/templates/architecture/user-journey-template.md
+- src/charter/offering/templates/diagrams/plantuml/themes/plantuml-theme-bluegray-conversation-template.md
+- src/charter/offering/toolguides/models.py
+- src/charter/offering/toolguides/repository.py
+- src/charter/offering/versioning.py
+- src/charter/pack_paths.py
+- src/charter/primitives.py
+- src/charter/profiles.py
+- src/charter/provenance.py
+- src/charter/repository_protocol.py
+- src/charter/resolution.py
+- src/charter/spdd_reasons.py
+- src/charter/template_catalog.py
+- src/charter/versioning.py
+- src/kernel/__init__.py
+- src/kernel/errors.py
+- src/kernel/glossary_runner.py
+- src/kernel/glossary_types.py
+- src/kernel/paths.py
+- src/kernel/pyproject.toml
+- src/kernel/schema_utils.py
+- src/kernel/sibling_paths.py
+- tests/architectural/_sole_door_scan.py
+- tests/charter/test_activate_resolves_no_answers_edit.py
+- tests/charter/test_builder_overlay_seam.py
+- tests/charter/test_catalog_completeness_4785.py
+- tests/charter/test_charter_whole_kind_invariants.py
+- tests/charter/test_compiler_scope_filtered_placeholder.py
+- tests/charter/test_context.py
+- tests/charter/test_context_selection_render.py
+- tests/charter/test_context_service_seams.py
+- tests/charter/test_doctrine_service_lineage_accessor.py
+- tests/charter/test_doctrine_service_unfiltered_mode.py
+- tests/charter/test_mission_type_profile_override.py
+- tests/charter/test_mission_type_profiles.py
+- tests/charter/test_model_task_routing_resolves.py
+- tests/charter/test_profile_channel_delivery.py
+- tests/charter/test_repository_protocol.py
+- tests/consolidation/test_profile_charter_e2e.py
+- tests/docs/test_doc_status_durable.py
+- tests/docs/test_docs_structural_lint.py
+- tests/docs/test_touched_set_gates.py
+- tests/integration/test_pack_enhances_partial_fields.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP19 – Identifier rename R1 — offering, facades, kernel

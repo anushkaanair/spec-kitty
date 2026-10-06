@@ -1,31 +1,44 @@
 ---
-work_package_id: "WP24"
-title: "Glossary, changelog and runbook"
-subtasks: ["T107", "T108", "T109", "T110", "T115"]
-dependencies: ["WP22"]
-requirement_refs: ["FR-013", "FR-017", "SC-005"]
-task_type: "implement"
-phase: "Phase 6 - Messaging and closeout"
-execution_mode: "code_change"
-owned_files:
-  - "docs/context/charter.md"
-  - ".kittify/glossaries/spec_kitty_core.yaml"
-  - "packs/built-in/glossary_packs/spec-kitty-core.glossary-pack.yaml"
-  - "docs/changelog/CHANGELOG.md"
-  - "docs/migrations/charter-pack-cutover.md"
-  - "docs/migrations/doctrine-local-overlay-to-org-layer.md"
-  - "docs/migrations/relocate-builtin-doctrine-packs.md"
-  - "docs/migrations/index.md"
-authoritative_surface: "docs/context/charter.md"
-create_intent:
-  - "docs/migrations/charter-pack-cutover.md"
-agent_profile: "scribe-sally"
-role: "implementer"
-agent: "claude"
+work_package_id: WP24
+title: Glossary, changelog and runbook
+dependencies:
+- WP22
+requirement_refs:
+- FR-013
+- FR-017
+- SC-005
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T107
+- T108
+- T109
+- T110
+- T115
+phase: Phase 6 - Messaging and closeout
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: scribe-sally
+authoritative_surface: docs/context/charter.md
+create_intent:
+- docs/migrations/charter-pack-cutover.md
+execution_mode: code_change
+owned_files:
+- docs/context/charter.md
+- .kittify/glossaries/spec_kitty_core.yaml
+- packs/built-in/glossary_packs/spec-kitty-core.glossary-pack.yaml
+- docs/changelog/CHANGELOG.md
+- docs/migrations/charter-pack-cutover.md
+- docs/migrations/doctrine-local-overlay-to-org-layer.md
+- docs/migrations/relocate-builtin-doctrine-packs.md
+- docs/migrations/index.md
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP24 – Glossary, changelog and runbook

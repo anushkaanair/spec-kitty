@@ -1,100 +1,112 @@
 ---
-work_package_id: "WP17"
-title: "Three meanings, three names; `charter_pack_id`"
-subtasks: ["T083", "T084", "T085", "T086", "T087"]
-dependencies: ["WP05"]
-requirement_refs: ["FR-009", "FR-010"]
-task_type: "implement"
-phase: "Phase 5 - Names"
-execution_mode: "code_change"
-owned_files:
-  - "src/charter/offering/packs/retired_fields.py"
-  - "tests/charter/test_retired_pack_fields.py"
-  - "src/charter/activation/pack_context.py"
-  - "src/charter/activation/activations.py"
-  - "src/charter/activation/consistency_check.py"
-  - "src/charter/activation/scope.py"
-  - "src/charter/activation/context_renderers/template_include.py"
-  - "src/charter/activation/ERROR_CODES.md"
-  - "src/charter/offering/spdd_reasons/activation.py"
-  - "src/charter/offering/missions/mission_type_repository.py"
-  - "src/runtime/next/decision.py"
-  - "src/runtime/next/prompt_builder.py"
-  - "src/specify_cli/charter_activate.py"
-  - "src/specify_cli/cli/commands/agent/mission_create.py"
-  - "src/specify_cli/cli/commands/agent/tasks_status_cmd.py"
-  - "src/specify_cli/cli/commands/charter/deactivate.py"
-  - "src/specify_cli/core/mission_creation.py"
-  - "src/specify_cli/core/mission_creation_scaffold.py"
-  - "src/specify_cli/tool_surface/enums.py"
-  - "src/specify_cli/tool_surface/bundles/claude.py"
-  - "src/specify_cli/tool_surface/bundles/copilot.py"
-  - "src/specify_cli/tool_surface/bundles/projection.py"
-  - "src/specify_cli/tool_surface/providers/managed_skills.py"
-  - "src/specify_cli/skills/installer.py"
-  - "src/specify_cli/skills/command_installer.py"
-  - "src/specify_cli/upgrade/assessment.py"
-  - "src/specify_cli/.contextive/execution.yml"
-  - "docs/context/execution.md"
-  - "docs/configuration/yaml-libraries.md"
-  - "docs/api/orchestrator-api.md"
-  - "tests/_factories/__init__.py"
-  - "tests/architectural/test_json_contract_enumeration.py"
-  - "tests/charter/test_activation_authority.py"
-  - "tests/charter/test_activations.py"
-  - "tests/charter/test_charter_scope_config_reader.py"
-  - "tests/charter/test_charter_yaml_model.py"
-  - "tests/charter/test_cli_boundary_config_mapping.py"
-  - "tests/charter/test_context_activation_render.py"
-  - "tests/charter/test_context_include.py"
-  - "tests/charter/test_context_org_governance.py"
-  - "tests/charter/test_context_render_seams.py"
-  - "tests/charter/test_issue_5409_anti_pattern_activation.py"
-  - "tests/charter/test_mission_type_activation_gating.py"
-  - "tests/charter/test_org_activations_reach_context.py"
-  - "tests/charter/test_org_activations_resolution.py"
-  - "tests/charter/test_org_scan_dirs_activation_regression.py"
-  - "tests/charter/test_pack_context.py"
-  - "tests/charter/test_pack_context_charter_yaml.py"
-  - "tests/charter/test_schemas_selection.py"
-  - "tests/charter/test_tension_cascade_exclusion.py"
-  - "tests/cli/test_mission_type_malformed_yaml_cli_boundary.py"
-  - "tests/core/golden/mission_create_refusals.json"
-  - "tests/core/test_mission_create_activation_gate.py"
-  - "tests/core/test_mission_creation_decomposition.py"
-  - "tests/core/test_mission_creation_owned_charter.py"
-  - "tests/integration/test_user_doctrine_artifact_lifecycle.py"
-  - "tests/next/test_cli_boundary_scope_config_4600.py"
-  - "tests/specify_cli/cli/commands/agent/test_mission_create.py"
-  - "tests/specify_cli/cli/commands/agent/test_mission_create_json_remediation.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_activate_commands_cascade_flags.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_activate_commands_cascade_output.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_activate_commands_core.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_deactivate_commands.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_list_commands.py"
-  - "tests/specify_cli/skills/test_crlf_skill_render_4998.py"
-  - "tests/specify_cli/skills/test_installer.py"
-  - "tests/specify_cli/test_charter_activate_cli.py"
-  - "tests/specify_cli/test_requirement_mapping.py"
-  - "tests/specify_cli/tool_surface/bundles/_support.py"
-  - "tests/specify_cli/tool_surface/bundles/test_claude.py"
-  - "tests/specify_cli/tool_surface/integration/test_doctor_tool_surfaces_cli.py"
-  - "tests/specify_cli/tool_surface/integration/test_migration_compat.py"
-  - "tests/specify_cli/tool_surface/providers/test_managed_skills.py"
-  - "tests/specify_cli/tool_surface/providers/test_plugin_bundle.py"
-  - "tests/specify_cli/tool_surface/test_docs.py"
-  - "tests/specify_cli/tool_surface/test_registry.py"
-authoritative_surface: "src/charter/activation/"
-create_intent:
-  - "src/charter/offering/packs/retired_fields.py"
-  - "tests/charter/test_retired_pack_fields.py"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP17
+title: Three meanings, three names; `charter_pack_id`
+dependencies:
+- WP05
+requirement_refs:
+- FR-009
+- FR-010
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T083
+- T084
+- T085
+- T086
+- T087
+phase: Phase 5 - Names
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/charter/activation/
+create_intent:
+- src/charter/offering/packs/retired_fields.py
+- tests/charter/test_retired_pack_fields.py
+execution_mode: code_change
+owned_files:
+- src/charter/offering/packs/retired_fields.py
+- tests/charter/test_retired_pack_fields.py
+- src/charter/activation/pack_context.py
+- src/charter/activation/activations.py
+- src/charter/activation/consistency_check.py
+- src/charter/activation/scope.py
+- src/charter/activation/context_renderers/template_include.py
+- src/charter/activation/ERROR_CODES.md
+- src/charter/offering/spdd_reasons/activation.py
+- src/charter/offering/missions/mission_type_repository.py
+- src/runtime/next/decision.py
+- src/runtime/next/prompt_builder.py
+- src/specify_cli/charter_activate.py
+- src/specify_cli/cli/commands/agent/mission_create.py
+- src/specify_cli/cli/commands/agent/tasks_status_cmd.py
+- src/specify_cli/cli/commands/charter/deactivate.py
+- src/specify_cli/core/mission_creation.py
+- src/specify_cli/core/mission_creation_scaffold.py
+- src/specify_cli/tool_surface/enums.py
+- src/specify_cli/tool_surface/bundles/claude.py
+- src/specify_cli/tool_surface/bundles/copilot.py
+- src/specify_cli/tool_surface/bundles/projection.py
+- src/specify_cli/tool_surface/providers/managed_skills.py
+- src/specify_cli/skills/installer.py
+- src/specify_cli/skills/command_installer.py
+- src/specify_cli/upgrade/assessment.py
+- src/specify_cli/.contextive/execution.yml
+- docs/context/execution.md
+- docs/configuration/yaml-libraries.md
+- docs/api/orchestrator-api.md
+- tests/_factories/__init__.py
+- tests/architectural/test_json_contract_enumeration.py
+- tests/charter/test_activation_authority.py
+- tests/charter/test_activations.py
+- tests/charter/test_charter_scope_config_reader.py
+- tests/charter/test_charter_yaml_model.py
+- tests/charter/test_cli_boundary_config_mapping.py
+- tests/charter/test_context_activation_render.py
+- tests/charter/test_context_include.py
+- tests/charter/test_context_org_governance.py
+- tests/charter/test_context_render_seams.py
+- tests/charter/test_issue_5409_anti_pattern_activation.py
+- tests/charter/test_mission_type_activation_gating.py
+- tests/charter/test_org_activations_reach_context.py
+- tests/charter/test_org_activations_resolution.py
+- tests/charter/test_org_scan_dirs_activation_regression.py
+- tests/charter/test_pack_context.py
+- tests/charter/test_pack_context_charter_yaml.py
+- tests/charter/test_schemas_selection.py
+- tests/charter/test_tension_cascade_exclusion.py
+- tests/cli/test_mission_type_malformed_yaml_cli_boundary.py
+- tests/core/golden/mission_create_refusals.json
+- tests/core/test_mission_create_activation_gate.py
+- tests/core/test_mission_creation_decomposition.py
+- tests/core/test_mission_creation_owned_charter.py
+- tests/integration/test_user_doctrine_artifact_lifecycle.py
+- tests/next/test_cli_boundary_scope_config_4600.py
+- tests/specify_cli/cli/commands/agent/test_mission_create.py
+- tests/specify_cli/cli/commands/agent/test_mission_create_json_remediation.py
+- tests/specify_cli/cli/commands/charter/test_charter_activate_commands_cascade_flags.py
+- tests/specify_cli/cli/commands/charter/test_charter_activate_commands_cascade_output.py
+- tests/specify_cli/cli/commands/charter/test_charter_activate_commands_core.py
+- tests/specify_cli/cli/commands/charter/test_charter_deactivate_commands.py
+- tests/specify_cli/cli/commands/charter/test_charter_list_commands.py
+- tests/specify_cli/skills/test_crlf_skill_render_4998.py
+- tests/specify_cli/skills/test_installer.py
+- tests/specify_cli/test_charter_activate_cli.py
+- tests/specify_cli/test_requirement_mapping.py
+- tests/specify_cli/tool_surface/bundles/_support.py
+- tests/specify_cli/tool_surface/bundles/test_claude.py
+- tests/specify_cli/tool_surface/integration/test_doctor_tool_surfaces_cli.py
+- tests/specify_cli/tool_surface/integration/test_migration_compat.py
+- tests/specify_cli/tool_surface/providers/test_managed_skills.py
+- tests/specify_cli/tool_surface/providers/test_plugin_bundle.py
+- tests/specify_cli/tool_surface/test_docs.py
+- tests/specify_cli/tool_surface/test_registry.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP17 – Three meanings, three names; `charter_pack_id`

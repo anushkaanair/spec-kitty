@@ -1,179 +1,188 @@
 ---
-work_package_id: "WP22"
-title: "Prose in packs and living docs"
-subtasks: ["T101", "T102", "T103", "T104"]
-dependencies: ["WP18", "WP21"]
-requirement_refs: ["FR-010"]
-task_type: "implement"
-phase: "Phase 5 - Names"
-execution_mode: "code_change"
-owned_files:
-  # packs (tier-sense prose; content sense kept)
-  - "packs/built-in/agent_profiles/README.md"
-  - "packs/built-in/agent_profiles/curator-carla.agent.yaml"
-  - "packs/built-in/agent_profiles/drupal-dries.agent.yaml"
-  - "packs/built-in/agent_profiles/retrospective-facilitator.agent.yaml"
-  - "packs/built-in/assets/README.md"
-  - "packs/built-in/assets/docs_structural_lint.config.yaml"
-  - "packs/built-in/assets/docs_structural_lint.py"
-  - "packs/built-in/directives/038-structured-prompt-boundary.directive.yaml"
-  - "packs/built-in/directives/042-common-docs.directive.yaml"
-  - "packs/built-in/directives/044-canonical-sources-and-unification.directive.yaml"
-  - "packs/built-in/directives/046-readable-consistent-prs.directive.yaml"
-  - "packs/built-in/directives/048-version-governance.directive.yaml"
-  - "packs/built-in/directives/051-supply-chain-install-safety.directive.yaml"
-  - "packs/built-in/directives/reconcile-change-scope-tensions.directive.yaml"
-  - "packs/built-in/missions/built_in_step_contracts/research-scoping.step-contract.yaml"
-  - "packs/built-in/missions/documentation/actions/retrospect/index.yaml"
-  - "packs/built-in/missions/documentation/governance-profile.yaml"
-  - "packs/built-in/missions/plan/actions/plan/index.yaml"
-  - "packs/built-in/missions/plan/actions/research/index.yaml"
-  - "packs/built-in/missions/plan/actions/review/index.yaml"
-  - "packs/built-in/missions/plan/actions/specify/index.yaml"
-  - "packs/built-in/missions/plan/governance-profile.yaml"
-  - "packs/built-in/missions/research/actions/retrospect/index.yaml"
-  - "packs/built-in/missions/research/governance-profile.yaml"
-  - "packs/built-in/missions/software-dev/actions/retrospect/index.yaml"
-  - "packs/built-in/missions/software-dev/governance-profile.yaml"
-  - "packs/built-in/pack.md"
-  - "packs/built-in/paradigms/brownfield-onboarding.paradigm.yaml"
-  - "packs/built-in/procedures/adversarial-squad-deployment.procedure.yaml"
-  - "packs/built-in/procedures/disciplined-defect-diagnosis.procedure.yaml"
-  - "packs/built-in/procedures/domain-aware-decision-interview.procedure.yaml"
-  - "packs/built-in/procedures/example-mapping-workshop.procedure.yaml"
-  - "packs/built-in/procedures/migrate-project-guidance-to-spec-kitty-charter.procedure.yaml"
-  - "packs/built-in/procedures/onboard-external-agent-to-pack.procedure.yaml"
-  - "packs/built-in/styleguides/common-docs.styleguide.yaml"
-  - "packs/built-in/styleguides/deployable-skill-authoring.styleguide.yaml"
-  - "packs/built-in/styleguides/writing/README.md"
-  - "packs/built-in/tactics/analysis/forensic-repository-audit.tactic.yaml"
-  - "packs/built-in/tactics/architecture/c4-zoom-in-architecture-documentation.tactic.yaml"
-  - "packs/built-in/tactics/canonical-source-unification.tactic.yaml"
-  - "packs/built-in/tactics/common-docs-scaffold.tactic.yaml"
-  - "packs/built-in/tactics/model-task-routing.tactic.yaml"
-  - "packs/built-in/tactics/pr-agent-worktree-isolation.tactic.yaml"
-  - "packs/built-in/tactics/reasons-canvas-fill.tactic.yaml"
-  - "packs/built-in/tactics/reasons-canvas-review.tactic.yaml"
-  - "packs/built-in/tactics/testing/acceptance-criteria-non-vacuity.tactic.yaml"
-  - "packs/built-in/toolguides/EFFICIENT_LOCAL_TOOLING.md"
-  - "packs/built-in/toolguides/GIT_AGENT_COMMIT_SIGNING.md"
-  - "packs/internal/directives/operator-signal-contract.directive.yaml"
-  - "packs/internal/drg/fragment.yaml"
-  - "packs/internal/procedures/cloud-session-dispatch.procedure.yaml"
-  - "packs/internal/procedures/issue-triage-pass.procedure.yaml"
-  - "packs/internal/procedures/memory-curation-and-escalation.procedure.yaml"
-  - "packs/internal/procedures/project-evolution-postmortem.procedure.yaml"
-  - "packs/internal/skills/issue-triage.skill.md"
-  - "packs/internal/styleguides/spec-kitty-docs-lint-config.styleguide.yaml"
-  - "packs/internal/tactics/branded-deliverable.tactic.yaml"
-  # living docs (tier-sense prose)
-  - "docs/api/batch-api-contract.md"
-  - "docs/api/configuration.md"
-  - "docs/api/environment-variables.md"
-  - "docs/api/retrospective-schema.md"
-  - "docs/architecture/00_landscape/README.md"
-  - "docs/architecture/04_implementation_mapping/code-patterns.md"
-  - "docs/architecture/05_ownership_map.md"
-  - "docs/architecture/assessments/code-as-a-crime-scene-overview.md"
-  - "docs/architecture/calibration/README.md"
-  - "docs/architecture/calibration/documentation.md"
-  - "docs/architecture/calibration/erp-custom.md"
-  - "docs/architecture/calibration/research.md"
-  - "docs/architecture/calibration/software-dev.md"
-  - "docs/architecture/charter-backend-service-future.md"
-  - "docs/architecture/charter-pack-usage-journey.md"
-  - "docs/architecture/charter-synthesis-drg.md"
-  - "docs/architecture/diagrams/01_context/README.md"
-  - "docs/architecture/diagrams/02_containers/README.md"
-  - "docs/architecture/diagrams/03_components/README.md"
-  - "docs/architecture/diagrams/README.md"
-  - "docs/architecture/documentation-mission.md"
-  - "docs/architecture/explanation-index.md"
-  - "docs/architecture/explanation-toc.yml"
-  - "docs/architecture/governed-profile-invocation.md"
-  - "docs/architecture/host-surface-parity.md"
-  - "docs/architecture/index.md"
-  - "docs/architecture/mission-gates.md"
-  - "docs/architecture/mission-system.md"
-  - "docs/architecture/mission-type-resolution.md"
-  - "docs/architecture/org-doctrine-layer.md"
-  - "docs/architecture/post-merge-partition-authority.md"
-  - "docs/architecture/retrospective-learning-loop.md"
-  - "docs/architecture/runtime-loop.md"
-  - "docs/architecture/trail-model.md"
-  - "docs/architecture/vision/README-3.x.md"
-  - "docs/context/audience/internal/lead-developer.md"
-  - "docs/context/audience/internal/maintainer.md"
-  - "docs/context/audience/internal/spec-kitty-cli-runtime.md"
-  - "docs/context/charter-overview.md"
-  - "docs/context/configuration-project-structure.md"
-  - "docs/context/contextive-glossaries.md"
-  - "docs/context/governance-files.md"
-  - "docs/context/governance.md"
-  - "docs/context/index.md"
-  - "docs/context/ops-vs-missions.md"
-  - "docs/context/orchestration.md"
-  - "docs/context/planning-and-tracking.md"
-  - "docs/context/testing-taxonomy.md"
-  - "docs/convergence/charter-fetch.md"
-  - "docs/convergence/doctrine-drg.md"
-  - "docs/convergence/interim-ci-producer.md"
-  - "docs/convergence/landing.md"
-  - "docs/development/agent-fleet.md"
-  - "docs/development/analysis-report-transactions.md"
-  - "docs/development/contributing.md"
-  - "docs/development/getting-started/onboarding-run.md"
-  - "docs/development/how-to/add-architectural-gate-exemption.md"
-  - "docs/development/how-to/create-a-pack-skill.md"
-  - "docs/development/how-to/enable-the-internal-pack.md"
-  - "docs/development/how-to/index.md"
-  - "docs/development/how-to/manage-issue-tracker.md"
-  - "docs/development/how-to/pr-landing.md"
-  - "docs/development/how-to/review-gates.md"
-  - "docs/development/index.md"
-  - "docs/development/reference/coverage-signals.md"
-  - "docs/development/reference/known-friction-points.md"
-  - "docs/development/reference/quality-and-tech-debt-standing-orders.md"
-  - "docs/development/reference/read-side-seam-classification.md"
-  - "docs/development/reference/version-taxonomy.md"
-  - "docs/development/reporting/debrief-styleguide.md"
-  - "docs/development/testing/run-mutation-tests.md"
-  - "docs/development/toc.yml"
-  - "docs/guides/how-to/collaboration/adhoc-specialist-session.md"
-  - "docs/guides/how-to/governance/extend-charter-for-unsupported-language.md"
-  - "docs/guides/how-to/governance/index.md"
-  - "docs/guides/how-to/governance/manage-glossary.md"
-  - "docs/guides/how-to/governance/run-governed-mission.md"
-  - "docs/guides/how-to/governance/setup-governance.md"
-  - "docs/guides/how-to/governance/synthesize-doctrine.md"
-  - "docs/guides/how-to/governance/troubleshoot-charter.md"
-  - "docs/guides/how-to/governance/use-retrospective-learning.md"
-  - "docs/guides/how-to/index.md"
-  - "docs/guides/how-to/installation/tool-surface-upgrade-and-repair.md"
-  - "docs/guides/how-to/missions/review-work-package.md"
-  - "docs/guides/index.md"
-  - "docs/guides/toc.yml"
-  - "docs/guides/tutorials/charter-governed-workflow.md"
-  - "docs/guides/tutorials/claude-code-workflow.md"
-  - "docs/guides/tutorials/index.md"
-  - "docs/index.md"
-  - "docs/llms.txt"
-  - "docs/migrations/cross-repo-e2e-gate.md"
-  - "docs/migrations/feature-flag-deprecation.md"
-  - "docs/migrations/from-charter-2x.md"
-  - "docs/migrations/migration-and-shim-rules.md"
-  - "docs/operations/how-to-maintain.md"
-  - "docs/toc.yml"
-  - "AGENTS.md"
-authoritative_surface: "packs/built-in/"
-create_intent: []
-agent_profile: "lexical-larry"
-role: "implementer"
-agent: "claude"
+work_package_id: WP22
+title: Prose in packs and living docs
+dependencies:
+- WP18
+- WP21
+requirement_refs:
+- FR-010
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T101
+- T102
+- T103
+- T104
+phase: Phase 5 - Names
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: lexical-larry
+authoritative_surface: packs/built-in/
+create_intent: []
+execution_mode: code_change
+owned_files:
+- packs/built-in/agent_profiles/README.md
+- packs/built-in/agent_profiles/curator-carla.agent.yaml
+- packs/built-in/agent_profiles/drupal-dries.agent.yaml
+- packs/built-in/agent_profiles/retrospective-facilitator.agent.yaml
+- packs/built-in/assets/README.md
+- packs/built-in/assets/docs_structural_lint.config.yaml
+- packs/built-in/assets/docs_structural_lint.py
+- packs/built-in/directives/038-structured-prompt-boundary.directive.yaml
+- packs/built-in/directives/042-common-docs.directive.yaml
+- packs/built-in/directives/044-canonical-sources-and-unification.directive.yaml
+- packs/built-in/directives/046-readable-consistent-prs.directive.yaml
+- packs/built-in/directives/048-version-governance.directive.yaml
+- packs/built-in/directives/051-supply-chain-install-safety.directive.yaml
+- packs/built-in/directives/reconcile-change-scope-tensions.directive.yaml
+- packs/built-in/missions/built_in_step_contracts/research-scoping.step-contract.yaml
+- packs/built-in/missions/documentation/actions/retrospect/index.yaml
+- packs/built-in/missions/documentation/governance-profile.yaml
+- packs/built-in/missions/plan/actions/plan/index.yaml
+- packs/built-in/missions/plan/actions/research/index.yaml
+- packs/built-in/missions/plan/actions/review/index.yaml
+- packs/built-in/missions/plan/actions/specify/index.yaml
+- packs/built-in/missions/plan/governance-profile.yaml
+- packs/built-in/missions/research/actions/retrospect/index.yaml
+- packs/built-in/missions/research/governance-profile.yaml
+- packs/built-in/missions/software-dev/actions/retrospect/index.yaml
+- packs/built-in/missions/software-dev/governance-profile.yaml
+- packs/built-in/pack.md
+- packs/built-in/paradigms/brownfield-onboarding.paradigm.yaml
+- packs/built-in/procedures/adversarial-squad-deployment.procedure.yaml
+- packs/built-in/procedures/disciplined-defect-diagnosis.procedure.yaml
+- packs/built-in/procedures/domain-aware-decision-interview.procedure.yaml
+- packs/built-in/procedures/example-mapping-workshop.procedure.yaml
+- packs/built-in/procedures/migrate-project-guidance-to-spec-kitty-charter.procedure.yaml
+- packs/built-in/procedures/onboard-external-agent-to-pack.procedure.yaml
+- packs/built-in/styleguides/common-docs.styleguide.yaml
+- packs/built-in/styleguides/deployable-skill-authoring.styleguide.yaml
+- packs/built-in/styleguides/writing/README.md
+- packs/built-in/tactics/analysis/forensic-repository-audit.tactic.yaml
+- packs/built-in/tactics/architecture/c4-zoom-in-architecture-documentation.tactic.yaml
+- packs/built-in/tactics/canonical-source-unification.tactic.yaml
+- packs/built-in/tactics/common-docs-scaffold.tactic.yaml
+- packs/built-in/tactics/model-task-routing.tactic.yaml
+- packs/built-in/tactics/pr-agent-worktree-isolation.tactic.yaml
+- packs/built-in/tactics/reasons-canvas-fill.tactic.yaml
+- packs/built-in/tactics/reasons-canvas-review.tactic.yaml
+- packs/built-in/tactics/testing/acceptance-criteria-non-vacuity.tactic.yaml
+- packs/built-in/toolguides/EFFICIENT_LOCAL_TOOLING.md
+- packs/built-in/toolguides/GIT_AGENT_COMMIT_SIGNING.md
+- packs/internal/directives/operator-signal-contract.directive.yaml
+- packs/internal/drg/fragment.yaml
+- packs/internal/procedures/cloud-session-dispatch.procedure.yaml
+- packs/internal/procedures/issue-triage-pass.procedure.yaml
+- packs/internal/procedures/memory-curation-and-escalation.procedure.yaml
+- packs/internal/procedures/project-evolution-postmortem.procedure.yaml
+- packs/internal/skills/issue-triage.skill.md
+- packs/internal/styleguides/spec-kitty-docs-lint-config.styleguide.yaml
+- packs/internal/tactics/branded-deliverable.tactic.yaml
+- docs/api/batch-api-contract.md
+- docs/api/configuration.md
+- docs/api/environment-variables.md
+- docs/api/retrospective-schema.md
+- docs/architecture/00_landscape/README.md
+- docs/architecture/04_implementation_mapping/code-patterns.md
+- docs/architecture/05_ownership_map.md
+- docs/architecture/assessments/code-as-a-crime-scene-overview.md
+- docs/architecture/calibration/README.md
+- docs/architecture/calibration/documentation.md
+- docs/architecture/calibration/erp-custom.md
+- docs/architecture/calibration/research.md
+- docs/architecture/calibration/software-dev.md
+- docs/architecture/charter-backend-service-future.md
+- docs/architecture/charter-pack-usage-journey.md
+- docs/architecture/charter-synthesis-drg.md
+- docs/architecture/diagrams/01_context/README.md
+- docs/architecture/diagrams/02_containers/README.md
+- docs/architecture/diagrams/03_components/README.md
+- docs/architecture/diagrams/README.md
+- docs/architecture/documentation-mission.md
+- docs/architecture/explanation-index.md
+- docs/architecture/explanation-toc.yml
+- docs/architecture/governed-profile-invocation.md
+- docs/architecture/host-surface-parity.md
+- docs/architecture/index.md
+- docs/architecture/mission-gates.md
+- docs/architecture/mission-system.md
+- docs/architecture/mission-type-resolution.md
+- docs/architecture/org-doctrine-layer.md
+- docs/architecture/post-merge-partition-authority.md
+- docs/architecture/retrospective-learning-loop.md
+- docs/architecture/runtime-loop.md
+- docs/architecture/trail-model.md
+- docs/architecture/vision/README-3.x.md
+- docs/context/audience/internal/lead-developer.md
+- docs/context/audience/internal/maintainer.md
+- docs/context/audience/internal/spec-kitty-cli-runtime.md
+- docs/context/charter-overview.md
+- docs/context/configuration-project-structure.md
+- docs/context/contextive-glossaries.md
+- docs/context/governance-files.md
+- docs/context/governance.md
+- docs/context/index.md
+- docs/context/ops-vs-missions.md
+- docs/context/orchestration.md
+- docs/context/planning-and-tracking.md
+- docs/context/testing-taxonomy.md
+- docs/convergence/charter-fetch.md
+- docs/convergence/doctrine-drg.md
+- docs/convergence/interim-ci-producer.md
+- docs/convergence/landing.md
+- docs/development/agent-fleet.md
+- docs/development/analysis-report-transactions.md
+- docs/development/contributing.md
+- docs/development/getting-started/onboarding-run.md
+- docs/development/how-to/add-architectural-gate-exemption.md
+- docs/development/how-to/create-a-pack-skill.md
+- docs/development/how-to/enable-the-internal-pack.md
+- docs/development/how-to/index.md
+- docs/development/how-to/manage-issue-tracker.md
+- docs/development/how-to/pr-landing.md
+- docs/development/how-to/review-gates.md
+- docs/development/index.md
+- docs/development/reference/coverage-signals.md
+- docs/development/reference/known-friction-points.md
+- docs/development/reference/quality-and-tech-debt-standing-orders.md
+- docs/development/reference/read-side-seam-classification.md
+- docs/development/reference/version-taxonomy.md
+- docs/development/reporting/debrief-styleguide.md
+- docs/development/testing/run-mutation-tests.md
+- docs/development/toc.yml
+- docs/guides/how-to/collaboration/adhoc-specialist-session.md
+- docs/guides/how-to/governance/extend-charter-for-unsupported-language.md
+- docs/guides/how-to/governance/index.md
+- docs/guides/how-to/governance/manage-glossary.md
+- docs/guides/how-to/governance/run-governed-mission.md
+- docs/guides/how-to/governance/setup-governance.md
+- docs/guides/how-to/governance/synthesize-doctrine.md
+- docs/guides/how-to/governance/troubleshoot-charter.md
+- docs/guides/how-to/governance/use-retrospective-learning.md
+- docs/guides/how-to/index.md
+- docs/guides/how-to/installation/tool-surface-upgrade-and-repair.md
+- docs/guides/how-to/missions/review-work-package.md
+- docs/guides/index.md
+- docs/guides/toc.yml
+- docs/guides/tutorials/charter-governed-workflow.md
+- docs/guides/tutorials/claude-code-workflow.md
+- docs/guides/tutorials/index.md
+- docs/index.md
+- docs/llms.txt
+- docs/migrations/cross-repo-e2e-gate.md
+- docs/migrations/feature-flag-deprecation.md
+- docs/migrations/from-charter-2x.md
+- docs/migrations/migration-and-shim-rules.md
+- docs/operations/how-to-maintain.md
+- docs/toc.yml
+- AGENTS.md
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP22 – Prose in packs and living docs

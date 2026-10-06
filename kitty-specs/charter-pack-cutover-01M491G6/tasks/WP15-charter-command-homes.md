@@ -1,62 +1,77 @@
 ---
-work_package_id: "WP15"
-title: "Charter homes for every doctrine command"
-subtasks: ["T075", "T076", "T077", "T078", "T079"]
-dependencies: ["WP05", "WP08", "WP13", "WP14"]
-requirement_refs: ["FR-006", "SC-004"]
-task_type: "implement"
-phase: "Phase 4 - Removal (no aliases, no shims)"
-execution_mode: "code_change"
-owned_files:
-  - "src/specify_cli/cli/commands/charter/_app.py"
-  - "src/specify_cli/cli/commands/charter/authoring.py"
-  - "src/specify_cli/cli/commands/charter/org.py"
-  - "src/specify_cli/cli/commands/charter/pack_tooling.py"
-  - "src/specify_cli/cli/commands/charter/pack_asset.py"
-  - "src/specify_cli/cli/commands/charter/consistency_check.py"
-  - "src/specify_cli/cli/commands/charter/mission_type.py"
-  - "src/specify_cli/cli/commands/_doctrine_asset.py"
-  - "src/specify_cli/cli/commands/doctor.py"
-  - "src/specify_cli/cli/commands/_cutover_doctor.py"
-  - ".github/workflows/packs.yml"
-  - "Makefile"
-  - "packs/internal/README.md"
-  - "packs/internal/assets/test-quality-scan.py"
-  - "packs/internal/procedures/executive-debrief-generation.procedure.yaml"
-  - "packs/internal/procedures/test-suite-quality-assessment.procedure.yaml"
-  - "packs/internal/skills/report-debrief.skill.md"
-  - "packs/internal/toolguides/TEST_QUALITY_TRIAGE.md"
-  - "packs/internal/toolguides/test-quality-triage.toolguide.yaml"
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_tooling.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_asset.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_consistency_check.py"
-  - "tests/specify_cli/cli/commands/test_doctor_charter_packs.py"
-  - "tests/specify_cli/cli/commands/test_doctor_doctrine_collisions.py"
-  - "tests/specify_cli/cli/commands/test_doctor_doctrine_integrity.py"
-  - "tests/specify_cli/cli/commands/test_doctor_doctrine_org_layer.py"
-  - "tests/specify_cli/cli/commands/test_doctor_doctrine_selections.py"
-  - "tests/specify_cli/cli/commands/test_doctor_cli_surface_golden.py"
-  - "tests/specify_cli/test_doctor_doctrine.py"
-  - "tests/cli/test_doctor_doctrine_selections_snapshot.py"
-  - "tests/architectural/test_doctrine_regenerate_graph_roundtrip.py"
-authoritative_surface: "src/specify_cli/cli/commands/charter/"
-create_intent:
-  - "src/specify_cli/cli/commands/charter/authoring.py"
-  - "src/specify_cli/cli/commands/charter/org.py"
-  - "src/specify_cli/cli/commands/charter/pack_tooling.py"
-  - "src/specify_cli/cli/commands/charter/pack_asset.py"
-  - "src/specify_cli/cli/commands/charter/consistency_check.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_tooling.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_pack_asset.py"
-  - "tests/specify_cli/cli/commands/charter/test_charter_consistency_check.py"
-  - "tests/specify_cli/cli/commands/test_doctor_charter_packs.py"
-agent_profile: "implementer-ivan"
-role: "implementer"
-agent: "claude"
+work_package_id: WP15
+title: Charter homes for every doctrine command
+dependencies:
+- WP05
+- WP08
+- WP13
+- WP14
+requirement_refs:
+- FR-006
+- SC-004
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T075
+- T076
+- T077
+- T078
+- T079
+phase: Phase 4 - Removal (no aliases, no shims)
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: implementer-ivan
+authoritative_surface: src/specify_cli/cli/commands/charter/
+create_intent:
+- src/specify_cli/cli/commands/charter/authoring.py
+- src/specify_cli/cli/commands/charter/org.py
+- src/specify_cli/cli/commands/charter/pack_tooling.py
+- src/specify_cli/cli/commands/charter/pack_asset.py
+- src/specify_cli/cli/commands/charter/consistency_check.py
+- tests/specify_cli/cli/commands/charter/test_charter_pack_tooling.py
+- tests/specify_cli/cli/commands/charter/test_charter_pack_asset.py
+- tests/specify_cli/cli/commands/charter/test_charter_consistency_check.py
+- tests/specify_cli/cli/commands/test_doctor_charter_packs.py
+execution_mode: code_change
+owned_files:
+- src/specify_cli/cli/commands/charter/_app.py
+- src/specify_cli/cli/commands/charter/authoring.py
+- src/specify_cli/cli/commands/charter/org.py
+- src/specify_cli/cli/commands/charter/pack_tooling.py
+- src/specify_cli/cli/commands/charter/pack_asset.py
+- src/specify_cli/cli/commands/charter/consistency_check.py
+- src/specify_cli/cli/commands/charter/mission_type.py
+- src/specify_cli/cli/commands/_doctrine_asset.py
+- src/specify_cli/cli/commands/doctor.py
+- src/specify_cli/cli/commands/_cutover_doctor.py
+- .github/workflows/packs.yml
+- Makefile
+- packs/internal/README.md
+- packs/internal/assets/test-quality-scan.py
+- packs/internal/procedures/executive-debrief-generation.procedure.yaml
+- packs/internal/procedures/test-suite-quality-assessment.procedure.yaml
+- packs/internal/skills/report-debrief.skill.md
+- packs/internal/toolguides/TEST_QUALITY_TRIAGE.md
+- packs/internal/toolguides/test-quality-triage.toolguide.yaml
+- tests/specify_cli/cli/commands/charter/test_charter_pack_tooling.py
+- tests/specify_cli/cli/commands/charter/test_charter_pack_asset.py
+- tests/specify_cli/cli/commands/charter/test_charter_consistency_check.py
+- tests/specify_cli/cli/commands/test_doctor_charter_packs.py
+- tests/specify_cli/cli/commands/test_doctor_doctrine_collisions.py
+- tests/specify_cli/cli/commands/test_doctor_doctrine_integrity.py
+- tests/specify_cli/cli/commands/test_doctor_doctrine_org_layer.py
+- tests/specify_cli/cli/commands/test_doctor_doctrine_selections.py
+- tests/specify_cli/cli/commands/test_doctor_cli_surface_golden.py
+- tests/specify_cli/test_doctor_doctrine.py
+- tests/cli/test_doctor_doctrine_selections_snapshot.py
+- tests/architectural/test_doctrine_regenerate_graph_roundtrip.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP15 – Charter homes for every doctrine command

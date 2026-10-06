@@ -1,38 +1,51 @@
 ---
-work_package_id: "WP14"
-title: "Remove read-side shims; CLI-root legacy gate"
-subtasks: ["T070", "T071", "T072", "T073", "T074"]
-dependencies: ["WP12", "WP13"]
-requirement_refs: ["FR-011", "C-001"]
-task_type: "implement"
-phase: "Phase 4 - Removal (no aliases, no shims)"
-execution_mode: "code_change"
-owned_files:
-  - "src/specify_cli/migration/legacy_charter_gate.py"
-  - "src/specify_cli/__init__.py"
-  - "src/charter/activation/sync.py"
-  - "src/charter/offering/drg/org_pack_config.py"
-  - "src/charter/activation/mission_type_profiles.py"
-  - "src/specify_cli/tracker/config.py"
-  - "src/specify_cli/tracker/local_service.py"
-  - "src/specify_cli/cli/commands/tracker.py"
-  - "tests/specify_cli/migration/test_legacy_charter_gate.py"
-  - "tests/charter/test_governance_fail_closed.py"
-  - "tests/charter/test_governance_key_compat.py"
-  - "tests/agent/cli/commands/test_tracker.py"
-  - "tests/tracker/test_config.py"
-authoritative_surface: "src/specify_cli/migration/legacy_charter_gate.py"
-create_intent:
-  - "src/specify_cli/migration/legacy_charter_gate.py"
-  - "tests/specify_cli/migration/test_legacy_charter_gate.py"
-  - "tests/charter/test_governance_fail_closed.py"
-agent_profile: "python-pedro"
-role: "implementer"
-agent: "claude"
+work_package_id: WP14
+title: Remove read-side shims; CLI-root legacy gate
+dependencies:
+- WP12
+- WP13
+requirement_refs:
+- FR-011
+- C-001
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T070
+- T071
+- T072
+- T073
+- T074
+phase: Phase 4 - Removal (no aliases, no shims)
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: src/specify_cli/migration/legacy_charter_gate.py
+create_intent:
+- src/specify_cli/migration/legacy_charter_gate.py
+- tests/specify_cli/migration/test_legacy_charter_gate.py
+- tests/charter/test_governance_fail_closed.py
+execution_mode: code_change
+owned_files:
+- src/specify_cli/migration/legacy_charter_gate.py
+- src/specify_cli/__init__.py
+- src/charter/activation/sync.py
+- src/charter/offering/drg/org_pack_config.py
+- src/charter/activation/mission_type_profiles.py
+- src/specify_cli/tracker/config.py
+- src/specify_cli/tracker/local_service.py
+- src/specify_cli/cli/commands/tracker.py
+- tests/specify_cli/migration/test_legacy_charter_gate.py
+- tests/charter/test_governance_fail_closed.py
+- tests/charter/test_governance_key_compat.py
+- tests/agent/cli/commands/test_tracker.py
+- tests/tracker/test_config.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP14 – Remove read-side shims; CLI-root legacy gate

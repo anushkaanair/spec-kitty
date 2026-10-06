@@ -1,24 +1,39 @@
 ---
-work_package_id: "WP25"
-title: "Vocabulary gate, reachability pins, gate closeout"
-subtasks: ["T111", "T112", "T113", "T114"]
-dependencies: ["WP22", "WP23", "WP24"]
-requirement_refs: ["FR-014", "FR-018", "NFR-002", "SC-003"]
-task_type: "implement"
-phase: "Phase 6 - Messaging and closeout"
-execution_mode: "code_change"
-owned_files:
-  - "tests/architectural/test_retired_charter_vocabulary.py"
-authoritative_surface: "tests/architectural/test_retired_charter_vocabulary.py"
-create_intent:
-  - "tests/architectural/test_retired_charter_vocabulary.py"
-agent_profile: "reviewer-renata"
-role: "implementer"
-agent: "claude"
+work_package_id: WP25
+title: Vocabulary gate, reachability pins, gate closeout
+dependencies:
+- WP22
+- WP23
+- WP24
+requirement_refs:
+- FR-014
+- FR-018
+- NFR-002
+- SC-003
+planning_base_branch: issue-3732-charter-pack-rename
+merge_target_branch: issue-3732-charter-pack-rename
+branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+subtasks:
+- T111
+- T112
+- T113
+- T114
+phase: Phase 6 - Messaging and closeout
 history:
-  - at: "2026-10-06T19:30:00Z"
-    actor: "system"
-    action: "Prompt generated via /spec-kitty.tasks"
+- at: '2026-10-06T19:30:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: reviewer-renata
+authoritative_surface: tests/architectural/test_retired_charter_vocabulary.py
+create_intent:
+- tests/architectural/test_retired_charter_vocabulary.py
+execution_mode: code_change
+owned_files:
+- tests/architectural/test_retired_charter_vocabulary.py
+role: implementer
+tags: []
+task_type: implement
+tracker_refs: []
 ---
 
 # Work Package Prompt: WP25 – Vocabulary gate, reachability pins, gate closeout
