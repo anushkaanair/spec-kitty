@@ -61,7 +61,7 @@
       "wp": null
     },
     "#5824": {
-      "evidence_ref": "<link or commit>",
+      "evidence_ref": "Cited as out of scope (spec C-005); no work owed by this mission",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -69,7 +69,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "unknown",
+      "verdict": "not-applicable",
       "wp": null
     },
     "#5825": {
