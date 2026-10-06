@@ -117,8 +117,17 @@ def json_key_set(payload: object) -> list[str]:
     return sorted(payload) if isinstance(payload, dict) else []
 
 
+#: Literal markers (test_traceability requires a literal WP id at every call site).
+_FR006_PENDING = {"WP15": pending_until("WP15", "charter home of a former doctrine leaf (FR-006)")}
+_FR007_PENDING = {
+    "WP13": pending_until("WP13", "`charter pack apply` removed (FR-005)"),
+    "WP15": pending_until("WP15", "old spelling removed with its charter home (FR-006)"),
+    "WP16": pending_until("WP16", "`spec-kitty doctrine` group removed (FR-007)"),
+}
+
+
 def _leaf_param(leaf: Leaf) -> object:
-    marks = [pending_until(leaf.pending, f"charter home of `{' '.join(leaf.old)}`")] if leaf.pending else []
+    marks = [_FR006_PENDING[leaf.pending]] if leaf.pending else []
     return pytest.param(leaf, id=leaf.key, marks=marks)
 
 
@@ -134,7 +143,7 @@ def _recorded() -> dict[str, dict[str, object]]:
 # --------------------------------------------------------------------------------------
 
 
-@covers("FR-006", "SC-004", "US3-1")
+@covers("FR-006", "SC-004", "US3-1", "OD-8")
 @pytest.mark.integration
 @pytest.mark.git_repo
 @pytest.mark.parametrize("leaf", [_leaf_param(leaf) for leaf in DOCTRINE_LEAVES])
@@ -215,7 +224,7 @@ def _removed_rows() -> list[Removed]:
 @pytest.mark.git_repo
 @pytest.mark.parametrize(
     "row",
-    [pytest.param(r, id=r.key, marks=pending_until(r.pending, f"`{' '.join(r.old)}` is removed")) for r in _removed_rows()],
+    [pytest.param(r, id=r.key, marks=_FR007_PENDING[r.pending]) for r in _removed_rows()],
 )
 def test_fr007_old_spelling_exits_2(row: Removed, tmp_path: Path) -> None:
     project = build_doctrine_command_fixture(tmp_path / "doctrine-commands")

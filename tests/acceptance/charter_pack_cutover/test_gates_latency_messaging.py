@@ -168,8 +168,15 @@ GATE_ROWS: tuple[GateRow, ...] = (
 )
 
 
+_GATE_PENDING = {
+    "WP05": pending_until("WP05", "census/boundary exemptions for the old package removed (NFR-002)"),
+    "WP16": pending_until("WP16", "doctrine-group gates closed (NFR-002)"),
+    "WP25": pending_until("WP25", "FR-016/FR-018 gate allowlists close empty (NFR-002)"),
+}
+
+
 def _gate_param(row: GateRow) -> Any:
-    marks = [pending_until(row.pending, f"NFR-002 {row.key}")] if row.pending else []
+    marks = [_GATE_PENDING[row.pending]] if row.pending else []
     return pytest.param(row, id=row.key, marks=marks)
 
 
