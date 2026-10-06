@@ -13,6 +13,7 @@ import ast
 import importlib
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 from click.testing import Result
@@ -61,8 +62,7 @@ def _interview(project: Path) -> Result:
 
 
 def _prepare_org_charter_union(project: Path) -> None:
-    seeded = run_cli(["charter", "interview", "--defaults"], project)
-    assert seeded.exit_code == 0, describe(seeded)
+    """Org pack 1 requires a directive and a tactic; the union caller is the interview that reads it."""
     write_yaml(
         project / ORG_PACK_DIR / "org-charter.yaml",
         {"schema_version": "1", "org_name": "acme", "required_directives": [ORG_DIRECTIVE_ID], "required_tactics": [ORG_TACTIC_ID]},
@@ -71,7 +71,9 @@ def _prepare_org_charter_union(project: Path) -> None:
 
 
 def _org_charter_union(project: Path) -> Result:
-    return run_cli(["charter", "generate", "--from-interview", "--force"], project)
+    # ``apply_org_charter_to_interview`` -> ``_promote_org_required_to_config`` runs only from
+    # ``charter interview``. No ``--selected-*`` here: the union, not the operator, promotes.
+    return run_cli(["charter", "interview", "--defaults"], project)
 
 
 def _upgrade_unify(project: Path) -> Result:
@@ -91,9 +93,17 @@ def _upgrade_unify(project: Path) -> Result:
 
 
 def _prepare_resynthesize(project: Path) -> None:
-    for argv in (["charter", "interview", "--defaults"], ["charter", "generate", "--from-interview", "--force"]):
-        seeded = run_cli(argv, project)
-        assert seeded.exit_code == 0, describe(seeded)
+    """Interview answers present, every activation key absent again.
+
+    With the key absent the resynthesis preflight must seed its proposed selection; the
+    effective-set rule (WP06) seeds it from the effective set, the base seeds it from the
+    narrow ``default.yaml`` list.
+    """
+    original = load_yaml(project / ".kittify" / "config.yaml")
+    seeded = run_cli(["charter", "interview", "--defaults"], project)
+    assert seeded.exit_code == 0, describe(seeded)
+    finish(project, original)
+    assert not [k for k in active_charter(project) if k.startswith("activated_")], "precondition: the keys are absent again"
 
 
 def _resynthesize(project: Path) -> Result:
@@ -118,38 +128,72 @@ CALLERS: dict[str, Callable[[Path], Result]] = {
     "resynthesize": _resynthesize,
 }
 
-
-#: The resynthesis caller already preserves the effective set at base (the activation
-#: write is #4253-preserving; the synthesis step then needs agent-generated artifacts the
-#: fixture does not have), so its row is an unmarked regression guard.
-BASE_PASSING_CALLERS = frozenset({"resynthesize"})
+#: Where the resynthesis preflight hands its proposed selection to the resolver.
+PREFLIGHT_MODULE = "specify_cli.cli.commands.charter._resynthesis_preflight"
+PREFLIGHT_RESOLVER = "resolve_config_activated_roots"
 
 
-def _caller_param(caller: str) -> object:
-    if caller in BASE_PASSING_CALLERS:
-        return pytest.param(caller, id=caller)
-    return pytest.param(caller, id=caller, marks=pending_until("WP06", f"{caller} promotes from the effective set"))
+def _spy_on_preflight(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """Record the ``pack_context`` the resynthesis preflight proposes (it writes nothing itself)."""
+    module = importlib.import_module(PREFLIGHT_MODULE)
+    real = getattr(module, PREFLIGHT_RESOLVER)
+    proposals: list[Any] = []
+
+    def spy(*args: Any, **kwargs: Any) -> Any:
+        proposals.append(kwargs.get("pack_context"))
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(module, PREFLIGHT_RESOLVER, spy)
+    return proposals
+
+
+def _assert_preflight_seeded_from_effective_set(proposals: list[Any], project: Path) -> None:
+    """The preflight's proposed directive selection covers the selection the activation wrote.
+
+    The activation write already preserves the effective set at base (#4253), so the written
+    key is the reference; both sides are config ids.
+    """
+    assert proposals and proposals[-1] is not None, "control: the resynthesis preflight ran"
+    proposed = set(proposals[-1].activated_directives or ())
+    written_value = active_charter(project).get("activated_directives")
+    assert isinstance(written_value, list), written_value
+    written = {str(i) for i in written_value}
+    assert PROMOTED_DIRECTIVE in proposed, "control: the preflight proposes the requested directive"
+    narrowed = sorted(written - proposed)
+    assert not narrowed, f"the resynthesis preflight seeded a narrower set than the activation wrote: {narrowed}"
+
+
+#: The synthesis step that follows a resynthesizing activation needs the agent-authored
+#: artifacts under ``.kittify/charter/generated/`` (one per interview target, the
+#: ``how-we-apply-*`` tactics included), which this fixture deliberately does not provide.
+#: The command therefore exits 1 there, after the preflight and the activation write.
+SYNTHESIS_NEEDS_GENERATED_ARTIFACTS = "GeneratedArtifactMissingError"
 
 
 def _assert_caller_ran(caller: str, result: Result) -> None:
-    if caller == "resynthesize":
-        assert "Activated:" in output_of(result), describe(result)
-    else:
+    if caller != "resynthesize":
         assert result.exit_code == 0, describe(result)
+        return
+    text = output_of(result)
+    assert result.exit_code == 1, describe(result)
+    assert "Activated" in text and SYNTHESIS_NEEDS_GENERATED_ARTIFACTS in text, describe(result)
 
 
 @covers("FR-015", "US5-1")
-@pytest.mark.parametrize("caller", [_caller_param(c) for c in CALLERS])
-def test_fr015_promotion_preserves_effective_set(caller: str, tmp_path: Path, charter_cwd_isolation: Callable[..., Path]) -> None:
+@pytest.mark.parametrize("caller", [pytest.param(c, id=c, marks=pending_until("WP06", f"{c} promotes from the effective set")) for c in CALLERS])
+def test_fr015_promotion_preserves_effective_set(caller: str, tmp_path: Path, charter_cwd_isolation: Callable[..., Path], monkeypatch: pytest.MonkeyPatch) -> None:
     project = _fixture(tmp_path)
     charter_cwd_isolation(project)
     PREPARE[caller](project)
     inventory = builtin_inventory()
     before = expand(effective_set(project, inventory), inventory)
     assert ORG2_DIRECTIVE_ID in before["directives"] and ORG_DIRECTIVE_ID in before["directives"]
+    proposals = _spy_on_preflight(monkeypatch) if caller == "resynthesize" else []
     result = CALLERS[caller](project)
     _assert_caller_ran(caller, result)
     assert "activated_directives" in active_charter(project), "control: the caller promoted the directive key"
+    if caller == "resynthesize":
+        _assert_preflight_seeded_from_effective_set(proposals, project)
     after = expand(effective_set(project, inventory), inventory)
     lost = {kind: sorted(before[kind] - after[kind]) for kind in before if before[kind] - after[kind]}
     assert not lost, f"{caller} narrowed the effective set: {lost}"
