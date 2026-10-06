@@ -2,7 +2,7 @@
 
 **Mission Branch**: `issue-3732-charter-pack-rename`
 **Created**: 2026-10-06
-**Status**: Draft (post-spec squad folded 2026-10-06; owner decisions OD-1..OD-10 pending)
+**Status**: Draft (post-spec squad folded; owner decisions OD-1..OD-10 ruled 2026-10-06)
 **Input**: Issue #3732 (rename doctrine packs to charter packs), bound by ADR `docs/adr/4.x/2026-10-06-1-charter-offering-active-charter-and-activation-presets.md` (owner ruling, 2026-10-06); absorbs #4400, #5323, #5826, the legacy-key half of #4573 and the pack-path half of #5825. Requirement set confirmed by the owner in brief-intake mode on 2026-10-06; revised after the post-spec adversarial squad (architecture, testability, consumer impact).
 
 ## Bulk edit declaration
@@ -138,7 +138,7 @@ The charter interview, the org-charter union, the unify-activation upgrade step 
 | FR-007 | Remove the doctrine command group | As an operator, I want `spec-kitty doctrine` removed so that only one command surface exists; old spellings fail through the unknown-command path (OD-3). | High | Open | [build] | no |
 | FR-008 | Skill families | As an agent, I want the charter-governance skills named `spk-charter-{governance,glossary,profile-load,spdd-reasons}` and the practice skills `spk-practice-{bulk-edit,semantic-compression,show-me}`, the older skills that back them (`spec-kitty-charter-doctrine`, `spec-kitty-glossary-context`, `spec-kitty-bulk-edit-classification`, `spec-kitty-spdd-reasons`, `ad-hoc-profile-load`; wider scope per OD-7) folded in and deleted, every removed name added to `RETIRED_CANONICAL_SKILL_NAMES` so project and user-global roots drop them, historical skill migrations that read deleted sources neutralised, and generated agent copies and manifests regenerated. `doctrine-daphne` is unchanged. | High | Open | [build] | no |
 | FR-009 | Three meanings, three names | As a maintainer, I want the code to separate Charter Pack, activation preset and active charter, renaming `CharterPackManager`, `CharterPackConfigError` and the JSON error code `CHARTER_PACK_CONFIG_INVALID` (golden `mission_create_refusals.json` updated, listed in the changelog Before/After), with no re-export alias. | Medium | Open | [build] | no |
-| FR-010 | Rename retired-tier wording | As an agent or contributor, I want retired-tier "doctrine" wording in living code, packs and docs renamed per the occurrence map, including the `src/specify_cli/doctrine/` package (target name OD-9) with its architectural census/boundary exemptions and `pyproject.toml` entries moved atomically, and `doctrine_pack_id` per OD-1. | High | Open | [build] | no |
+| FR-010 | Rename retired-tier wording | As an agent or contributor, I want retired-tier "doctrine" wording in living code, packs and docs renamed per the occurrence map, including the `src/specify_cli/doctrine/` package, split by meaning (OD-9): pack model and tooling to `charter.offering.packs`, org charter composition to `charter.activation`, fetching and scaffolding adapters to `specify_cli.charter_packs`, with its architectural census/boundary exemptions removed (not moved) and `pyproject.toml` entries updated atomically, and `doctrine_pack_id` per OD-1. | High | Open | [build] | no |
 | FR-011 | Remove read-side shims | As a maintainer, I want the `doctrine.org.*`, `organisation_packs` (OD-4), `governance.doctrine.*` and `.kittify/doctrine/` read fallbacks, `apply_legacy_governance_selection_key_compat` and `LegacyDoctrineRootWarning` removed, with one detection seam at the CLI root that fails every command except `upgrade`, `init` and `--version` on an unmigrated project, naming `spec-kitty upgrade` and the runbook. `PackContext.from_config` stays total. | High | Open | [build] | no |
 | FR-012 | One upgrade migration | As an operator, I want one idempotent upgrade migration that runs **before every other pending migration** and rewrites the inventory below, so that my project keeps working after the cutover. The rc35 default-pack migration becomes a recorded no-op. Results (moved, rewritten, reset, kept-for-review) go to the migration result and the upgrade summary. | High | Open | [build] | no |
 | FR-013 | Glossary and citations | As a reader, I want `docs/context/charter.md` to define charter offering, Charter Pack, activation preset, active charter, project layer and Charter Bundle; retire or redirect Doctrine Pack, Doctrine Pack ID, Doctrine Catalog and Charter Selection; rewrite the `charter` entry's "Do NOT use when"; amend the "active" guard (ADR §1); and repoint every citation of the missing ADR 2026-08-22-2, so that the terms have one canonical definition. | Medium | Open | [build] | no |
@@ -196,7 +196,7 @@ Comparison rule for "stale": per key, order-insensitive set equality after id no
 | C-004 | Names kept | The `doctrine-daphne` profile id and name, `DIRECTIVE_039`, and "doctrine" as governance content are unchanged. | Business | Medium | Open |
 | C-005 | Out of scope | The Walk-B half of #4573, the built-in/builtin tier spelling (#5825), #5823, #5824, and compatibility residue unrelated to the doctrine vocabulary (for example the `charter sync` no-op; OD-5) are not part of this mission. | Business | Medium | Open |
 | C-006 | Acceptance tests first | WP01 turns every FR (and the NFRs with a measurable check) into acceptance tests before any implementation WP starts. Tests for behaviour not yet built are committed as strict `xfail` naming the WP that turns them green. Every later WP takes its done-condition from those tests and flips its own `xfail`s; it does not redefine the acceptance criteria (owner ruling, 2026-10-06). The NFR-001 golden "before" sets are generated in WP01, at the base. | Process | High | Open |
-| C-007 | Layering | Path constants live in `kernel`; preset discovery and the effective-set seam live in `charter` (no `specify_cli` preset registry, no `charter` → `specify_cli` import); the interview stops importing from a migration module. | Technical | High | Open |
+| C-007 | Layering | Path constants live in `kernel`; preset discovery, the effective-set seam, layer-root/org-chain resolution, the pack model and tooling, and org charter composition live in `charter` (no `specify_cli` preset registry, no `charter` → `specify_cli` import); the interview stops importing from a migration module. | Technical | High | Open |
 | C-008 | Ordering | FR-015 before FR-002; FR-016 before FR-011/FR-012; FR-012 (snapshots, run-first ordering, rc35 no-op) before FR-005 and FR-011; FR-006 before FR-007; FR-008 before FR-018. | Technical | High | Open |
 
 ### Key Entities
@@ -217,11 +217,11 @@ Comparison rule for "stale": per key, order-insensitive set equality after id no
 - **SC-004**: Each former `spec-kitty doctrine` leaf command listed in FR-006 runs through its `charter` home on the same fixture with the recorded exit code and key output, and each old spelling exits 2 — [build] · no-op passable: no
 - **SC-005**: The changelog Before/After lists every removed command, skill, config key, directory, descriptor field and JSON code, and the runbook exists — [build] · no-op passable: no
 
-## Owner decisions pending
+## Owner decisions (ruled 2026-10-06)
 
-The spec above uses the recommended default for each; it is revised if the owner rules otherwise.
+Stijn Dejongh accepted every recommended default except OD-9, where he accepted the split below after reviewing the package contents. Recorded in ADR 2026-10-06-1 (Amendment 2026-10-06) and on #3732.
 
-| ID | Question | Recommended default |
+| ID | Question | Ruling |
 |---|---|---|
 | OD-1 | `doctrine_pack_id` (persisted in project `charter.yaml` and every org pack's `org-charter.yaml`, strictly validated): rename or keep? | Rename to `charter_pack_id`; the migration rewrites project state; org packs get an `org-charter.yaml` schema-version bump and a validation error naming the field. |
 | OD-2 | Third-party `pack.yaml` still carrying `accompanies_doctrine_pack`: reject or tolerate? | Reject with a validation error naming the field to delete; send the public-packs sidecar a PR. |
@@ -231,7 +231,7 @@ The spec above uses the recommended default for each; it is revised if the owner
 | OD-6 | Applying a preset over customised lists: refuse without `--force` (with a diff), and record the applied preset name? | Refuse without `--force`, print the diff; do not persist the preset name. |
 | OD-7 | Fold scope for `spec-kitty-*` skills: ADR §5 says the whole layer (16 directories), FR-008 says only the five that back the renamed skills. | The five here; the rest of the layer as a follow-up mission; record the ADR deviation. |
 | OD-8 | Name for the moved `consistency-check`. | `spec-kitty charter consistency-check` (avoids a clash with `validate`, `lint`, `bundle validate`). |
-| OD-9 | Target package for `src/specify_cli/doctrine/`. | `src/specify_cli/charter_offering/`. |
+| OD-9 | Target for `src/specify_cli/doctrine/` (all code, ~7,600 lines; 52 imports from `charter`, 3 back into `specify_cli`). | **Ruled: split by meaning, not renamed.** Pack model and tooling (descriptor, manifest, built-in manifest, lineage, validator, assembler) → `src/charter/offering/packs/`; org charter composition (`org_charter`, `org_charter_loader`, `config`) → `src/charter/activation/`; fetch and scaffold adapters (`sources/`, `snapshot`, `template_render/`) → `src/specify_cli/charter_packs/`. The boundary exemption for the old package is deleted. |
 | OD-10 | One mission and one PR (about 19 work packages), or split? | One: a no-shim cutover cannot ship half. |
 
 ## Assumptions
