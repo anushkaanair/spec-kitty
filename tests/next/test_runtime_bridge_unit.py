@@ -20,6 +20,10 @@ import pytest
 from tests._factories import provision_test_charter
 from tests._perf_helpers import assert_timing_budget
 from tests.lane_test_utils import write_single_lane_manifest
+from specify_cli.requirement_mapping import grammar as requirement_grammar
+from runtime.next import runtime_bridge_retrospective as _retrospective_seam
+from runtime.next import runtime_bridge_io as _io_seam
+from runtime.next import runtime_bridge_identity as _identity_seam
 from runtime.next.decision import DecisionKind
 from runtime.next._internal_runtime import DiscoveryContext
 
@@ -116,7 +120,7 @@ class TestRuntimeTemplateKey:
         """Project-level mission-runtime.yaml shadows the built-in."""
         repo_root = _scaffold_project(tmp_path)
 
-        from runtime.next.runtime_bridge import _runtime_template_key
+        from runtime.next.runtime_bridge_io import _runtime_template_key
 
         # Create a project-level override at the canonical override tier
         project_dir = repo_root / ".kittify" / "overrides" / "missions" / "software-dev"
@@ -137,7 +141,7 @@ class TestRuntimeTemplateKey:
     ) -> None:
         """SPEC_KITTY_MISSION_PATHS outranks project override for runtime templates."""
         repo_root = _scaffold_project(tmp_path)
-        from runtime.next.runtime_bridge import _runtime_template_key
+        from runtime.next.runtime_bridge_io import _runtime_template_key
 
         # Project override exists
         override_dir = repo_root / ".kittify" / "overrides" / "missions" / "software-dev"
@@ -165,7 +169,6 @@ class TestRuntimeTemplateKey:
         """Without a project override, the built-in template is used."""
         repo_root = _scaffold_project(tmp_path)
 
-        import runtime.next.runtime_bridge as runtime_bridge
         import runtime.next.runtime_bridge_io as runtime_bridge_io
         import specify_cli
 
@@ -183,7 +186,7 @@ class TestRuntimeTemplateKey:
             ),
         )
 
-        result = runtime_bridge._runtime_template_key("software-dev", repo_root)
+        result = _io_seam._runtime_template_key("software-dev", repo_root)
         assert result == str((builtin_root / "software-dev" / "mission-runtime.yaml").resolve())
 
 
@@ -246,7 +249,7 @@ class TestWorkflowRuntimeTemplate:
         monkeypatch.setattr(
             runtime_bridge,
             "runtime_emitter_for_mission",
-            lambda **_: runtime_bridge._BufferingRuntimeEmitter(),
+            lambda **_: _retrospective_seam._BufferingRuntimeEmitter(),
         )
 
         runtime_bridge.decide_next_via_runtime(
@@ -294,7 +297,6 @@ class TestWorkflowRuntimeTemplate:
         """A stale user-global software-dev runtime must not revive legacy tasks_*."""
         repo_root = _scaffold_project(tmp_path)
 
-        import runtime.next.runtime_bridge as runtime_bridge
         import runtime.next.runtime_bridge_io as runtime_bridge_io
         import specify_cli
 
@@ -321,14 +323,14 @@ class TestWorkflowRuntimeTemplate:
             ),
         )
 
-        result = runtime_bridge._runtime_template_key("software-dev", repo_root)
+        result = _io_seam._runtime_template_key("software-dev", repo_root)
         assert result != str(global_runtime.resolve())
         assert result == str((builtin_root / "software-dev" / "mission-runtime.yaml").resolve())
 
     def test_project_legacy_used_when_override_absent(self, tmp_path: Path) -> None:
         """Legacy .kittify/missions path remains supported after override tier."""
         repo_root = _scaffold_project(tmp_path)
-        from runtime.next.runtime_bridge import _runtime_template_key
+        from runtime.next.runtime_bridge_io import _runtime_template_key
 
         legacy_dir = repo_root / ".kittify" / "missions" / "software-dev"
         legacy_dir.mkdir(parents=True)
@@ -388,10 +390,11 @@ class TestGetOrStartRun:
     def test_feature_runs_index_persisted(self, tmp_path: Path) -> None:
         repo_root = _scaffold_project(tmp_path)
 
-        from runtime.next.runtime_bridge import get_or_start_run, _load_feature_runs
+        from runtime.next.runtime_bridge import get_or_start_run
+        from runtime.next.runtime_bridge_io import _feature_runs_path, load_feature_runs
 
         get_or_start_run("042-test-feature", repo_root, "software-dev")
-        index = _load_feature_runs(repo_root)
+        index = load_feature_runs(_feature_runs_path(repo_root))
         # WP05 / FR-016 (C-003): the index is keyed by mission_id; a mission
         # without one (this scaffold's meta.json) lands under ``legacy-<slug>``
         # and the bare slug is never a key.
@@ -402,10 +405,11 @@ class TestGetOrStartRun:
         """FR-028: feature-runs.json entries must include mission_id and mission_slug (WP06)."""
         repo_root = _scaffold_project(tmp_path)
 
-        from runtime.next.runtime_bridge import get_or_start_run, _load_feature_runs
+        from runtime.next.runtime_bridge import get_or_start_run
+        from runtime.next.runtime_bridge_io import _feature_runs_path, load_feature_runs
 
         get_or_start_run("042-test-feature", repo_root, "software-dev")
-        index = _load_feature_runs(repo_root)
+        index = load_feature_runs(_feature_runs_path(repo_root))
         entry = index["legacy-042-test-feature"]
         # mission_slug is display-only (WP05) but must always be present
         assert entry.get("mission_slug") == "042-test-feature"
@@ -415,20 +419,18 @@ class TestGetOrStartRun:
 
 class TestRuntimeBridgeCompatibilityHelpers:
     def test_mission_key_for_run_ref_prefers_mission_type(self, tmp_path: Path) -> None:
-        from runtime.next.runtime_bridge import _mission_key_for_run_ref
+        from runtime.next.runtime_bridge_io import _mission_key_for_run_ref
 
         run_ref = SimpleNamespace(mission_type="software-dev")
         assert _mission_key_for_run_ref(run_ref, "fallback") == "software-dev"
 
     def test_mission_key_for_run_ref_falls_back_to_default(self, tmp_path: Path) -> None:
-        from runtime.next.runtime_bridge import _mission_key_for_run_ref
+        from runtime.next.runtime_bridge_io import _mission_key_for_run_ref
 
         run_ref = SimpleNamespace(mission_type="")
         assert _mission_key_for_run_ref(run_ref, "fallback") == "fallback"
 
-    def test_build_run_ref_falls_back_when_runtime_uses_mission_type(self, monkeypatch) -> None:
-        import runtime.next.runtime_bridge as runtime_bridge
-
+    def test_build_run_ref_falls_back_when_runtime_uses_mission_type(self) -> None:
         class FakeRunRef:
             def __init__(self, *, run_id: str, run_dir: str, mission_type: str | None = None, mission_key: str | None = None):
                 if mission_key is not None:
@@ -437,12 +439,11 @@ class TestRuntimeBridgeCompatibilityHelpers:
                 self.run_dir = run_dir
                 self.mission_type = mission_type
 
-        monkeypatch.setattr(runtime_bridge, "MissionRunRef", FakeRunRef)
-
-        run_ref = runtime_bridge._build_run_ref(
+        run_ref = _io_seam._build_run_ref(
             run_id="run-123",
             run_dir="/nonexistent/run-123",
             mission_type="software-dev",
+            run_ref_cls=FakeRunRef,
         )
 
         assert run_ref.run_id == "run-123"
@@ -470,10 +471,7 @@ class TestWPIteration:
             },
         )
 
-        from runtime.next.runtime_bridge import (
-            get_or_start_run,
-            decide_next_via_runtime,
-        )
+        from runtime.next.runtime_bridge import get_or_start_run, decide_next_via_runtime
         from runtime.next._internal_runtime import next_step as runtime_next_step, NullEmitter
         from runtime.next._internal_runtime.engine import _read_snapshot
 
@@ -508,10 +506,7 @@ class TestWPIteration:
             },
         )
 
-        from runtime.next.runtime_bridge import (
-            get_or_start_run,
-            decide_next_via_runtime,
-        )
+        from runtime.next.runtime_bridge import get_or_start_run, decide_next_via_runtime
         from runtime.next._internal_runtime import next_step as runtime_next_step, NullEmitter
         from runtime.next._internal_runtime.engine import _read_snapshot
 
@@ -610,7 +605,7 @@ class TestAnswerDecisionViaRuntime:
                 emitter_calls.append(("seed", snapshot))
 
         monkeypatch.setattr(runtime_bridge, "get_mission_type", lambda path: "software-dev")
-        monkeypatch.setattr(runtime_bridge, "get_or_start_run", lambda mission_slug, repo_root, mission_type, owned=None: fake_run_ref)
+        monkeypatch.setattr("runtime.next.runtime_bridge_io.get_or_start_run", lambda mission_slug, repo_root, mission_type, owned=None: fake_run_ref)
         monkeypatch.setattr(runtime_bridge, "runtime_emitter_for_mission", lambda **_: FakeEmitter())
 
         provided: list[tuple[object, str, str, object, object]] = []
@@ -702,7 +697,7 @@ class TestGuardChecks:
 
 class TestTasksMarkdownParsing:
     def test_parse_wp_sections_preserves_same_line_suffix(self) -> None:
-        from runtime.next.runtime_bridge import _parse_wp_sections_from_tasks_md
+        from runtime.next.runtime_bridge_cores import _parse_wp_sections_from_tasks_md
 
         tasks_md = "## Work Package WP01: Build parser\nRequirements Refs: FR-001, NFR-002\n### WP02\nRequirements: FR-003\n"
 
@@ -713,40 +708,40 @@ class TestTasksMarkdownParsing:
         assert sections["WP02"] == "\nRequirements: FR-003\n"
 
     def test_parse_wp_sections_accepts_legacy_work_package_spacing(self) -> None:
-        from runtime.next.runtime_bridge import _parse_requirement_refs_from_tasks_md
+        from runtime.next.runtime_bridge_cores import _parse_requirement_refs_from_tasks_md
 
         tasks_md = "## Work Package    WP01: Build parser\nRequirements Refs: FR-001, NFR-002\n"
 
-        assert _parse_requirement_refs_from_tasks_md(tasks_md) == {"WP01": ["FR-001", "NFR-002"]}
+        assert _parse_requirement_refs_from_tasks_md(tasks_md, grammar=requirement_grammar) == {"WP01": ["FR-001", "NFR-002"]}
 
     def test_parse_requirement_refs_supports_heading_bullet_format(self) -> None:
-        from runtime.next.runtime_bridge import _parse_requirement_refs_from_tasks_md
+        from runtime.next.runtime_bridge_cores import _parse_requirement_refs_from_tasks_md
 
         tasks_md = "## Work Package WP01: Build parser\n### Requirement Refs\n- FR-001, nfr-002\n"
 
-        assert _parse_requirement_refs_from_tasks_md(tasks_md) == {"WP01": ["FR-001", "NFR-002"]}
+        assert _parse_requirement_refs_from_tasks_md(tasks_md, grammar=requirement_grammar) == {"WP01": ["FR-001", "NFR-002"]}
 
     def test_parse_requirement_refs_on_adversarial_input(self) -> None:
         """Functional half of the #4015 split: parses correctly under adversarial input."""
-        from runtime.next.runtime_bridge import _parse_requirement_refs_from_tasks_md
+        from runtime.next.runtime_bridge_cores import _parse_requirement_refs_from_tasks_md
 
         filler = "".join("#### Not a work package heading\n" for _ in range(100_000))
         tasks_md = f"{filler}## Work Package WP01: Harden parser\nRequirements Refs: FR-001, fr-002, C-003\n"
 
-        refs = _parse_requirement_refs_from_tasks_md(tasks_md)
+        refs = _parse_requirement_refs_from_tasks_md(tasks_md, grammar=requirement_grammar)
 
         assert refs == {"WP01": ["FR-001", "FR-002", "C-003"]}
 
     @pytest.mark.performance
     def test_parse_requirement_refs_completes_under_budget_on_adversarial_input(self) -> None:
         """#4015 split: regex/backtracking budget on adversarial tasks.md input."""
-        from runtime.next.runtime_bridge import _parse_requirement_refs_from_tasks_md
+        from runtime.next.runtime_bridge_cores import _parse_requirement_refs_from_tasks_md
 
         filler = "".join("#### Not a work package heading\n" for _ in range(100_000))
         tasks_md = f"{filler}## Work Package WP01: Harden parser\nRequirements Refs: FR-001, fr-002, C-003\n"
 
         start = time.perf_counter()
-        _parse_requirement_refs_from_tasks_md(tasks_md)
+        _parse_requirement_refs_from_tasks_md(tasks_md, grammar=requirement_grammar)
         elapsed = time.perf_counter() - start
 
         assert_timing_budget(elapsed, 0.2, name="elapsed")
@@ -1130,7 +1125,7 @@ class TestAtomicTaskSteps:
             encoding="utf-8",
         )
 
-        from runtime.next.runtime_bridge import _check_composed_action_guard
+        from runtime.next.runtime_bridge_composition import _check_composed_action_guard
 
         failures = _check_composed_action_guard(
             "tasks",
@@ -1201,7 +1196,8 @@ class TestAtomicTaskSteps:
             encoding="utf-8",
         )
 
-        from runtime.next.runtime_bridge import _check_composed_action_guard, _check_requirement_mapping_ready
+        from runtime.next.runtime_bridge import _check_requirement_mapping_ready
+        from runtime.next.runtime_bridge_composition import _check_composed_action_guard
 
         # Sanity: the pre-existing requirement-mapping check is clean here --
         # the assertion below is not incidentally passing because of it.
@@ -2203,11 +2199,11 @@ class TestWrapWithDecisionGitLogOwnedCheckout:
         mission_id = "01K3PW7QRSTVXYZ23456789ABC"
         mission_slug = "non-owned-unmaterialized-mission"
         monkeypatch.setattr(
-            runtime_bridge,
+            _identity_seam,
             "_resolve_coordination_branch",
             lambda *_a, **_k: "kitty/mission-non-owned-unmaterialized",
         )
-        monkeypatch.setattr(runtime_bridge, "_resolve_mission_ulid", lambda *_a, **_k: mission_id)
+        monkeypatch.setattr(_identity_seam, "_resolve_mission_ulid", lambda *_a, **_k: mission_id)
         coord_root = tmp_path / "resolved-via-write-dir"
         coord_mission_dir = coord_root / "kitty-specs" / mission_slug
         location = WriteLocation(

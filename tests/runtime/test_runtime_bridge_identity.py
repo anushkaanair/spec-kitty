@@ -29,11 +29,8 @@ from unittest.mock import patch
 
 import pytest
 
-from runtime.next.runtime_bridge import (
-    DecisionGitLogUnavailable,
-    _resolve_mission_ulid,
-    _wrap_with_decision_git_log,
-)
+from runtime.next.runtime_bridge import DecisionGitLogUnavailable, _wrap_with_decision_git_log
+from runtime.next.runtime_bridge_identity import _resolve_mission_ulid
 from runtime.next._internal_runtime.events import NullEmitter
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
@@ -82,7 +79,7 @@ class TestResolveMissionUlid:
         _write_meta(feature_dir)  # no mission_id written
 
         with patch(
-            "runtime.next.runtime_bridge._primary_runtime_feature_dir",
+            "runtime.next.runtime_bridge_identity._primary_runtime_feature_dir",
             return_value=feature_dir,
         ):
             result = _resolve_mission_ulid(_SLUG, tmp_path)
@@ -100,7 +97,7 @@ class TestResolveMissionUlid:
         # No meta.json written
 
         with patch(
-            "runtime.next.runtime_bridge._primary_runtime_feature_dir",
+            "runtime.next.runtime_bridge_identity._primary_runtime_feature_dir",
             return_value=feature_dir,
         ):
             result = _resolve_mission_ulid(_SLUG, tmp_path)
@@ -118,7 +115,7 @@ class TestResolveMissionUlid:
         _write_meta(feature_dir, mission_id=_ULID)
 
         with patch(
-            "runtime.next.runtime_bridge._primary_runtime_feature_dir",
+            "runtime.next.runtime_bridge_identity._primary_runtime_feature_dir",
             return_value=feature_dir,
         ):
             result = _resolve_mission_ulid(_SLUG, tmp_path)
@@ -150,7 +147,7 @@ class TestWrapWithDecisionGitLogIdentityContract:
         emitter = NullEmitter()
         with (
             patch(
-                "runtime.next.runtime_bridge._primary_runtime_feature_dir",
+                "runtime.next.runtime_bridge_identity._primary_runtime_feature_dir",
                 return_value=feature_dir,
             ),
             patch(
@@ -158,7 +155,7 @@ class TestWrapWithDecisionGitLogIdentityContract:
                 return_value=False,
             ),
             patch(
-                "runtime.next.runtime_bridge._resolve_coordination_branch",
+                "runtime.next.runtime_bridge_identity._resolve_coordination_branch",
                 return_value="kitty/mission-my-mission-01KWDABC-lane-a",
             ),
         ):
@@ -188,7 +185,7 @@ class TestWrapWithDecisionGitLogIdentityContract:
         emitter = NullEmitter()
         with (
             patch(
-                "runtime.next.runtime_bridge._primary_runtime_feature_dir",
+                "runtime.next.runtime_bridge_identity._primary_runtime_feature_dir",
                 return_value=feature_dir,
             ),
             patch(
@@ -196,7 +193,7 @@ class TestWrapWithDecisionGitLogIdentityContract:
                 return_value=False,
             ),
             patch(
-                "runtime.next.runtime_bridge._resolve_coordination_branch",
+                "runtime.next.runtime_bridge_identity._resolve_coordination_branch",
                 return_value="kitty/mission-my-mission-lane-a",
             ),
         ):
@@ -225,7 +222,7 @@ class TestWrapWithDecisionGitLogIdentityContract:
         emitter = NullEmitter()
         with (
             patch(
-                "runtime.next.runtime_bridge._primary_runtime_feature_dir",
+                "runtime.next.runtime_bridge_identity._primary_runtime_feature_dir",
                 return_value=feature_dir,
             ),
             patch(
@@ -233,7 +230,7 @@ class TestWrapWithDecisionGitLogIdentityContract:
                 return_value=True,  # coord topology
             ),
             patch(
-                "runtime.next.runtime_bridge._resolve_coordination_branch",
+                "runtime.next.runtime_bridge_identity._resolve_coordination_branch",
                 return_value="kitty/mission-my-mission-01KWDABC-lane-a",
             ),
             pytest.raises(DecisionGitLogUnavailable),

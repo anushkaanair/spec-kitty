@@ -18,59 +18,14 @@ The inversion that will route through this seam is gates mission #2535's own
 WP14, landing *after* this mission — this WP leaves the seam clean; it does
 not wire it.
 
-``_advance_run_state_after_composition`` (bridge:1800, CC23) is explicitly OUT
-of scope for this move: its logic already lives in the WP03 engine adapter
-(``runtime_bridge_engine.advance_run_state_after_composition``), and
-``runtime_bridge.py`` already keeps the thin residual compat delegate for its
-heavy 8x-patch/9x-attr surface. Nothing about that symbol changes here — it
-stays natively defined in the residual, unmoved by this WP.
-
-``runtime_bridge.py`` keeps a **native thin compat delegate** — a real
-``def`` statement, never a plain ``import`` alias — under every one of the
-symbols the WP02 compat guard binds (``_should_dispatch_via_composition``,
-``_normalize_action_for_composition``, ``_dispatch_via_composition``,
-``_check_composed_action_guard``, ``_resolve_step_agent_profile``,
-``_resolve_runtime_contract_for_step`` (identity-only —
-``GUARD_B_ONLY_IMPORT_SURFACE`` in contracts/compat-surface.md),
-``_count_source_documented_events``, ``_publication_approved``). This is
-mandatory, not stylistic: ``tests/runtime/test_bridge_compat_surface.py::
-test_guard_b_identity_reexport_for_relocated_symbols`` (a FROZEN gate file)
-asserts the set of compat symbols whose ``__module__`` differs from
-``runtime_bridge`` equals a hardcoded 3-element baseline (the pre-existing
-``runtime.next.decision``-origin symbols) — the exact mechanism WP03-WP07
-already documented for their own clusters.
-
-``_resolve_step_binding``, ``_composition_dispatch_inputs``,
-``_has_generated_docs``, and ``_LEGACY_TASKS_STEP_IDS`` are NOT in the WP02
-compat guard's tracked symbol inventory (nothing patches them — grep-verified
-against test_bridge_compat_surface.py). ``_composition_dispatch_inputs`` /
-``_has_generated_docs`` still get a **plain re-export** in the residual
-(needed because ``decide_next_via_runtime`` still calls the former bare, and
-``runtime_bridge_io.gather_artifact_presence`` still reaches the latter via
-its own live ``_rb.<name>`` lookup); ``_resolve_step_binding`` and
-``_LEGACY_TASKS_STEP_IDS`` are purely internal to this module now (no
-external caller left), so they carry no residual shim at all.
-
-**The intra-seam live-lookup risk (research.md §Compat / WP03-WP07
-precedent).** Several of the moved, compat-tracked symbols call each other
-now that they live together in this module:
-``_should_dispatch_via_composition`` / ``_resolve_step_binding`` /
-``_resolve_runtime_contract_for_step`` all call
-``_normalize_action_for_composition``; ``_composition_dispatch_inputs`` calls
-``_resolve_step_agent_profile`` / ``_resolve_runtime_contract_for_step``;
-``_dispatch_via_composition`` calls ``_check_composed_action_guard``. Every
-one of these calls is routed through a **local, live import of
-``runtime_bridge``** (``from runtime.next import runtime_bridge as _rb;
-_rb.<name>(...)``, deferred to function scope — ``runtime_bridge`` imports
-this module at its own top level, so a top-level back-import here would be
-circular) so a ``monkeypatch.setattr(runtime_bridge, "<name>", …)`` is still
-observed exactly as before the extraction — the same false-green mitigation
-WP03/WP04/WP05 already apply. ``_check_composed_action_guard`` ALSO calls
-back into ``_should_advance_wp_step``, which stays defined in the residual
-(untouched by this WP) — routed the identical way. Calls to the genuinely
-untracked ``_resolve_step_binding`` (from ``_should_dispatch_via_composition``
-and ``_resolve_step_agent_profile``) are plain intra-module calls — nothing
-patches that symbol, so no false-green risk exists for it.
+Every symbol here is owned by this module: ``runtime_bridge`` calls it as
+``runtime_bridge_composition.<name>`` and tests patch it here (#2561 retired
+the thin compat delegates ``runtime_bridge`` used to keep under these names).
+Calls between symbols of this module are plain intra-module calls, so a patch
+on this module is observed by every caller. ``_check_composed_action_guard``
+still calls back into ``runtime_bridge._should_advance_wp_step`` (owned by the
+residual) through a deferred module import, since ``runtime_bridge`` imports
+this module at its own top level.
 
 Import DAG (research.md §Import DAG): this module may import
 ``runtime_bridge_io`` / ``runtime_bridge_engine`` / ``runtime_bridge_cores``;
@@ -175,7 +130,6 @@ def _should_dispatch_via_composition(
        composition. Empty / missing bindings fall through to the legacy DAG
        handler unchanged.
     """
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
     # Live charter lookup path (FR-007 / FR-008).  ``repo_root`` is required;
     # without it skip directly to the custom widening path.
@@ -186,7 +140,7 @@ def _should_dispatch_via_composition(
             )
 
             action_sequence = resolve_mission_type_context(repo_root, mission_type=mission).action_sequence
-            if _rb._normalize_action_for_composition(step_id) in action_sequence:
+            if _normalize_action_for_composition(step_id) in action_sequence:
                 return True
         except Exception:
             # Degrade gracefully: if charter is unavailable or the mission type
@@ -209,19 +163,13 @@ def _resolve_step_binding(run_dir: Path, step_id: str) -> tuple[str | None, str 
     Missing templates, missing steps, and empty strings all resolve to
     ``None`` values so callers fail closed through the legacy path or the
     executor's structured error surface.
-
-    Not part of the WP02 compat guard's tracked symbol inventory (nothing
-    imports/patches it), so this is a plain internal helper — no residual
-    delegate needed.
     """
     try:
         template = _engine_adapter._load_frozen_template(run_dir)
     except Exception:
         return None, None
 
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
-
-    normalized = _rb._normalize_action_for_composition(step_id)
+    normalized = _normalize_action_for_composition(step_id)
     for step in template.steps:
         if step.id == step_id or step.id == normalized:
             profile = step.agent_profile.strip() if step.agent_profile else None
@@ -274,9 +222,7 @@ def _resolve_runtime_contract_for_step(
     except Exception:
         return None
 
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
-
-    normalized = _rb._normalize_action_for_composition(step_id)
+    normalized = _normalize_action_for_composition(step_id)
     for step in template.steps:
         if step.id != step_id and step.id != normalized:
             continue
@@ -333,11 +279,6 @@ def _composition_dispatch_inputs(
     of that table, so this exception never narrows FR-001's guarantee that
     a custom type's own action reaches ``PromptStep.agent_profile``.
 
-    Not part of the WP02 compat guard's tracked symbol inventory (nothing
-    patches it), so it is a plain internal helper re-exported into the
-    residual (``decide_next_via_runtime`` still calls it bare) — no native
-    delegate needed.
-
     """
     try:
         from charter.activation.mission_type_profiles import (  # noqa: PLC0415
@@ -369,15 +310,14 @@ def _composition_dispatch_inputs(
             action,
         )
 
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
     from specify_cli.mission_step_contracts.executor import (  # noqa: PLC0415
         _ACTION_PROFILE_DEFAULTS,
     )
 
-    profile_hint = None if (mission, action) in _ACTION_PROFILE_DEFAULTS else _rb._resolve_step_agent_profile(run_dir, step_id)
+    profile_hint = None if (mission, action) in _ACTION_PROFILE_DEFAULTS else _resolve_step_agent_profile(run_dir, step_id)
     return (
         profile_hint,
-        _rb._resolve_runtime_contract_for_step(
+        _resolve_runtime_contract_for_step(
             repo_root=repo_root,
             run_dir=run_dir,
             mission=mission,
@@ -455,11 +395,8 @@ def _publication_approved(feature_dir: Path) -> bool:
 def _has_generated_docs(feature_dir: Path) -> bool:
     """Return True iff at least one *.md file exists under feature_dir / 'docs'.
 
-    Used by the documentation `generate` guard branch (D6 of plan.md). Not
-    part of the WP02 compat guard's tracked symbol inventory (nothing patches
-    it); ``runtime_bridge_io.gather_artifact_presence`` reaches it directly
-    from this seam (WP18 / #2561 retired the ``runtime_bridge`` façade
-    re-export and its ``_rb._has_generated_docs`` round-trip).
+    Used by the documentation `generate` guard branch (D6 of plan.md);
+    ``runtime_bridge_io.gather_artifact_presence`` reaches it on this seam.
     """
     docs_root = feature_dir / "docs"
     if not docs_root.is_dir():
@@ -535,9 +472,8 @@ def _check_composed_action_guard(
         owned=owned,
     )
     if mission == "software-dev" and action in ("implement", "review"):
-        # _should_advance_wp_step stays defined in the residual (untouched by
-        # this WP) -- reached via a live lookup so a monkeypatch on
-        # runtime_bridge._should_advance_wp_step is still observed from here.
+        # _should_advance_wp_step is owned by runtime_bridge; deferred import
+        # because runtime_bridge imports this module at its top level.
         from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
         # Intentionally NOT anchored (no repo_root=/mission_slug= forwarded), even
@@ -595,8 +531,7 @@ def _dispatch_via_composition(
     ``ProfileInvocationExecutor`` directly.
 
     The follow-up advancement is performed by
-    ``runtime_bridge._advance_run_state_after_composition`` (a thin residual
-    compat delegate onto the WP03 engine adapter), which reuses the same
+    ``runtime_bridge_engine.advance_run_state_after_composition``, which reuses the same
     primitives ``runtime_next_step(...)`` uses internally for state, lane,
     and prompt progression. The legacy ``runtime_next_step`` is **not**
     called for composition-backed actions (FR-001).
@@ -686,9 +621,7 @@ def _dispatch_via_composition(
                 ", ".join(unresolved),
             )
 
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
-
-    failures = _rb._check_composed_action_guard(action, feature_dir, mission=mission, legacy_step_id=legacy_step_id, repo_root=repo_root, owned=owned)
+    failures = _check_composed_action_guard(action, feature_dir, mission=mission, legacy_step_id=legacy_step_id, repo_root=repo_root, owned=owned)
     if failures:
         return failures
     return None

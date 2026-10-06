@@ -466,7 +466,7 @@ class TestQueryCurrentStateErrorPaths:
         mock_run_ref.run_dir = str(tmp_path / "run")
 
         with (
-            patch("runtime.next.runtime_bridge.get_or_start_run", return_value=mock_run_ref),
+            patch("runtime.next.runtime_bridge_io.get_or_start_run", return_value=mock_run_ref),
             patch("runtime.next.runtime_bridge.get_mission_type", return_value="software-dev"),
             patch("runtime.next.runtime_bridge._compute_wp_progress", return_value=None),
             patch("runtime.next._internal_runtime.engine._read_snapshot", side_effect=Exception("snapshot read failed")),
@@ -711,7 +711,7 @@ class TestQueryCurrentStateErrorPaths:
         assert decision.is_query is True
 
     def test_existing_run_ref_raises_when_state_json_missing(self, tmp_path: Path) -> None:
-        from runtime.next.runtime_bridge import _existing_run_ref
+        from runtime.next.runtime_bridge_io import _existing_run_ref
         from runtime.next.runtime_bridge_io import RunStateMissing
 
         index = {
@@ -734,7 +734,7 @@ class TestQueryCurrentStateErrorPaths:
 
     def test_start_ephemeral_query_run_cleans_up_on_bootstrap_failure(self, tmp_path: Path) -> None:
         """If start_mission_run raises, the freshly created temp dir is removed."""
-        from runtime.next.runtime_bridge import _start_ephemeral_query_run
+        from runtime.next.runtime_bridge_io import _start_ephemeral_query_run
 
         created_dirs: list[Path] = []
         original_mkdtemp = __import__("tempfile").mkdtemp

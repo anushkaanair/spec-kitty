@@ -36,6 +36,8 @@ from spec_kitty_events.mission_next import (
     RuntimeActorIdentity,
 )
 
+from runtime.next import runtime_bridge_engine as _engine_seam
+from runtime.next import runtime_bridge_composition as _composition_seam
 from runtime.next import runtime_bridge as rb
 from runtime.next import runtime_bridge_retrospective as _retrospective_seam
 from runtime.next._internal_runtime.engine import MissionRunRef
@@ -186,9 +188,9 @@ class _Harness:
 def strict_bridge(monkeypatch: pytest.MonkeyPatch) -> None:
     """Stub the bridge so ``_dn_decision_materialize`` runs the strict gate path
     without touching the retrospective package or mission metadata."""
-    monkeypatch.setattr(rb, "_resolve_retrospective_policy_for_runtime", lambda repo_root: (_strict_policy(), {}, None))
-    monkeypatch.setattr(rb, "_resolve_mission_id_for_terminus", lambda feature_dir: None)
-    monkeypatch.setattr(rb, "_run_retrospective_learning_capture", lambda **kwargs: None)
+    monkeypatch.setattr(_retrospective_seam, "_resolve_retrospective_policy_for_runtime", lambda repo_root: (_strict_policy(), {}, None))
+    monkeypatch.setattr(_retrospective_seam, "_resolve_mission_id_for_terminus", lambda feature_dir: None)
+    monkeypatch.setattr(_retrospective_seam, "_run_retrospective_learning_capture", lambda **kwargs: None)
 
 
 def _decision_required(run_id: str = RUN_ID) -> NextDecision:
@@ -252,10 +254,10 @@ def test_composition_dispatch_decision_required_reaches_decision_log(monkeypatch
     mirrors the real helper's first two emitter calls (seed, then the
     decision request raised by ``_emit_decision_required``)."""
     h = _Harness(tmp_path)
-    monkeypatch.setattr(rb, "_should_dispatch_via_composition", lambda *args, **kwargs: True)
-    monkeypatch.setattr(rb, "_normalize_action_for_composition", lambda step_id: step_id)
+    monkeypatch.setattr(_composition_seam, "_should_dispatch_via_composition", lambda *args, **kwargs: True)
+    monkeypatch.setattr(_composition_seam, "_normalize_action_for_composition", lambda step_id: step_id)
     monkeypatch.setattr(rb._composition, "_composition_dispatch_inputs", lambda **kwargs: (None, None))
-    monkeypatch.setattr(rb, "_dispatch_via_composition", lambda **kwargs: [])
+    monkeypatch.setattr(_composition_seam, "_dispatch_via_composition", lambda **kwargs: [])
     monkeypatch.setattr(
         rb._engine_adapter,
         "plan_composition_advance",
@@ -280,7 +282,7 @@ def test_composition_dispatch_decision_required_reaches_decision_log(monkeypatch
         emitter.emit_decision_input_requested(_requested_payload())
         return expected
 
-    monkeypatch.setattr(rb, "_advance_run_state_after_composition", spy_advance)
+    monkeypatch.setattr(_engine_seam, "advance_run_state_after_composition", spy_advance)
 
     decision = rb._dn_composition_dispatch(h.ctx)
 
@@ -313,7 +315,7 @@ def test_strict_policy_refused_terminal_gate_writes_nothing(monkeypatch: pytest.
 
     rollbacks: list[tuple[Any, ...]] = []
     monkeypatch.setattr(rb, "runtime_next_step", fake_terminal_step)
-    monkeypatch.setattr(rb, "_run_retrospective_learning_capture", refuse)
+    monkeypatch.setattr(_retrospective_seam, "_run_retrospective_learning_capture", refuse)
     monkeypatch.setattr(rb, "_dn_rollback_buffered_run_state", lambda *args: rollbacks.append(args))
 
     decision = rb._dn_decision_materialize(h.ctx)
@@ -335,12 +337,12 @@ def test_gated_flush_does_not_duplicate(monkeypatch: pytest.MonkeyPatch, tmp_pat
     _install_decision_required_engine(monkeypatch)
     buffers: list[Any] = []
 
-    class _SpyBuffer(rb._BufferingRuntimeEmitter):
+    class _SpyBuffer(_retrospective_seam._BufferingRuntimeEmitter):
         def __init__(self) -> None:
             super().__init__()
             buffers.append(self)
 
-    monkeypatch.setattr(rb, "_BufferingRuntimeEmitter", _SpyBuffer)
+    monkeypatch.setattr(_retrospective_seam, "_BufferingRuntimeEmitter", _SpyBuffer)
 
     rb._dn_decision_materialize(h.ctx)
 
@@ -375,10 +377,10 @@ def test_real_composition_advances_and_logs_despite_optional_seed_failure(
             return getattr(h.inner, name)
 
     h.log._inner = Producer()
-    monkeypatch.setattr(rb, "_should_dispatch_via_composition", lambda *args, **kwargs: True)
-    monkeypatch.setattr(rb, "_normalize_action_for_composition", lambda step_id: step_id)
+    monkeypatch.setattr(_composition_seam, "_should_dispatch_via_composition", lambda *args, **kwargs: True)
+    monkeypatch.setattr(_composition_seam, "_normalize_action_for_composition", lambda step_id: step_id)
     monkeypatch.setattr(rb._composition, "_composition_dispatch_inputs", lambda **kwargs: (None, None))
-    monkeypatch.setattr(rb, "_dispatch_via_composition", lambda **kwargs: [])
+    monkeypatch.setattr(_composition_seam, "_dispatch_via_composition", lambda **kwargs: [])
     snapshot = MissionRunSnapshot(run_id=RUN_ID, mission_key=MISSION_TYPE, template_path="", template_hash="h", issued_step_id="plan")
     monkeypatch.setattr(engine, "_read_snapshot", lambda _: snapshot)
     monkeypatch.setattr(engine, "_load_frozen_template", lambda _: object())

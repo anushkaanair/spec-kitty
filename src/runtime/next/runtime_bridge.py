@@ -18,123 +18,31 @@ A tracked-mission-to-run compatibility index currently lives at
 """
 
 # ─────────────────────────────────────────────────────────────────────────────
-# #2531 DECOMPOSITION IN PROGRESS (mission runtime-bridge-degod-01KX8M1C).
+# Decomposition map (#2531 runtime-bridge-degod; #2561 retired the compat
+# delegates). Each seam owns its symbols outright: callers, here and in
+# tests, reach and patch a symbol on the module that defines it.
 #
-# This module is being progressively decomposed from a single ~3800-LOC /
-# 62-symbol god module into cohesive, independently-tested seams under
-# ``runtime/next/``. Extracted so far:
+#   runtime_bridge_engine.py         sole home of ``_internal_runtime`` engine /
+#                                    planner private access (FR-013) and of
+#                                    ``advance_run_state_after_composition``.
+#   runtime_bridge_retrospective.py  retrospective / learning-capture cluster.
+#   runtime_bridge_io.py             feature-runs index, template discovery,
+#                                    run lifecycle, OperationalContext builders,
+#                                    ``gather_artifact_presence``.
+#   runtime_bridge_cores.py          pure leaves: tasks.md parsing, guard
+#                                    evaluation, the Decision builder.
+#   runtime_bridge_composition.py    composition dispatch and its guards.
+#   runtime_bridge_identity.py       coord-branch / mission-ULID / primary
+#                                    feature-dir resolution.
 #
-#   runtime_bridge_engine.py   sole home of ``_internal_runtime`` engine /
-#                              planner private access (FR-013); also owns the
-#                              ``advance_run_state_after_composition`` logic
-#                              (former CC23 ``_advance_run_state_after_composition``
-#                              body, reduced to <=15) — this module keeps only
-#                              a thin residual compat delegate under the same
-#                              name so its 8x-patch/9x-attr monkeypatch surface
-#                              still intercepts (contracts/compat-surface.md).
-#
-#   runtime_bridge_retrospective.py   sole home of the self-contained
-#                              Confirm.ask-gated retrospective / learning-
-#                              capture cluster (FR-006). This module keeps a
-#                              native thin compat delegate under each of the 9
-#                              symbols the WP02 compat guard binds (see the
-#                              seam module's docstring for why a plain
-#                              re-export is insufficient here — the guard's
-#                              identity check hardcodes the cross-module
-#                              baseline).
-#
-#   runtime_bridge_io.py       sole home of the narrow I/O ports (IC-04):
-#                              feature-runs.json index, template/pack
-#                              discovery, run lifecycle, the OperationalContext
-#                              builder, the FR-009 gather_artifact_presence
-#                              fact-port, and the pure resolve_commit_target
-#                              lifted out of _wrap_with_decision_git_log. Same
-#                              native-thin-delegate rule as the retrospective
-#                              seam applies to every compat-tracked symbol
-#                              moved there.
-#
-#   runtime_bridge_cores.py    sole home of the pure, zero-dependency leaves
-#                              (FR-009): the tasks.md parse family and the
-#                              guard inversion (`evaluate_guards(snapshot)`
-#                              folding `_check_cli_guards` /
-#                              `_check_composed_action_guard` /
-#                              `_check_requirement_mapping_ready`'s decision
-#                              tail over the WP05 `ArtifactPresenceSnapshot`
-#                              fact-port). Same native-thin-delegate rule for
-#                              every compat-tracked symbol moved there; two
-#                              symbols (`_parse_wp_sections_from_tasks_md` /
-#                              `_parse_requirement_refs_from_tasks_md`) use a
-#                              same-module live-lookup between their two
-#                              residual delegates rather than forwarding to
-#                              the cores-internal call, closing the
-#                              intra-seam false-green trap for their mutual
-#                              call (see their docstrings below).
-#
-#   runtime_bridge_cores.py    ALSO owns the Decision-builder (FR-011,
-#                              WP07): ``DecisionEnvelope`` + ``step_or_
-#                              blocked`` collapse the 29 open-coded
-#                              ``Decision(...)`` constructions (+ the 4x
-#                              ``_state_to_action -> _build_prompt_or_error
-#                              -> step-or-blocked`` triad) that used to be
-#                              scattered across this module's three public
-#                              entries. This module keeps ``_materialize_
-#                              decision`` (the thin residual wrapper
-#                              supplying the production ``prompt_exists``
-#                              port) plus ``_map_wp_step_decision`` /
-#                              ``_map_non_wp_step_decision`` /
-#                              ``_build_decision_required_prompt_file``, the
-#                              extractions that keep ``_map_runtime_
-#                              decision`` / ``query_current_state`` at or
-#                              under the complexity ceiling.
-#
-#   runtime_bridge_composition.py   sole home of the composition-dispatch
-#                              cluster (WP08): the dispatch entry
-#                              (``_dispatch_via_composition``), the
-#                              composed-action guard
-#                              (``_check_composed_action_guard``), the
-#                              composition-input resolution helpers, the
-#                              research/documentation guard-fact readers, and
-#                              — the FR-008 headline — the
-#                              ``_should_dispatch_via_composition`` selection
-#                              seam isolated as a clean, gates-#2535-free
-#                              predicate for a future WP14 consumer to route
-#                              through. Same native-thin-delegate rule for
-#                              every compat-tracked symbol moved there.
-#                              ``_advance_run_state_after_composition``
-#                              (WP03) is unaffected — its logic already lives
-#                              in the engine adapter and its thin residual
-#                              delegate stays defined right here, unmoved.
-#
-#   runtime_bridge_identity.py   sole home of the hottest fracture line
-#                              (WP10, LAST): coord-branch naming
-#                              (``_resolve_coordination_branch``), mission-ULID
-#                              resolution (``_resolve_mission_ulid``), and
-#                              primary-feature-dir resolution
-#                              (``_primary_runtime_feature_dir``) — the scars
-#                              #2091/#1978/#1918/#1814/#2069 cluster. Same
-#                              native-thin-delegate rule for every compat-
-#                              tracked symbol moved there; both intra-seam
-#                              callers of ``_primary_runtime_feature_dir``
-#                              (patched 6x) route back through THIS module's
-#                              own delegate via a live, deferred lookup rather
-#                              than a bare intra-seam call (research.md
-#                              §Compat's grounded false-green trap).
-#                              ``_wrap_with_decision_git_log`` (the cluster's
-#                              caller) and ``_mission_routes_through_
-#                              coordination`` are KEEP-IN-PLACE here, unmoved.
-#
-# This is the FINAL extraction (WP10) — see
-# ``kitty-specs/runtime-bridge-degod-01KX8M1C/``.
+# This module keeps the ``decide_next_via_runtime`` phases, the CLI guards,
+# the decision git-log wrapper, and the query / answer entries.
 #
 # RULES (do NOT regress):
 #   * Never reach into ``_internal_runtime.engine`` / ``.planner`` directly
 #     from this module — go through ``runtime_bridge_engine`` (arch-guarded,
 #     see ``tests/runtime/test_bridge_engine.py``).
-#   * ``__all__`` (below) covers the 8 public names only (governs
-#     ``import *``); the ~50 private symbols tests patch stay preserved by the
-#     explicit guarded compat re-export block, not by ``__all__`` (FR-012).
-#
-# De-godding effort: https://github.com/Priivacy-ai/spec-kitty/issues/2531
+#   * Do not add forwarding delegates for seam symbols; call the seam.
 # ─────────────────────────────────────────────────────────────────────────────
 
 from __future__ import annotations
@@ -145,15 +53,11 @@ import re
 import shutil
 from collections.abc import Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from kernel.clock import now_utc_iso
 
-if TYPE_CHECKING:
-    from charter.activation.invocation_context import OperationalContext as OperationalContextT
-
 from runtime.next._internal_runtime import (
-    DiscoveryContext,
     MissionRunRef,
     NextDecision,
     next_step as runtime_next_step,
@@ -167,14 +71,10 @@ from runtime.next import runtime_bridge_identity as _identity_seam
 from runtime.next import runtime_bridge_io as _io_seam
 from runtime.next import runtime_bridge_retrospective as _retrospective_seam
 
-# WP18 (#2561) — the untracked self-alias re-exports that formerly lived here
-# (the five ``runtime_bridge_cores`` parse-family helpers, plus
-# ``_retrospective_blocks_completion`` / ``_composition_dispatch_inputs`` /
-# ``_has_generated_docs``) were retired now that no consumer patches them via
-# the ``runtime_bridge.<name>`` façade path. Their leaves are reached directly
-# from the owning seam (``_cores`` / ``_retrospective_seam`` / ``_composition``)
-# at each call site below; the seam ``_rb.<name>`` round-trips were repointed to
-# the owning seam in the same change.
+# Public façade: production callers outside ``runtime.next`` reach these two
+# I/O-port entry points through ``runtime_bridge``. Patch them on
+# ``runtime_bridge_io`` (their owner) — this module's own code calls them there.
+from runtime.next.runtime_bridge_io import build_operational_context_for_claim, get_or_start_run
 
 from specify_cli.core.constants import KITTY_SPECS_DIR, MISSION_TYPE_SOFTWARE_DEV
 from specify_cli.mission import get_mission_type
@@ -204,36 +104,6 @@ logger = logging.getLogger(__name__)
 
 class DecisionGitLogUnavailable(RuntimeError):
     """Decision audit logging cannot be made durable for a modern mission."""
-
-
-def _primary_runtime_feature_dir(repo_root: Path, mission_slug: str) -> Path:
-    """Thin compat delegate (native ``def``; FR-012 compat surface, #2531
-    WP10) — forwards to :func:`runtime_bridge_identity._primary_runtime_feature_dir`.
-    Patched 6x by ``tests/runtime/test_runtime_bridge_identity.py`` — kept as a
-    native ``def`` (never a plain re-export) so this name's ``__module__``
-    stays ``runtime_bridge``, and both intra-seam callers of the real
-    implementation (:func:`runtime_bridge_identity._resolve_coordination_branch`
-    / ``._resolve_mission_ulid``) route back through THIS delegate via a live,
-    deferred lookup rather than a bare intra-seam call — see
-    ``runtime_bridge_identity``'s module docstring for the false-green
-    mechanism this closes."""
-    return _identity_seam._primary_runtime_feature_dir(repo_root, mission_slug)
-
-
-def _resolve_coordination_branch(mission_slug: str, repo_root: Path) -> str:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_identity._resolve_coordination_branch` (FR-012
-    compat surface, #2531 WP10; see module-level comment above and
-    ``runtime_bridge_identity``'s docstring)."""
-    return _identity_seam._resolve_coordination_branch(mission_slug, repo_root)
-
-
-def _resolve_mission_ulid(mission_slug: str, repo_root: Path) -> str | None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_identity._resolve_mission_ulid` (FR-012 compat
-    surface, #2531 WP10; see module-level comment above and
-    ``runtime_bridge_identity``'s docstring)."""
-    return _identity_seam._resolve_mission_ulid(mission_slug, repo_root)
 
 
 def _mission_routes_through_coordination(
@@ -313,8 +183,8 @@ def _wrap_with_decision_git_log(
         from specify_cli.events.decision_log import DecisionGitLog
 
         if not is_owned_call:
-            coordination_branch = _resolve_coordination_branch(mission_slug, repo_root)
-            mission_id = _resolve_mission_ulid(mission_slug, repo_root)  # str | None
+            coordination_branch = _identity_seam._resolve_coordination_branch(mission_slug, repo_root)
+            mission_id = _identity_seam._resolve_mission_ulid(mission_slug, repo_root)  # str | None
         else:
             from mission_runtime import mission_context_for
             from specify_cli.mission_metadata import resolve_mission_identity
@@ -556,8 +426,7 @@ class MissionNotFoundError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Feature → Run index — bodies moved to runtime_bridge_io.py (T017); see
-# ``_load_feature_runs`` below for the residual thin compat delegate.
+# Feature → Run index — lives in runtime_bridge_io.py (T017).
 #
 # tasks.md parse family — bodies moved to runtime_bridge_cores.py (#2531
 # WP06, T021; verbatim, zero-dependency pure leaf). ``TASKS_GLOB`` stays
@@ -566,159 +435,6 @@ class MissionNotFoundError(Exception):
 # ---------------------------------------------------------------------------
 
 TASKS_GLOB = "WP*.md"
-
-
-def _parse_wp_sections_from_tasks_md(tasks_content: str) -> dict[str, str]:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_cores._parse_wp_sections_from_tasks_md`."""
-    return _cores._parse_wp_sections_from_tasks_md(tasks_content)
-
-
-def _parse_requirement_refs_from_tasks_md(tasks_content: str) -> dict[str, list[str]]:
-    """Thin compat delegate — parse requirement references per WP.
-
-    Composed via THIS module's own :func:`_parse_wp_sections_from_tasks_md`
-    delegate (bare call, resolved against ``runtime_bridge``'s own globals)
-    rather than forwarding to :func:`runtime_bridge_cores._parse_requirement_
-    refs_from_tasks_md` (whose internal call to the cores-local
-    ``_parse_wp_sections_from_tasks_md`` would resolve against
-    ``runtime_bridge_cores``'s globals instead). Both symbols are WP02
-    compat-tracked and patched independently
-    (``tests/runtime/test_bridge_compat_surface.py``'s ``REACH`` map); a
-    blind forward here would make ``monkeypatch.setattr(runtime_bridge,
-    "_parse_wp_sections_from_tasks_md", ...)`` a no-op false-green for any
-    scenario that reaches it only through this function (the exact
-    intra-seam-call trap research.md §Compat documents for
-    ``_primary_runtime_feature_dir``).
-
-    WP04 (C-002): the signature stays one-argument -- the grammar is
-    resolved lazily here (the existing edge to ``specify_cli.requirement_
-    mapping``, no new layer-ledger key) and threaded into the cores call as
-    ``grammar=``."""
-    from specify_cli.requirement_mapping import grammar
-
-    return {
-        wp_id: _cores._collect_requirement_refs_for_section(section_content, grammar=grammar)
-        for wp_id, section_content in _parse_wp_sections_from_tasks_md(tasks_content).items()
-    }
-
-
-class _BufferingRuntimeEmitter(_retrospective_seam._BufferingRuntimeEmitter):
-    """Thin compat delegate (native ``class`` statement; FR-012 compat
-    surface, #2531 WP04). Real implementation lives in
-    :class:`runtime_bridge_retrospective._BufferingRuntimeEmitter` — inherited
-    unchanged (no override). Kept as a native subclass definition (not a
-    plain re-export alias) so ``_BufferingRuntimeEmitter.__module__`` stays
-    ``runtime_bridge`` — the WP02 compat guard's identity/relocated-symbol
-    check only tolerates the pre-existing ``runtime.next.decision``-origin
-    cross-module symbols; see the module-level #2531 comment block above and
-    ``runtime_bridge_retrospective``'s docstring."""
-
-
-def _rich_hic_prompt() -> tuple[bool, str | None]:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_retrospective._rich_hic_prompt` (FR-012 compat
-    surface, #2531 WP04; see module-level comment above)."""
-    return _retrospective_seam._rich_hic_prompt()
-
-
-def _resolve_mission_id_for_terminus(feature_dir: Path) -> str:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_retrospective._resolve_mission_id_for_terminus`."""
-    return _retrospective_seam._resolve_mission_id_for_terminus(feature_dir)
-
-
-def _build_retrospective_facilitator_callback(
-    mission_slug: str,
-    repo_root: Path,
-    provenance_kind: str = "runtime_post_completion",
-) -> Any:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_retrospective._build_retrospective_facilitator_callback`."""
-    return _retrospective_seam._build_retrospective_facilitator_callback(mission_slug, repo_root, provenance_kind)
-
-
-def _resolve_retrospective_policy_for_runtime(
-    repo_root: Path,
-) -> tuple[Any, dict[str, str], Exception | None]:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_retrospective._resolve_retrospective_policy_for_runtime`."""
-    return _retrospective_seam._resolve_retrospective_policy_for_runtime(repo_root)
-
-
-def _run_retrospective_learning_capture(
-    *,
-    mission_id: str,
-    mission_slug: str,
-    feature_dir: Path,
-    repo_root: Path,
-    block_on_failure: bool,
-) -> None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_retrospective._run_retrospective_learning_capture`."""
-    _retrospective_seam._run_retrospective_learning_capture(
-        mission_id=mission_id,
-        mission_slug=mission_slug,
-        feature_dir=feature_dir,
-        repo_root=repo_root,
-        block_on_failure=block_on_failure,
-    )
-
-
-def _classify_exc(exc: Exception) -> str:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_retrospective._classify_exc`."""
-    return _retrospective_seam._classify_exc(exc)
-
-
-def _remediation_hint(exc: Exception, source_map: dict[str, str]) -> str | None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_retrospective._remediation_hint`."""
-    return _retrospective_seam._remediation_hint(exc, source_map)
-
-
-def _classify_and_emit_failure(
-    *,
-    mission_id: str,
-    mission_slug: str,
-    repo_root: Path,
-    exc: Exception,
-    source_map: dict[str, str],
-    provenance_kind: str,
-    emit_capture_failed: Any,
-) -> None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_retrospective._classify_and_emit_failure`."""
-    _retrospective_seam._classify_and_emit_failure(
-        mission_id=mission_id,
-        mission_slug=mission_slug,
-        repo_root=repo_root,
-        exc=exc,
-        source_map=source_map,
-        provenance_kind=provenance_kind,
-        emit_capture_failed=emit_capture_failed,
-    )
-
-
-def _load_feature_runs(repo_root: Path) -> dict[str, _io_seam._FeatureRunEntry]:
-    """Thin compat delegate — forwards to :func:`runtime_bridge_io.load_feature_runs`
-    (via the repo_root -> path resolver :func:`runtime_bridge_io._feature_runs_path`)."""
-    return _io_seam.load_feature_runs(_io_seam._feature_runs_path(repo_root))
-
-
-def _mission_key_for_run_ref(run_ref: MissionRunRef, default: str) -> str:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._mission_key_for_run_ref`."""
-    return _io_seam._mission_key_for_run_ref(run_ref, default)
-
-
-def _build_run_ref(*, run_id: str, run_dir: str, mission_type: str) -> MissionRunRef:
-    """Thin compat delegate — forwards to :func:`runtime_bridge_io._build_run_ref`.
-
-    Passes this module's own ``MissionRunRef`` binding through explicitly
-    (rather than letting the io module close over its own import) so tests
-    that monkeypatch ``runtime_bridge.MissionRunRef`` observe the substitution."""
-    return _io_seam._build_run_ref(run_id=run_id, run_dir=run_dir, mission_type=mission_type, run_ref_cls=MissionRunRef)
 
 
 # ---------------------------------------------------------------------------
@@ -978,13 +694,11 @@ def _check_cli_guards(
     repo_root: Path | None = None,
     owned: OwnedCheckout | None = None,
 ) -> list[str]:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_cores.evaluate_guards` over a
-    :func:`runtime_bridge_io.gather_artifact_presence` snapshot (#2531 WP06,
-    T022). ``wp_advance_ready`` is threaded through separately (not gathered
-    by the snapshot) for ``implement``/``review`` so the pre-existing,
-    unmoved :func:`_should_advance_wp_step` I/O read — and its own WP02
-    compat reach — stay exactly where they were.
+    """Evaluate the CLI guards for ``step_id``: :func:`runtime_bridge_cores.evaluate_guards_strict`
+    over a :func:`runtime_bridge_io.gather_artifact_presence` snapshot (#2531
+    WP06, T022). ``wp_advance_ready`` is threaded through separately (not
+    gathered by the snapshot) for ``implement``/``review`` from this module's
+    :func:`_should_advance_wp_step` I/O read.
 
     ``mission_family`` is supplied by runtime paths that already resolved the
     primary-anchored mission type. Direct callers may omit it to preserve the
@@ -1182,7 +896,7 @@ def _check_requirement_mapping_ready(feature_dir: Path) -> list[str]:
         if wps_manifest is None:
             tasks_md = feature_dir / TASKS_ARTIFACT
             if tasks_md.exists():
-                tasks_md_refs = _parse_requirement_refs_from_tasks_md(tasks_md.read_text(encoding="utf-8"))
+                tasks_md_refs = _cores._parse_requirement_refs_from_tasks_md(tasks_md.read_text(encoding="utf-8"), grammar=grammar)
                 for wp_id, refs in tasks_md_refs.items():
                     if refs and not wp_requirement_refs.get(wp_id):
                         wp_requirement_refs[wp_id] = refs
@@ -1267,325 +981,6 @@ def _has_raw_dependencies_field(wp_file: Path) -> bool:
         if stripped.startswith("dependencies:"):
             return True
     return False
-
-
-# ---------------------------------------------------------------------------
-# Composition dispatch (WP02 / mission software-dev-composition-rewrite-01KQ26CY)
-# ---------------------------------------------------------------------------
-#
-# The cluster itself now lives in ``runtime_bridge_composition.py`` (#2531
-# WP08) — see that module's docstring for the constraints (C-001/C-002/
-# C-003/C-008) that still govern it. This residual keeps:
-#
-#   * a **native thin compat delegate** for every WP02-tracked symbol
-#     (FR-012) below, so ``monkeypatch.setattr(runtime_bridge, "<name>", …)``
-#     keeps intercepting exactly as before the move;
-#   * a **plain re-export** for the two untracked helpers
-#     (``_composition_dispatch_inputs``, ``_has_generated_docs``) that
-#     ``decide_next_via_runtime`` / ``runtime_bridge_io`` still reach bare /
-#     via live lookup, respectively.
-#
-# ``_resolve_step_binding`` and ``_LEGACY_TASKS_STEP_IDS`` have no caller left
-# in this module and are not compat-tracked — they live ONLY in
-# ``runtime_bridge_composition.py`` now, with no residual re-export.
-# (``_composition_dispatch_inputs`` / ``_has_generated_docs`` plain
-# re-exports live in the top-of-file import block above, alongside the
-# other untracked-helper re-exports, to keep them module-level per E402.)
-
-
-def _normalize_action_for_composition(step_id: str) -> str:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_composition._normalize_action_for_composition`
-    (FR-012 compat surface, #2531 WP08)."""
-    return _composition._normalize_action_for_composition(step_id)
-
-
-def _should_dispatch_via_composition(
-    mission: str,
-    step_id: str,
-    *,
-    run_dir: Path | None = None,
-    repo_root: Path | None = None,
-) -> bool:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_composition._should_dispatch_via_composition`
-    (FR-008 selection seam; FR-012 compat surface, #2531 WP08). See the seam
-    module's docstring for the full order-critical charter-lookup /
-    custom-widening contract."""
-    return _composition._should_dispatch_via_composition(mission, step_id, run_dir=run_dir, repo_root=repo_root)
-
-
-def _resolve_step_agent_profile(run_dir: Path, step_id: str) -> str | None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_composition._resolve_step_agent_profile`
-    (FR-012 compat surface, #2531 WP08)."""
-    return _composition._resolve_step_agent_profile(run_dir, step_id)
-
-
-def _resolve_runtime_contract_for_step(
-    *,
-    repo_root: Path,
-    run_dir: Path,
-    mission: str,
-    step_id: str,
-) -> Any | None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_composition._resolve_runtime_contract_for_step`
-    (identity-only compat surface — GUARD_B_ONLY_IMPORT_SURFACE in
-    contracts/compat-surface.md; #2531 WP08)."""
-    return _composition._resolve_runtime_contract_for_step(repo_root=repo_root, run_dir=run_dir, mission=mission, step_id=step_id)
-
-
-def _count_source_documented_events(feature_dir: Path) -> int:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_composition._count_source_documented_events`
-    (FR-012 compat surface, #2531 WP08)."""
-    return _composition._count_source_documented_events(feature_dir)
-
-
-def _publication_approved(feature_dir: Path) -> bool:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_composition._publication_approved`
-    (FR-012 compat surface, #2531 WP08)."""
-    return _composition._publication_approved(feature_dir)
-
-
-def _check_composed_action_guard(
-    action: str,
-    feature_dir: Path,
-    *,
-    mission: str = "software-dev",
-    legacy_step_id: str | None = None,
-    repo_root: Path | None = None,
-    owned: OwnedCheckout | None = None,
-) -> list[str]:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_composition._check_composed_action_guard`
-    (FR-012 compat surface, #2531 WP08). See the seam module's docstring for
-    the full guard-branch-family / legacy-vs-composition-only contract.
-
-    ``repo_root`` (#3704 WP03, FR-003) is forwarded unchanged; defaults to
-    ``None`` (built-in tree only, matching every existing caller of this
-    compat surface that does not yet pass a real ``repo_root``)."""
-    return _composition._check_composed_action_guard(action, feature_dir, mission=mission, legacy_step_id=legacy_step_id, repo_root=repo_root, owned=owned)
-
-
-def _dispatch_via_composition(
-    *,
-    repo_root: Path,
-    mission: str,
-    action: str,
-    actor: str,
-    profile_hint: str | None,
-    request_text: str | None,
-    mode_of_work: Any | None,
-    feature_dir: Path,
-    legacy_step_id: str | None = None,
-    contract: Any | None = None,
-    owned: OwnedCheckout | None = None,
-) -> list[str] | None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_composition._dispatch_via_composition`
-    (FR-012 compat surface, #2531 WP08). See the seam module's docstring for
-    the full ``StepContractExecutor`` handoff / structured-failure contract."""
-    return _composition._dispatch_via_composition(
-        repo_root=repo_root,
-        mission=mission,
-        action=action,
-        actor=actor,
-        profile_hint=profile_hint,
-        request_text=request_text,
-        mode_of_work=mode_of_work,
-        feature_dir=feature_dir,
-        legacy_step_id=legacy_step_id,
-        contract=contract,
-        owned=owned,
-    )
-
-
-# Single-dispatch invariant (FR-001 / phase6-composition-stabilization-01KQ2JAS):
-# After a composition-backed software-dev action succeeds, run state must still
-# advance through the next public step — but the legacy ``runtime_next_step``
-# DAG dispatch handler MUST NOT be invoked for the same action attempt.
-#
-# THIN RESIDUAL COMPAT DELEGATE (#2531 WP03, FR-013): the logic that used to
-# live here now lives at ``runtime_bridge_engine.advance_run_state_after_composition``
-# (adapter-owned — it reuses the same engine primitives ``runtime_next_step``
-# uses internally: ``_read_snapshot``, ``_append_event``, ``_load_frozen_template``,
-# ``plan_next``, ``_write_snapshot``). This delegate exists ONLY so the heavy
-# monkeypatch surface tests bind to (8x ``monkeypatch.setattr``/``mocker.patch``
-# + 9x bare-attribute reads across the suite, per contracts/compat-surface.md)
-# keeps resolving against ``runtime_bridge._advance_run_state_after_composition``
-# unchanged. Do not add logic here — extend the adapter instead.
-def _advance_run_state_after_composition(
-    *,
-    run_ref: MissionRunRef,
-    agent: str,
-    mission_slug: str,
-    mission_type: str,
-    repo_root: Path,
-    feature_dir: Path,
-    timestamp: str,
-    progress: dict[str, int | float] | None,
-    origin: dict[str, Any],
-    sync_emitter: RuntimeEventEmitter,
-    plan: Any,
-    owned: OwnedCheckout | None = None,
-    wp_resolution: _WpIterationResolution | None = None,
-) -> Decision:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_engine.advance_run_state_after_composition`. See the
-    module-level comment above for why this delegate must stay (FR-012 compat
-    surface) even though the logic itself moved (FR-013)."""
-    return _engine_adapter.advance_run_state_after_composition(
-        run_ref=run_ref,
-        agent=agent,
-        mission_slug=mission_slug,
-        mission_type=mission_type,
-        repo_root=repo_root,
-        feature_dir=feature_dir,
-        timestamp=timestamp,
-        progress=progress,
-        origin=origin,
-        sync_emitter=sync_emitter,
-        owned=owned,
-        plan=plan,
-        wp_resolution=wp_resolution,
-    )
-
-
-# ---------------------------------------------------------------------------
-# Run management
-# ---------------------------------------------------------------------------
-
-
-def _build_discovery_context(repo_root: Path) -> DiscoveryContext:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._build_discovery_context`. Flagged 🔴 high-risk in
-    research.md §Compat (patched at ``test_query_mode_unit.py:751``, reached
-    only via intra-seam movers in ``runtime_bridge_io.py``) — every one of
-    those intra-seam callers routes back through this delegate via a live
-    lookup rather than a bare intra-module call; see the seam module's
-    docstring."""
-    return _io_seam._build_discovery_context(repo_root)
-
-
-def _resolve_runtime_template_in_root(root: Path, mission_type: str) -> Path | None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._resolve_runtime_template_in_root`."""
-    return _io_seam._resolve_runtime_template_in_root(root, mission_type)
-
-
-def _runtime_template_key(mission_type: str, repo_root: Path) -> str:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._runtime_template_key`."""
-    return _io_seam._runtime_template_key(mission_type, repo_root)
-
-
-def _existing_run_ref(
-    mission_slug: str,
-    repo_root: Path,
-    mission_type: str,
-    *,
-    owned: OwnedCheckout | None = None,
-) -> MissionRunRef | None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._existing_run_ref`."""
-    return _io_seam._existing_run_ref(mission_slug, repo_root, mission_type, owned=owned)
-
-
-def _start_ephemeral_query_run(
-    mission_slug: str,
-    mission_type: str,
-    repo_root: Path,
-) -> tuple[MissionRunRef, Path]:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._start_ephemeral_query_run`."""
-    return _io_seam._start_ephemeral_query_run(mission_slug, mission_type, repo_root)
-
-
-def get_or_start_run(
-    mission_slug: str,
-    repo_root: Path,
-    mission_type: str,
-    *,
-    emitter: Any | None = None,
-    owned: OwnedCheckout | None = None,
-) -> MissionRunRef:
-    """Thin compat delegate — forwards to :func:`runtime_bridge_io.get_or_start_run`.
-
-    Run mapping stored in .kittify/runtime/feature-runs.json:
-    { "042-test-feature": { "run_id": "abc", "run_dir": "..." } }
-    """
-    return _io_seam.get_or_start_run(mission_slug, repo_root, mission_type, emitter=emitter, owned=owned)
-
-
-# ---------------------------------------------------------------------------
-# OperationalContext wiring (FR-017, NFR-004) — bodies live in
-# runtime_bridge_io.py (T017); these are native thin compat delegates.
-# ---------------------------------------------------------------------------
-
-
-def _resolve_run_dir_for_mission(repo_root: Path, mission_slug: str) -> Path | None:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._resolve_run_dir_for_mission`."""
-    return _io_seam._resolve_run_dir_for_mission(repo_root, mission_slug)
-
-
-def _resolve_tech_stack_for_profile(repo_root: Path, profile_id: str | None) -> frozenset[str]:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._resolve_tech_stack_for_profile`."""
-    return _io_seam._resolve_tech_stack_for_profile(repo_root, profile_id)
-
-
-def build_operational_context_for_claim(
-    *,
-    repo_root: Path,
-    feature_dir: Path,
-    mission_slug: str,
-    wp_id: str,
-    actor: str | None,
-    active_model: str | None,
-    active_role: str | None,
-    current_activity: str = "implement",
-    active_profile: str | None = None,
-) -> OperationalContextT:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io.build_operational_context_for_claim`. See that
-    function's docstring for the full OC-builder contract (shared by the two
-    claim entry points, ``implement.py`` and ``agent/workflow.py``)."""
-    return _io_seam.build_operational_context_for_claim(
-        repo_root=repo_root,
-        feature_dir=feature_dir,
-        mission_slug=mission_slug,
-        wp_id=wp_id,
-        actor=actor,
-        active_model=active_model,
-        active_role=active_role,
-        current_activity=current_activity,
-        active_profile=active_profile,
-    )
-
-
-def _build_operational_context_for_decision(
-    *,
-    agent: str,
-    run_ref: MissionRunRef,
-    feature_dir: Path,
-    repo_root: Path,
-    step_id: str | None,
-    mission_state: str | None = None,
-) -> OperationalContextT:
-    """Thin compat delegate — forwards to
-    :func:`runtime_bridge_io._build_operational_context_for_decision`."""
-    return _io_seam._build_operational_context_for_decision(
-        agent=agent,
-        run_ref=run_ref,
-        feature_dir=feature_dir,
-        repo_root=repo_root,
-        step_id=step_id,
-        mission_state=mission_state,
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1757,7 +1152,7 @@ def _dn_bootstrap(
 
     if not is_owned_call:
         feature_dir = _resolve_runtime_feature_dir(repo_root, mission_slug)
-        primary_metadata_dir: Path | None = _primary_runtime_feature_dir(repo_root, mission_slug)
+        primary_metadata_dir: Path | None = _identity_seam._primary_runtime_feature_dir(repo_root, mission_slug)
     else:
         from mission_runtime import MissionArtifactKind, mission_context_for
 
@@ -1875,7 +1270,7 @@ def _dn_bootstrap(
     # Get or start runtime run (before result handling so failed/blocked
     # decisions include canonical run_id, step_id, and mission_state)
     try:
-        run_ref = get_or_start_run(mission_slug, config_root, mission_type, emitter=emitter_for_engine, owned=owned)
+        run_ref = _io_seam.get_or_start_run(mission_slug, config_root, mission_type, emitter=emitter_for_engine, owned=owned)
     except Exception as exc:
         return None, _materialize_decision(
             _cores.DecisionEnvelope(
@@ -1906,7 +1301,7 @@ def _dn_bootstrap(
     # boundary via the extracted helper (keeps the bootstrap phase flat). The
     # builder is read-only — it never allocates a worktree or emits a status
     # event (NFR-004).
-    operational_context = _build_operational_context_for_decision(
+    operational_context = _io_seam._build_operational_context_for_decision(
         agent=agent,
         run_ref=run_ref,
         feature_dir=feature_dir,
@@ -2345,14 +1740,14 @@ def _dn_composition_dispatch(ctx: DecideNextContext) -> Decision | None:
     if (
         ctx.result == "success"
         and current_step_id
-        and _should_dispatch_via_composition(
+        and _composition._should_dispatch_via_composition(
             mission_type,
             current_step_id,
             run_dir=ctx.run_dir,
             repo_root=config_root,
         )
     ):
-        composed_action = _normalize_action_for_composition(current_step_id)
+        composed_action = _composition._normalize_action_for_composition(current_step_id)
         # R-005: for custom missions, the active step's ``agent_profile`` is
         # the source of truth for ``profile_hint``. For built-in missions
         # (e.g., ``software-dev``), built-in templates do NOT set
@@ -2366,7 +1761,7 @@ def _dn_composition_dispatch(ctx: DecideNextContext) -> Decision | None:
             step_id=current_step_id,
             action=composed_action,
         )
-        composition_failures = _dispatch_via_composition(
+        composition_failures = _composition._dispatch_via_composition(
             repo_root=config_root,
             mission=mission_type,
             action=composed_action,
@@ -2401,7 +1796,7 @@ def _dn_composition_dispatch(ctx: DecideNextContext) -> Decision | None:
             return planned
         plan, wp_resolution = planned
         try:
-            return _advance_run_state_after_composition(
+            return _engine_adapter.advance_run_state_after_composition(
                 run_ref=ctx.run_ref,
                 agent=agent,
                 mission_slug=ctx.mission_slug,
@@ -2476,7 +1871,7 @@ def _dn_rollback_buffered_run_state(
 def _dn_terminal_retrospective_gate(
     ctx: DecideNextContext,
     policy_error: Exception | None,
-    buffer: _BufferingRuntimeEmitter | None,
+    buffer: _retrospective_seam._BufferingRuntimeEmitter | None,
     pre_state_bytes: bytes | None,
     pre_events_size: int | None,
 ) -> Decision | None:
@@ -2490,12 +1885,12 @@ def _dn_terminal_retrospective_gate(
     to keep that phase's own complexity down — pure orchestration plumbing
     local to this phase, not a re-extraction of WP04's retrospective seam.
     """
-    mission_id = _resolve_mission_id_for_terminus(ctx.feature_dir)
+    mission_id = _retrospective_seam._resolve_mission_id_for_terminus(ctx.feature_dir)
     config_root = ctx.owned.owned_root if ctx.owned is not None else ctx.repo_root
     try:
         if policy_error is not None:
             raise policy_error
-        _run_retrospective_learning_capture(
+        _retrospective_seam._run_retrospective_learning_capture(
             mission_id=mission_id,
             mission_slug=ctx.mission_slug,
             feature_dir=ctx.feature_dir,
@@ -2607,7 +2002,7 @@ def _dn_decision_materialize(ctx: DecideNextContext) -> Decision:
     # Root discipline (FR-009): retrospective policy is a P-local governance
     # read for an owned mission.
     config_root = ctx.owned.owned_root if ctx.owned is not None else ctx.repo_root
-    policy, _source_map, policy_error = _resolve_retrospective_policy_for_runtime(config_root)
+    policy, _source_map, policy_error = _retrospective_seam._resolve_retrospective_policy_for_runtime(config_root)
     retrospective_enabled = bool(getattr(policy, "enabled", False))
     block_on_retrospective = _retrospective_seam._retrospective_blocks_completion(policy)
 
@@ -2621,7 +2016,7 @@ def _dn_decision_materialize(ctx: DecideNextContext) -> Decision:
     # Use the DecisionGitLog-wrapped emitter as the engine's emitter so that
     # decision events are durably committed to the coordination branch.
     engine_emitter: Any = ctx.emitter_for_engine
-    buffer: _BufferingRuntimeEmitter | None = None
+    buffer: _retrospective_seam._BufferingRuntimeEmitter | None = None
 
     if block_on_retrospective:
         captured = _dn_capture_pre_speculative_state(ctx.run_dir)
@@ -2643,7 +2038,7 @@ def _dn_decision_materialize(ctx: DecideNextContext) -> Decision:
                 )
             )
         pre_state_bytes, pre_events_size = captured
-        buffer = _BufferingRuntimeEmitter()
+        buffer = _retrospective_seam._BufferingRuntimeEmitter()
         engine_emitter = buffer
 
     # Advance via runtime
@@ -2680,8 +2075,8 @@ def _dn_decision_materialize(ctx: DecideNextContext) -> Decision:
         buffer.flush(ctx.emitter_for_engine)
 
     if retrospective_enabled and not block_on_retrospective and runtime_decision.kind == DecisionKind.terminal:
-        mission_id = _resolve_mission_id_for_terminus(ctx.feature_dir)
-        _run_retrospective_learning_capture(
+        mission_id = _retrospective_seam._resolve_mission_id_for_terminus(ctx.feature_dir)
+        _retrospective_seam._run_retrospective_learning_capture(
             mission_id=mission_id,
             mission_slug=ctx.mission_slug,
             feature_dir=ctx.feature_dir,
@@ -3099,7 +2494,7 @@ def query_current_state(
     # Root discipline: the run store (and the template/policy reads that start
     # an ephemeral preview run) live at P for an owned mission.
     config_root = owned.owned_root if owned is not None else repo_root
-    run_ref = _existing_run_ref(mission_slug, config_root, mission_type, owned=owned)
+    run_ref = _io_seam._existing_run_ref(mission_slug, config_root, mission_type, owned=owned)
     ephemeral_run_store: Path | None = None
 
     # Read current step WITHOUT calling next_step(). When no step has been
@@ -3190,7 +2585,7 @@ def _query_read_runtime_plan(
     ephemeral_run_store: Path | None = None
     try:
         if run_ref is None:
-            run_ref, ephemeral_run_store = _start_ephemeral_query_run(
+            run_ref, ephemeral_run_store = _io_seam._start_ephemeral_query_run(
                 mission_slug,
                 mission_type,
                 repo_root,
@@ -3342,7 +2737,7 @@ def answer_decision_via_runtime(
         raise MissionRuntimeError(f"Mission {mission_slug!r} not found; cannot answer decision {decision_id!r}")
     mission_type = get_mission_type(feature_dir)
     config_root = owned.owned_root if owned is not None else repo_root
-    run_ref = get_or_start_run(mission_slug, config_root, mission_type, owned=owned)
+    run_ref = _io_seam.get_or_start_run(mission_slug, config_root, mission_type, owned=owned)
     # E3 (#3929): same bridge-entry registration as the decide path.
     from specify_cli.status import ensure_runtime_moment_producer  # noqa: PLC0415
 
@@ -4065,10 +3460,8 @@ def _map_runtime_decision(
 
 
 # ---------------------------------------------------------------------------
-# Public surface (FR-007 / #2531 WP03). Governs ``from runtime_bridge import *``
-# ONLY — it does NOT preserve the ~50 private symbols tests patch (those live
-# in the explicit guarded compat re-export block introduced as later WPs
-# relocate them; see contracts/compat-surface.md §``__all__``).
+# Public surface (FR-007 / #2531 WP03): what production callers outside
+# ``runtime.next`` import from this module.
 # ---------------------------------------------------------------------------
 __all__ = [
     "DecisionGitLogUnavailable",

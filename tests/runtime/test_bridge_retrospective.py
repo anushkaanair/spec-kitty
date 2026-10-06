@@ -40,6 +40,7 @@ from typing import Any
 
 import pytest
 
+from runtime.next import runtime_bridge_retrospective as _retrospective_seam
 from runtime.next import runtime_bridge_retrospective as retro
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
@@ -327,7 +328,6 @@ def test_classify_and_emit_failure_uses_live_lookup_for_classify_and_hint(
     functions would silently bypass a patch applied to
     ``runtime_bridge.<name>`` (the exact false-green mechanism
     contracts/compat-surface.md warns about)."""
-    from runtime.next import runtime_bridge as rb
 
     calls: list[str] = []
 
@@ -339,8 +339,8 @@ def test_classify_and_emit_failure_uses_live_lookup_for_classify_and_hint(
         calls.append("hint")
         return "patched-hint"
 
-    monkeypatch.setattr(rb, "_classify_exc", _spy_classify)
-    monkeypatch.setattr(rb, "_remediation_hint", _spy_hint)
+    monkeypatch.setattr(_retrospective_seam, "_classify_exc", _spy_classify)
+    monkeypatch.setattr(_retrospective_seam, "_remediation_hint", _spy_hint)
 
     captured: dict[str, Any] = {}
     retro._classify_and_emit_failure(
@@ -370,7 +370,6 @@ def test_run_retrospective_learning_capture_uses_live_lookup_for_facilitator_bui
     ``_run_retrospective_learning_capture`` must invoke
     ``_build_retrospective_facilitator_callback`` via a live lookup through
     ``runtime_bridge`` -- see module docstring."""
-    from runtime.next import runtime_bridge as rb
 
     build_calls: list[dict[str, Any]] = []
     facilitator_calls: list[dict[str, Any]] = []
@@ -383,7 +382,7 @@ def test_run_retrospective_learning_capture_uses_live_lookup_for_facilitator_bui
 
         return _facilitator
 
-    monkeypatch.setattr(rb, "_build_retrospective_facilitator_callback", _fake_builder)
+    monkeypatch.setattr(_retrospective_seam, "_build_retrospective_facilitator_callback", _fake_builder)
 
     retro._run_retrospective_learning_capture(
         mission_id="mission-9",
@@ -400,12 +399,11 @@ def test_run_retrospective_learning_capture_uses_live_lookup_for_facilitator_bui
 def test_run_retrospective_learning_capture_swallows_failure_by_default(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from runtime.next import runtime_bridge as rb
 
     def _raising_callback(*, mission_id: str, feature_dir: Path, repo_root: Path, **_kw: Any) -> None:
         raise RuntimeError("generator exploded")
 
-    monkeypatch.setattr(rb, "_build_retrospective_facilitator_callback", lambda **_kw: _raising_callback)
+    monkeypatch.setattr(_retrospective_seam, "_build_retrospective_facilitator_callback", lambda **_kw: _raising_callback)
 
     # Must not raise -- best-effort default (block_on_failure=False).
     retro._run_retrospective_learning_capture(
@@ -420,12 +418,11 @@ def test_run_retrospective_learning_capture_swallows_failure_by_default(
 def test_run_retrospective_learning_capture_reraises_when_blocking(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    from runtime.next import runtime_bridge as rb
 
     def _raising_callback(*, mission_id: str, feature_dir: Path, repo_root: Path, **_kw: Any) -> None:
         raise RuntimeError("strict gate failure")
 
-    monkeypatch.setattr(rb, "_build_retrospective_facilitator_callback", lambda **_kw: _raising_callback)
+    monkeypatch.setattr(_retrospective_seam, "_build_retrospective_facilitator_callback", lambda **_kw: _raising_callback)
 
     with pytest.raises(RuntimeError, match="strict gate failure"):
         retro._run_retrospective_learning_capture(
@@ -496,7 +493,6 @@ def test_facilitator_uses_live_lookup_for_classify_and_emit_failure(
     by (unpatched, real) ``_build_retrospective_facilitator_callback`` must
     invoke ``_classify_and_emit_failure`` via a live lookup through
     ``runtime_bridge`` when the generator raises -- see module docstring."""
-    from runtime.next import runtime_bridge as rb
 
     class _EnabledPolicy:
         enabled = True
@@ -512,9 +508,7 @@ def test_facilitator_uses_live_lookup_for_classify_and_emit_failure(
         raise FileNotFoundError("forced for seam test")
 
     monkeypatch.setattr("specify_cli.retrospective.generator.generate_retrospective", _raise_missing)
-    monkeypatch.setattr(
-        rb,
-        "_classify_and_emit_failure",
+    monkeypatch.setattr(_retrospective_seam, "_classify_and_emit_failure",
         lambda **kwargs: classify_calls.append(kwargs),
     )
 

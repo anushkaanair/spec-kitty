@@ -241,7 +241,7 @@ class TestWrapWithDecisionGitLogCoordRouting:
         PRIMARY surface and return the ULID. RED on the unfixed code (returns the
         slug), GREEN once the identity read is primary-anchored.
         """
-        from runtime.next.runtime_bridge import _resolve_mission_ulid
+        from runtime.next.runtime_bridge_identity import _resolve_mission_ulid
 
         slug = "my-feature-01KT3YBD"
         mid8 = "01KT3YBD"
@@ -366,10 +366,7 @@ class TestWrapWithDecisionGitLogCoordRouting:
         originates from ``write_dir`` (the one accessor this arm calls)
         instead of the retired ``CoordinationWorkspace.resolve``.
         """
-        from runtime.next.runtime_bridge import (
-            DecisionGitLogUnavailable,
-            _wrap_with_decision_git_log,
-        )
+        from runtime.next.runtime_bridge import DecisionGitLogUnavailable, _wrap_with_decision_git_log
 
         repo_root = tmp_path / "repo"
         slug = "my-feature-01KT3YBD"

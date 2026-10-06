@@ -38,7 +38,7 @@ from specify_cli.mission_step_contracts.executor import (
 )
 from runtime.next import runtime_bridge as rb
 from runtime.next._internal_runtime import MissionRunRef
-from runtime.next.runtime_bridge import (
+from runtime.next.runtime_bridge_composition import (
     _check_composed_action_guard,
     _dispatch_via_composition,
     _normalize_action_for_composition,
@@ -1079,10 +1079,7 @@ def test_composition_success_advances_run_state_and_lane_events(
     _advance_runtime_to_step(repo_root, mission_slug, "specify")
 
     from runtime.next._internal_runtime.engine import _read_snapshot
-    from runtime.next.runtime_bridge import (
-        decide_next_via_runtime,
-        get_or_start_run,
-    )
+    from runtime.next.runtime_bridge import decide_next_via_runtime, get_or_start_run
 
     run_ref = get_or_start_run(mission_slug, repo_root, "software-dev")
     run_dir = Path(run_ref.run_dir)
@@ -1139,10 +1136,7 @@ def test_advancement_helper_persists_decision_required_branch(
 
     from runtime.next._internal_runtime.engine import _read_snapshot
     from runtime.next._internal_runtime.schema import NextDecision
-    from runtime.next.runtime_bridge import (
-        decide_next_via_runtime,
-        get_or_start_run,
-    )
+    from runtime.next.runtime_bridge import decide_next_via_runtime, get_or_start_run
 
     run_ref = get_or_start_run(mission_slug, repo_root, "software-dev")
     run_dir = Path(run_ref.run_dir)
@@ -1205,10 +1199,8 @@ def test_advancement_helper_runs_default_post_completion_retrospective(
     from runtime.next._internal_runtime.engine import _read_snapshot
     from runtime.next._internal_runtime.schema import NextDecision
     from runtime.next.runtime_bridge_engine import plan_composition_advance
-    from runtime.next.runtime_bridge import (
-        _advance_run_state_after_composition,
-        get_or_start_run,
-    )
+    from runtime.next.runtime_bridge import get_or_start_run
+    from runtime.next.runtime_bridge_engine import advance_run_state_after_composition as _advance_run_state_after_composition
 
     run_ref = get_or_start_run(mission_slug, repo_root, "software-dev")
     snapshot_before = _read_snapshot(Path(run_ref.run_dir))
@@ -1235,7 +1227,7 @@ def test_advancement_helper_runs_default_post_completion_retrospective(
             ),
         ),
         patch(
-            "runtime.next.runtime_bridge._run_retrospective_learning_capture",
+            "runtime.next.runtime_bridge_retrospective._run_retrospective_learning_capture",
             side_effect=lambda **kwargs: captures.append(dict(kwargs)),
         ),
     ):
@@ -1267,10 +1259,8 @@ def test_advancement_helper_runs_strict_retrospective_before_completion(
     from runtime.next._internal_runtime.engine import _read_snapshot
     from runtime.next._internal_runtime.schema import NextDecision
     from runtime.next.runtime_bridge_engine import plan_composition_advance
-    from runtime.next.runtime_bridge import (
-        _advance_run_state_after_composition,
-        get_or_start_run,
-    )
+    from runtime.next.runtime_bridge import get_or_start_run
+    from runtime.next.runtime_bridge_engine import advance_run_state_after_composition as _advance_run_state_after_composition
 
     run_ref = get_or_start_run(mission_slug, repo_root, "software-dev")
     snapshot_before = _read_snapshot(Path(run_ref.run_dir))
@@ -1302,11 +1292,11 @@ def test_advancement_helper_runs_strict_retrospective_before_completion(
             ),
         ),
         patch(
-            "runtime.next.runtime_bridge._resolve_retrospective_policy_for_runtime",
+            "runtime.next.runtime_bridge_retrospective._resolve_retrospective_policy_for_runtime",
             return_value=(strict_policy, {"enabled": "test"}, None),
         ),
         patch(
-            "runtime.next.runtime_bridge._run_retrospective_learning_capture",
+            "runtime.next.runtime_bridge_retrospective._run_retrospective_learning_capture",
             side_effect=lambda **kwargs: captures.append(dict(kwargs)),
         ),
     ):
@@ -1337,10 +1327,8 @@ def test_advancement_helper_raises_policy_error_for_strict_retrospective(
     from runtime.next._internal_runtime.engine import _read_snapshot
     from runtime.next._internal_runtime.schema import NextDecision
     from runtime.next.runtime_bridge_engine import plan_composition_advance
-    from runtime.next.runtime_bridge import (
-        _advance_run_state_after_composition,
-        get_or_start_run,
-    )
+    from runtime.next.runtime_bridge import get_or_start_run
+    from runtime.next.runtime_bridge_engine import advance_run_state_after_composition as _advance_run_state_after_composition
 
     run_ref = get_or_start_run(mission_slug, repo_root, "software-dev")
     snapshot_before = _read_snapshot(Path(run_ref.run_dir))
@@ -1369,7 +1357,7 @@ def test_advancement_helper_raises_policy_error_for_strict_retrospective(
             ),
         ),
         patch(
-            "runtime.next.runtime_bridge._resolve_retrospective_policy_for_runtime",
+            "runtime.next.runtime_bridge_retrospective._resolve_retrospective_policy_for_runtime",
             return_value=(strict_policy, {"enabled": "test"}, policy_error),
         ),
         pytest.raises(RuntimeError, match="bad retrospective policy"),
@@ -1587,10 +1575,7 @@ class TestCustomMissionComposition:
         repo_root, _feature_dir, mission_slug = composed_software_dev_project
         _advance_runtime_to_step(repo_root, mission_slug, "specify")
 
-        from runtime.next.runtime_bridge import (
-            decide_next_via_runtime,
-            get_or_start_run,
-        )
+        from runtime.next.runtime_bridge import decide_next_via_runtime, get_or_start_run
 
         run_ref = get_or_start_run(mission_slug, repo_root, "software-dev")
         # Inject a step-level ``agent_profile`` so the call site picks it up

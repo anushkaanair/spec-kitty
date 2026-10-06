@@ -261,7 +261,7 @@ def test_advance_run_state_preserves_identity_through_autocomplete_reconstructio
     """
     from runtime.next._internal_runtime.engine import _read_snapshot
     from runtime.next._internal_runtime.schema import NextDecision
-    from runtime.next.runtime_bridge import _advance_run_state_after_composition
+    from runtime.next.runtime_bridge_engine import advance_run_state_after_composition as _advance_run_state_after_composition
     from runtime.next.runtime_bridge_engine import plan_composition_advance
 
     run_dir = tmp_path / "run"
@@ -352,7 +352,7 @@ def test_advance_run_state_preserves_identity_through_final_persist_reconstructi
     """
     from runtime.next._internal_runtime.engine import _read_snapshot
     from runtime.next._internal_runtime.schema import NextDecision
-    from runtime.next.runtime_bridge import _advance_run_state_after_composition
+    from runtime.next.runtime_bridge_engine import advance_run_state_after_composition as _advance_run_state_after_composition
     from runtime.next.runtime_bridge_engine import plan_composition_advance
 
     run_dir = tmp_path / "run2"

@@ -17,6 +17,9 @@ base, never a typed ``OwnedRefusalCode``).
 
 from __future__ import annotations
 
+from runtime.next import runtime_bridge_engine as _engine_seam
+from runtime.next import runtime_bridge_composition as _composition_seam
+
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -626,7 +629,6 @@ class TestFr009CompositionSeams:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         from runtime.next import decision as decision_mod
-        from runtime.next import runtime_bridge
         from runtime.next import runtime_bridge_composition as composition
 
         checkouts = make_owned_checkouts(topology="single_branch")
@@ -641,8 +643,8 @@ class TestFr009CompositionSeams:
             return _call
 
         monkeypatch.setattr(composition, "_composition_dispatch_inputs", _spy("inputs", composition._composition_dispatch_inputs))
-        monkeypatch.setattr(runtime_bridge, "_dispatch_via_composition", _spy("dispatch", runtime_bridge._dispatch_via_composition))
-        monkeypatch.setattr(runtime_bridge, "_advance_run_state_after_composition", _spy("advance", runtime_bridge._advance_run_state_after_composition))
+        monkeypatch.setattr(_composition_seam, "_dispatch_via_composition", _spy("dispatch", _composition_seam._dispatch_via_composition))
+        monkeypatch.setattr(_engine_seam, "advance_run_state_after_composition", _spy("advance", _engine_seam.advance_run_state_after_composition))
 
         decision_mod.decide_next("claude", checkouts.mission_slug, "success", checkouts.repository_root, owned=fact)
 
@@ -687,7 +689,8 @@ class TestOwnedRunIdentity:
         ownership verification ``RunIdentityMigrationRequired`` asks for."""
         import json
 
-        from runtime.next.runtime_bridge import _existing_run_ref, get_or_start_run
+        from runtime.next.runtime_bridge import get_or_start_run
+        from runtime.next.runtime_bridge_io import _existing_run_ref
 
         checkouts = owned_checkouts
         _provision_charter(checkouts)

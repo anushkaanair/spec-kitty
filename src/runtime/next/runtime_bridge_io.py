@@ -9,10 +9,8 @@ Also hosts the two new port-shaped additions this WP introduces:
 - ``gather_artifact_presence`` (T018, FR-009) — the fact-gathering counterpart
   of the guard inversion WP06 completes. It reads the SAME filesystem /
   status / bulk-edit / requirement-mapping facts ``_check_cli_guards``
-  (still defined on ``runtime_bridge``, unmoved by this WP) /
-  ``_check_composed_action_guard`` (moved to ``runtime_bridge_composition``
-  by #2531 WP08; the residual keeps a thin compat delegate under the same
-  name) read today, packaged as an
+  (``runtime_bridge``) / ``_check_composed_action_guard``
+  (``runtime_bridge_composition``) read, packaged as an
   :class:`ArtifactPresenceSnapshot`, so a future pure ``evaluate_guards``
   (WP06) can decide pass/fail without doing I/O itself. This function
   GATHERS ONLY — it makes no pass/fail decisions, and nothing in the current
@@ -20,57 +18,27 @@ Also hosts the two new port-shaped additions this WP introduces:
 - ``resolve_commit_target`` (T019) — the ONE pure decision that was
   interleaved inside ``_wrap_with_decision_git_log`` (mid8 derivation +
   fail-closed validation + ``CommitTarget``/worktree_root-candidate
-  selection). ``_wrap_with_decision_git_log`` itself is KEEP-IN-PLACE in the
-  residual (contracts/compat-surface.md) — only its pure selection moved
-  out; see that function's docstring for why the remaining ``.exists()``
+  selection). ``_wrap_with_decision_git_log`` itself stays in
+  ``runtime_bridge`` — only its pure selection moved out; see that function's docstring for why the remaining ``.exists()``
   check stays a residual I/O concern.
 
-``runtime_bridge.py`` keeps a **native thin compat delegate** — a real
-``def``/``class`` statement, never a plain ``import`` alias — under every one
-of the moved symbols the WP02 compat guard binds. This is mandatory, not
-stylistic: ``tests/runtime/test_bridge_compat_surface.py::
-test_guard_b_identity_reexport_for_relocated_symbols`` (a FROZEN gate file)
-asserts that the set of compat symbols whose ``__module__`` differs from
-``runtime_bridge`` equals a **hardcoded 3-element baseline** (the
-pre-existing ``runtime.next.decision``-origin symbols). A plain re-export of
-any OTHER compat-tracked symbol would flip that assertion and fail
-deterministically — the exact mechanism WP04's ``runtime_bridge_retrospective``
-docstring documents for its own 9 symbols. ``_feature_runs_path`` /
-``save_feature_runs`` and the handful of names nothing patches (see each
-function's docstring below) are untracked and therefore fine as plain
-internal helpers with no residual shim at all.
+Every symbol here is owned by this module: ``runtime_bridge`` calls it as
+``runtime_bridge_io.<name>`` and tests patch it here (#2561 retired the thin
+compat delegates ``runtime_bridge`` used to keep). ``runtime_bridge`` still
+re-exports the two public ports production callers outside ``runtime.next``
+use (``get_or_start_run``, ``build_operational_context_for_claim``); they are
+the same function objects as this module's.
 
-**The intra-seam live-lookup risk (research.md §Compat / WP03-WP04
-precedent).** Several of the moved, compat-tracked symbols call each other
-now that they live together in this module (``get_or_start_run`` ->
-``_load_feature_runs`` / ``_build_run_ref`` / ``_mission_key_for_run_ref`` /
-``_runtime_template_key`` / ``_build_discovery_context``;
-``_runtime_template_key`` -> ``_build_discovery_context`` /
-``_resolve_runtime_template_in_root``; ``_start_ephemeral_query_run`` ->
-``_runtime_template_key`` / ``_build_discovery_context``;
-``_existing_run_ref`` -> ``_load_feature_runs`` / ``_build_run_ref``;
-``build_operational_context_for_claim`` -> ``_resolve_run_dir_for_mission`` /
-``_resolve_tech_stack_for_profile``; ``_build_operational_context_for_decision``
--> ``_resolve_tech_stack_for_profile``). Several ALSO call back into
-compat-tracked names reachable at ``runtime_bridge.<name>`` — some still
-natively defined in the residual (``_resolve_mission_ulid``,
-``_resolve_runtime_feature_dir``, ``_has_raw_dependencies_field``,
-``_check_requirement_mapping_ready``, ``_occurrence_gate_failures``), others
-now thin compat delegates onto ``runtime_bridge_composition`` after #2531
-WP08 (``_resolve_step_agent_profile``, ``_count_source_documented_events``,
-``_publication_approved``) or plain re-exports from that same seam
-(``_has_generated_docs``). Every one of these calls is routed through a
-**local, live import of ``runtime_bridge``**
-(``from runtime.next import runtime_bridge as _rb; _rb.<name>(...)``,
-deferred to function scope — ``runtime_bridge`` imports this module at its
-own top level, so a top-level back-import here would be circular) so a
-``monkeypatch.setattr(runtime_bridge, "<name>", …)`` is still observed
-exactly as before the extraction — the same false-green mitigation WP03's
-``runtime_bridge_engine`` and WP04's ``runtime_bridge_retrospective`` already
-apply. ``_build_discovery_context`` is the grounded high-risk case flagged by
-``research.md`` §Compat (patched at ``test_query_mode_unit.py:751``, reached
-only via intra-seam movers); the rule above closes it the same way it closes
-every other compat-tracked intra-seam call in this module.
+Calls between symbols of this module are plain intra-module calls, so one
+patch here covers every caller. Calls into other seams go through the owning
+module attribute (``runtime_bridge_identity._resolve_mission_ulid``;
+``runtime_bridge_composition.<name>`` through a deferred import, since
+composition imports this module at its top level).
+``gather_artifact_presence`` still reads a few guard facts owned by
+``runtime_bridge`` (``_resolve_runtime_feature_dir``,
+``_has_raw_dependencies_field``, ``_check_requirement_mapping_ready``,
+``_check_bare_prose_requirements_ready``, ``_occurrence_gate_failures``)
+through a deferred ``runtime_bridge`` import for the same reason.
 """
 
 from __future__ import annotations
@@ -108,6 +76,7 @@ from runtime.next._internal_runtime.schema import (
     load_mission_template_file,
 )
 from runtime.next import run_index
+from runtime.next import runtime_bridge_identity as _identity_seam
 from runtime.next.run_index import FEATURE_RUNS_FILENAME
 from runtime.next.run_index import RunDirOutsideRepoError as RunDirOutsideRepoError  # re-export
 from specify_cli.coordination.workspace import CoordinationWorkspace
@@ -259,9 +228,8 @@ def _canonicalize_run_index(
 
 def _load_run_index(repo_root: Path) -> tuple[dict[str, _FeatureRunEntry], bool]:
     """Load the index through the canonical view; report whether it needed rekeying."""
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
-    return _canonicalize_run_index(_rb._load_feature_runs(repo_root))
+    return _canonicalize_run_index(load_feature_runs(_feature_runs_path(repo_root)))
 
 
 def _is_unbound_run_of(candidate: _FeatureRunEntry, mission_slug: str) -> bool:
@@ -306,9 +274,8 @@ def _run_mission_id(mission_slug: str, repo_root: Path, owned: OwnedCheckout | N
 
         owned_mission_id: str | None = resolve_mission_identity(owned.mission_dir).mission_id
         return owned_mission_id
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
-    return _rb._resolve_mission_ulid(mission_slug, repo_root)
+    return _identity_seam._resolve_mission_ulid(mission_slug, repo_root)
 
 
 def _adopt_verified_unbound_run(index: dict[str, _FeatureRunEntry], *, mission_slug: str, mission_id: str | None) -> bool:
@@ -357,8 +324,7 @@ def load_feature_runs(path: Path) -> dict[str, _FeatureRunEntry]:
     """Textbook narrow port: read the feature->run index JSON file at ``path``.
 
     ``data-model.md`` §Ports names this the canonical path-based port
-    signature; ``runtime_bridge._load_feature_runs`` (repo_root-keyed,
-    compat-tracked) is a thin residual delegate over this + :func:`_feature_runs_path`.
+    signature; repo_root-keyed callers compose it with :func:`_feature_runs_path`.
     See :class:`_FeatureRunEntry` for why ``mission_id`` alone is ``str | None``.
 
     Thin delegate over the RunIndex port's sole file reader (the port owns the
@@ -400,13 +366,10 @@ def _build_run_ref(
 ) -> MissionRunRef:
     """Construct MissionRunRef across runtime versions.
 
-    ``run_ref_cls`` defaults to this module's own :class:`MissionRunRef` import
-    but callers (notably the ``runtime_bridge._build_run_ref`` compat delegate)
-    pass their own module-level binding through explicitly. This is load-bearing:
+    ``run_ref_cls`` defaults to this module's own :class:`MissionRunRef` import;
     ``tests/next/test_runtime_bridge_unit.py::
-    test_build_run_ref_falls_back_when_runtime_uses_mission_type`` monkeypatches
-    ``runtime_bridge.MissionRunRef`` to a fake class and expects the delegate to
-    honor that substitution rather than closing over this module's own import.
+    test_build_run_ref_falls_back_when_runtime_uses_mission_type`` passes a fake
+    class to exercise the legacy-keyword fallback.
 
     Typed as ``Callable[..., MissionRunRef]`` rather than ``type[MissionRunRef]``
     deliberately: the ``except TypeError`` fallback below calls it with a
@@ -651,9 +614,8 @@ def _runtime_template_key(mission_type: str, repo_root: Path) -> str:
     from earlier installs must not reintroduce the legacy tasks_* DAG, while
     explicit, env, and project-scoped overrides remain honored.
     """
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
-    context = _rb._build_discovery_context(repo_root)
+    context = _build_discovery_context(repo_root)
     env_value = os.environ.get(context.env_var_name, "")
     # Org tier (FR-009) sits immediately after the project-legacy entry
     # (`.kittify/missions`) and before the project-config/global/builtin
@@ -675,7 +637,7 @@ def _runtime_template_key(mission_type: str, repo_root: Path) -> str:
 
     for roots in tiers:
         for root in roots:
-            resolved = _rb._resolve_runtime_template_in_root(root, mission_type)
+            resolved = _resolve_runtime_template_in_root(root, mission_type)
             if resolved is not None:
                 return str(resolved)
 
@@ -712,7 +674,7 @@ def _workflow_runtime_template(
     from runtime.next._internal_runtime.planner import compose_template_with_workflow
     from runtime.next._internal_runtime.workflow_registry import get_workflow
 
-    context = _rb._build_discovery_context(repo_root)
+    context = _build_discovery_context(repo_root)
     base_template = load_mission_template(template_key, context=context)
     workflow = get_workflow(str(workflow_id), project_root=repo_root)
     template = compose_template_with_workflow(base_template, workflow)
@@ -739,7 +701,6 @@ def _existing_run_ref(
     ``feature-runs.json``. A live entry with a missing cursor raises
     :class:`RunStateMissing` (FR-016) rather than masquerading as "no run".
     """
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
     mission_id = _run_mission_id(mission_slug, repo_root, owned)
     index, _rekeyed = _load_run_index(repo_root)
@@ -751,7 +712,7 @@ def _existing_run_ref(
     run_dir = _require_run_state(entry, mission_slug=mission_slug, mission_id=mission_id, repo_root=repo_root)
 
     stored_mission_type = entry.get("mission_type") or entry.get("mission_key") or mission_type
-    return _rb._build_run_ref(
+    return _build_run_ref(
         run_id=entry["run_id"],
         run_dir=str(run_dir),
         mission_type=stored_mission_type,
@@ -770,13 +731,12 @@ def _start_ephemeral_query_run(
     snapshot/bootstrap behavior. The temp run store is cleaned up if any
     bootstrap step raises so we never leak directories on failure paths.
     """
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
     run_store = Path(tempfile.mkdtemp(prefix="spec-kitty-query-run-"))
     try:
-        template_key = _rb._runtime_template_key(mission_type, repo_root)
+        template_key = _runtime_template_key(mission_type, repo_root)
         template_override, template_path_override = _workflow_runtime_template(mission_slug, mission_type, repo_root, template_key)
-        context = _rb._build_discovery_context(repo_root)
+        context = _build_discovery_context(repo_root)
 
         run_ref = start_mission_run(
             template_key=template_key,
@@ -807,11 +767,10 @@ def _run_ref_for_entry(
     The cursor is verified and the stored ``run_dir`` token is resolved to an
     ABSOLUTE, containment-checked path against ``repo_root`` (adversarial review
     C1: consumers always see an absolute ``run_ref.run_dir``)."""
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
     run_dir = _require_run_state(entry, mission_slug=mission_slug, mission_id=mission_id, repo_root=repo_root)
     stored_mission_type = entry.get("mission_type") or entry.get("mission_key") or mission_type
-    return _rb._build_run_ref(run_id=entry["run_id"], run_dir=str(run_dir), mission_type=stored_mission_type)
+    return _build_run_ref(run_id=entry["run_id"], run_dir=str(run_dir), mission_type=stored_mission_type)
 
 
 def _start_new_run(
@@ -821,12 +780,11 @@ def _start_new_run(
     emitter: Any | None,
 ) -> MissionRunRef:
     """Start a fresh run in the repo-local run store (no index write here)."""
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
     run_store = run_index.runs_root(repo_root)
-    template_key = _rb._runtime_template_key(mission_type, repo_root)
+    template_key = _runtime_template_key(mission_type, repo_root)
     template_override, template_path_override = _workflow_runtime_template(mission_slug, mission_type, repo_root, template_key)
-    context = _rb._build_discovery_context(repo_root)
+    context = _build_discovery_context(repo_root)
     return start_mission_run(
         template_key=template_key,
         inputs={"mission_slug": mission_slug},
@@ -863,7 +821,6 @@ def get_or_start_run(
     :class:`RunStateMissing`; a ``run_dir`` outside the invoking repo raises
     :class:`RunDirOutsideRepoError` — neither is silently replaced by a fresh run.
     """
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
     resolved_mission_id = _run_mission_id(mission_slug, repo_root, owned)
     index_key = run_index_key(mission_slug, resolved_mission_id)
@@ -898,7 +855,7 @@ def get_or_start_run(
             # cursor is missing / out-of-repo), then reuse the winner's run.
             shutil.rmtree(run_ref.run_dir, ignore_errors=True)
             return _run_ref_for_entry(existing, mission_slug=mission_slug, mission_id=resolved_mission_id, mission_type=mission_type, repo_root=repo_root)
-        resolved_mission_type = _rb._mission_key_for_run_ref(run_ref, mission_type)
+        resolved_mission_type = _mission_key_for_run_ref(run_ref, mission_type)
         index[index_key] = {
             "run_id": run_ref.run_id,
             "run_dir": run_ref.run_dir,
@@ -926,9 +883,8 @@ def _resolve_run_dir_for_mission(repo_root: Path, mission_slug: str) -> Path | N
     free of any run-start side effect (NFR-004). The canonical (rekeyed) view
     is computed in memory only; nothing is persisted here.
     """
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
 
-    mission_id = _rb._resolve_mission_ulid(mission_slug, repo_root)
+    mission_id = _identity_seam._resolve_mission_ulid(mission_slug, repo_root)
     index, _rekeyed = _load_run_index(repo_root)
     entry = _entry_for_mission(index, mission_slug=mission_slug, mission_id=mission_id)
     if not entry:
@@ -1023,14 +979,14 @@ def build_operational_context_for_claim(
         A populated :class:`~charter.activation.invocation_context.OperationalContext`.
     """
     from charter.activation.invocation_context import build_operational_context  # noqa: PLC0415
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
+    from runtime.next import runtime_bridge_composition as _composition  # noqa: PLC0415 — deferred; composition imports this module at top level
 
     resolved_profile = active_profile
     if resolved_profile is None:
         try:
-            run_dir = _rb._resolve_run_dir_for_mission(repo_root, mission_slug)
+            run_dir = _resolve_run_dir_for_mission(repo_root, mission_slug)
             if run_dir is not None:
-                resolved_profile = _rb._resolve_step_agent_profile(run_dir, current_activity)
+                resolved_profile = _composition._resolve_step_agent_profile(run_dir, current_activity)
         except Exception:
             resolved_profile = None
 
@@ -1039,7 +995,7 @@ def build_operational_context_for_claim(
         active_profile=resolved_profile,
         active_role=active_role or actor,
         current_activity=current_activity or wp_id,
-        tech_stack=_rb._resolve_tech_stack_for_profile(repo_root, resolved_profile),
+        tech_stack=_resolve_tech_stack_for_profile(repo_root, resolved_profile),
     )
 
 
@@ -1061,13 +1017,13 @@ def _build_operational_context_for_decision(
     tech stack from the resolved profile. Read-only; no side effects (NFR-004).
     """
     from charter.activation.invocation_context import build_operational_context  # noqa: PLC0415
-    from runtime.next import runtime_bridge as _rb  # noqa: PLC0415
+    from runtime.next import runtime_bridge_composition as _composition  # noqa: PLC0415 — deferred; composition imports this module at top level
 
     activity = step_id or mission_state
     resolved_profile: str | None = None
     if step_id is not None:
         try:
-            resolved_profile = _rb._resolve_step_agent_profile(Path(run_ref.run_dir), step_id)
+            resolved_profile = _composition._resolve_step_agent_profile(Path(run_ref.run_dir), step_id)
         except Exception:
             resolved_profile = None
 
@@ -1076,7 +1032,7 @@ def _build_operational_context_for_decision(
         active_profile=resolved_profile,
         active_role=agent,
         current_activity=activity,
-        tech_stack=_rb._resolve_tech_stack_for_profile(repo_root, resolved_profile),
+        tech_stack=_resolve_tech_stack_for_profile(repo_root, resolved_profile),
     )
 
 
@@ -1200,23 +1156,19 @@ class ArtifactPresenceSnapshot:
     """FR-009 guard fact-port output (data-model.md §ArtifactPresenceSnapshot).
 
     A plain, I/O-free value object carrying the filesystem/status facts the
-    CLI-level guards (``_check_cli_guards``, still defined on
-    ``runtime_bridge``; ``_check_composed_action_guard``, moved to
-    ``runtime_bridge_composition`` by #2531 WP08 behind a thin residual
-    compat delegate under the same name) read today, gathered
+    CLI-level guards (``runtime_bridge._check_cli_guards``,
+    ``runtime_bridge_composition._check_composed_action_guard``) read, gathered
     ONCE by :func:`gather_artifact_presence` so the pure
     ``runtime_bridge_cores.evaluate_guards(snapshot)`` (WP06) can decide
     pass/fail without doing I/O itself.
 
     ``wp_advance_ready`` (WP06, T022) is deliberately NOT populated by
     :func:`gather_artifact_presence` — it defaults to ``None`` here and is
-    filled in by the residual guard delegates in ``runtime_bridge.py`` for
-    ``step_id``/``action`` in ``{"implement", "review"}`` via
-    ``dataclasses.replace(snapshot, wp_advance_ready=...)``, threading the
-    pre-existing (unmoved) ``_should_advance_wp_step`` I/O read through so
-    both its own WP02 compat reach AND this port's already-green
-    ``tests/runtime/test_bridge_io.py`` (which does not stub
-    ``_should_advance_wp_step``) stay intact.
+    filled in by the two guard callers for ``step_id``/``action`` in
+    ``{"implement", "review"}`` via
+    ``dataclasses.replace(snapshot, wp_advance_ready=...)``, threading
+    ``runtime_bridge._should_advance_wp_step``'s I/O read through (so
+    ``tests/runtime/test_bridge_io.py``, which does not stub it, stays valid).
 
     ``blocking_artifact_names`` (WP01, FR-001/FR-002/FR-006, #3704 Part 1)
     IS populated by :func:`gather_artifact_presence` — ``None`` when no
@@ -1445,14 +1397,11 @@ def gather_artifact_presence(
     reproduce identical ``guard_failures`` content and ordering (SC-007)
     without touching disk again. The guard-helper calls below
     (``_check_requirement_mapping_ready``, ``_occurrence_gate_failures``,
-    ``_has_raw_dependencies_field``) stay natively defined on
-    ``runtime_bridge`` (unmoved by this WP); ``_count_source_documented_events``
-    / ``_publication_approved`` are now thin compat delegates onto
-    ``runtime_bridge_composition`` and ``_has_generated_docs`` is a plain
-    re-export from that same seam (#2531 WP08) — all still reachable at
-    ``runtime_bridge.<name>``. Several are compat-tracked, so every one is
-    invoked through a live lookup — never a bare/cached import — exactly
-    like every other cross-seam call in this module.
+    ``_has_raw_dependencies_field``) are owned by ``runtime_bridge``;
+    ``_count_source_documented_events`` / ``_publication_approved`` /
+    ``_has_generated_docs`` are owned by ``runtime_bridge_composition``. Both
+    are reached through deferred module imports (each imports this module at
+    its own top level).
 
     Presence is checked with ``Path.is_file()`` uniformly — the stricter of
     the two predicates the guards mix today (research/documentation branches
@@ -1536,8 +1485,8 @@ def gather_artifact_presence(
         "requirement_mapping_failures": tuple(_rb._check_requirement_mapping_ready(planning_dir)),
         "bare_prose_requirement_failures": tuple(_rb._check_bare_prose_requirements_ready(planning_dir)),
         "occurrence_gate_failures": tuple(_rb._occurrence_gate_failures(planning_dir)),
-        "source_documented_count": _rb._count_source_documented_events(feature_dir),
-        "publication_approved": bool(_rb._publication_approved(feature_dir)),
+        "source_documented_count": _composition._count_source_documented_events(feature_dir),
+        "publication_approved": bool(_composition._publication_approved(feature_dir)),
         "has_generated_docs": has_generated_docs,
     }
 

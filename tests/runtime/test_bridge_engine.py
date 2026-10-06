@@ -50,6 +50,7 @@ from typing import Any
 
 import pytest
 
+from runtime.next import runtime_bridge_retrospective as _retrospective_seam
 from runtime.next import runtime_bridge_engine as engine_adapter
 from runtime.next._internal_runtime.engine import MissionRunRef
 from runtime.next._internal_runtime.schema import MissionRunSnapshot, NextDecision
@@ -487,7 +488,6 @@ def test_advance_run_state_terminal_runs_retrospective_gate(
     retrospective policy/terminus helpers on ``runtime_bridge`` — stubbed here
     via a live module patch, exactly as the WP02 compat guard's sentinel
     mechanism relies on."""
-    from runtime.next import runtime_bridge as rb
 
     run_dir = tmp_path / "run-4"
     run_dir.mkdir()
@@ -515,9 +515,9 @@ def test_advance_run_state_terminal_runs_retrospective_gate(
         failure_policy = "warn"
 
     retro_calls: list[dict[str, Any]] = []
-    monkeypatch.setattr(rb, "_resolve_retrospective_policy_for_runtime", lambda repo_root: (_Policy(), {}, None))
-    monkeypatch.setattr(rb, "_resolve_mission_id_for_terminus", lambda feature_dir: "mission-id-4")
-    monkeypatch.setattr(rb, "_run_retrospective_learning_capture", lambda **kwargs: retro_calls.append(kwargs))
+    monkeypatch.setattr(_retrospective_seam, "_resolve_retrospective_policy_for_runtime", lambda repo_root: (_Policy(), {}, None))
+    monkeypatch.setattr(_retrospective_seam, "_resolve_mission_id_for_terminus", lambda feature_dir: "mission-id-4")
+    monkeypatch.setattr(_retrospective_seam, "_run_retrospective_learning_capture", lambda **kwargs: retro_calls.append(kwargs))
 
     sync_emitter = _FakeSyncEmitter()
     run_ref = MissionRunRef(run_id="run-4", run_dir=str(run_dir), mission_key="software-dev")
@@ -548,7 +548,6 @@ def test_advance_run_state_terminal_skipped_when_no_step_completed(
 ) -> None:
     """A ``terminal`` decision on a re-poll (no step just completed) must NOT
     re-emit ``MissionRunCompleted`` or re-run the retrospective gate."""
-    from runtime.next import runtime_bridge as rb
 
     run_dir = tmp_path / "run-5"
     run_dir.mkdir()
@@ -557,7 +556,7 @@ def test_advance_run_state_terminal_skipped_when_no_step_completed(
     _stub_engine_and_planner(monkeypatch, read_snapshot_returns=snapshot_in, plan_next_returns=decision)
 
     monkeypatch.setattr(
-        rb,
+        _retrospective_seam,
         "_resolve_retrospective_policy_for_runtime",
         lambda repo_root: (_ for _ in ()).throw(AssertionError("must not consult retrospective policy")),
     )

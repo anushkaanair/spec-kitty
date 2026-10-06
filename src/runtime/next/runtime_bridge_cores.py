@@ -475,12 +475,12 @@ class _ArtifactPresenceSnapshotLike(Protocol):
     ``runtime_bridge_io`` import here). Satisfied structurally; mypy checks
     the match across modules with no runtime coupling either direction.
 
-    ``wp_advance_ready`` is populated by the residual guard delegates in
-    ``runtime_bridge.py`` (not by ``gather_artifact_presence`` itself) —
-    see their docstrings for why: it threads the pre-existing, unmoved
-    ``_should_advance_wp_step`` I/O read through so its own WP02 compat
-    reach stays intact, without adding a new gather concern to the WP05
-    port or its already-green test suite.
+    ``wp_advance_ready`` is populated by the two guard callers
+    (``runtime_bridge._check_cli_guards`` /
+    ``runtime_bridge_composition._check_composed_action_guard``), not by
+    ``gather_artifact_presence`` itself: it threads
+    ``runtime_bridge._should_advance_wp_step``'s I/O read through without
+    adding a new gather concern to the WP05 port or its test suite.
 
     ``blocking_artifact_names`` (WP01/WP02, FR-001/FR-002/FR-006, #3704
     Part 1) is ``frozenset[str] | None``: ``None`` means no expected-
