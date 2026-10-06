@@ -111,7 +111,7 @@ Constraints:
 
 ## Red-first (C-006 / C-011)
 
-First commit: remove the `pending_until("WP12")` strict-xfail markers from the WP01 acceptance tests in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP12")' tests/acceptance/charter_pack_cutover/`): the remaining FR-012 rows, the NFR-001 golden comparisons, NFR-004 idempotence, SC-002 and the US2 scenarios tagged WP12. Run them, paste the red output into the Activity Log, change no assertion. The NFR-001 "before" sets are frozen JSON from WP01 (with generator and base SHA); never regenerate them.
+First commit: remove the `pending_until("WP12")` strict-xfail markers from the WP01 acceptance tests in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP12")' tests/acceptance/charter_pack_cutover/`): the remaining FR-012 rows, the NFR-001 golden comparisons, NFR-004 idempotence, SC-002 and the US2 scenarios tagged WP12 (WP01's plan: in `test_upgrade_migration.py`, the stale/kept/minimal/`[]`/skills/dry-run FR-012 tests, all `test_nfr001_*`, `test_nfr004_*`, `test_us2_6_*`, `test_us2_7_*`). WP01 keeps its own copy of the snapshot data in `tests/fixtures/charter_pack_cutover/default_yaml_snapshots.yaml`, independent of your T061 module: never make the tests read your module or vice versa. Run them, paste the red output into the Activity Log, change no assertion. The NFR-001 "before" sets are frozen JSON from WP01 (with generator and base SHA); never regenerate them.
 
 ## Subtasks & Detailed Guidance
 

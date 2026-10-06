@@ -10,7 +10,6 @@ execution_mode: "code_change"
 owned_files:
   - "src/specify_cli/charter_pack_registry.py"
   - "src/charter/activation/packs/**"
-  - "src/charter/activation/default_pack.py"
   - "src/charter/offering/packs/retired_fields.py"
   - "packs/built-in/pack.yaml"
   - "tests/specify_cli/test_charter_pack_registry.py"
@@ -101,7 +100,7 @@ Constraints:
 
 ## Red-first (C-006 / C-011)
 
-First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP13")' tests/acceptance/charter_pack_cutover/`): typically "`charter pack apply` exits 2", "registry modules not importable", "`accompanies_doctrine_pack` rejected with `RETIRED_PACK_FIELD`", "no `default.yaml` reader". Run them, paste the red output into the Activity Log, change no assertion.
+First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP13")' tests/acceptance/charter_pack_cutover/`): per WP01's flip map, in `test_cli_surface.py`: all `test_fr005_*` except `test_fr005_merge_defaults_removed` (WP06), `test_us3_4_accompanies_field_rejected`, and the FR-007 row for `charter pack apply` (exits 2). Run them, paste the red output into the Activity Log, change no assertion.
 
 ## Subtasks & Detailed Guidance
 
@@ -114,7 +113,7 @@ First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/
      git grep -n -e charter_pack_registry -e BUILTIN_PACKS -e 'activation.default_pack' -e 'activation import default_pack' -e 'activation/packs' -e 'activation.packs' -e load_default_pack -e merge_pack_into_config -e resolve_builtin_pack_path -- src tests pyproject.toml .github scripts
      ```
      At planning time the hits were: `provisioning/default_charter.py` (9), `cli/commands/charter/pack.py` (5), `m_3_2_0rc35_default_charter_pack.py` (5), `compiler.py` (4), `m_unify_charter_activation.py` (3), `org_charter.py` (2), `cli/commands/upgrade.py` (2), `_resynthesis_preflight.py`, `provisioning/__init__.py`, migrations rtk/rc5/rc35-activate (docstrings), plus tests. Most `src` hits should already be gone (WP06/WP09/WP10). Any remaining **code** reader is a gap from those WPs: repoint it to the `default` preset loader (WP07) or the effective-set seam (WP06) and log which WP should have covered it; docstring mentions are repointed or dropped.
-  2. Delete `src/specify_cli/charter_pack_registry.py`, `src/charter/activation/packs/` (whatever WP07 left), `src/charter/activation/default_pack.py`.
+  2. Delete `src/specify_cli/charter_pack_registry.py` and `src/charter/activation/packs/` (whatever WP07 left). `src/charter/activation/default_pack.py` is WP06/WP09's module (WP09 removes its last function and the module): confirm it is gone; if WP09 left it, delete it as a logged follow-up.
   3. Clean every roster that names them (logged follow-ups): `pyproject.toml` ruff-format exclude entry `src/specify_cli/charter_pack_registry.py` (around `:463`); `tests/architectural/_interpreter_shard_roster.py:340` and `.github/workflows/ci-nightly.yml:774` (the test path `tests/specify_cli/test_charter_pack_registry.py`); `.github/ci-foreign-coverage-baseline.json` (`specify_cli.charter_pack_registry` at `:63`, `charter.activation.packs` at `:84` and in `_provenance.notes` at `:12`: shrink-only baseline, so lowering a count is allowed, raising is not); `tests/release/coverage_breadth_baseline.json` (`:219`, `:1555`); `tests/architectural/test_src_reachability_guard.py:91` (`"charter.activation.packs"`); `tests/architectural/test_no_dead_modules.py` and `tests/architectural/charter_path_literal_allowlist.yaml` if they list the deleted files.
   4. Confirm packaging no longer needs the data package: `uv run --frozen pytest tests/cross_cutting/packaging/test_packaging_safety.py -q`.
 - **Files**: the deleted modules; roster files (follow-ups).

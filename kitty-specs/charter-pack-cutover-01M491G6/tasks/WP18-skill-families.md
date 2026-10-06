@@ -43,7 +43,6 @@ owned_files:
   - "src/charter/offering/skills/spk-mission-specify/SKILL.md"
   - "src/charter/offering/skills/spk-start-command-map/references/command-map.md"
   - "src/charter/offering/skills/spk-start-here/SKILL.md"
-  - "src/charter/activation/synthesizer/errors.py"
   - "src/specify_cli/upgrade/migrations/m_3_2_0rc35_kittify_profile_handoff.py"
   # --- built-in pack sources that name removed skills ---
   - "packs/built-in/missions/documentation/templates/task-prompt-template.md"

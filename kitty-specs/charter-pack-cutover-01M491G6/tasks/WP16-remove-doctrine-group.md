@@ -8,7 +8,6 @@ task_type: "implement"
 phase: "Phase 4 - Removal (no aliases, no shims)"
 execution_mode: "code_change"
 owned_files:
-  - "src/specify_cli/cli/commands/doctrine.py"
   - "src/specify_cli/cli/commands/__init__.py"
   - "src/specify_cli/cli/commands/mission_type.py"
   - "src/specify_cli/cli/commands/regen.py"

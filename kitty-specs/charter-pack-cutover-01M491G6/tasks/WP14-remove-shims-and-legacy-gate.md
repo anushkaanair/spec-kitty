@@ -13,18 +13,14 @@ owned_files:
   - "src/charter/activation/sync.py"
   - "src/charter/offering/drg/org_pack_config.py"
   - "src/charter/activation/mission_type_profiles.py"
-  - "src/specify_cli/analysis_inputs.py"
-  - "src/specify_cli/cli/commands/_doctrine_collect.py"
   - "src/specify_cli/tracker/config.py"
   - "src/specify_cli/tracker/local_service.py"
   - "src/specify_cli/cli/commands/tracker.py"
   - "tests/specify_cli/migration/test_legacy_charter_gate.py"
   - "tests/charter/test_governance_fail_closed.py"
   - "tests/charter/test_governance_key_compat.py"
-  - "tests/doctrine/drg/test_org_pack_config_cr04_charter_packs.py"
   - "tests/agent/cli/commands/test_tracker.py"
   - "tests/tracker/test_config.py"
-  - "tests/architectural/dead_symbol_allowlist.yaml"
 authoritative_surface: "src/specify_cli/migration/legacy_charter_gate.py"
 create_intent:
   - "src/specify_cli/migration/legacy_charter_gate.py"
@@ -97,8 +93,8 @@ Constraints:
 - **C-001**: deleted means deleted: no warning class kept "for external filtering", no hidden flag, no JSON key "for downstream consumers".
 - **Version-bump rule**: CLAUDE.md "Any changes to `__init__.py` require a version bump in `pyproject.toml` and a `CHANGELOG.md` entry". Your edit to `src/specify_cli/__init__.py` triggers it. Keep the edit to one call, add a CHANGELOG Unreleased line for the gate, and ask the orchestrator whether the version bump lands here or with the release (WP24 owns the changelog Before/After); log the answer.
 - **Cost**: the gate runs on every invocation; it may add at most two `stat`s and one small read per checked root, never a YAML parse on the common path, never a `charter.*` import.
-- Files owned by completed upstream WPs (kernel module from WP02, `synthesizer/reconcile.py` from WP03, acceptance tests from WP01) are logged follow-up edits.
-- **Parallel lanes**: WP15 may run beside you. It leaves `_doctrine_collect.py` to you (you own it) and edits doctor command strings elsewhere; WP17 may rename `CharterPackConfigError` → `ActiveCharterConfigError` in parallel. Raise whichever name exists at implementation time and rebase.
+- Files owned by completed upstream WPs are logged follow-up edits: the kernel module, `analysis_inputs.py`, `cli/commands/_doctrine_collect.py` and `tests/architectural/dead_symbol_allowlist.yaml` (WP02), `synthesizer/reconcile.py` (WP03), the acceptance tests (WP01). `tests/doctrine/**` belongs to WP23 (a later directory rename): your edits there are logged too.
+- **Parallel lanes**: WP15 may run beside you. It leaves `_doctrine_collect.py` to you and edits doctor command strings elsewhere; WP17 may rename `CharterPackConfigError` → `ActiveCharterConfigError` in parallel. Raise whichever name exists at implementation time and rebase.
 - Code style: ruff + mypy clean, complexity ≤ 15, no unexplained suppressions.
 - Commit often (`refactor(charter)!: remove governance.doctrine compat shim (#3732)`), never push to `main`.
 
@@ -112,7 +108,7 @@ Constraints:
 
 ## Red-first (C-006 / C-011)
 
-First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP14")' tests/acceptance/charter_pack_cutover/`): legacy-state commands fail with `LEGACY_CHARTER_STATE`, the exempt commands run, legacy keys are no longer read, `--doctrine-mode` is unknown, `doctrine_mode` is absent from JSON. Run, paste red output, change no assertion.
+First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP14")' tests/acceptance/charter_pack_cutover/`): legacy-state commands fail with `LEGACY_CHARTER_STATE`, the exempt commands run, legacy keys are no longer read, `--doctrine-mode` is unknown, `doctrine_mode` is absent from JSON. WP01's flip map assigns you all `test_fr011_*` in `test_cli_surface.py` and the NFR-002 row "cr02 compat test deleted". That row conflicts with WP16, which owns and deletes `tests/architectural/test_lifted_cli_doctrine_charter_cr02_compat.py` with the doctrine group: do not delete WP16's file; ask the orchestrator to re-tag that row to WP16 and log the answer. Run, paste red output, change no assertion.
 
 ## Subtasks & Detailed Guidance
 

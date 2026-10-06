@@ -24,7 +24,7 @@ create_intent:
   - "tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_keys.py"
   - "tests/specify_cli/upgrade/migrations/test_charter_pack_cutover_paths.py"
   - "tests/specify_cli/migration/test_legacy_charter_layout.py"
-  - ".kittify/charter-packs/"
+  - ".kittify/charter-packs/**"
 agent_profile: "python-pedro"
 role: "implementer"
 agent: "claude"
@@ -115,7 +115,7 @@ Constraints:
 
 ## Red-first (C-006 / C-011)
 
-Your **first commit** removes the `pending_until("WP11")` strict-xfail markers from the WP01 acceptance tests in `tests/acceptance/charter_pack_cutover/` that cover the FR-012 rows listed above (find them with `grep -rn 'pending_until("WP11")' tests/acceptance/charter_pack_cutover/`), and nothing else. Run them and paste the red result into the Activity Log. Do not edit their assertions (C-006: WP01 owns the acceptance criteria; the acceptance files are WP01's, edited here as a logged follow-up). If a test tagged WP11 needs behaviour from WP12 (a stale-list reset) or WP17 (loading a model that accepts `charter_pack_id`), stop and record it; do not re-tag silently. Implementation commits then turn them green.
+Your **first commit** removes the `pending_until("WP11")` strict-xfail markers from the WP01 acceptance tests in `tests/acceptance/charter_pack_cutover/` that cover the FR-012 rows listed above (find them with `grep -rn 'pending_until("WP11")' tests/acceptance/charter_pack_cutover/`; WP01's plan lists them in `test_upgrade_migration.py`: `test_fr012_cutover_runs_first`, `test_fr012_legacy_keys_rewritten[*]`, `test_fr012_doctrine_pack_id_renamed`, `test_fr012_project_root_moved`, `test_fr012_collision_refuses_and_moves_nothing`, `test_fr012_path_references_rewritten`, `test_fr012_user_path_values_untouched`, `test_fr012_windows_locked_file_refuses`), and nothing else. Run them and paste the red result into the Activity Log. Do not edit their assertions (C-006: WP01 owns the acceptance criteria; the acceptance files are WP01's, edited here as a logged follow-up). If a test tagged WP11 needs behaviour from WP12 (a stale-list reset) or WP17 (loading a model that accepts `charter_pack_id`), stop and record it; do not re-tag silently. Implementation commits then turn them green.
 
 ## Subtasks & Detailed Guidance
 
