@@ -10,7 +10,7 @@ corpus_snapshot_id: (none)
 evidence_bundle_hash:
 generated_at: '2026-01-01T00:34:12.132952+00:00'
 inputs_hash: 7a5110584e2bc4cd88e58b3eaf8df4de5f1e36f445f68be07224fd5978b74683
-produced_at: '2026-10-06T20:19:26.576069+00:00'
+produced_at: '2026-10-06T22:00:18.013598+00:00'
 schema_version: '2'
 source_input_ids:
 - directive:DIRECTIVE_003

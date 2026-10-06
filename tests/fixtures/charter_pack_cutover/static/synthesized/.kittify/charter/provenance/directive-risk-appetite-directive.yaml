@@ -10,7 +10,7 @@ corpus_snapshot_id: (none)
 evidence_bundle_hash:
 generated_at: '2026-01-01T01:00:52.645585+00:00'
 inputs_hash: d9b6f2d13e94a45e51460dfeab329b122b6bfce0da7cc5f62edf05de9f6ad114
-produced_at: '2026-10-06T20:19:26.573317+00:00'
+produced_at: '2026-10-06T22:00:18.011324+00:00'
 schema_version: '2'
 source_input_ids: []
 source_section: risk_appetite

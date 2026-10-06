@@ -1,5 +1,5 @@
 schema_version: '1.0'
-generated_at: '2026-10-06T20:19:26+00:00'
+generated_at: '2026-10-06T22:00:18+00:00'
 generated_by: spec-kitty charter synthesize 4.0.0rc6
 nodes:
 - urn: directive:PROJECT_001

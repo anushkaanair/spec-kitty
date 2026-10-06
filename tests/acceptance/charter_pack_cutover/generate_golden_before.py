@@ -81,19 +81,19 @@ def _isolated_home() -> Iterator[Path]:
     """Point HOME / XDG at a throwaway directory: in-process CLI runs write global state."""
     keys = ("HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME")
     saved = {k: os.environ.get(k) for k in keys}
-    with tempfile.TemporaryDirectory(prefix="charter-pack-cutover-home-") as tmp:
-        home = Path(tmp)
-        os.environ["HOME"] = str(home)
-        for key in keys[1:]:
-            os.environ[key] = str(home / key.lower())
-        try:
-            yield home
-        finally:
-            for key, value in saved.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
+    home = Path(tempfile.mkdtemp(prefix="charter-pack-cutover-home-"))
+    os.environ["HOME"] = str(home)
+    for key in keys[1:]:
+        os.environ[key] = str(home / key.lower())
+    try:
+        yield home
+    finally:
+        for key, value in saved.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+        shutil.rmtree(home, ignore_errors=True)
 
 
 def _dump(path: Path, data: Any) -> None:

@@ -47,8 +47,8 @@ artifacts:
   slug: testing-philosophy-tactic
 built_in_only: false
 bundle_content_hash:
-created_at: '2026-10-06T20:19:26.594834+00:00'
-manifest_hash: 41061bb028f68798e7a3c338dd99a55d5c499fa9d20d5b78dc028142b5a6df89
+created_at: '2026-10-06T22:00:18.035069+00:00'
+manifest_hash: 3febd0df395f7f71f5541e0bfc838c822232df995394686b044991faeb8bca67
 mission_id:
 run_id: 01KPE222CD1MMCYEGB3ZCY51VR
 schema_version: '3'
