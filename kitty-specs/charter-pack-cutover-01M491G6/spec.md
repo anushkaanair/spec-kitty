@@ -117,7 +117,7 @@ The charter interview, the org-charter union, the unify-activation upgrade step 
 - **Pack without presets** (for example one fetched from the public-packs repository): the pack works; it offers no presets.
 - **Stale list plus one customisation**: not equal to any snapshot, so it is kept and named in the upgrade summary.
 - **List equal to the `minimal` preset**: per-kind lists kept and reported as "matches preset minimal"; its `activated_kinds: [directives, tactics]` gate is removed and reported.
-- **Deliberate `[]` for a kind**: reset to absent like the normalizer's `[]` (the two cannot be told apart); the upgrade summary names the kind and the `charter deactivate` command that restores "none".
+- **Deliberate `[]` for a kind**: reset to absent like the normalizer's `[]` (the two cannot be told apart); the upgrade summary names the kind, the file and the key to set back to `[]` to restore "none".
 - **Lists mixing default ids with other ids** (written by interview, org-charter or answers promotion): match no snapshot; kept and reported as customised.
 - **Saved script calling `spec-kitty doctrine fetch`**: fails as an unknown command (OD-3); the changelog Before/After and the runbook name the replacement.
 - **Uncommitted edits in moved or rewritten files**: the migration carries the working-tree content over (plain filesystem move; the operator commits the result) and lists the moved paths.
@@ -170,7 +170,7 @@ The charter interview, the org-charter union, the unify-activation upgrade step 
 | Stale activation lists | `activated_<kind>` equal to a frozen released `default.yaml` snapshot for that kind (both before and after the rc5 and rtk retirement rewrites), in `config.yaml` or the pointed `charter.yaml` | key absent | reset |
 | Stale kind gate | `activated_kinds` equal to a frozen snapshot's 8-kind list | key absent | reset |
 | Released `minimal` kind gate | `activated_kinds` equal to `[directives, tactics]` (every released `minimal.yaml`) | key absent | reset + report (DM-01M497F0NAQARAK3JZFVWF1SD0) |
-| Normalizer empty lists | per-artifact `activated_<kind>: []` (written by the 3.2.6 `normalize_activation_absence` migration; indistinguishable from a deliberate `[]`) | key absent | reset + report, naming the command to switch the kind off again (DM-01M497EW60HNWWJQCXDFA99R0H) |
+| Normalizer empty lists | per-artifact `activated_<kind>: []` (written by the 3.2.6 `normalize_activation_absence` migration; indistinguishable from a deliberate `[]`) | key absent | reset + report, naming the file and key to set back to `[]` to switch the kind off again (DM-01M497EW60HNWWJQCXDFA99R0H) |
 | Installed skills | removed skill names in configured agent directories (via `get_agent_dirs_for_project`) and command-skill manifests | new names | remove + reinstall |
 | Customised lists, `minimal`-equal lists | — | unchanged | report |
 
