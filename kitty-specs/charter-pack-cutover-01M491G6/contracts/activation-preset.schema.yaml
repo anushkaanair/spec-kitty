@@ -18,7 +18,7 @@ properties:
     type: array
     uniqueItems: true
     items:
-      enum: [directives, tactics, styleguides, toolguides, paradigms, procedures, agent_profiles, mission_step_contracts, anti_patterns]
+      type: string   # any ArtifactKind plural; the validator checks membership against ArtifactKind (the kind gate covers every kind, not only governed ones)
   mission_type_activations:
     type: array
     uniqueItems: true
