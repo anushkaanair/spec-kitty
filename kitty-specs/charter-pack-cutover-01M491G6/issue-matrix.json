@@ -73,7 +73,7 @@
       "wp": null
     },
     "#5825": {
-      "evidence_ref": "<link or commit>",
+      "evidence_ref": "Pack-path half (FR-016); tier-spelling half out of scope (C-005)",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -81,8 +81,8 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "unknown",
-      "wp": null
+      "verdict": "in-mission",
+      "wp": "WP03"
     },
     "#5826": {
       "evidence_ref": "<link or commit>",
