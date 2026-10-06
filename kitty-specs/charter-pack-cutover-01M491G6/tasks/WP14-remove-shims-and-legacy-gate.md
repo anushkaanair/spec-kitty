@@ -88,15 +88,15 @@ With the migration in place (WP11/WP12), every read-side fallback for the retire
 - `contracts/errors.md` (`LEGACY_CHARTER_STATE` payload: first finding, remedy text).
 - `research/runtime-seams.md` §3 entire: root callback anatomy (`specify_cli/__init__.py:119-179`), exemptions, worktree root resolution, cost budget, "Where the legacy shapes are read today" table, and the required fail-closed governance load (`GovernanceConfig` has no `extra="forbid"`, `charter/activation/schemas.py:201-209`).
 - WP11's `src/specify_cli/migration/legacy_charter_layout.py` (`detect_legacy_charter_layout(root) -> tuple[str, ...]`): reuse it; do not write a second predicate.
-- Upstream: WP02 replaced `kernel/doctrine_root.py` with `kernel/charter_pack_paths.py` and may have carried the read fallback over (find it: `git grep -n -e LegacyDoctrineRootWarning -e resolve_doctrine_read_root -- src`); WP10 removed the compat-helper call from `m_unify_charter_activation_finalize.py` (`:231,247`): confirm.
+- Upstream: WP02 replaced `kernel/doctrine_root.py` with `kernel/charter_pack_paths.py` and carried the read fallback over as `resolve_project_pack_read_root` / `LEGACY_PROJECT_PACK_DIRNAME` / `LegacyDoctrineRootWarning`; WP02 and WP03 added further temporary legacy symbols that this WP deletes (T070 step 3 lists them all); WP10 removed the compat-helper call from `m_unify_charter_activation_finalize.py` (`:231,247`): confirm.
 
 Constraints:
 
 - **C-001**: deleted means deleted: no warning class kept "for external filtering", no hidden flag, no JSON key "for downstream consumers".
-- **Version-bump rule**: CLAUDE.md "Any changes to `__init__.py` require a version bump in `pyproject.toml` and a `CHANGELOG.md` entry". Your edit to `src/specify_cli/__init__.py` triggers it. Keep the edit to one call, add a CHANGELOG Unreleased line for the gate, and ask the orchestrator whether the version bump lands here or with the release (WP24 owns the changelog Before/After); log the answer.
+- **Version-bump rule**: CLAUDE.md "Any changes to `__init__.py` require a version bump in `pyproject.toml` and a `CHANGELOG.md` entry". Your edit to `src/specify_cli/__init__.py` triggers it. Per tasks.md "Version" (orchestrator ruling): no WP bumps the version (the cutover targets the current `4.0.0rc6`), and the rule is satisfied by the changelog entry. Keep the edit to one call and add a CHANGELOG Unreleased line for the gate (WP24 owns the changelog Before/After).
 - **Cost**: the gate runs on every invocation; it may add at most two `stat`s and one small read per checked root, never a YAML parse on the common path, never a `charter.*` import.
 - Files owned by completed upstream WPs are logged follow-up edits: the kernel module, `analysis_inputs.py`, `cli/commands/_doctrine_collect.py` and `tests/architectural/dead_symbol_allowlist.yaml` (WP02), `synthesizer/reconcile.py` (WP03), the acceptance tests (WP01). `tests/doctrine/**` belongs to WP23 (a later directory rename): your edits there are logged too.
-- **Parallel lanes**: WP15 may run beside you. It leaves `_doctrine_collect.py` to you and edits doctor command strings elsewhere; WP17 may rename `CharterPackConfigError` → `ActiveCharterConfigError` in parallel. Raise whichever name exists at implementation time and rebase.
+- **Neighbours**: WP15 runs after you (it depends on WP14) and leaves `_doctrine_collect.py` to you; WP17 (upstream) already renamed `CharterPackConfigError` → `ActiveCharterConfigError`; WP13 (upstream) edited a remediation string in `org_pack_config.py`. WP18 may run in a parallel lane: never edit a file it owns.
 - Code style: ruff + mypy clean, complexity ≤ 15, no unexplained suppressions.
 - Commit often (`refactor(charter)!: remove governance.doctrine compat shim (#3732)`), never push to `main`.
 
@@ -110,7 +110,7 @@ Constraints:
 
 ## Red-first (C-006 / C-011)
 
-First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP14")' tests/acceptance/charter_pack_cutover/`): legacy-state commands fail with `LEGACY_CHARTER_STATE`, the exempt commands run, legacy keys are no longer read, `--doctrine-mode` is unknown, `doctrine_mode` is absent from JSON. WP01's flip map assigns you all `test_fr011_*` in `test_cli_surface.py`. The NFR-002 row "cr02 compat test deleted" belongs to WP16, which deletes `tests/architectural/test_lifted_cli_doctrine_charter_cr02_compat.py` with the doctrine group; do not touch it. Run, paste red output, change no assertion.
+First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP14")' tests/acceptance/charter_pack_cutover/`): legacy-state commands fail with `LEGACY_CHARTER_STATE`, the exempt commands run, legacy keys are no longer read, `--doctrine-mode` is unknown, `doctrine_mode` is absent from JSON. WP01's flip map assigns you all `test_fr011_*` in `test_cli_surface.py` (incl. `test_fr011_pack_context_from_config_total`) except `test_fr011_exempt_invocations`, which is unmarked (it passes at base; a regression guard that must stay green). The NFR-002 row "cr02 compat test deleted" belongs to WP16, which deletes `tests/architectural/test_lifted_cli_doctrine_charter_cr02_compat.py` with the doctrine group; do not touch it. Run, paste red output, change no assertion.
 
 ## Subtasks & Detailed Guidance
 
@@ -123,7 +123,15 @@ First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/
      - `_build_legacy_single_pack` / `_LEGACY_DEFAULT_PACK_NAME` also serve the **canonical** `charter_packs.org.local_path` single-pack form (runtime-seams §3 table). The spec renames only the legacy form. Decide with evidence: if no test, doc or fixture uses the canonical single-pack form, delete it (C-001: it is a second shape for one concept) and let the WP11 migration's single-pack rewrite cover it (log the decision so WP11's rewrite is checked); otherwise keep it, rename the helper away from "legacy", and record why. Either way `ensure_pack_identity`'s `name == "default"` built-in special case (`:764`) must not misidentify an org pack: test it.
      - `strict=True` behaviour (`_require_well_shaped_org_config`) must not start rejecting a config just because a legacy key is present (the CLI gate owns that).
   2. `src/charter/activation/sync.py` (`:236-317`): delete `_LEGACY_GOVERNANCE_SELECTION_KEY`, `LegacyGovernanceKeyWarning`, `_warn_legacy_governance_key_once`, `apply_legacy_governance_selection_key_compat`, the private alias `_apply_legacy_governance_selection_key_compat`. T073 adds the fail-closed check.
-  3. `.kittify/doctrine/` read fallback: wherever WP02 left it (`git grep -n resolve_doctrine_read_root -- src`; the only caller was `charter/activation/synthesizer/reconcile.py:612`), delete the function and its warning; the caller reads `project_pack_root(repo_root)` directly.
+  3. **Every temporary legacy symbol WP02 and WP03 introduced** (orchestrator decision, FI-B1/AR-S2). Inventory first, then delete each:
+     - `resolve_project_pack_read_root`, `LEGACY_PROJECT_PACK_DIRNAME` and `LegacyDoctrineRootWarning` in `src/kernel/charter_pack_paths.py` (WP02 T011); repoint **every** `resolve_project_pack_read_root(..., quiet=True)` call site (about 25 read sites, WP02 T013/T014 and WP03 T016/T017) to `project_pack_root(repo_root)`;
+     - the legacy half of the dual dirty-scope prefix in `charter_runtime/preflight/runner.py` `_DIRTY_SCOPE_PATHS` (WP02 T014);
+     - the legacy comparison in `charter/offering/service.py:48` (`LEGACY_PROJECT_PACK_DIRNAME`, WP02 T013);
+     - `_is_legacy_artifact_prefix` in `charter/activation/synthesizer/manifest.py` (WP03);
+     - the `test_*_legacy_root_read_fallback` tests (WP03 T020);
+     - the FR-016 path-authority gate's kernel legacy-segment exemption in `tests/architectural/test_charter_pack_path_authority.py`, and the two FR-016 allowlist entries assigned to WP14 (`kind_vocabulary.py:297`, `_doctrine_paths.py:32`; WP03 T019).
+
+     Check: `git grep -n -e LEGACY_PROJECT_PACK_DIRNAME -e resolve_project_pack_read_root -e _is_legacy_artifact_prefix -e legacy_root_read_fallback -e LegacyDoctrineRootWarning -- src tests` returns nothing (except the cutover migration and `legacy_charter_layout.py`, which spell the legacy root on their own). Each file is owned by an upstream WP: logged follow-ups.
   4. `src/specify_cli/cli/commands/_doctrine_collect.py:1088` (`governance_block.get("charter") or governance_block.get("doctrine")`): canonical only, via the T073 helper.
   5. `tests/architectural/dead_symbol_allowlist.yaml`: remove the entries for every deleted symbol (`LegacyGovernanceKeyWarning` around `:268`, `:1219`; `LegacyOrgPackDoctrineKeyWarning` and the `kernel.doctrine_root` entries around `:310-323`; `LegacyTrackerOwnershipKeyWarning`). Shrink only.
   6. Prose that only describes the deleted shims (docstrings in `org_pack_loader.py:16,442`, `merge.py:558`, `_retired_activation.py:76`, `pack_context.py:747`) is FR-018/FR-010 territory; fix it only where it now states something false about behaviour, and log it.
@@ -146,20 +154,20 @@ First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/
 - **Purpose**: one detection seam, shared with the migration's `detect()` (research §3 decision).
 - **Steps**:
   1. Create `src/specify_cli/migration/legacy_charter_gate.py`:
-     - `LEGACY_CHARTER_STATE = "LEGACY_CHARTER_STATE"`; `EXEMPT_COMMANDS = frozenset({"upgrade", "init"})`.
+     - `LEGACY_CHARTER_STATE = "LEGACY_CHARTER_STATE"`; `EXEMPT_COMMANDS`: `upgrade`, `init`, every git merge driver (`merge-driver-*`, registered by `lanes/consolidation.py:66-136`; git runs them inside the checkout being merged, which is exactly the documented remedy for a pre-upgrade lane) and the hook entry points (the live-work and session-start hooks). These are git plumbing, not project commands (orchestrator decision, AR-S3; `contracts/cli.md` "Unmigrated project").
      - `check_legacy_charter_layout(project_root: Path, checkout_root: Path | None, *, invoked_subcommand: str | None, argv: Sequence[str]) -> None`: return immediately for exempt commands, for `--help`/`-h` anywhere in argv, for `--version`/`-v` (eager, normally already exited), and when `<root>/.kittify` is absent (reuse the same early return as `migration/gate.py:112-115`). Otherwise call `detect_legacy_charter_layout(project_root)` and, when `checkout_root` differs from `project_root`, on it too. On any finding: print the contracts/cli.md message to stderr with the first finding substituted, include the worktree sentence only when the finding came from a checkout that is not the main root, and `raise SystemExit(1)` (or the code WP01's test asserts).
      - Message source: one module constant; it names `spec-kitty upgrade` and `docs/migrations/charter-pack-cutover.md` (WP24 writes the runbook; do not create it here).
   2. Current checkout root: `locate_project_root()` returns the **main** root even inside a worktree (`core/paths.py:197-235`). Find the checkout root by walking from `Path.cwd()` up to the nearest `.git` entry (file or directory) without a subprocess; reuse a helper from `core/paths.py` (`is_worktree_context`, `_read_worktree_gitdir`) if one fits. Return `None` outside a git checkout.
   3. `src/specify_cli/__init__.py` `_run_startup_project_gates` (`:165-179`): after `check_schema_version(...)`, call the new function with `ctx.invoked_subcommand` and `sys.argv[1:]`. Keep the existing skips: `main_callback` already bypasses the gates for `upgrade_intent`, `defer_root_bootstrap`, the live-work hook and session-start (`:128-162`); those hook paths must keep exiting 0, so leave them ungated and say so in a comment.
   4. Do not add the check to `compat/safety.py`; the safety registry lets `status`, `doctor`, `migrate` and read-only `agent` commands through the **schema** gate, but FR-011 blocks every command except the exemptions.
 - **Files**: `legacy_charter_gate.py`, `src/specify_cli/__init__.py`, `tests/specify_cli/migration/test_legacy_charter_gate.py`.
-- **Tests**: CliRunner (or subprocess where the root callback needs real argv) for each finding kind → exit 1, code and runbook in stderr; `upgrade`, `init`, `--help`, `--version` pass on the same fixture; a migrated fixture passes (positive control); a lane-worktree checkout with `.kittify/doctrine/` while the main root is clean → refused with the worktree remedy; outside a project → no-op; a project whose `config.yaml` contains the word "doctrine" only in a comment → passes. Measure: the gate's own time on a clean project, median of 5, record it (NFR-style evidence; no hard timing assert unless under the `timing` marker).
+- **Tests**: CliRunner (or subprocess where the root callback needs real argv) for each finding kind → exit 1, code and runbook in stderr; `upgrade`, `init`, `--help`, `--version`, a `merge-driver-*` invocation and the hook entry points exit 0 on the same fixture; a migrated fixture passes (positive control); a lane-worktree checkout with `.kittify/doctrine/` while the main root is clean → refused with the worktree remedy; outside a project → no-op; a project whose `config.yaml` contains the word "doctrine" only in a comment → passes. Measure: the gate's own time on a clean project, median of 5, record it (NFR-style evidence; no hard timing assert unless under the `timing` marker).
 
 ### Subtask T073 – `load_governance_config` fails closed on legacy keys
 
 - **Purpose**: without the shim, `GovernanceConfig` (no `extra="forbid"`) would silently drop a legacy `doctrine:` selection, losing the selected directives (research §3, "required, not optional").
 - **Steps**:
-  1. In `src/charter/activation/sync.py` add one helper, for example `require_canonical_governance(governance: Mapping[str, Any], *, source: Path) -> Mapping[str, Any]`, that raises the activation config error (`CharterPackConfigError` today, `ActiveCharterConfigError` after WP17) when the mapping carries `doctrine`, with a message naming the file, the key, `spec-kitty upgrade` and the runbook. This is a validation diagnostic naming a replacement, which C-001 allows.
+  1. In `src/charter/activation/sync.py` add one helper, for example `require_canonical_governance(governance: Mapping[str, Any], *, source: Path) -> Mapping[str, Any]`, that raises the activation config error (`ActiveCharterConfigError`, WP17's name) when the mapping carries `doctrine`, with a message naming the file, the key, `spec-kitty upgrade` and the runbook. This is a validation diagnostic naming a replacement, which C-001 allows.
   2. Call it from `load_governance_config` (`sync.py:337-352`) before `GovernanceConfig.model_validate`, and from the two raw readers that used the compat function: `charter/activation/mission_type_profiles.py:68,1380` and `specify_cli/analysis_inputs.py:60-63` (they then read `.get("charter")` directly), and from `_doctrine_collect.py:1088` (T070 step 4).
   3. Check how callers handle the error: `mission create` and charter commands already render this exception class with its code (`agent/mission_create.py:542-552`, `charter/activate.py:103-111`); doctor-style diagnostics must report, not crash. Add a test per caller.
 - **Files**: `sync.py`, `mission_type_profiles.py`, `analysis_inputs.py`, `_doctrine_collect.py`, `tests/charter/test_governance_fail_closed.py`.
@@ -197,7 +205,6 @@ Never bare `tests/architectural/` or `make test-full`. Classify unrelated reds p
 - **Gate misses a stale lane worktree**: checkout-root check plus a worktree test.
 - **Silent loss of governance selections**: fail-closed helper at every raw reader.
 - **`PackContext.from_config` starts raising**: test that a legacy-only config yields an empty org registry, no exception.
-- **Overlap with WP15/WP17 lanes**: small hunks, rebase before review.
 
 ## Definition of Done
 
@@ -206,7 +213,8 @@ Never bare `tests/architectural/` or `make test-full`. Classify unrelated reds p
 - [ ] CLI-root gate with exemptions, checkout-root check, contract message; latency recorded.
 - [ ] Governance readers fail closed with a message naming `spec-kitty upgrade`.
 - [ ] Shim tests deleted; fixtures converted; dead-symbol allowlist shrunk.
-- [ ] `__init__.py` version-bump / CHANGELOG question answered and logged.
+- [ ] No version bump (tasks.md "Version"); CHANGELOG Unreleased line for the gate added.
+- [ ] T070 step 3 inventory grep returns nothing; every WP02/WP03 temporary legacy symbol deleted.
 - [ ] All Test Strategy commands pass; mypy/ruff clean.
 
 ## Review Guidance

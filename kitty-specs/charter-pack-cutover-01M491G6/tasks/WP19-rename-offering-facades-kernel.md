@@ -190,7 +190,7 @@ Done means:
 - Every R1 identifier in the table below is renamed at its definition **and at every call site in the repository** (including `charter.activation`, `specify_cli`, `runtime`, tests), in the same commit as the definition, so the tree imports at every commit.
 - No `X = Y` alias, no re-export of an old name from any facade, no `__getattr__` shim (C-001).
 - Docstrings, comments and README prose in owned files use the charter vocabulary **where the word means the retired tier**; content-sense "doctrine" is kept (T094 rules).
-- WP01 acceptance tests marked `pending_until("WP19")` (FR-010 identifier/vocabulary cases for the offering/kernel slice) go red → green.
+- WP01 acceptance test `test_fr010_retired_identifiers_absent[r1]` (marked `pending_until("WP19")`: the closed R1 identifier list, scanned over `src/charter/offering/**`, `src/kernel/**` and the charter facades) goes red → green.
 
 ### R1 rename table (proposed; record the final choice)
 
@@ -219,7 +219,8 @@ Names that are **not** R1: `bundle.DOCTRINE_DIR` (`src/charter/bundle.py:66`) is
 
 - Read: `.kittify/charter/charter.md`; `spec.md` FR-010, C-001, C-002, C-004, Domain Language table; `occurrence_map.yaml` (categories: `code_symbols`, `import_paths` rename; `user_facing_strings` **manual_review**; exceptions: C-004 names, historical records, mission-slug citations in comments `src/**` `comments:mission-slug` keep); `research/package-split-and-paths.md` §C (sizing, R1 scope, most-frequent names).
 - Dependencies: WP14 (shims gone) and WP17 (three names) are done. The package split (WP04/WP05) is done, so `src/charter/offering/packs/**` exists; it is **not** in this WP's owned files (WP04/WP05/WP07/WP13 own it) — rename R1 symbols there as logged follow-ups.
-- **Parallel-lane caution**: WP08, WP09, WP13, WP15 and WP16 are not upstream of this WP in `tasks.md`. Several R1 call sites sit in files they own (`src/charter/offering/artifact_kinds.py`, `drg/merge.py`, `drg/validator.py`, `agent_profiles/operating_procedures.py`, `drg/override_policy.py` carry WP15 remediation strings; `shared/scoping.py`, `drg/migration/hand_authored_overlay.py`, `schemas/agent-profile.schema.yaml` are WP16's). Before editing any of them, confirm with `spec-kitty agent tasks status` that the owning WP is `done`/`approved`; otherwise wait or coordinate.
+- **No parallel lane**: every WP02–WP18 is upstream of this WP (directly or through WP14, WP16 and WP18). R1 call sites in files they own (`src/charter/offering/artifact_kinds.py`, `drg/merge.py`, `drg/validator.py`, `agent_profiles/operating_procedures.py`, `drg/override_policy.py` carry WP15 remediation strings; `shared/scoping.py`, `drg/migration/hand_authored_overlay.py`, `schemas/agent-profile.schema.yaml` are WP16's; skill prose is WP18's) are logged follow-up edits.
+- **Do not edit WP01's `tests/acceptance/charter_pack_cutover/_effective_set.py`** (its digest is pinned in the golden header). If a rename breaks its imports, stop and ask the orchestrator for the WP01 follow-up (fixed helper, regenerated golden, logged).
 - **Files you will edit but do not own** (call sites; log each in the Activity Log): `src/charter/offering/service.py` (WP02 owns it for its `.kittify` read-site change; it holds the `DoctrineService` definition you rename — WP02 is upstream and done), `src/kernel/README.md` (WP02), `src/charter/offering/schemas/README.md` (WP07), tests `tests/architectural/test_charter_facades_reexport_doctrine.py` and `test_charter_sole_door_agent_profile_repository.py` (WP04), `tests/charter/test_answers_inert_and_org_union.py`, `tests/integration/test_org_pack_artifact_lifecycle.py`, `tests/specify_cli/test_provenance_integration.py` (WP05), `tests/charter/synthesizer/**` (WP03 glob, e.g. `test_context_reflects_synthesis.py`), `tests/architectural/test_charter_sole_door_doctrine_service.py` (WP21 owns it under a glob and renames it later; update the R1 class names it pins as a one-line edit and log it), `src/charter/drg.py` (WP04 facade: `DoctrineLayerCollisionWarning` export l.75,126), `src/charter/bundle.py` (WP02/WP03), `src/charter/offering/drg/{project_scan,override_policy,org_pack_config}.py`, `src/charter/offering/yaml_utils.py`, `src/charter/offering/packs/**`, the WP15/WP16/WP17 offering files named above, every `src/charter/activation/**` importer (WP20 renames its own identifiers later; you only change R1 names there), `src/specify_cli/**` and `src/runtime/**` importers (`charter_runtime/freshness/computer.py`, `charter_runtime/lint/checks/org_layer.py`, `cli/commands/_doctrine_{asset,collect,health}.py` or their WP15/WP21 successors), skill prose quoting `DoctrineService` in `src/charter/offering/skills/**` (WP18), and test files under `tests/doctrine/**` (WP23 moves that directory later; WP23 runs strictly after this WP).
 - Keep **test file names** unchanged here; rename identifiers inside them. File renames of tests are WP23 (T106), which also owns the `pyproject.toml` format-exclude entries that list test paths.
 - No `__init__.py` re-export may keep an old name. `src/charter/offering/__init__.py` exports change in place.
@@ -240,7 +241,7 @@ Names that are **not** R1: `bundle.DOCTRINE_DIR` (`src/charter/bundle.py:66`) is
 rg -n 'pending_until\("WP19"\)' tests/acceptance/charter_pack_cutover/
 ```
 
-These are WP01 T008's FR-010 cases for this slice (for example: the R1 names no longer importable; no retired-tier identifier in `src/charter/offering/**` / `src/kernel/**` / the charter facades, measured against the occurrence map). Remove only the markers, run them, confirm red, commit `test(acceptance): unmark WP19 FR-010 R1 tests (red) (#3732)`.
+This is WP01 T008's `test_fr010_retired_identifiers_absent[r1]`: an AST/token scan of `src/charter/offering/**`, `src/kernel/**` and the charter facades for the closed R1 identifier list in `tests/fixtures/charter_pack_cutover/retired_identifiers.yaml` (for example `DoctrineService`, `BaseDoctrineRepository`, `doctrine_root`), with a planted-identifier self-test and a scanned-file floor. Remove only the markers, run them, confirm red, commit `test(acceptance): unmark WP19 FR-010 R1 tests (red) (#3732)`.
 
 ## Subtasks & Detailed Guidance
 
@@ -338,7 +339,7 @@ Never bare `tests/architectural/` or `make test-full`.
 - **String references** (patch targets, YAML allowlists) survive a symbol rename silently: grep bare strings.
 - **Content-sense prose renamed**: reviewer samples the Activity Log classification; when in doubt keep and record.
 - **Graph regeneration drift**: `regenerate-graph --check` must stay green (a parameter rename must not change output).
-- **Parallel lanes**: see Context; do not edit a sibling lane's live file.
+- **Ownership**: no WP runs in parallel with this one (see Context); every edit outside `owned_files` is a logged follow-up.
 
 ## Review Guidance
 

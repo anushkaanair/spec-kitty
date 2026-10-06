@@ -240,7 +240,7 @@ Done when:
   - Skill references in `packs/built-in/missions/mission-steps/**/prompt.md`, the three `task-prompt-template.md`, `tactics/reviewer-implementer-role-separation.tactic.yaml`, `toolguides/CONTEXTIVE.md`, `docs/api/skills/**`, `docs/api/agent_profiles/**`, `docs/guides/how-to/harnesses/**` (WP18). If tier prose remains in them after WP18, fix it as a logged follow-up.
   - `packs/internal/{README.md, assets/test-quality-scan.py, procedures/executive-debrief-generation.procedure.yaml, procedures/test-suite-quality-assessment.procedure.yaml, skills/report-debrief.skill.md, toolguides/TEST_QUALITY_TRIAGE.md, toolguides/test-quality-triage.toolguide.yaml}` (WP15 T078 moved their commands). Their remaining tier prose ("org-tier doctrine pack" in `README.md`) is a logged follow-up here.
   - `docs/context/charter.md`, `docs/migrations/index.md`, the new runbook and the two superseded runbooks (WP24); `docs/migrations/shim-registry.yaml` (WP14); `docs/api/charter-commands.md` (CLI WPs); generated docs (`docs/api/cli-commands.md`, `docs/development/docs-retrieval-index.yaml`, `docs/development/page-inventory.yaml`) are regenerated, never hand-edited.
-  - The four docs that also cite `tests/doctrine/` (`docs/architecture/doctrine-relationships.md`, `docs/architecture/04_implementation_mapping/README.md`, `docs/operations/p0-baseline-refresh.md`, `docs/architecture/profile-load-reliability.md`) belong to WP23, which runs in parallel; WP23 applies this WP's prose rule there.
+  - The four docs that also cite `tests/doctrine/` (`docs/architecture/doctrine-relationships.md`, `docs/architecture/04_implementation_mapping/README.md`, `docs/operations/p0-baseline-refresh.md`, `docs/architecture/profile-load-reliability.md`) belong to WP23, which runs after you (WP23 depends on WP22); WP23 applies this WP's prose rule there.
 - **Files claimed upstream** that still need this WP's prose pass (logged follow-ups; their WPs are complete): WP16 `packs/built-in/agent_profiles/doctrine-daphne.agent.yaml`, `packs/built-in/tactics/common-docs-find.tactic.yaml`, `packs/built-in/tactics/common-docs-write.tactic.yaml`, `docs/architecture/doctrine-kinds.md`, `docs/development/how-to/create-a-doctrine-artifact.md`, `docs/development/reference/ci-gate-mechanics.md`, `docs/development/reference/terminology-exemptions.md`, `docs/guides/how-to/governance/create-an-org-doctrine-pack.md`; WP17 `docs/configuration/yaml-libraries.md`, `docs/context/execution.md`. WP16 most likely already replaced the retired command spellings in them; check, then apply the classification rule to the remaining prose.
 - WP21 left a list of docs that still name renamed modules or gate files (its Activity Log). Sweep those references as part of T102.
 
@@ -260,8 +260,8 @@ Never push to `main`. Commit per surface (built-in pack, internal pack, docs are
 
 ### Red first (C-006 / C-011) — first commit
 
-1. `grep -rn 'pending_until("WP22")' tests/acceptance/charter_pack_cutover/`. WP01's flip map assigns WP22 no acceptance test (the prose result is measured by WP25's FR-018 gate, `test_fr018_vocabulary_gate_zero_findings_over_floor`). If the grep is empty, record that, and record as your red evidence the T101 forbidden-token grep over the owned files (hit count per file) before any edit; it must reach zero by the end.
-2. If markers exist, remove them only; run the tests; record the red output in the Activity Log; commit `test(acceptance): drop WP22 xfail markers for FR-010 prose (#3732)`.
+1. `grep -rn 'pending_until("WP22")' tests/acceptance/charter_pack_cutover/`. WP01's flip map assigns WP22 `test_fr010_retired_identifiers_absent[prose]` (`test_package_split.py`): a token scan of `packs/`, living `docs/` and `AGENTS.md` for the closed prose list in `tests/fixtures/charter_pack_cutover/retired_identifiers.yaml`, with a planted-token self-test and a scanned-file floor. WP25's FR-018 gate measures the full vocabulary later. Also record the T101 forbidden-token grep over the owned files (hit count per file) before any edit; it must reach zero by the end.
+2. Remove the marker only; run the test; record the red output in the Activity Log; commit `test(acceptance): drop WP22 xfail markers for FR-010 prose (#3732)`.
 3. A test that passes at once is vacuous or already satisfied: record which and ask the reviewer; do not edit its assertion.
 
 ### Classification rule (applies to T101–T103)
@@ -369,12 +369,24 @@ uv run --frozen ruff format --check --force-exclude packs/built-in/assets/docs_s
 
 `mypy` applies only if a `.py` file changed (`docs_structural_lint.py`): `uv run --frozen mypy --strict packs/built-in/assets/docs_structural_lint.py`.
 
+## Commit checkpoints
+
+This WP stays one WP (mechanical prose; orchestrator ruling AR-S8), but a session may stop after any checkpoint and resume at the next. Commit at each and append one Activity Log line naming it:
+
+1. red-first commit (marker removed, red output and per-file hit counts recorded);
+2. T101, built-in pack prose: one commit per pack area (agent profiles, tactics and procedures, mission steps and templates, remaining files), each with its per-file classification recorded;
+3. T102, living docs: one commit per docs subtree (`docs/guides`, `docs/architecture`, `docs/development`, the rest);
+4. T103, `AGENTS.md` and `packs/internal` prose;
+5. T104, regenerated pack manifests and CLI reference (`chore(generated)`), then the green acceptance run.
+
+A resuming session reads the Activity Log, checks `git log --oneline` against this list and continues with the next unchecked item.
+
 ## Risks & Mitigations
 
 - **Content sense renamed**: "doctrine" meaning governance substance becomes "Charter Pack". Mitigation: the per-file classification record; the reviewer samples it.
 - **A pack YAML value matched by code changed**: a capability tag or glob silently stops matching. Mitigation: grep before changing any non-prose value; keep and record.
 - **Hand-edited generated file**: `test_pack_manifest_no_author_edit.py` and the CLI-reference freshness check catch it; regenerate instead.
-- **Parallel lane with WP23**: both touch docs. Mitigation: WP23 owns the four `tests/doctrine`-citing pages and the AGENTS.md test-policy lines; merge (never rebase) when integrating.
+- **WP23 runs after you** and touches docs too: WP23 owns the four `tests/doctrine`-citing pages and the AGENTS.md test-policy lines; leave them alone.
 
 ## Review Guidance
 

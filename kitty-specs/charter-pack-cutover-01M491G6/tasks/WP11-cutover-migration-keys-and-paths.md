@@ -117,7 +117,7 @@ Constraints:
 
 ## Red-first (C-006 / C-011)
 
-Your **first commit** removes the `pending_until("WP11")` strict-xfail markers from the WP01 acceptance tests in `tests/acceptance/charter_pack_cutover/` that cover the FR-012 rows listed above (find them with `grep -rn 'pending_until("WP11")' tests/acceptance/charter_pack_cutover/`; WP01's plan lists them in `test_upgrade_migration.py`: `test_fr012_cutover_runs_first`, `test_fr012_legacy_keys_rewritten[*]`, `test_fr012_doctrine_pack_id_renamed`, `test_fr012_project_root_moved`, `test_fr012_collision_refuses_and_moves_nothing`, `test_fr012_path_references_rewritten`, `test_fr012_user_path_values_untouched`, `test_fr012_windows_locked_file_refuses`), and nothing else. Run them and paste the red result into the Activity Log. Do not edit their assertions (C-006: WP01 owns the acceptance criteria; the acceptance files are WP01's, edited here as a logged follow-up). If a test tagged WP11 needs behaviour from WP12 (a stale-list reset) or WP17 (loading a model that accepts `charter_pack_id`), stop and record it; do not re-tag silently. Implementation commits then turn them green.
+Your **first commit** removes the `pending_until("WP11")` strict-xfail markers from the WP01 acceptance tests in `tests/acceptance/charter_pack_cutover/` that cover the FR-012 rows listed above (find them with `grep -rn 'pending_until("WP11")' tests/acceptance/charter_pack_cutover/`; WP01's plan lists them in `test_upgrade_migration.py`: `test_fr012_cutover_runs_first`, `test_fr012_legacy_keys_rewritten[*]`, `test_fr012_doctrine_pack_id_renamed`, `test_fr012_project_root_moved`, `test_fr012_collision_refuses_and_moves_nothing`, `test_fr012_path_references_rewritten`, `test_fr012_windows_locked_file_refuses`; in `test_rename_skills_glossary.py`: `test_fr010_charter_pack_id_in_project_state`), and nothing else. Run them and paste the red result into the Activity Log. Two exceptions to red-first evidence: `test_fr012_user_path_values_untouched` is unmarked (it passes at base; a regression guard), and `test_fr012_windows_locked_file_refuses` (`windows_ci`) is auto-skipped off win32, so it is exempt from red-first evidence: record that in the Activity Log and rely on the POSIX simulation in T058. Do not edit their assertions (C-006: WP01 owns the acceptance criteria; the acceptance files are WP01's, edited here as a logged follow-up). If a test tagged WP11 needs behaviour from WP12 (a stale-list reset), stop and record it; do not re-tag silently. WP17 is upstream, so the model already accepts `charter_pack_id`. Implementation commits then turn them green.
 
 ## Subtasks & Detailed Guidance
 
@@ -135,9 +135,10 @@ Your **first commit** removes the `pending_until("WP11")` strict-xfail markers f
   4. Create `src/specify_cli/upgrade/migrations/m_4_0_0rc6_charter_pack_cutover.py`:
      - `@MigrationRegistry.register`, class `CharterPackCutoverMigration(BaseMigration)`, `migration_id = "charter_pack_cutover"`, `runs_first = True`, `runs_on_worktrees = False` (contract; research §1.3 said True: the contract wins, record why in the docstring: integrating worktrees are skipped by the runner anyway, #5457), `target_version` = the `pyproject.toml` version at implementation time (`4.0.0rc6` today, matching the filename; if the version was bumped before you start, rename the file and both frontmatter paths and log it).
      - `detect()` = `bool(detect_legacy_charter_layout(project_path))` **or** the content checks that only the migration runs (charter.yaml `governance.doctrine` and `governance.activations[].doctrine_pack_id`, answers.yaml top-level `doctrine:`, path references with the old prefix, `.gitignore` legacy rules). WP12 extends `detect()` with stale lists and skills. Content-driven only, never version-driven (research §1.2).
+     - **Split predicate** (orchestrator decision, AR-B4): implement WP10's hook `structural_detect()` as the **structural** part only: legacy project root present, legacy config keys present, or an activation entry carrying `doctrine_pack_id`. WP10's selection re-runs the migration whenever it is true, even when `metadata.yaml` records the cutover as applied (a pulled teammate checkout with untracked legacy files, or a merge that brings legacy state back). The `[]`, stale-list and kind-gate resets (WP12) run only on the **first** application: record that the resets ran (for example a marker in the migration's recorded result) and skip them on a structural re-run, so a deliberate post-cutover `activated_<kind>: []` is never reset again. Add a test: cutover recorded as success, `.kittify/doctrine/x.md` planted, `spec-kitty upgrade` moves it and the FR-011 predicate is then empty.
      - `can_apply()` returns `(True, "")`. The collision preflight (T058) runs inside `apply()`, as the contract says (`success=False`, every colliding path in `errors`, nothing written), so a dry run reports it too. The runner records that as a failed migration and stops (`runner.py:225-246`), which is the intended outcome.
      - `apply()` runs the steps in the contract order (preflight → move → path references → config keys → `doctrine_pack_id` → [WP12: resets] → [WP12: skills] → record), each step a separate function returning report entries, so complexity stays ≤ 15 and WP12 adds its steps with a two-line wiring edit.
-  5. Verify selection ordering against WP10: in a fixture stamped `3.1.0`, `MigrationRegistry.get_applicable("3.1.0", <pyproject version>, path)[0].migration_id == "charter_pack_cutover"`. Also check a project **stamped above** the cutover `target_version` with a legacy root: if `get_applicable` does not select the cutover there (it only re-detects when `target == from`, `registry.py:98-117`), the WP14 gate would tell that project to run an upgrade that cannot fix it. Do not patch `registry.py` silently: record the finding and raise it with the orchestrator (WP10 owns the selector).
+  5. Verify selection ordering against WP10: in a fixture stamped `3.1.0`, `MigrationRegistry.get_applicable("3.1.0", <pyproject version>, path)[0].migration_id == "charter_pack_cutover"`. WP10 already selects a `runs_first` migration independently of the version window and re-selects it on `structural_detect()`; add a test that a project **stamped above** the cutover `target_version` with a legacy root selects the cutover. Do not patch `registry.py` or `runner.py` (WP10 owns them); if the test fails, raise it with the orchestrator.
 - **Files**: the three new modules above.
 - **Parallel?**: no; T056–T058 build on it.
 - **Notes**: the CLI root never imports the migration module; it imports only the predicate module. Keep the predicate under 1 ms on a project with no legacy state (two `stat`s + one ~1 KB read).
@@ -172,7 +173,7 @@ Your **first commit** removes the `pending_until("WP11")` strict-xfail markers f
   3. Line-level edit, same byte-minimal rule as T056 step 3.
 - **Files**: migration module; tests in `test_charter_pack_cutover_keys.py`.
 - **Parallel?**: yes.
-- **Notes**: the model rename that makes a migrated file **load** is WP17 (T085), which depends on this WP. Between WP11 and WP17 a migrated fixture with activations will not load through `ActivationEntry`. Your tests assert the file-level rewrite only. If a WP01 acceptance test tagged WP11 loads such a file, record it and ask the orchestrator to re-tag it WP17; do not change the model here.
+- **Notes**: the model rename that makes a migrated file **load** is WP17 (T085), which runs **before** this WP (WP11 depends on WP17), so a migrated fixture with activations loads through `ActivationEntry`. `test_fr010_charter_pack_id_in_project_state` (WP01) flips here. Do not change the model here.
 
 ### Subtask T058 – Project-root move with collision preflight; path-reference rewrites; `.gitignore`
 
@@ -203,7 +204,8 @@ Your **first commit** removes the `pending_until("WP11")` strict-xfail markers f
   3. Run `detect()` again → False. Run `apply()` again → 0 bytes changed (`git diff --stat` empty after the commit).
   4. Run the readers against the moved tree: `spec-kitty charter list --json` and `spec-kitty charter synthesize --dry-run` (or the WP03 CLI test) must still see the four project artifacts and overlays. Paste the counts.
   5. Commit: `git add -A .kittify/doctrine .kittify/charter-packs .gitignore` then `chore(repo): move project charter components to .kittify/charter-packs (#3732)`. `.kittify/` paths are bookkeeping for `approved_bound` (research §2); `.gitignore` is not, so commit it before requesting review.
-- **Files**: `.kittify/doctrine/**` (deleted), `.kittify/charter-packs/**` (created), `.gitignore` (follow-up).
+  6. Drop the `'.kittify/doctrine/**'` path filter from `.github/workflows/ci-router.yml` (WP03 kept it until this move; WP03 owns the file, completed upstream: a logged follow-up edit) and run the router self-tests (`pytest tests/ci -q -k router`).
+- **Files**: `.kittify/doctrine/**` (deleted), `.kittify/charter-packs/**` (created), `.gitignore` and `.github/workflows/ci-router.yml` (follow-ups).
 - **Parallel?**: last implementation step, after T055–T058.
 - **Notes**: the stale-list and `[]` resets on this repo's `charter.yaml` (it holds `activated_mission_step_contracts: []` and `activated_glossary_packs: []`) are **WP12**'s; do not touch activation lists here.
 
@@ -240,11 +242,10 @@ Confirm the FR-016 gate's real filename before running it (WP03 created it). Nev
 
 ## Risks & Mitigations
 
-- **Selection for projects stamped above the target** (T055 step 5): a wedge between the WP14 gate and `upgrade`. Mitigation: test it now, escalate to WP10's owner if it fails.
+- **Selection for projects stamped above the target, or with the cutover already recorded** (T055 steps 4–5): a wedge between the WP14 gate and `upgrade`. Mitigation: WP10's version-independent selection and `structural_detect()` re-selection; test both here.
 - **Byte churn in a 155 KB `charter.yaml`**: ruamel reflow breaks NFR-004 and reviewers' diffs. Mitigation: line-level edits + a test that compares untouched lines.
 - **Partial move on Windows**: idempotent re-run; report moved paths; never delete a source before its target exists.
 - **Legacy literals leaking into `src/`**: confined to the three modules; gate exemptions by file, logged for WP25.
-- **Activation entries not loadable until WP17**: tests at file level; flag tagged acceptance tests.
 
 ## Definition of Done
 
@@ -252,14 +253,15 @@ Confirm the FR-016 gate's real filename before running it (WP03 created it). Nev
 - [ ] Every WP11 inventory row is rewritten with a report line; second `apply()` changes 0 bytes; `detect()` False after.
 - [ ] Collision preflight refuses with every path named and writes nothing.
 - [ ] `detect_legacy_charter_layout` exists, imports no `charter.*`, never reads `charter.yaml`.
-- [ ] This repository's tree moved, `.gitignore` clean, readers still see the project artifacts.
+- [ ] This repository's tree moved, `.gitignore` clean, the `ci-router.yml` legacy filter dropped, readers still see the project artifacts.
+- [ ] `structural_detect()` implemented (structural findings only); resets recorded as first-application-only; the recorded-then-replanted test passes.
 - [ ] Ordering verified (cutover first); the stamped-above-target case tested and its outcome recorded.
 - [ ] All commands in Test Strategy pass; mypy and ruff (check + format with `--force-exclude`) clean; complexity ≤ 15.
 - [ ] Follow-up edits outside owned files (acceptance markers, `.gitignore`, FR-016 gate exemption list) each logged with a one-line rationale.
 
 ## Review Guidance
 
-- Verify red-on-base → green-on-final for every test that carried `pending_until("WP11")`: check out the first commit and see them fail, then the final commit and see them pass.
+- Verify red-on-base → green-on-final for every test that carried `pending_until("WP11")`: check out the first commit and see them fail, then the final commit and see them pass. The Windows case is exempt (recorded); `test_fr012_user_path_values_untouched` is an unmarked regression guard.
 - Check the report dict shape and the `MigrationResult` mapping against `contracts/upgrade-migration.md`.
 - Check that no step writes in dry-run (tree hash compare in tests).
 - Check no legacy-aware reader (`load_pack_registry`, `load_governance_config`, `TrackerProjectConfig.from_dict`) is used by the migration.

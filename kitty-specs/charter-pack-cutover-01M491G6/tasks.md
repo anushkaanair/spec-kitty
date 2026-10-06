@@ -128,6 +128,7 @@
 | T108 | Changelog Unreleased Before/After | WP24 | |
 | T109 | Runbook `docs/migrations/charter-pack-cutover.md`; historical banners | WP24 | |
 | T110 | Flip FR-013/FR-017 xfails | WP24 | |
+| T115 | Draft the public-packs sidecar PR (OD-2); the orchestrator opens it after merge | WP24 | [P] |
 | T111 | FR-018 vocabulary gate (closed token and root lists, floor, planted tests) | WP25 | |
 | T112 | Reachability pins re-asserted or deleted with reasons | WP25 | |
 | T113 | NFR-002 gate closeout (empty allowlists; shim tests deleted) | WP25 | |
@@ -437,7 +438,7 @@ T105–T106 (WP23)
 **Requirement Refs**: FR-013, FR-017, SC-005
 **Estimated prompt size**: ~300 lines
 
-T107–T110 (WP24)
+T107–T110, T115 (WP24)
 
 **Dependencies**: WP22.
 

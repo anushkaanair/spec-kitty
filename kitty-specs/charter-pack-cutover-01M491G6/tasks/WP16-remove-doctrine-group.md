@@ -18,7 +18,6 @@ owned_files:
   - "packs/built-in/tactics/common-docs-find.tactic.yaml"
   - "packs/built-in/tactics/common-docs-write.tactic.yaml"
   - "packs/built-in/agent_profiles/doctrine-daphne.agent.yaml"
-  - "docs/api/cli-commands.md"
   - "docs/guides/how-to/governance/create-an-org-doctrine-pack.md"
   - "docs/development/how-to/create-a-doctrine-artifact.md"
   - "docs/architecture/doctrine-kinds.md"
@@ -161,7 +160,7 @@ These are the CLI-surface cases written by WP01 T006 for FR-007 (and the SC-004 
      - Text files (`.md`, `.yaml`, `.yml`, `.txt`, `.toml`, `.json`) under `src/charter/offering/skills`, `src/charter/offering` (schemas, READMEs), `packs/`, `docs/`, `.github/workflows/`, plus the single files `Makefile`, `AGENTS.md`, `README.md`.
      - **Every `.py` file under `src/` and `scripts/`, full text** (string literals, docstrings and comments). The old gate skipped docstrings because they "describe the deprecated group"; that group no longer exists, so any mention is stale guidance.
      - Exclusions (scope, not allowlist), each with a one-line reason in a comment: `FORBIDDEN_SCAN_ROOTS` from `tests/_support/terminology_scope.py` (covers `docs/migrations/`, `docs/adr/`, `docs/archive/`, `kitty-specs/`, `.kittify/`, `tests/`); `docs/plans/`; `docs/changelog/` (released sections and the FR-017 Unreleased Before/After quote the old spelling; the section-aware treatment is FR-018's, WP25); `docs/development/docs-retrieval-index.yaml` (generated from pages that include historical ADRs); the cutover migration module, matched by the glob `src/specify_cli/upgrade/migrations/m_*charter_pack_cutover*.py` (occurrence map exception: it must spell legacy literals).
-     - `docs/api/cli-commands.md` is **no longer excluded**: it is hand-maintained around generated help blocks, and you remove its `doctrine` section in this subtask.
+     - `docs/api/cli-commands.md` is **no longer excluded**: it is a generated file with no owner (tasks.md); you regenerate it in this subtask so its `doctrine` section disappears.
   5. Keep the non-vacuity floor (`_MIN_FILES_SCANNED`, today 800; the widened scope scans more, so re-measure and set the floor to the measured count rounded down to the nearest 100). Keep and adapt the self-tests:
      - planted `spec-kitty doctrine fetch …` in markdown is flagged;
      - planted bare `` `doctrine asset list` `` is flagged;
@@ -183,7 +182,7 @@ These are the CLI-surface cases written by WP01 T006 for FR-007 (and the SC-004 
      - `scripts/generate_schemas.py:531` "…for spec-kitty doctrine framework" → reword (e.g. "…for the Spec Kitty charter offering"); then regenerate `src/charter/offering/schemas/agent-profile.schema.yaml` with the generator (do not hand-edit; check the generator's own freshness test still passes).
      - `packs/built-in/tactics/common-docs-find.tactic.yaml:27,49`, `common-docs-write.tactic.yaml:54,60` → `spec-kitty charter pack regenerate-graph [--check]`.
      - `packs/built-in/agent_profiles/doctrine-daphne.agent.yaml:114` → `spec-kitty charter pack regenerate-graph`. The occurrence map lists this file as `do_not_change` for C-004 (id and name); its reason does not cover a stale command reference. Change only that line, keep id/name, and record the decision in the Activity Log.
-     - `docs/api/cli-commands.md`: delete the `spec-kitty doctrine` section(s) and rewrite remaining invocations to `charter` homes (36 hits today); then run `uv run pytest tests/architectural/test_docs_cli_reference_parity.py -q` and the CLI-reference freshness check (`python scripts/docs/check_cli_reference_freshness.py` or its test).
+     - `docs/api/cli-commands.md` (generated, unowned): regenerate it with `uv run --frozen python scripts/docs/build_cli_reference.py` after the group is deleted; if text outside the generated help blocks still names `spec-kitty doctrine` (36 hits today), rewrite it to the `charter` homes and log it as a generated-file change; then run `uv run pytest tests/architectural/test_docs_cli_reference_parity.py -q` and the CLI-reference freshness check (`python scripts/docs/check_cli_reference_freshness.py` or its test).
      - `docs/guides/how-to/governance/create-an-org-doctrine-pack.md` (8), `docs/development/how-to/create-a-doctrine-artifact.md` (3), `docs/architecture/doctrine-kinds.md:149,150,175`, `docs/development/reference/ci-gate-mechanics.md:748`: command spellings only (titles and broader prose are WP22's).
      - `docs/development/reference/terminology-exemptions.md:229`: rewrite the paragraph that documents this gate to describe the removed-command gate and its exclusions.
      Not owned (mechanical follow-ups if WP15 left any; log them): `src/specify_cli/cli/commands/charter/mission_type.py:8,208,218`, `src/charter/offering/artifact_kinds.py:416`, `src/specify_cli/_completion_manifest.json` (regenerate), `packs/internal/**`, `.github/workflows/packs.yml`, `Makefile:47`, `AGENTS.md`.

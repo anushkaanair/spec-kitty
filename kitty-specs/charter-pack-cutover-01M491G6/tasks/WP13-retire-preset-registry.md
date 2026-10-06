@@ -14,9 +14,11 @@ owned_files:
   - "tests/specify_cli/test_charter_pack_registry.py"
   - "tests/specify_cli/cli/commands/charter/test_apply_compile_bridge.py"
   - "tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py"
+  - "tests/charter/test_retired_accompanies_doctrine_pack.py"
 authoritative_surface: "src/specify_cli/charter_pack_registry.py"
 create_intent:
   - "tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py"
+  - "tests/charter/test_retired_accompanies_doctrine_pack.py"
 agent_profile: "python-pedro"
 role: "implementer"
 agent: "claude"
@@ -84,7 +86,7 @@ Constraints:
 
 - **C-001**: no re-export, no stub module, no hidden command, no "did you mean" hint. Deleted things are deleted.
 - **Files owned by upstream WPs**: `src/specify_cli/cli/commands/charter/pack.py` (WP08), `src/charter/offering/packs/pack_descriptor.py`, `pack_lineage.py`, `pack_validator.py` (WP04 moves), `pyproject.toml` and the census/roster files (WP05). Edits there are logged follow-ups (tasks.md rule): one line each in the Activity Log with the rationale.
-- **Parallel lanes**: WP15 also edits `charter/pack.py` (it moves `consistency-check` out). WP17 adds `doctrine_pack_id` to the retired-field table you create (T068). Keep your edits minimal and rebase-friendly; coordinate through the Activity Log.
+- **Neighbours (none in a parallel lane)**: WP15 (downstream) also edits `charter/pack.py` (it moves `consistency-check` out). WP17 (upstream) created the retired-field table with its `doctrine_pack_id` entry; you add one row (T068). WP14 runs after you. Keep your edits minimal; log them.
 - Code style: ruff + mypy clean, complexity ≤ 15, no suppressions without rationale.
 - Commit often (`refactor(charter)!: delete the built-in preset registry (#3732)`), never push to `main`.
 
@@ -98,7 +100,7 @@ Constraints:
 
 ## Red-first (C-006 / C-011)
 
-First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP13")' tests/acceptance/charter_pack_cutover/`): per WP01's flip map, in `test_cli_surface.py`: all `test_fr005_*` except `test_fr005_merge_defaults_removed` (WP06), `test_us3_4_accompanies_field_rejected`, and the FR-007 row for `charter pack apply` (exits 2). Run them, paste the red output into the Activity Log, change no assertion.
+First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/acceptance/charter_pack_cutover/` (`grep -rn 'pending_until("WP13")' tests/acceptance/charter_pack_cutover/`): per WP01's flip map, in `test_cli_surface.py`: all `test_fr005_*` except `test_fr005_merge_defaults_removed` (WP06), and the FR-007 row for `charter pack apply` (exits 2). `test_us3_4_accompanies_field_rejected` invokes `charter pack validate`, which exists only from WP15, so it flips at WP15; you prove the rejection with unit-level tests in your own `tests/charter/test_retired_accompanies_doctrine_pack.py` (T069). Run them, paste the red output into the Activity Log, change no assertion.
 
 ## Subtasks & Detailed Guidance
 
@@ -124,7 +126,7 @@ First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/
 - **Steps**:
   1. In `src/specify_cli/cli/commands/charter/pack.py`, delete `apply_cmd` (`@charter_pack_app.command("apply")`, around `:279`) and every helper only it uses: `_resolve_pack_path_or_exit`, `_compile_bundle_after_merge`, `_compile_failure_exit`, `_apply_compile_bridge` (around `:102-260`) unless WP08's `list`/`path` or `charter activate --preset --compile` still calls them (grep before deleting; if WP08 reuses one, leave it).
   2. Delete the registry imports at the top of `pack.py` (`:20-26`).
-  3. Remove remediation strings in `src/` that tell operators to run `charter pack apply` (for example `org_pack_config.py` warning text "or run `spec-kitty charter pack apply`", around `:117-121`; WP14 deletes that whole warning, so if WP14 already landed skip it). Replace any other with `spec-kitty charter activate --preset <name>`.
+  3. Remove remediation strings in `src/` that tell operators to run `charter pack apply` (for example `org_pack_config.py` warning text "or run `spec-kitty charter pack apply`", around `:117-121`). `org_pack_config.py` is owned by WP14, which runs after you (WP14 depends on WP13): edit the string here as a logged follow-up; WP14 deletes that whole warning later. Replace any other with `spec-kitty charter activate --preset <name>`.
   4. Tests: delete `tests/specify_cli/cli/commands/charter/test_apply_compile_bridge.py`; delete the `apply` tests in `tests/specify_cli/cli/commands/charter/test_charter_pack_builtin.py` (the `_apply` helper and every `test_apply_*` / `test_applied_*` function, around `:122-260`; WP08 owns that file for `list`/`path`, so this is a logged follow-up). Do not port them to `--preset`: WP08 owns preset-application tests.
   5. Create `tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py`: `spec-kitty charter pack apply default` exits 2 with Typer's "No such command" path; `charter pack --help` does not list `apply`; positive control in the same file: `charter activate --preset minimal` on a fresh fixture exits 0.
 - **Files**: `charter/pack.py` (follow-up), the test files above.
@@ -144,17 +146,17 @@ First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/
   2. Descriptor (`src/charter/offering/packs/pack_descriptor.py` after WP04; field around `:62`, docstring `:39`, model `extra="forbid"` at `:48`): delete the field and its docstring lines; add a `model_validator(mode="before")` that calls `reject_retired_fields(data, file="pack.yaml", ...)` **before** pydantic's generic extra-field error, so the operator sees `RETIRED_PACK_FIELD` and not "extra fields not permitted". Make sure the error survives pydantic wrapping (pydantic converts a `ValueError` raised in a validator into a `ValidationError`); if the loader catches `ValidationError`, unwrap the cause or raise from the loader before `model_validate`. Pick the place that keeps a single code path and test it through the real loader.
   3. Lineage (`src/charter/offering/packs/pack_lineage.py`, after WP04): delete the `accompanies` resolution (`resolve_…` around `:200-240`) and `UnresolvedDoctrinePackError` (`:99-115`), plus their callers (`grep -rn accompanies src/`). No replacement concept.
   4. Validator (`pack_validator.py`) and `charter org validate`: a descriptor with the field is a validation finding with code `RETIRED_PACK_FIELD` naming file and field (US3 scenario 4). Reuse the same error, do not re-spell the message.
-  5. `packs/built-in/pack.yaml:12` `accompanies_doctrine_pack: null`: delete the line, then regenerate the pack manifest (`spec-kitty charter pack regenerate-graph` if WP15 has landed, else `spec-kitty doctrine regenerate-graph`); never hand-edit `pack-manifest.yaml` (`tests/architectural/test_pack_manifest_no_author_edit.py`). The manifest is a generated file other WPs also regenerate; log the regeneration.
+  5. `packs/built-in/pack.yaml:12` `accompanies_doctrine_pack: null`: delete the line, then regenerate the pack manifest with `spec-kitty doctrine regenerate-graph` (WP15, which creates the `charter pack` home, runs after you); never hand-edit `pack-manifest.yaml` (`tests/architectural/test_pack_manifest_no_author_edit.py`). The manifest is a generated file other WPs also regenerate; log the regeneration.
   6. Any other pack in the repo or test fixtures with the field: `git grep -n accompanies_doctrine_pack -- packs tests src`; fixtures that test the old lineage are deleted with that test; fixtures that merely carried `null` drop the line.
 - **Files**: `retired_fields.py`, descriptor/lineage/validator (follow-ups), `packs/built-in/pack.yaml`, `tests/charter/test_retired_pack_fields.py`.
 - **Parallel?**: yes.
-- **Notes**: the public-packs sidecar PR (OD-2) is out of this WP's code scope; record it as a follow-up in the Activity Log for WP24's runbook.
+- **Notes**: the public-packs sidecar PR (OD-2) is out of this WP's code scope; WP24 drafts it (a WP24 subtask) and the orchestrator opens it after merge.
 
 ### Subtask T069 – Tests; flip FR-005 xfails
 
 - **Steps**:
   1. Delete tests of deleted code: `tests/specify_cli/test_charter_pack_registry.py`; registry/`default_pack` uses in `tests/charter/test_compiler_charter_yaml.py`, `test_mission_type_activations_seed_read_parity.py`, `test_mission_type_activation_emit.py`, `test_activation_preserves_effective_4253.py`, `tests/specify_cli/cli/commands/test_init_provisioning.py`, `tests/specify_cli/upgrade/test_unify_charter_activation_migration.py`, `tests/doctrine/test_activation_squad_lenses.py`, `test_squad_procedure_single_owner.py`, `test_owner_delivery.py`, `test_retirement_table_consistency.py`, `test_retired_ids_absent.py`, `tests/doctrine/test_pack_lineage.py` / `test_pack_id_identity.py` (or their WP04 destinations). For each: if the test guards behaviour that still exists (for example "retired ids absent from the default list"), retarget it to the `default`/`minimal` preset or the frozen snapshot module; if it tests the deleted mechanism, delete it. Record each decision (file, kept/retargeted/deleted, reason) in the Activity Log. Most should already be handled by WP06/WP09; touch only what remains.
-  2. `tests/charter/test_retired_pack_fields.py`: descriptor with the field → `RetiredPackFieldError` with code, file, field, replacement; descriptor without it loads; validator reports the finding; the error message names the runbook; the table lookup is data-driven (a planted second `RetiredField` is rejected the same way).
+  2. `tests/charter/test_retired_accompanies_doctrine_pack.py` (yours; `test_retired_pack_fields.py` is WP17's): descriptor with the field → `RetiredPackFieldError` with code, file, field, replacement; descriptor without it loads; validator reports the finding; the error message names the runbook; the table lookup is data-driven (a planted second `RetiredField` is rejected the same way).
   3. Positive controls next to every negative assertion (C-006): an unrelated unknown field still fails with pydantic's generic error, proving the retired-field check is specific.
   4. Run the WP13 acceptance tests: green.
 
@@ -162,7 +164,7 @@ First commit: remove the `pending_until("WP13")` strict-xfail markers in `tests/
 
 ```bash
 make test-fast
-uv run --frozen pytest tests/charter/test_retired_pack_fields.py tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py tests/specify_cli/cli/commands/charter/test_charter_pack_builtin.py -q
+uv run --frozen pytest tests/charter/test_retired_pack_fields.py tests/charter/test_retired_accompanies_doctrine_pack.py tests/specify_cli/cli/commands/charter/test_charter_pack_apply_removed.py tests/specify_cli/cli/commands/charter/test_charter_pack_builtin.py -q
 uv run --frozen pytest tests/acceptance/charter_pack_cutover/ -q
 uv run --frozen pytest tests/charter/ tests/doctrine/ -q            # src/charter/offering/** changed
 uv run --frozen pytest tests/specify_cli/cli/commands/charter/ tests/specify_cli/upgrade/ tests/upgrade/test_auto_discovery.py tests/specify_cli/cli/commands/test_init_provisioning.py -q

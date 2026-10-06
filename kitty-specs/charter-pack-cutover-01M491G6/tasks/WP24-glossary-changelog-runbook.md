@@ -1,7 +1,7 @@
 ---
 work_package_id: "WP24"
 title: "Glossary, changelog and runbook"
-subtasks: ["T107", "T108", "T109", "T110"]
+subtasks: ["T107", "T108", "T109", "T110", "T115"]
 dependencies: ["WP22"]
 requirement_refs: ["FR-013", "FR-017", "SC-005"]
 task_type: "implement"
@@ -102,7 +102,7 @@ Never push to `main`. Commit per subtask, conventional subjects referencing #373
 
 ### Red first (C-006 / C-011) — first commit
 
-1. `grep -rn 'pending_until("WP24")' tests/acceptance/charter_pack_cutover/`. WP01 assigns WP24: `test_fr013_glossary_defines_terms` and `test_fr013_no_living_citation_of_missing_adr` (`test_rename_skills_glossary.py`); `test_fr017_changelog_before_after_lists_every_removed_name` (the Unreleased section names every row of `contracts/cli.md` and `contracts/errors.md`, the twelve skill names, the config keys, `.kittify/doctrine/`, `accompanies_doctrine_pack`) and `test_fr017_runbook_and_historical_banners` (`test_gates_latency_messaging.py`).
+1. `grep -rn 'pending_until("WP24")' tests/acceptance/charter_pack_cutover/`. WP01 assigns WP24: `test_fr013_retired_terms_redirected` (Doctrine Pack, Doctrine Pack ID, Doctrine Catalog and Charter Selection retired or redirected; the `charter` entry's "Do NOT use when" rewritten; the "active" guard amended), `test_fr013_glossary_defines_terms` and `test_fr013_no_living_citation_of_missing_adr` (`test_rename_skills_glossary.py`); `test_fr017_changelog_before_after_lists_every_removed_name` (the Unreleased section names every row of `contracts/cli.md` and `contracts/errors.md`, the twelve skill names, the config keys, `.kittify/doctrine/`, `accompanies_doctrine_pack`) and `test_fr017_runbook_and_historical_banners` (`test_gates_latency_messaging.py`).
 2. Remove the markers only; run them; record red; commit `test(acceptance): drop WP24 xfail markers for FR-013/FR-017 (#3732)`.
 3. Read what each test asserts before writing content: the tests are the done-condition (C-006), this prompt is guidance.
 
@@ -142,6 +142,10 @@ Never push to `main`. Commit per subtask, conventional subjects referencing #373
      - Directories: `.kittify/doctrine/` → `.kittify/charter-packs/`; `src/charter/activation/packs/` presets → `packs/built-in/presets/`.
      - Descriptor field: `accompanies_doctrine_pack` rejected (`RETIRED_PACK_FIELD`); `org-charter.yaml` `schema_version` bump.
      - JSON codes and output: `CHARTER_PACK_CONFIG_INVALID` → `ACTIVE_CHARTER_CONFIG_INVALID`; new `LEGACY_CHARTER_STATE`, `DEFAULT_PRESET_MISSING`, `PRESET_NOT_FOUND`, `PACK_NOT_FOUND`, `PRESET_ID_UNRESOLVED`, `PRESET_WOULD_OVERWRITE`, `RETIRED_PACK_FIELD`; `doctrine_mode` output key removed.
+     - Tool surfaces: `spec-kitty doctor tool-surfaces --kind doctrine-skill` → `--kind charter-skill`; the `ToolSurfaceKind` value and surface-id segment `doctrine_skill` → `charter_skill`.
+     - `charter pack list --json` shape (breaking): preset rows → one row per pack, `{"packs": [{"name", "tier", "root", "presets": [...]}]}` (`contracts/cli.md` "`--json` shapes").
+     - State surface name `project_doctrine_graph` → `project_pack_graph` (printed by `doctor`).
+     - Built-in pack manifest `generated_by`: `spec-kitty doctrine regenerate-graph` → `spec-kitty charter pack regenerate-graph`.
      Verify every new name against the live CLI and code (`--help`, `git grep`) before writing it.
   3. Add `### Upgrade Notes` entry `Charter pack cutover: run spec-kitty upgrade once …` (#3732): what the migration does (moves, rewrites, resets, kept-for-review report; `[]` lists reset with the key to restore; the `minimal` kind gate removed), that unmigrated projects fail with `LEGACY_CHARTER_STATE`, lanes merge the upgraded target (never rebase), and a link to `../migrations/charter-pack-cutover.md`.
   4. Add `### Added` entries for presets (`charter activate --preset`, `charter pack list` packs+presets, `presets/` in packs) — these name only new things, so no `Charter pack cutover:` prefix is needed unless they cite a retired name.
@@ -159,7 +163,7 @@ Never push to `main`. Commit per subtask, conventional subjects referencing #373
 - **Steps**:
   1. Create the runbook with the frontmatter shape of `docs/migrations/shared-package-boundary-cutover.md` (`title`, `description`, `doc_status: active`, `updated`), plus `audience:` if the docs lint requires it. Sections:
      - **What changed** (one paragraph; link ADR 2026-10-06-1).
-     - **Operators**: `spec-kitty upgrade --dry-run`, read the summary (moved / rewritten / reset / kept for review), `spec-kitty upgrade`, commit the result (plain filesystem move; uncommitted edits are carried over); what each report class means; restoring a deliberate `[]` (the summary names file and key); the removed `minimal` kind gate; the collision refusal when both `.kittify/doctrine/` and `.kittify/charter-packs/` hold a path with different content; Windows locked files; the `LEGACY_CHARTER_STATE` error and its exempt commands (`upgrade`, `init`, `--version`, `--help`).
+     - **Operators**: `spec-kitty upgrade --dry-run`, read the summary (moved / rewritten / reset / kept for review), `spec-kitty upgrade`, commit the result (plain filesystem move; uncommitted edits are carried over); what each report class means; restoring a deliberate `[]` (the summary names file and key); the removed `minimal` kind gate; the collision refusal when both `.kittify/doctrine/` and `.kittify/charter-packs/` hold a path with different content; Windows locked files; the `LEGACY_CHARTER_STATE` error and its exempt commands (`upgrade`, `init`, `--version`, `--help`, the git merge drivers and the hook entry points; `contracts/cli.md`).
      - **Missions in flight**: upgrade the repository root; then **merge** the target branch into each lane, never rebase (a rebase moves the lane past its approval stamp and `spec-kitty consolidate` refuses with `APPROVAL_STAMP_NOT_ON_LANE`); or finish and consolidate the Mission before upgrading. The upgrade skips worktrees.
      - **Choosing a starting point**: `charter pack list`, `charter activate --preset minimal|default [--force]`, `--pack <org-pack> --preset <name>` (from `quickstart.md`).
      - **Pack authors**: delete `accompanies_doctrine_pack` from `pack.yaml`; rename `doctrine_pack_id` to `charter_pack_id` in `org-charter.yaml` and bump its `schema_version` (state the number from WP17's change); add `presets/<name>.yaml` (schema summary from `contracts/activation-preset.schema.yaml`); validate with `spec-kitty charter pack validate`; regenerate with `spec-kitty charter pack regenerate-graph`; replace retired command spellings in your procedures and skills.
@@ -179,6 +183,20 @@ Never push to `main`. Commit per subtask, conventional subjects referencing #373
 - **Purpose**: close the loop on the acceptance tests.
 - **Steps**: run every test un-xfailed in the red-first commit; all must be green. Paste the red output (from the first commit) and the green output (final) side by side in the Activity Log, by test id.
 - **Validation**: [ ] all WP24 acceptance tests green; [ ] no assertion changed.
+
+### Subtask T115 – Draft the public-packs sidecar PR (OD-2)
+
+- **Purpose**: OD-2 (amendment ruling 2) says the public-packs sidecar repository receives a PR. This WP drafts it; the orchestrator opens it after this mission merges (no push to another repository from this WP).
+- **Steps**:
+  1. Write the draft into this prompt's Activity Log as one entry with a fenced block (no new repository file: a living-surface file would spell retired tokens, and `kitty-specs/` paths cannot be owned files). The draft holds a PR title and description (what changed in Spec Kitty, why the sidecar must change, a link to the runbook `docs/migrations/charter-pack-cutover.md`), and the exact changes as unified-diff blocks or file-by-file instructions:
+     - every `pack.yaml`: delete `accompanies_doctrine_pack` (rejected with `RETIRED_PACK_FIELD`);
+     - every `org-charter.yaml`: `doctrine_pack_id` → `charter_pack_id`, and the new `schema_version` (the number WP17 chose);
+     - any retired command spelling in the sidecar's procedures or READMEs → the `contracts/cli.md` replacement.
+  2. Read the sidecar's current files to make the draft concrete (`spec-kitty charter fetch` into a temp project, or the repository URL named in `docs/guides/how-to/governance/`); record the commit you read.
+  3. Add one line to the mission PR body hand-off: "Sidecar PR drafted in the WP24 Activity Log; the orchestrator opens it after merge."
+- **Files**: none (the draft lives in the Activity Log).
+- **Parallel?**: Yes, after T109 (it links the runbook).
+- **Validation**: [ ] every descriptor and org-charter change the cutover forces on pack authors is in the draft; [ ] the draft names the runbook.
 
 ## Test Strategy
 

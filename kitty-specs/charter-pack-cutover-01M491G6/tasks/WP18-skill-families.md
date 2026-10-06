@@ -98,9 +98,6 @@ owned_files:
   - "tests/architectural/test_docs_cli_reference_parity.py"
   - "tests/docs/test_charter_selection_key_teaching.py"
   - "tests/specify_cli/skills/test_retired_charter_skills.py"
-  - "tests/specify_cli/regression/_twelve_agent_baseline/claude/specify.md"
-  - "tests/specify_cli/regression/_twelve_agent_baseline/gemini/specify.toml"
-  - "tests/specify_cli/skills/__snapshots__/codex/specify.SKILL.md"
 authoritative_surface: "src/charter/offering/skills/"
 create_intent:
   - "src/charter/offering/skills/spk-charter-governance"
@@ -180,10 +177,10 @@ FR-008, as ruled in OD-7 (the five backing skills only; the rest of the `spec-ki
 
 - The seven new directories exist under `src/charter/offering/skills/` (the SOURCE; agent copies are generated and git-ignored here); the twelve old directories are gone (C-001: no alias skill, no "Legacy Alias" section, no redirect stub).
 - `spec-kitty-constitution-doctrine` is also added to `RETIRED_CANONICAL_SKILL_NAMES` (WP10 stops `m_3_1_1_charter_rename` from renaming it into the retired `spec-kitty-charter-doctrine`, so an old global copy would otherwise linger).
-- All twelve removed names are in `RETIRED_CANONICAL_SKILL_NAMES` (`src/specify_cli/skills/retired.py`), so user-global roots drop them on the next CLI run (`runtime/agent_skills.py:196-206`), and the upgrade finalizer's manifest reconciliation retires project-root copies.
+- All thirteen retired names (the twelve FR-008 names plus `spec-kitty-constitution-doctrine`; orchestrator ruling FI-S4) are in `RETIRED_CANONICAL_SKILL_NAMES` (`src/specify_cli/skills/retired.py`), so user-global roots drop them on the next CLI run (`runtime/agent_skills.py:196-206`), and the upgrade finalizer's manifest reconciliation retires project-root copies.
 - No living surface (skills, both packs' sources, living docs, `src/`) names a removed skill; derived files are regenerated, not hand-edited.
 - `doctrine-daphne` is untouched (C-004).
-- WP01 acceptance tests marked `pending_until("WP18")` (FR-008, US4 scenario 1) go red → green.
+- WP01 acceptance tests marked `pending_until("WP18")` (FR-008, US4 scenario 1, and `test_fr012_installed_removed_skills`, the installed-skill removal through `spec-kitty upgrade`, which can pass only once the sources are gone) go red → green.
 
 ## Context & Constraints
 
@@ -194,7 +191,7 @@ FR-008, as ruled in OD-7 (the five backing skills only; the rest of the `spec-ki
   rg -n "spec-kitty-glossary-context|spec-kitty-charter-doctrine" src/specify_cli/upgrade/migrations/
   ```
   Any remaining **read** of a deleted skill source in a migration that is not a recorded no-op is a blocker: report it; do not patch WP10's migrations here.
-- **WP12 consistency**: open the WP12 cutover-migration module (`src/specify_cli/upgrade/migrations/m_*charter_pack_cutover*.py` and its snapshot/data module). Confirm the list of removed skill names it acts on equals the twelve names above (ideally it reads `RETIRED_CANONICAL_SKILL_NAMES` or a shared constant) and that its hash set covers the **shipped** versions of all twelve. If WP12 embedded a different list, record the mismatch and raise it with the orchestrator; do not fork a second list.
+- **WP12 consistency**: open the WP12 cutover-migration module (`src/specify_cli/upgrade/migrations/m_*charter_pack_cutover*.py` and its snapshot/data module). Confirm the list of removed skill names it acts on equals the thirteen names above (WP12's `REMOVED_SKILL_NAMES` has all thirteen) and that its hash set covers the **shipped** versions of the twelve that had shipped sources. If WP12 embedded a different list, record the mismatch and raise it with the orchestrator; do not fork a second list.
 - Pack tiers (C-003): only consumer-facing guidance goes in `packs/built-in`; after any pack edit run `spec-kitty charter pack regenerate-graph`.
 - Prose inside the skills you fold: apply the FR-018 forbidden-token list (`spec.md` "FR-018 closed lists") to text you touch (e.g. "doctrine pack" → "Charter Pack", `.kittify/doctrine` → `.kittify/charter-packs`). Python symbol names quoted in skill prose (`DoctrineService`, `doctrine_service_builder`) are renamed later by WP19/WP20; leave them, and note it in the Activity Log for WP22's final prose sweep.
 
@@ -213,7 +210,7 @@ FR-008, as ruled in OD-7 (the five backing skills only; the rest of the `spec-ki
 rg -n 'pending_until\("WP18"\)' tests/acceptance/charter_pack_cutover/
 ```
 
-These are WP01 T008's skills cases (FR-008; US4 scenario 1: after upgrade, `spk-charter-*`/`spk-practice-*` present, no removed name in project or user-global roots, no orphan manifest entries). Remove only the markers; run; confirm red; commit `test(acceptance): unmark WP18 FR-008 tests (red) (#3732)`.
+These are WP01 T008's skills cases (FR-008; US4 scenario 1: after upgrade, `spk-charter-*`/`spk-practice-*` present, no removed name in project or user-global roots, no orphan manifest entries). Also `test_fr012_installed_removed_skills` in `test_upgrade_migration.py` (manifested and hash-equal installed copies removed through `spec-kitty upgrade`, edited copy kept and reported): WP12 built the removal step, but the finalizer reinstalled the skills until this WP deleted their sources. Remove only the markers; run; confirm red; commit `test(acceptance): unmark WP18 FR-008 tests (red) (#3732)`.
 
 ## Subtasks & Detailed Guidance
 
@@ -242,14 +239,14 @@ These are WP01 T008's skills cases (FR-008; US4 scenario 1: after upgrade, `spk-
 
 - **Purpose**: removed names disappear from every installed root and every living reference.
 - **Steps**:
-  1. `src/specify_cli/skills/retired.py`: add all twelve names to `RETIRED_CANONICAL_SKILL_NAMES` with a comment `# Renamed/folded by #3732 (FR-008): spk-charter-* / spk-practice-*.` Keep the frozenset sorted by group as today.
+  1. `src/specify_cli/skills/retired.py`: add all thirteen names (the twelve plus `spec-kitty-constitution-doctrine`) to `RETIRED_CANONICAL_SKILL_NAMES` with a comment `# Renamed/folded by #3732 (FR-008): spk-charter-* / spk-practice-*.` Keep the frozenset sorted by group as today.
   2. Project roots: the upgrade finalizer (`upgrade/assessment.py:121-139` → `assess_skill_installation(..., retire=True)`) retires manifested entries the catalog no longer expects; WP12 covers unmanifested hash-matched copies. Confirm end-to-end in a temp project (the WP01 US4 acceptance test does this; run it).
   3. `m_3_2_0rc35_spk_skill_pack.py:151` filters `RETIRED_CANONICAL_SKILL_NAMES` out of the preserved manifest; adding names here is the intended effect. Run `tests/upgrade/migrations/test_m_3_2_0rc35_spk_skill_pack.py`.
   4. `src/specify_cli/upgrade/migrations/m_3_2_0rc35_kittify_profile_handoff.py:78,87,101` writes text naming `/ad-hoc-profile-load` into consumer prompts. Read its `detect()`/`apply()` first: if idempotence keys on a heading or marker, update the literal to `/spk-charter-profile-load` (body edit; `migration_id` unchanged per the occurrence-map exception). If it keys on the full block text, changing it would re-apply on already-migrated projects: then leave the literal, record the finding, and raise it with the orchestrator (the cutover migration may need to rewrite the stale skill name in consumer overrides). Do not guess.
   5. Repoint every reference (listed in `owned_files`), replacing each removed name with its new name and `spk-doctrine-*` family mentions with `spk-charter-*` / `spk-practice-*`:
      - skills: `skills/README.md` (table rows l.~130), `spec-kitty/SKILL.md`, `spec-kitty-mission-review/SKILL.md`, `spk-admin-agent-config/SKILL.md`, `spk-meta-skill-map/SKILL.md` (family list l.27, l.40) and `references/spk-skill-map.md`, `spk-meta-skill-authoring/SKILL.md` (family list l.23: replace `doctrine` with `charter` and add `practice`), `spk-mission-{documentation,plan,specify}/SKILL.md`, `spk-start-command-map/references/command-map.md`, `spk-start-here/SKILL.md`.
      - pack sources: the three `task-prompt-template.md` files ("Use the `/ad-hoc-profile-load` skill…" → `/spk-charter-profile-load`), the nine mission-step `prompt.md` files, `tactics/reviewer-implementer-role-separation.tactic.yaml`, `toolguides/CONTEXTIVE.md`.
-     - src prose, not owned (one-line follow-ups; log them): `src/charter/activation/synthesizer/errors.py:11` (WP03), `src/specify_cli/cli/commands/charter/_synthesis.py:186` (WP03), `src/specify_cli/cli/commands/charter/synthesize.py:139` (WP17), `docs/api/cli-commands.md` (WP16; it embeds the synthesize help).
+     - src prose, not owned (one-line follow-ups; log them): `src/charter/activation/synthesizer/errors.py:11` (WP03), `src/specify_cli/cli/commands/charter/_synthesis.py:186` (WP03), `src/specify_cli/cli/commands/charter/synthesize.py:139` (WP03), `docs/api/cli-commands.md` (generated, unowned; it embeds the synthesize help: regenerate it, step T090.5).
      - docs: `docs/api/skills/index.md` (the "## spk-doctrine-*" section l.95-104 becomes two families), `git mv docs/api/skills/spk-doctrine-profile-load.md docs/api/skills/spk-charter-profile-load.md` (update its frontmatter title/description), `docs/api/skills/{spk-meta-skill-map,spk-start-here}.md`, `docs/api/toc.yml:50-51`, `docs/development/page-inventory.yaml:1499`, `docs/api/bulk-edit-gate.md`, the eleven `docs/api/agent_profiles/*.md` pages ("see the `ad-hoc-profile-load` skill"), `docs/architecture/{profile-load-reliability,spdd-reasons}.md`, the thirteen `docs/guides/how-to/harnesses/*.md` pages.
   6. "Skill manifests": the in-repo indexes above (skills README table, skill map, docs index/toc/page inventory) are the manifests to keep consistent. `.kittify/command-skills-manifest.json` is unaffected (none of the twelve is a command skill, research §5).
 - **Files**: as listed.
@@ -270,8 +267,8 @@ These are WP01 T008's skills cases (FR-008; US4 scenario 1: after upgrade, `spk-
   2. Completion manifest: `python -m specify_cli.completion --regenerate` (the synthesize help text names the governance skill). Shared generated file: regenerate on any rebase conflict.
   3. Built-in pack manifest: `uv run spec-kitty charter pack regenerate-graph` (WP15's home) after the pack edits; `--check` must exit 0.
   4. Retrieval index: `python scripts/docs/docs_index.py --write` (`docs/development/docs-retrieval-index.yaml` header says so); commit the result.
-  5. CLI reference: if `docs/api/cli-commands.md` embeds generated help that changed, refresh it with `scripts/docs/build_cli_reference.py` (check its usage) — WP16 owns the file; log the follow-up.
-- **Files**: generated outputs (only the three regen fixtures are in `owned_files`; the others are shared generated files).
+  5. CLI reference: if `docs/api/cli-commands.md` embeds generated help that changed, refresh it with `scripts/docs/build_cli_reference.py` (check its usage); it has no owner; log the regeneration.
+- **Files**: generated outputs, none of them in `owned_files` (tasks.md: generated files have no owner; regenerate, never hand-merge).
 - **Parallel?**: After T089.
 - **Validation**: [ ] `uv run spec-kitty regen --check` and `uv run spec-kitty charter pack regenerate-graph --check` exit 0; [ ] `uv run pytest tests/architectural/test_completion_manifest_freshness.py -q` passes.
 
@@ -283,7 +280,7 @@ These are WP01 T008's skills cases (FR-008; US4 scenario 1: after upgrade, `spk-
   2. `tests/architectural/test_no_dead_doctrine_paths.py:254-265`: byte-pinned asset paths move to `spk-practice-show-me/assets/…` (NFR-002 gate; keep its allowlist unchanged or shrinking).
   3. `tests/architectural/test_docs_cli_reference_parity.py:17,221-225`: the profile-subcommand guard reads `ad-hoc-profile-load/SKILL.md`; point it at `spk-charter-profile-load/SKILL.md` (and keep it non-vacuous: assert the file exists).
   4. `tests/docs/test_charter_selection_key_teaching.py:10`: path → `spk-charter-governance/SKILL.md`.
-  5. New `tests/specify_cli/skills/test_retired_charter_skills.py`: (a) the twelve names are in `RETIRED_CANONICAL_SKILL_NAMES`; (b) none of them exists in the shipped registry (`SkillRegistry.from_package()`), and all seven new names do; (c) in a temp HOME with a global skill root holding `spk-doctrine-charter/` and `spec-kitty-glossary-context/`, `assess_global_agent_skills` (`runtime/agent_skills.py`) marks both for retirement while an unrelated custom skill is preserved (positive control). Mark `fast`.
+  5. New `tests/specify_cli/skills/test_retired_charter_skills.py`: (a) the thirteen names are in `RETIRED_CANONICAL_SKILL_NAMES`; (b) none of them exists in the shipped registry (`SkillRegistry.from_package()`), and all seven new names do; (c) in a temp HOME with a global skill root holding `spk-doctrine-charter/` and `spec-kitty-glossary-context/`, `assess_global_agent_skills` (`runtime/agent_skills.py`) marks both for retirement while an unrelated custom skill is preserved (positive control). Mark `fast`.
   6. Not owned, follow-ups if they fail: `tests/specify_cli/upgrade/test_skill_update_external_symlinks.py` (drives the neutralised glossary-context migration; WP10 owns that change), `tests/upgrade/test_charter_rename_migration.py` (WP10), `tests/specify_cli/tool_surface/providers/test_managed_skills.py` (WP17).
   7. Run the WP18 acceptance tests: green. Commit `feat(skills)!: spk-charter-* and spk-practice-* families (#3732)`.
 - **Validation**: [ ] `rg -n 'pending_until\("WP18"\)' tests` empty.
@@ -322,7 +319,7 @@ Never bare `tests/architectural/` or `make test-full`.
 
 - Red-on-base → green-on-final for the WP18 acceptance tests.
 - Seven directories present, twelve gone; no alias/redirect skill; `name:` equals directory; descriptions keep both sources' triggers.
-- Retired list contains exactly the twelve; WP12's migration list matches (recorded).
+- Retired list contains exactly the twelve FR-008 names plus `spec-kitty-constitution-doctrine` (thirteen); WP12's migration list matches (recorded).
 - Validation grep in T089 is clean; regen/pack/completion checks exit 0.
 - `doctrine-daphne` and historical roots untouched.
 - Follow-up edits outside `owned_files` logged.

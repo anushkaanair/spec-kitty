@@ -229,6 +229,7 @@ Conventional subjects with `#3732`: `feat(upgrade): runs_first ordering in get_a
 
 - [ ] Red-first commit; every `pending_until("WP10")` test green.
 - [ ] `runs_first` attribute, partition in `get_applicable`, duplicate refusal in `register`; `get_all()` unchanged.
+- [ ] `structural_detect` hook; a recorded `runs_first` migration is re-selected (registry and runner) when it returns true; tested.
 - [ ] Three migrations neutralised (ids unchanged), recorded as skipped by the runner; their body tests deleted; normalizer pointer decision recorded.
 - [ ] Discovery survives a blocked `specify_cli.charter_pack_registry` (test with planted self-test).
 - [ ] `m_3_1_1` no longer creates `spec-kitty-charter-doctrine`; finalize no longer imports the compat helper and fails closed on `governance.doctrine`.
