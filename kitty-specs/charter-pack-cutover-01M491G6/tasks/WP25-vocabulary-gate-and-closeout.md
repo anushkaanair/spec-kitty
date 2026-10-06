@@ -93,7 +93,8 @@ Never push to `main`. Commit per subtask (`test(architectural): retired charter 
 
 ### Red first (C-006 / C-011) — first commit
 
-1. `grep -rn 'pending_until("WP25")' tests/acceptance/charter_pack_cutover/` (FR-014, FR-018, NFR-002, SC-003 and the traceability closeout).
+1. `grep -rn 'pending_until("WP25")' tests/acceptance/charter_pack_cutover/`. WP01 assigns WP25: `test_fr014_reachability_pins_reasserted_or_recorded` (`test_rename_skills_glossary.py`: finds the module by glob `tests/**/drg/test_reachability.py`; no pin references `default.yaml` / `default_pack` / `charter_pack_registry`; every deleted pin listed with a reason under a module-docstring section titled exactly `Deleted pins (FR-014)`), `test_fr018_vocabulary_gate_zero_findings_over_floor` and `test_fr018_planted_token_detected` (`test_gates_latency_messaging.py`), the remaining `test_nfr002_gates_close_empty` rows (FR-016 allowlist empty, FR-018 allowlist only C-004 names, `test_no_dead_doctrine_paths` and kind-vocabulary allowlists empty), and `test_traceability_no_pending_markers_remain` (`test_traceability.py`).
+   **These tests import the gate modules by file path and call names in them.** Read them before writing the gate and implement exactly the names they use (scan function, token tuple, allowlist, floor constant). If a name they need conflicts with this prompt, the test wins (C-006).
 2. Remove the markers only; run them; record red; commit `test(acceptance): drop WP25 xfail markers (#3732)`.
 
 ### Subtask T111 – FR-018 vocabulary gate (closed token and root lists, floor, planted tests)
@@ -132,7 +133,7 @@ Never push to `main`. Commit per subtask (`test(architectural): retired charter 
   3. For each pin decide:
      - **Re-assert**: the pin still expresses a meaningful invariant under the `default` preset. Add a test asserting `measured == pin`, and update the pin to the measured value **with a ledger row per member that entered or left** (the module's "NFR-002 REVIEW-GATE NOTE (D18)" requires a per-member ledger; a pasted value without a ledger row is a reject).
      - **Delete**: the pin cannot hold or no longer means anything (for example an "activated-only" set when nothing is activation-filtered). Remove the constant and any helper only it used; list it with its reason.
-  4. Put the decision table (pin, decision, reason, size before/after) in the module docstring and in the Activity Log. FR-014 is satisfied only by an explicit list.
+  4. Put the decision table in the module docstring under a section titled exactly `Deleted pins (FR-014)` (the acceptance test parses that title; list every deleted pin with its reason there, and the re-asserted pins with their asserting test) and copy it to the Activity Log. FR-014 is satisfied only by an explicit list. No remaining pin may reference `default.yaml`, `default_pack` or `charter_pack_registry`, even in a comment.
   5. Run the module and its owning subsystem directories.
 - **Files**: `tests/charter_offering/drg/test_reachability.py` (closeout follow-up in a WP23-owned file; logged); the wiring ledger it cites lives in `docs/plans/**` (historical root: do not edit; cite it).
 - **Parallel?**: Yes, with T111.
@@ -162,7 +163,7 @@ Never push to `main`. Commit per subtask (`test(architectural): retired charter 
 - **Purpose**: C-006 closes: every acceptance test the mission defined is a plain, green test.
 - **Steps**:
   1. `git grep -n "pending_until(" -- tests/acceptance/charter_pack_cutover` → only the helper's definition (and its own unit test, if any).
-  2. WP01's traceability test (T010) asserts every marker names a real WP. Make the permanent guard assert that **no** `pending_until` call remains in the suite (an AST scan over the suite's files). If nothing else uses the helper, delete it (dead code; `tests/architectural/test_no_dead_modules.py` / the dead-symbol allowlist would otherwise need an entry).
+  2. WP01 already wrote the permanent guard `test_traceability_no_pending_markers_remain` (strict xfail for WP25; you removed its marker in the red-first commit). It goes green once the last marker is gone. Keep the `pending_until` helper and its self-tests only if `test_every_pending_marker_names_a_real_wp` or the helper self-tests still need it; otherwise delete it with its self-tests (dead code under `tests/architectural/test_no_dead_modules.py`). Record the decision.
   3. Run the whole acceptance suite: `uv run --frozen pytest tests/acceptance/charter_pack_cutover -q` → all pass, 0 xfail, 0 xpass. Record counts.
   4. Final sweep for the whole mission, recorded in the Activity Log: `git grep -n "tests/doctrine\b" -- . ':!kitty-specs' ':!docs/adr' ':!docs/plans' ':!docs/reports' ':!docs/archive' ':!docs/changelog' ':!.kittify'` → nothing (WP23 may have left `docs/context/charter.md` for WP24; fix as a follow-up); `git grep -n "2026-08-22-2"` over living surfaces → nothing.
 - **Files**: acceptance-suite files (WP01-owned; logged).
@@ -178,7 +179,7 @@ uv run --frozen pytest tests/architectural/test_retired_charter_vocabulary.py \
   tests/architectural/test_lifted_cli_doctrine_retirement.py tests/architectural/test_no_dead_doctrine_paths.py \
   tests/architectural/test_charter_kind_vocabulary_single_authority.py tests/architectural/test_runtime_charter_doctrine_boundary.py \
   tests/architectural/test_no_legacy_terminology.py tests/architectural/test_no_dead_modules.py -q
-uv run --frozen pytest $(git grep -ln "4836" -- tests/architectural) -q        # the removed-command guidance gate
+uv run --frozen pytest $(git grep -ln "4836" -- "tests/architectural/test_*.py") -q   # includes the removed-command guidance gate
 uv run --frozen pytest tests/charter_offering/drg/test_reachability.py -q
 uv run --frozen pytest tests/charter tests/charter_offering -q -m "fast or unit"
 ls tests/architectural/test_module_shard_registry.py tests/architectural/test_gate_selection_authority.py \

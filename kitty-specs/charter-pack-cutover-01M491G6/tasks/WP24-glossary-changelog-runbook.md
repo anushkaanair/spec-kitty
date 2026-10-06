@@ -102,7 +102,7 @@ Never push to `main`. Commit per subtask, conventional subjects referencing #373
 
 ### Red first (C-006 / C-011) — first commit
 
-1. `grep -rn 'pending_until("WP24")' tests/acceptance/charter_pack_cutover/` (FR-013 glossary terms and citations; FR-017 changelog Before/After and runbook; SC-005).
+1. `grep -rn 'pending_until("WP24")' tests/acceptance/charter_pack_cutover/`. WP01 assigns WP24: `test_fr013_glossary_defines_terms` and `test_fr013_no_living_citation_of_missing_adr` (`test_rename_skills_glossary.py`); `test_fr017_changelog_before_after_lists_every_removed_name` (the Unreleased section names every row of `contracts/cli.md` and `contracts/errors.md`, the twelve skill names, the config keys, `.kittify/doctrine/`, `accompanies_doctrine_pack`) and `test_fr017_runbook_and_historical_banners` (`test_gates_latency_messaging.py`).
 2. Remove the markers only; run them; record red; commit `test(acceptance): drop WP24 xfail markers for FR-013/FR-017 (#3732)`.
 3. Read what each test asserts before writing content: the tests are the done-condition (C-006), this prompt is guidance.
 

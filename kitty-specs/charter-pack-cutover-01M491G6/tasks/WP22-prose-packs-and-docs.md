@@ -11,7 +11,6 @@ owned_files:
   # packs (tier-sense prose; content sense kept)
   - "packs/built-in/agent_profiles/README.md"
   - "packs/built-in/agent_profiles/curator-carla.agent.yaml"
-  - "packs/built-in/agent_profiles/doctrine-daphne.agent.yaml"
   - "packs/built-in/agent_profiles/drupal-dries.agent.yaml"
   - "packs/built-in/agent_profiles/retrospective-facilitator.agent.yaml"
   - "packs/built-in/assets/README.md"
@@ -50,9 +49,7 @@ owned_files:
   - "packs/built-in/tactics/analysis/forensic-repository-audit.tactic.yaml"
   - "packs/built-in/tactics/architecture/c4-zoom-in-architecture-documentation.tactic.yaml"
   - "packs/built-in/tactics/canonical-source-unification.tactic.yaml"
-  - "packs/built-in/tactics/common-docs-find.tactic.yaml"
   - "packs/built-in/tactics/common-docs-scaffold.tactic.yaml"
-  - "packs/built-in/tactics/common-docs-write.tactic.yaml"
   - "packs/built-in/tactics/model-task-routing.tactic.yaml"
   - "packs/built-in/tactics/pr-agent-worktree-isolation.tactic.yaml"
   - "packs/built-in/tactics/reasons-canvas-fill.tactic.yaml"
@@ -90,7 +87,6 @@ owned_files:
   - "docs/architecture/diagrams/02_containers/README.md"
   - "docs/architecture/diagrams/03_components/README.md"
   - "docs/architecture/diagrams/README.md"
-  - "docs/architecture/doctrine-kinds.md"
   - "docs/architecture/documentation-mission.md"
   - "docs/architecture/explanation-index.md"
   - "docs/architecture/explanation-toc.yml"
@@ -107,14 +103,12 @@ owned_files:
   - "docs/architecture/spdd-reasons.md"
   - "docs/architecture/trail-model.md"
   - "docs/architecture/vision/README-3.x.md"
-  - "docs/configuration/yaml-libraries.md"
   - "docs/context/audience/internal/lead-developer.md"
   - "docs/context/audience/internal/maintainer.md"
   - "docs/context/audience/internal/spec-kitty-cli-runtime.md"
   - "docs/context/charter-overview.md"
   - "docs/context/configuration-project-structure.md"
   - "docs/context/contextive-glossaries.md"
-  - "docs/context/execution.md"
   - "docs/context/governance-files.md"
   - "docs/context/governance.md"
   - "docs/context/index.md"
@@ -131,7 +125,6 @@ owned_files:
   - "docs/development/contributing.md"
   - "docs/development/getting-started/onboarding-run.md"
   - "docs/development/how-to/add-architectural-gate-exemption.md"
-  - "docs/development/how-to/create-a-doctrine-artifact.md"
   - "docs/development/how-to/create-a-pack-skill.md"
   - "docs/development/how-to/enable-the-internal-pack.md"
   - "docs/development/how-to/index.md"
@@ -139,18 +132,15 @@ owned_files:
   - "docs/development/how-to/pr-landing.md"
   - "docs/development/how-to/review-gates.md"
   - "docs/development/index.md"
-  - "docs/development/reference/ci-gate-mechanics.md"
   - "docs/development/reference/coverage-signals.md"
   - "docs/development/reference/known-friction-points.md"
   - "docs/development/reference/quality-and-tech-debt-standing-orders.md"
   - "docs/development/reference/read-side-seam-classification.md"
-  - "docs/development/reference/terminology-exemptions.md"
   - "docs/development/reference/version-taxonomy.md"
   - "docs/development/reporting/debrief-styleguide.md"
   - "docs/development/testing/run-mutation-tests.md"
   - "docs/development/toc.yml"
   - "docs/guides/how-to/collaboration/adhoc-specialist-session.md"
-  - "docs/guides/how-to/governance/create-an-org-doctrine-pack.md"
   - "docs/guides/how-to/governance/extend-charter-for-unsupported-language.md"
   - "docs/guides/how-to/governance/index.md"
   - "docs/guides/how-to/governance/manage-glossary.md"
@@ -252,6 +242,7 @@ Done when:
   - `packs/internal/{README.md, assets/test-quality-scan.py, procedures/executive-debrief-generation.procedure.yaml, procedures/test-suite-quality-assessment.procedure.yaml, skills/report-debrief.skill.md, toolguides/TEST_QUALITY_TRIAGE.md, toolguides/test-quality-triage.toolguide.yaml}` (WP15 T078 moved their commands). Their remaining tier prose ("org-tier doctrine pack" in `README.md`) is a logged follow-up here.
   - `docs/context/charter.md`, `docs/migrations/index.md`, the new runbook and the two superseded runbooks (WP24); `docs/migrations/shim-registry.yaml` (WP14); `docs/api/charter-commands.md` (CLI WPs); generated docs (`docs/api/cli-commands.md`, `docs/development/docs-retrieval-index.yaml`, `docs/development/page-inventory.yaml`) are regenerated, never hand-edited.
   - The four docs that also cite `tests/doctrine/` (`docs/architecture/doctrine-relationships.md`, `docs/architecture/04_implementation_mapping/README.md`, `docs/operations/p0-baseline-refresh.md`, `docs/architecture/profile-load-reliability.md`) belong to WP23, which runs in parallel; WP23 applies this WP's prose rule there.
+- **Files claimed upstream** that still need this WP's prose pass (logged follow-ups; their WPs are complete): WP16 `packs/built-in/agent_profiles/doctrine-daphne.agent.yaml`, `packs/built-in/tactics/common-docs-find.tactic.yaml`, `packs/built-in/tactics/common-docs-write.tactic.yaml`, `docs/architecture/doctrine-kinds.md`, `docs/development/how-to/create-a-doctrine-artifact.md`, `docs/development/reference/ci-gate-mechanics.md`, `docs/development/reference/terminology-exemptions.md`, `docs/guides/how-to/governance/create-an-org-doctrine-pack.md`; WP17 `docs/configuration/yaml-libraries.md`, `docs/context/execution.md`. WP16 most likely already replaced the retired command spellings in them; check, then apply the classification rule to the remaining prose.
 - WP21 left a list of docs that still name renamed modules or gate files (its Activity Log). Sweep those references as part of T102.
 
 ## Branch Strategy
@@ -270,8 +261,8 @@ Never push to `main`. Commit per surface (built-in pack, internal pack, docs are
 
 ### Red first (C-006 / C-011) — first commit
 
-1. `grep -rn 'pending_until("WP22")' tests/acceptance/charter_pack_cutover/` (FR-010 prose checks for packs, docs and AGENTS.md).
-2. Remove the markers only; run the tests; record the red output in the Activity Log; commit `test(acceptance): drop WP22 xfail markers for FR-010 prose (#3732)`.
+1. `grep -rn 'pending_until("WP22")' tests/acceptance/charter_pack_cutover/`. WP01's flip map assigns WP22 no acceptance test (the prose result is measured by WP25's FR-018 gate, `test_fr018_vocabulary_gate_zero_findings_over_floor`). If the grep is empty, record that, and record as your red evidence the T101 forbidden-token grep over the owned files (hit count per file) before any edit; it must reach zero by the end.
+2. If markers exist, remove them only; run the tests; record the red output in the Activity Log; commit `test(acceptance): drop WP22 xfail markers for FR-010 prose (#3732)`.
 3. A test that passes at once is vacuous or already satisfied: record which and ask the reviewer; do not edit its assertion.
 
 ### Classification rule (applies to T101–T103)

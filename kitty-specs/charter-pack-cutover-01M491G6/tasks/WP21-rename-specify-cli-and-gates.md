@@ -9,28 +9,20 @@ phase: "Phase 5 - Names"
 execution_mode: "code_change"
 owned_files:
   # R3: specify_cli command surface and neighbours (module moves own source + destination)
-  - "src/specify_cli/cli/commands/_doctrine_collect.py"
   - "src/specify_cli/cli/commands/_charter_pack_collect.py"
   - "src/specify_cli/cli/commands/_doctrine_health.py"
   - "src/specify_cli/cli/commands/_charter_pack_health.py"
   - "src/specify_cli/cli/commands/_profile_health_render.py"
-  - "src/specify_cli/cli/commands/charter/_fresh_doctrine.py"
   - "src/specify_cli/cli/commands/charter/_fresh_project_layer.py"
   - "src/specify_cli/cli/commands/charter/__init__.py"
-  - "src/specify_cli/cli/commands/charter/_synthesis.py"
-  - "src/specify_cli/cli/commands/charter/synthesize.py"
   - "src/specify_cli/cli/commands/charter/_cascade_shared.py"
-  - "src/specify_cli/cli/commands/charter/deactivate.py"
-  - "src/specify_cli/cli/commands/charter/_status_collectors.py"
-  - "src/specify_cli/cli/commands/profiles_cmd.py"
   - "src/specify_cli/cli/commands/agent_retrospect.py"
   - "src/specify_cli/*_service_factory.py"
-  - "src/specify_cli/doctrine_synthesizer/**"
+  - "src/specify_cli/doctrine_synthesizer/__init__.py"
+  - "src/specify_cli/doctrine_synthesizer/conflict.py"
+  - "src/specify_cli/doctrine_synthesizer/provenance.py"
   - "src/specify_cli/charter_pack_synthesizer/**"
   - "src/specify_cli/charter_runtime/freshness/cache.py"
-  - "src/specify_cli/charter_runtime/freshness/computer.py"
-  - "src/specify_cli/charter_runtime/lint/checks/org_layer.py"
-  - "src/specify_cli/charter_runtime/preflight/runner.py"
   - "src/specify_cli/invocation/registry.py"
   - "src/specify_cli/invocation/org_profiles.py"
   - "src/specify_cli/skills/registry.py"
@@ -50,14 +42,10 @@ owned_files:
   # R4: architectural gates
   - "tests/architectural/_dead_path_scan.py"
   - "tests/architectural/_inert_slots.py"
-  - "tests/architectural/_sole_door_scan.py"
-  - "tests/architectural/test_charter_facades_reexport_doctrine.py"
   - "tests/architectural/test_charter_facades_reexport_offering.py"
   - "tests/architectural/test_charter_sole_door_*_service.py"
-  - "tests/architectural/test_charter_sole_door_inner_reacharound.py"
   - "tests/architectural/test_doctrine_missions_stale_path_sweep.py"
   - "tests/architectural/test_offering_missions_stale_path_sweep.py"
-  - "tests/architectural/test_doctrine_public_surface.py"
   - "tests/architectural/test_charter_offering_public_surface.py"
   - "tests/architectural/test_kernel_no_doctrine_import.py"
   - "tests/architectural/test_kernel_no_charter_offering_import.py"
@@ -71,18 +59,18 @@ owned_files:
   - "tests/architectural/test_issue_matrix_json_migration_completeness.py"
   - "tests/architectural/test_issue_matrix_partition_guard.py"
   - "tests/architectural/test_no_authored_applies_edge.py"
-  - "tests/architectural/test_no_op_stable_writes.py"
   - "tests/architectural/test_no_shipped_layer_label.py"
   - "tests/architectural/test_override_policy_parity.py"
   - "tests/architectural/test_ratchet_baselines.py"
   - "tests/architectural/test_no_dead_doctrine_paths.py"
   # T100: tests that follow the R3/R4 renames
-  - "tests/specify_cli/cli/commands/test_doctrine_collect.py"
   - "tests/specify_cli/cli/commands/test_charter_pack_collect.py"
   - "tests/specify_cli/cli/commands/test_doctrine_hard_fail_surfacing.py"
   - "tests/specify_cli/cli/commands/test_charter_pack_hard_fail_surfacing.py"
   - "tests/specify_cli/test_*_service_factory.py"
-  - "tests/doctrine_synthesizer/**"
+  - "tests/doctrine_synthesizer/__init__.py"
+  - "tests/doctrine_synthesizer/test_conflict_failclosed.py"
+  - "tests/doctrine_synthesizer/test_provenance.py"
   - "tests/charter_pack_synthesizer/**"
   - "tests/specify_cli/charter/test_graph_unlink_helper.py"
   - "tests/specify_cli/test_read_seam_migration_core.py"
@@ -92,7 +80,6 @@ owned_files:
   - "tests/cli/test_agent_retrospect_synthesize.py"
   - "tests/cli/commands/test_retrospect.py"
   - "tests/retrospective/test_reducer_integration.py"
-  - "tests/specify_cli/invocation/test_org_profiles.py"
 authoritative_surface: "src/specify_cli/cli/commands/"
 create_intent:
   - "src/specify_cli/cli/commands/_charter_pack_collect.py"
@@ -185,6 +172,7 @@ Key rules:
   - keep, and record: `retrospective/policy.py` `propose_doctrine_changes` (a persisted policy key, content sense, not in the FR-012 inventory); class names `FixCharterDoctrineSkillMigration` and `RetireSingleOwnerDoctrineIdsMigration` and every migration module file name (they mirror recorded `migration_id` values); the NFR-002 gate file names `test_doctrine_census.py`, `test_lifted_cli_doctrine_retirement.py`, `test_no_deprecated_doctrine_command_in_guidance.py`, `test_no_dead_doctrine_paths.py`.
 - **C-001**: rename in place with `git mv`; update every importer; leave no forwarding module, no alias in `__all__`, no `X = Y` alias.
 - **Ownership**: files moved or deleted by WP04/WP05/WP13/WP16 are gone. Files named for another WP's subtask (for example `cli/commands/doctor.py` for WP15, `charter/generate.py` and `init.py` for WP09, `charter/activate.py` and `pack.py` for WP08/WP13, `interview.py` and `_resynthesis_preflight.py` for WP06, `tracker.py` for WP14, the `ToolSurfaceKind` files for WP17, `m_unify_charter_activation.py` and `m_2_1_2_fix_glossary_context_skill.py` for WP06/WP10, `test_doctrine_census.py` and `test_runtime_charter_doctrine_boundary.py` for WP05) are **not** in `owned_files`. When a rename here needs a call-site edit in one of them, make it as a mechanical follow-up (tasks.md rule) and log each file with a one-line rationale. Shared rosters (`pyproject.toml`, `ruff.toml`, `.github/ci-module-registry.yml`, `.github/ci-shard-timings.json`, `.github/workflows/ci-router.yml`, `.github/workflows/ci-nightly.yml`, `tests/architectural/_gate_coverage.py`, `tests/architectural/_interpreter_shard_roster.py`, `tests/architectural/ci_topology_census.json`, `tests/release/coverage_breadth_baseline.json`, `tests/release/ci_retirement_scrub.json`) are edited the same way and logged.
+- **Sources owned upstream, destinations owned here.** These files are claimed by earlier WPs and are renamed, moved or edited here as logged follow-ups (their WPs are complete before WP21 starts): WP02 `src/specify_cli/cli/commands/_doctrine_collect.py`, `charter/_status_collectors.py`, `profiles_cmd.py`, `charter_runtime/preflight/runner.py`; WP03 `charter/_fresh_doctrine.py`, `charter/_synthesis.py`, `charter/synthesize.py`, `doctrine_synthesizer/apply.py`, `charter_runtime/freshness/computer.py`, `tests/doctrine_synthesizer/test_apply.py`, `tests/doctrine_synthesizer/test_path_traversal_rejection.py`; WP04 `tests/architectural/test_charter_facades_reexport_doctrine.py`, `test_doctrine_public_surface.py`; WP05 `charter_runtime/lint/checks/org_layer.py`, `tests/specify_cli/cli/commands/test_doctrine_collect.py`; WP17 `charter/deactivate.py`; WP19 `tests/architectural/_sole_door_scan.py`; WP20 `tests/architectural/test_charter_sole_door_inner_reacharound.py`, `test_no_op_stable_writes.py`, `tests/specify_cli/invocation/test_org_profiles.py`. The move destinations (`_charter_pack_collect.py`, `_fresh_project_layer.py`, `charter_pack_synthesizer/**`, `tests/charter_pack_synthesizer/**`, the renamed gate and test files) are owned here.
 - **Downstream docs**: do not edit living docs (WP22 owns them). Record every doc that still names a renamed module or gate file (for example `docs/development/reference/ci-gate-mechanics.md` names `test_charter_facades_reexport_doctrine`) in the Activity Log so WP22 sweeps it.
 
 ## Branch Strategy
@@ -203,7 +191,7 @@ Never push to `main`. Commit often, conventional subjects referencing #3732, for
 
 ### Red first (C-006 / C-011) — first commit
 
-1. `grep -rn 'pending_until("WP21")' tests/acceptance/charter_pack_cutover/` — these are WP01's FR-010 rename tests for the `specify_cli` surface, migrations and gates (tagged FR-010).
+1. `grep -rn 'pending_until("WP21")' tests/acceptance/charter_pack_cutover/`. WP01's flip map assigns WP21 `test_fr010_no_src_module_named_for_retired_tier` in `test_package_split.py`: no `src/**` path segment contains `doctrine` except the kept migration ids in the occurrence map. At base the offending paths outside WP21's scope were `src/kernel/doctrine_root.py` (WP02), `src/charter/activation/{_doctrine_paths,action_doctrine_bundle,doctrine_service_builder}.py` (WP20), `src/charter/offering/skills/spk-doctrine-*` and `spec-kitty-charter-doctrine` (WP18), `src/specify_cli/doctrine/` (WP05), `cli/commands/doctrine.py` (WP16), `_doctrine_asset.py` (WP15 moves it to `charter/pack_asset.py`). If any of them still exists when you start, it is that WP's miss: record it and raise it with the reviewer before renaming it yourself. The two kept migration modules (`m_2_1_2_fix_charter_doctrine_skill.py`, `m_4_0_0rc5_retire_single_owner_doctrine_ids.py`) must be in the test's exception set; if they are not, raise it (C-006: do not edit the test).
 2. Remove each marker (the decorator only; do not change the assertion). Run them: they must fail on the current tree. Paste the failing test ids and the red summary line into the Activity Log.
 3. Commit: `test(acceptance): drop WP21 xfail markers for FR-010 R3/R4 (#3732)`.
 4. If a WP21 test passes immediately, stop: it is vacuous or already satisfied by WP19/WP20. Record which, and ask the reviewer before changing it (C-006 forbids redefining acceptance criteria).
