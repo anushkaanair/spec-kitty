@@ -445,6 +445,7 @@ def test_fr011_stale_worktree_checkout_detected(tmp_path: Path) -> None:
     assert "merge" in output_of(stale) and "rebase" in output_of(stale), describe(stale)
 
 
+KNOWN_SRC_DEFINITION = "def emit_status_transition("
 RETIRED_SHIM_NAMES = ("LegacyDoctrineRootWarning", "LegacyTrackerOwnershipKeyWarning", "apply_legacy_governance_selection_key_compat")
 
 
@@ -453,10 +454,11 @@ RETIRED_SHIM_NAMES = ("LegacyDoctrineRootWarning", "LegacyTrackerOwnershipKeyWar
 @pending_until("WP14", "read-side shims removed")
 def test_fr011_shims_removed(tmp_path: Path) -> None:
     src_text = "\n".join(p.read_text(encoding="utf-8") for p in sorted((REPO_ROOT / "src").rglob("*.py")))
-    assert "def charter_list" in src_text or "charter" in src_text  # control: the scan reads real source
+    # Control: the scan reads real source (a definition no work package of this mission touches).
+    assert KNOWN_SRC_DEFINITION in src_text
     present = [name for name in RETIRED_SHIM_NAMES if name in src_text]
     assert present == [], present
-    project = BUILDERS["tracker_doctrine_key"](tmp_path / "p")
+    project = project_from_template("tracker_doctrine_key", tmp_path / "p")
     flag = run_cli(["tracker", "status", "--doctrine-mode", "external_authoritative"], project)
     assert flag.exit_code == 2, describe(flag)
     assert "doctrine_mode" not in src_text

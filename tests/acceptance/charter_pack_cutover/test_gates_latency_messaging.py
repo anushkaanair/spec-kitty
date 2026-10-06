@@ -109,6 +109,20 @@ def _cr02_row() -> None:
     assert not (ARCH / "test_lifted_cli_doctrine_charter_cr02_compat.py").exists()
 
 
+LIFTED_RETIREMENT_GATE = ARCH / "test_lifted_cli_doctrine_retirement.py"
+
+
+def _lifted_retirement_row() -> None:
+    """The lifted retirement gate closes empty: no exemption structure, no pin of the ``doctrine`` group."""
+    gate = load_gate(LIFTED_RETIREMENT_GATE)
+    tests = [name for name in vars(gate) if name.startswith("test_")]
+    assert tests, "control: the gate defines its tests"
+    assert {n: v for n, v in _named_allowlists(gate).items() if v} == {}
+    assert _doctrine_package_refs(gate) == []
+    source = LIFTED_RETIREMENT_GATE.read_text(encoding="utf-8")
+    assert '["doctrine", "--help"]' not in source, "the gate still requires the retired `doctrine` group to be registered"
+
+
 def _guidance_gate_path() -> Path:
     found = [p for p in sorted(ARCH.glob("test_*.py")) if re.search("guidance|removed", p.name) and "4836" in p.read_text(encoding="utf-8")]
     assert found, "the #4836 guidance gate is missing"
@@ -159,6 +173,7 @@ GATE_ROWS: tuple[GateRow, ...] = (
     GateRow("census_exemptions", _census_row, "WP05"),
     GateRow("boundary_exemptions", _boundary_row, "WP05"),
     GateRow("cr02_compat_test_deleted", _cr02_row, "WP16"),
+    GateRow("lifted_retirement_gate_closes_empty", _lifted_retirement_row, "WP16"),
     GateRow("guidance_gate_is_removed_command_gate", _guidance_row, "WP16"),
     GateRow("fr016_allowlist_empty", _fr016_row, "WP25"),
     GateRow("fr018_allowlist_c004_only", _fr018_row, "WP25"),
@@ -350,8 +365,36 @@ def test_fr017_changelog_before_after_lists_every_removed_name() -> None:
     assert len(names) >= 15, "control: the contract tables parse"
     section = unreleased_section(CHANGELOG.read_text(encoding="utf-8"))
     expected = [*names, *REMOVED_SKILL_IDS, *REMOVED_KEYS_AND_PATHS]
-    missing = sorted({name for name in expected if name not in section})
+    missing = sorted({name for name in expected if not changelog_names(section, name)})
     assert missing == [], missing
+
+
+_ELLIPSIS = re.compile(r"\s*(?:\u2026|\.\.\.)\s*")
+
+
+def _plain(text: str) -> str:
+    """Lower-cased, backticks dropped, whitespace collapsed."""
+    return " ".join(text.replace("`", " ").lower().split())
+
+
+def changelog_names(section: str, name: str) -> bool:
+    """*name* appears in *section*, matched on meaning rather than verbatim spelling.
+
+    Case, backticks and whitespace are ignored, and an elided spelling such as
+    ``spec-kitty tracker … --doctrine-mode`` matches when each fragment appears.
+    """
+    haystack = _plain(section)
+    fragments = [_plain(f) for f in _ELLIPSIS.split(name)]
+    return all(f in haystack for f in fragments if f)
+
+
+@covers("FR-017")
+def test_fr017_changelog_matching_is_semantic() -> None:
+    """Self-test of the matcher used by the changelog check."""
+    section = "| `spec-kitty tracker status --doctrine-mode` | removed |\n| `Doctrine.Org.Packs` |"
+    assert changelog_names(section, "spec-kitty tracker \u2026 --doctrine-mode")
+    assert changelog_names(section, "doctrine.org.packs")
+    assert not changelog_names(section, "spec-kitty doctrine fetch")
 
 
 @covers("FR-017")
