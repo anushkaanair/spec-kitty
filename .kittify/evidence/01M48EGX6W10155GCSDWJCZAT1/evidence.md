@@ -1,0 +1,1 @@
+Grounding for #2560/#2561/#2562: baseline 2738 passed; #2561 delegate-deletion prototype (scratch patch, 48 files); #2560 dependency closure; #2562 spike finding (composition advance skips significance/RACI). Implementation handed to a spec-kitty mission per operator.
