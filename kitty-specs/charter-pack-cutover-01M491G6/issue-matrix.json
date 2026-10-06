@@ -109,7 +109,7 @@
       "wp": null
     },
     "#5830": {
-      "evidence_ref": "<link or commit>",
+      "evidence_ref": "Follow-up filed by this mission for out-of-scope work (OD-5/OD-7); cited for context",
       "fr": null,
       "nfr": null,
       "repo": null,
@@ -117,7 +117,7 @@
       "scope": null,
       "source_file": "spec.md",
       "title": "<fill at WP-implementation time>",
-      "verdict": "unknown",
+      "verdict": "not-applicable",
       "wp": null
     }
   },
