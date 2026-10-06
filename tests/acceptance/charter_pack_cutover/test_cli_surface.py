@@ -196,7 +196,7 @@ def test_fr006_in_repo_callers_use_charter_spellings() -> None:
 
 
 # --------------------------------------------------------------------------------------
-# FR-007: every old spelling hits the unknown-command path (exit 2), the new one exits 0
+# FR-007: every old spelling hits the unknown-command path (exit 2), the new one runs
 # --------------------------------------------------------------------------------------
 
 
@@ -219,6 +219,16 @@ def _removed_rows() -> list[Removed]:
     return rows
 
 
+def _expected_replacement_exit(row: Removed) -> int:
+    """The recorded base exit code of a former leaf (``cli_before.json``); 0 for the other rows."""
+    record = _recorded().get(row.key)
+    if record is None:
+        return 0
+    code = record["exit_code"]
+    assert isinstance(code, int), (row.key, code)
+    return code
+
+
 @covers("FR-007", "US3-2", "OD-3", "FR-005")
 @pytest.mark.integration
 @pytest.mark.git_repo
@@ -231,9 +241,12 @@ def test_fr007_old_spelling_exits_2(row: Removed, tmp_path: Path) -> None:
     old = run_cli(list(row.old), project)
     assert old.exit_code == 2, describe(old)
     assert UNKNOWN_COMMAND in output_of(old), describe(old)
-    # Control: the replacement exits 0 on the same fixture (a hidden alias would exit 0 above).
+    # Control: the replacement runs on the same fixture (a hidden alias would exit 0 above). A
+    # former leaf must exit with the code recorded for it at base (SC-004; `doctor doctrine` exits 1
+    # on this fixture because its org pack is not fetched); the other rows exit 0.
     new = run_cli(list(row.new), project)
-    assert new.exit_code == 0, describe(new)
+    assert UNKNOWN_COMMAND not in output_of(new), describe(new)
+    assert new.exit_code == _expected_replacement_exit(row), describe(new)
 
 
 # --------------------------------------------------------------------------------------
