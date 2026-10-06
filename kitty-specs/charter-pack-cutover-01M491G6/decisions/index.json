@@ -24,6 +24,54 @@
       "status": "resolved",
       "step_id": null,
       "summary_json": null
+    },
+    {
+      "created_at": "2026-10-06T18:26:19.968527Z",
+      "decision_id": "01M497EW60HNWWJQCXDFA99R0H",
+      "final_answer": null,
+      "input_key": "normalizer_empty_lists",
+      "mission_id": "01M491G6102N7NRMAW3219Z2F9",
+      "mission_slug": "charter-pack-cutover-01M491G6",
+      "opened_by": "cli",
+      "options": [
+        "Reset only [] keys for kinds the project never listed and report each",
+        "Keep every [] and report it",
+        "Other"
+      ],
+      "origin_flow": "plan",
+      "other_answer": false,
+      "question": "Projects where the 3.2.6 normalize-activation-absence migration wrote [] (nothing activated) for kinds that were absent (all active): should the cutover migration reset those [] keys to absent?",
+      "rationale": null,
+      "resolved_at": null,
+      "resolved_by": null,
+      "slot_key": "plan.migration.normalizer-empty-lists",
+      "status": "open",
+      "step_id": null,
+      "summary_json": null
+    },
+    {
+      "created_at": "2026-10-06T18:26:24.554861Z",
+      "decision_id": "01M497F0NAQARAK3JZFVWF1SD0",
+      "final_answer": null,
+      "input_key": "minimal_kind_gate",
+      "mission_id": "01M491G6102N7NRMAW3219Z2F9",
+      "mission_slug": "charter-pack-cutover-01M491G6",
+      "opened_by": "cli",
+      "options": [
+        "Remove it when it equals the released minimal value and report it",
+        "Keep it and report it",
+        "Other"
+      ],
+      "origin_flow": "plan",
+      "other_answer": false,
+      "question": "Projects that applied the released minimal preset carry activated_kinds: [directives, tactics], which disables six kinds the preset meant to leave open. Should the migration remove that activated_kinds key?",
+      "rationale": null,
+      "resolved_at": null,
+      "resolved_by": null,
+      "slot_key": "plan.migration.minimal-kind-gate",
+      "status": "open",
+      "step_id": null,
+      "summary_json": null
     }
   ],
   "mission_id": "01M491G6102N7NRMAW3219Z2F9",
