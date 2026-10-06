@@ -1,7 +1,7 @@
 {
-  "event_count": 20,
-  "last_event_id": "01M49BS3JB4RHR48XBKTG662S1",
-  "materialized_at": "2026-10-06T19:41:49.515209+00:00",
+  "event_count": 21,
+  "last_event_id": "01M49BS6REEM4R700VTW0YDFYE",
+  "materialized_at": "2026-10-06T19:41:52.782481+00:00",
   "mission_number": "",
   "mission_slug": "charter-pack-cutover-01M491G6",
   "mission_type": "",
@@ -15,7 +15,7 @@
     "for_review": 0,
     "in_progress": 0,
     "in_review": 0,
-    "planned": 20
+    "planned": 21
   },
   "work_packages": {
     "WP01": {
@@ -157,6 +157,13 @@
       "lane": "planned",
       "last_event_id": "01M49BS3JB4RHR48XBKTG662S1",
       "last_transition_at": "2026-10-06T19:41:49.515209+00:00"
+    },
+    "WP21": {
+      "actor": "finalize-tasks",
+      "force_count": 0,
+      "lane": "planned",
+      "last_event_id": "01M49BS6REEM4R700VTW0YDFYE",
+      "last_transition_at": "2026-10-06T19:41:52.782481+00:00"
     }
   }
 }
