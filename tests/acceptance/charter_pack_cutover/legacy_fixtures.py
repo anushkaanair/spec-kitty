@@ -641,3 +641,57 @@ STALE_KEYS_KEPT: dict[str, tuple[str, ...]] = {
 
 #: For ``normalizer_empty_lists``: the per-artifact ``[]`` keys the migration resets.
 NORMALIZER_RESET_KEYS: tuple[str, ...] = ("activated_glossary_packs", "activated_paradigms")
+
+
+# --------------------------------------------------------------------------------------
+# SC-004 doctrine-command fixture (old leaves and their charter homes run on it)
+# --------------------------------------------------------------------------------------
+
+DOCTRINE_PACK_DIR = "orgpack"
+DOCTRINE_REMOTE_DIR = "remote-pack"
+DOCTRINE_FETCHED_DIR = "orgpack-fetched"
+AUTHORING_TACTIC = "authoring/fixture-tactic.tactic.yaml"
+
+_ORG_CHARTER = (
+    'schema_version: "1"\norg_name: acme\nrequired_directives: []\nrequired_tactics: []\nrequired_paradigms: []\n'
+    "required_styleguides: []\nrequired_toolguides: []\nrequired_procedures: []\nrequired_agent_profiles: []\n"
+    "required_mission_step_contracts: []\ngovernance_policies: []\nactivations: []\n"
+)
+_FRAGMENT = "pack_name: acme\nsource_kind: local_path\nsource_ref: .\nlayer_index: 1\nprovenance_marker: org\nnodes: []\nedges: []\n"
+
+
+def write_doctrine_pack(pack: Path) -> Path:
+    """A minimal valid org pack (``org-charter.yaml`` + DRG fragment), as ``org init`` scaffolds at base."""
+    write_text(pack / "org-charter.yaml", _ORG_CHARTER)
+    write_text(pack / "drg" / "fragment.yaml", _FRAGMENT)
+    return pack
+
+
+def build_doctrine_command_fixture(project: Path) -> Path:
+    """Project + local pack dir + a local git remote for ``fetch`` (SC-004)."""
+    write_doctrine_pack(project / DOCTRINE_PACK_DIR)
+    remote = write_doctrine_pack(project / DOCTRINE_REMOTE_DIR)
+    write_org_tactic(remote, ORG_TACTIC_ID)
+    git_init_commit(remote, "fixture: remote org pack")
+    write_org_tactic(project / "authoring-src", "fixture-tactic")
+    authored = project / "authoring-src" / "tactics" / "fixture-tactic.tactic.yaml"
+    write_text(project / AUTHORING_TACTIC, authored.read_text(encoding="utf-8"))
+    shutil.rmtree(project / "authoring-src")
+    config = {
+        "charter_packs": {
+            "org": {
+                "packs": [
+                    {
+                        "name": ORG_PACK_NAME,
+                        "local_path": DOCTRINE_FETCHED_DIR,
+                        "source_type": "git",
+                        "url": (project / DOCTRINE_REMOTE_DIR).as_uri(),
+                        "ref": "main",
+                    }
+                ]
+            }
+        },
+        "mission_type_activations": MISSION_TYPES,
+    }
+    (project / ".gitignore").write_text(f"{DOCTRINE_REMOTE_DIR}/\n", encoding="utf-8")
+    return finish(project, config)
