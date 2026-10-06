@@ -26,9 +26,13 @@ NEW_SKILLS = (
     "spk-practice-show-me",
 )
 GLOSSARY = REPO_ROOT / "docs" / "context" / "charter.md"
-HISTORICAL_TERMS = REPO_ROOT / "docs" / "context" / "historical-terms.md"
+#: The FR-018-exempt glossary surfaces that record retired terms as deprecated (WP24 plan).
+GLOSSARY_SEED = REPO_ROOT / ".kittify" / "glossaries" / "spec_kitty_core.yaml"
+GLOSSARY_PACK = REPO_ROOT / "packs" / "built-in" / "glossary_packs" / "spec-kitty-core.glossary-pack.yaml"
 NEW_TERMS = ("Charter offering", "Charter Pack", "Activation preset", "Active charter", "Project layer", "Charter Bundle")
-RETIRED_TERMS = ("Doctrine Pack", "Doctrine Pack ID", "Doctrine Catalog", "Charter Selection")
+RETIRED_TERMS = ("Doctrine Pack", "Doctrine Pack ID", "Doctrine Catalog", "Charter Selection", "Pack Default Charter")
+#: A term both seed and pack already record as deprecated (control for the reader).
+KNOWN_DEPRECATED_TERM = "ceremony commit"
 MISSING_ADR = "2026-08-22-2"
 CUTOVER_ADR = REPO_ROOT / "docs" / "adr" / "4.x" / "2026-10-06-1-charter-offering-active-charter-and-activation-presets.md"
 
@@ -196,16 +200,36 @@ def test_fr013_glossary_defines_terms() -> None:
     assert all(_status(sections[t.lower()]) == "canonical" for t in NEW_TERMS)
 
 
+def _glossary_entries(path: Path) -> dict[str, dict[str, object]]:
+    """Glossary seed or pack entries keyed by lower-cased ``surface``."""
+    data = load_yaml(path)
+    terms = data.get("terms", []) if isinstance(data, dict) else []
+    return {str(t["surface"]).strip().lower(): t for t in terms if isinstance(t, dict) and "surface" in t}
+
+
+def _deprecated_with_replacement(entry: dict[str, object] | None) -> bool:
+    """``status: deprecated`` and a definition that names one of the new terms."""
+    if entry is None or str(entry.get("status", "")).strip().lower() != "deprecated":
+        return False
+    definition = str(entry.get("definition", "")).lower()
+    return any(term.lower() in definition for term in NEW_TERMS)
+
+
 @covers("FR-013")
 @pytest.mark.corpus
-@pending_until("WP24", "retired terms retired or redirected; charter guard rewritten")
+@pending_until("WP24", "retired terms retired from charter.md and deprecated in the glossary seed and pack")
 def test_fr013_retired_terms_redirected() -> None:
+    """Retire, do not redefine: FR-018 forbids the retired spellings on charter.md, so they live on only
+    as ``deprecated`` entries in the FR-018-exempt seed and built-in glossary pack, each naming its successor."""
     sections = _glossary_sections()
-    historical = HISTORICAL_TERMS.read_text(encoding="utf-8")
-    for term in RETIRED_TERMS:
-        section = sections.get(term.lower())
-        retired_here = section is not None and _status(section) != "canonical"
-        assert retired_here or f"| {term} |" in historical, term
+    assert "charter" in sections, "control: the glossary parses"
+    defined_here = [term for term in RETIRED_TERMS if term.lower() in sections]
+    assert defined_here == [], f"retired terms still defined in {GLOSSARY.name}: {defined_here}"
+    for surface in (GLOSSARY_SEED, GLOSSARY_PACK):
+        entries = _glossary_entries(surface)
+        assert str(entries[KNOWN_DEPRECATED_TERM].get("status")) == "deprecated", "control: the reader sees a deprecated entry"
+        not_deprecated = [term for term in RETIRED_TERMS if not _deprecated_with_replacement(entries.get(term.lower()))]
+        assert not_deprecated == [], f"{surface.relative_to(REPO_ROOT)}: not deprecated with a replacement: {not_deprecated}"
     guard = sections["charter"]
     assert "Pack Default Charter" not in guard and "[Doctrine Pack]" not in guard
     assert "active charter" in guard.lower(), "the 'active' guard names the active charter"
