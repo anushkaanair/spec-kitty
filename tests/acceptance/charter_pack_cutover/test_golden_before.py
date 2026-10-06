@@ -22,6 +22,7 @@ from ._support import active_charter, covers, file_digest, load_yaml
 from .legacy_fixtures import (
     BUILDERS,
     EXPECTED_RELATION,
+    LANE_LEGACY_LAYER,
     NFR001_FIXTURES,
     ORG2_DIRECTIVE_STEM,
     STALE_FIXTURES,
@@ -170,7 +171,11 @@ SHAPE_CHECKS: dict[str, Callable[[Path], bool]] = {
     "both_roots_disjoint": lambda p: (p / ".kittify/doctrine").is_dir() and (p / ".kittify/charter-packs").is_dir(),
     "user_path_value_with_doctrine": lambda p: (p / "packs/doctrine-foo").is_dir(),
     "installed_removed_skills": lambda p: (p / ".claude/skills/spk-doctrine-charter/SKILL.md").is_file() and (p / ".agents/skills").is_dir(),
-    "lane_in_approved": lambda p: (p / ".worktrees").is_dir(),
+    "lane_in_approved": lambda p: (
+        (p / ".worktrees").is_dir()
+        and (p / LANE_LEGACY_LAYER / "graph.yaml").is_file()
+        and all((lane / LANE_LEGACY_LAYER / "graph.yaml").is_file() for lane in (p / ".worktrees").iterdir())
+    ),
     **dict.fromkeys(STALE_FIXTURES, _has_stale_lists),
 }
 

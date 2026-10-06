@@ -45,6 +45,7 @@ from .legacy_fixtures import (
     COLLISION_PATH,
     EDITED_SKILL,
     EXPECTED_RELATION,
+    LANE_LEGACY_LAYER,
     MANIFESTED_SKILL,
     NFR001_FIXTURES,
     NORMALIZER_RESET_KEYS,
@@ -548,16 +549,25 @@ def test_us2_6_pre_rc35_upgrade_has_zero_errors(tmp_path: Path) -> None:
 
 @covers("US2-7", "EC:Lane worktrees created before the upgrade")
 @pytest.mark.slow
+@pending_until("WP11", "the root upgrade moves the lane-carried legacy project layer; the lane still consolidates")
 def test_us2_7_lane_in_approved_consolidates_after_root_upgrade(tmp_path: Path) -> None:
-    """Regression guard (passes at base): root upgrade, then merge the target into the lane, then consolidate."""
+    """Root upgrade (a cutover commit on the target), merge the target into the lane, then consolidate."""
     project = build_lane_project(tmp_path / "lanes")
+    lane_id, worktree = next(iter(project.lane_worktrees.items()))
+    assert (worktree / LANE_LEGACY_LAYER).is_dir(), "precondition: the lane carries the legacy project layer"
+    pre_upgrade = git(project.repo, "rev-parse", "HEAD")
     upgraded = project.upgrade()
     assert upgraded.returncode == 0, upgraded.stdout + upgraded.stderr
+    # Positive control: the root upgrade is a cutover (committed or not), not just a version stamp.
+    changed = git(project.repo, "diff", "--name-only", pre_upgrade, "--", LANE_LEGACY_LAYER).splitlines()
+    assert changed, "control: the root upgrade changed the legacy project layer"
+    assert not (project.repo / LANE_LEGACY_LAYER).exists(), "control: the cutover moved the legacy project layer"
+    assert (project.repo / ".kittify" / "charter-packs").is_dir(), "control: the project layer now lives in .kittify/charter-packs/"
     if git(project.repo, "status", "--porcelain"):
         git(project.repo, "add", "-A")
         git(project.repo, "commit", "-q", "--no-verify", "-m", "chore: commit the upgraded charter layout")
-    lane_id, worktree = next(iter(project.lane_worktrees.items()))
     git(worktree, "merge", "-q", "--no-edit", project.target_branch)
+    assert not (worktree / LANE_LEGACY_LAYER).exists(), "control: the merge brought the cutover into the lane"
     result = project.run("consolidate", "--mission", project.slug)
     combined = (result.stdout or "") + (result.stderr or "")
     assert "LANE_MOVED_AFTER_APPROVAL" not in combined, combined

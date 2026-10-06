@@ -24,7 +24,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from ._support import git_init_commit, sha256_hex
+from ._support import git, git_init_commit, sha256_hex
 
 FIXTURES_ROOT = Path(__file__).resolve().parents[2] / "fixtures" / "charter_pack_cutover"
 SNAPSHOTS_PATH = FIXTURES_ROOT / "default_yaml_snapshots.yaml"
@@ -551,17 +551,35 @@ def build_lane_in_approved(project: Path) -> Path:
     return repo
 
 
+#: The legacy project layer the lane fixture commits on the target before any lane is cut.
+LANE_LEGACY_LAYER = ".kittify/doctrine"
+
+
 def build_lane_project(project: Path) -> Any:
     """A ``lanes`` mission with one live lane worktree whose WP is ``approved`` (stamped).
 
     Reuses the real-git lanes builder of the target-owned bookkeeping mission
     (``tests/integration/target_owned_fixtures.py``), with a legacy project layer
-    committed on the target before the lanes are cut, so the lane carries it too.
+    (the frozen ``static/synthesized`` tree: ``.kittify/doctrine/`` plus the synthesis
+    manifest and provenance sidecars) committed on the target right after the repository
+    is initialised, so every lane cut afterwards carries it too.
     """
-    from tests.integration.target_owned_fixtures import build_older_version_lanes_project
+    from tests.integration import target_owned_fixtures as owned
+
+    real_init_repo = owned._init_repo
+
+    def init_repo_with_legacy_layer(repo: Path, target_branch: str) -> None:
+        real_init_repo(repo, target_branch)
+        copy_static("synthesized", repo)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "--no-verify", "-m", "fixture: legacy project layer on the target")
 
     project.mkdir(parents=True, exist_ok=True)
-    return build_older_version_lanes_project(project, topology="lanes", lanes=1, target_branch="work", approvals_stamped=True)
+    owned._init_repo = init_repo_with_legacy_layer
+    try:
+        return owned.build_older_version_lanes_project(project, topology="lanes", lanes=1, target_branch="work", approvals_stamped=True)
+    finally:
+        owned._init_repo = real_init_repo
 
 
 # --------------------------------------------------------------------------------------
