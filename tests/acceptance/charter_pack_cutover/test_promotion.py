@@ -28,8 +28,8 @@ from .legacy_fixtures import (
     ORG_DIRECTIVE_ID,
     ORG_PACK_DIR,
     ORG_TACTIC_ID,
-    build_two_org_packs,
     finish,
+    project_from_template,
     write_yaml,
 )
 
@@ -45,7 +45,7 @@ EFFECTIVE_SET_CALLERS = (
 
 
 def _fixture(tmp_path: Path) -> Path:
-    project = build_two_org_packs(tmp_path / "two-org-packs")
+    project = project_from_template("two_org_packs", tmp_path / "two-org-packs")
     packs = load_yaml(project / ".kittify" / "config.yaml")["charter_packs"]["org"]["packs"]
     assert len(packs) == 2, "precondition: two declared org packs"
     assert (project / ORG2_PACK_DIR / "directives" / f"{ORG2_DIRECTIVE_STEM}.directive.yaml").is_file()

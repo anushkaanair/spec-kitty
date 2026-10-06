@@ -12,7 +12,7 @@ import pytest
 
 from ._requirements import REMOVED_SKILL_IDS, REPO_ROOT, RETIRED_EXTRA_SKILL_IDS, is_living_path
 from ._support import covers, describe, git_init_commit, load_yaml, output_of, pending_until, read_json_output, run_cli
-from .legacy_fixtures import BUILDERS, write_doctrine_pack, write_text, write_yaml
+from .legacy_fixtures import EDITED_SKILL, project_from_template, write_doctrine_pack, write_text, write_yaml
 from .test_package_split import _python_names
 
 SKILLS_ROOT = REPO_ROOT / "src" / "charter" / "offering" / "skills"
@@ -71,12 +71,14 @@ def test_fr008_upgrade_installs_new_and_removes_old(tmp_path: Path, monkeypatch:
     monkeypatch.setenv("HOME", str(home))
     global_copy = home / ".claude" / "skills" / "spk-doctrine-charter" / "SKILL.md"
     write_text(global_copy, "old global copy\n")
-    project = BUILDERS["installed_removed_skills"](tmp_path / "p")
+    project = project_from_template("installed_removed_skills", tmp_path / "p")
     upgraded = run_cli(["upgrade", "--yes", "--no-worktrees"], project)
     # The fixture's edited copy is a managed file left for review: the upgrade contract exits 1 for it.
     assert upgraded.exit_code in (0, 1), describe(upgraded)
     if upgraded.exit_code == 1:
-        assert "spk-doctrine-show-me" in output_of(upgraded), describe(upgraded)
+        # Exit 1 is acceptable only for that reason: the edited copy was kept for review.
+        text = output_of(upgraded)
+        assert EDITED_SKILL in text and "kept" in text.lower(), describe(upgraded)
     listed = run_cli(["charter", "list"], project)
     assert listed.exit_code == 0, describe(listed)
     for root in (project / ".claude" / "skills", project / ".agents" / "skills", home / ".claude" / "skills"):
@@ -86,6 +88,10 @@ def test_fr008_upgrade_installs_new_and_removes_old(tmp_path: Path, monkeypatch:
     manifest = json.loads((project / ".kittify" / "skills-manifest.json").read_text(encoding="utf-8"))
     orphans = [e["installed_path"] for e in manifest["entries"] if not (project / e["installed_path"]).exists()]
     assert orphans == [], orphans
+    command_manifest = json.loads((project / ".kittify" / "command-skills-manifest.json").read_text(encoding="utf-8"))
+    assert command_manifest["entries"], "control: the command-skill manifest is populated"
+    command_orphans = [e["path"] for e in command_manifest["entries"] if not (project / e["path"]).exists()]
+    assert command_orphans == [], command_orphans
 
 
 # --------------------------------------------------------------------------------------
@@ -121,7 +127,7 @@ def test_fr009_three_names_no_alias(tmp_path: Path) -> None:
 @pytest.mark.git_repo
 @pending_until("WP17", "ACTIVE_CHARTER_CONFIG_INVALID on the --json surface")
 def test_fr009_json_error_code(tmp_path: Path) -> None:
-    project = BUILDERS["two_org_packs"](tmp_path / "p")
+    project = project_from_template("two_org_packs", tmp_path / "p")
     (project / ".kittify" / "config.yaml").write_text("charter_packs: [unclosed\n", encoding="utf-8")
     git_init_commit(project, "fixture: malformed config")
     result = run_cli(["agent", "mission", "create", "demo-mission", "--json"], project)
@@ -137,7 +143,7 @@ def test_fr009_tool_surface_kind(tmp_path: Path) -> None:
     enums = importlib.import_module("specify_cli.tool_surface.enums")
     assert enums.ToolSurfaceKind.CHARTER_SKILL.value == "charter_skill"
     assert not hasattr(enums.ToolSurfaceKind, "DOCTRINE_SKILL")
-    project = BUILDERS["two_org_packs"](tmp_path / "p")
+    project = project_from_template("two_org_packs", tmp_path / "p")
     ok = run_cli(["doctor", "tool-surfaces", "--kind", "charter-skill", "--json"], project)
     assert ok.exit_code == 0, describe(ok)
     payload = json.dumps(read_json_output(ok))
@@ -167,7 +173,7 @@ def test_us3_4_doctrine_pack_id_rejected_in_org_charter(tmp_path: Path) -> None:
 @pytest.mark.integration
 def test_od5_charter_sync_noop_left_in_place(tmp_path: Path) -> None:
     """Regression guard (passes at base): compatibility residue unrelated to doctrine vocabulary stays (OD-5, follow-up #5828)."""
-    project = BUILDERS["two_org_packs"](tmp_path / "p")
+    project = project_from_template("two_org_packs", tmp_path / "p")
     result = run_cli(["charter", "sync", "--help"], project)
     assert result.exit_code == 0, describe(result)
     assert "sync" in output_of(run_cli(["charter", "--help"], project))

@@ -19,7 +19,7 @@ import pytest
 
 from ._requirements import REPO_ROOT, is_living_path
 from ._support import covers, describe, load_yaml, pending_until, run_cli
-from .legacy_fixtures import BUILDERS
+from .legacy_fixtures import project_from_template
 
 RETIRED_IDENTIFIERS = REPO_ROOT / "tests" / "fixtures" / "charter_pack_cutover" / "retired_identifiers.yaml"
 
@@ -102,7 +102,7 @@ def test_fr010_tests_doctrine_directory_renamed() -> None:
 @pytest.mark.git_repo
 @pending_until("WP11", "project activation entries use charter_pack_id after upgrade")
 def test_fr010_charter_pack_id_in_project_state(tmp_path: Path) -> None:
-    project = BUILDERS["doctrine_pack_id_activations"](tmp_path / "p")
+    project = project_from_template("doctrine_pack_id_activations", tmp_path / "p")
     charter_yaml = project / ".kittify" / "charter" / "charter.yaml"
     assert "doctrine_pack_id" in charter_yaml.read_text(encoding="utf-8")  # control
     result = run_cli(["upgrade", "--yes", "--no-worktrees"], project)

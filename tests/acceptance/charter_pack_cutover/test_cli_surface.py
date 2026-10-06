@@ -21,7 +21,7 @@ from click.testing import Result
 
 from ._requirements import REPO_ROOT
 from ._support import covers, describe, output_of, pending_until, read_json_output, run_cli
-from .legacy_fixtures import BUILDERS, build_doctrine_command_fixture, write_doctrine_pack
+from .legacy_fixtures import build_doctrine_command_fixture, project_from_template, upgraded_copy, write_doctrine_pack
 
 FIXTURES_ROOT = REPO_ROOT / "tests" / "fixtures" / "charter_pack_cutover"
 CLI_BEFORE = FIXTURES_ROOT / "cli_before.json"
@@ -166,7 +166,7 @@ def test_fr006_charter_home_matches_recorded_output(leaf: Leaf, tmp_path: Path) 
 @pytest.mark.integration
 @pending_until("WP08", "`charter pack path` takes a pack name")
 def test_fr006_pack_path_takes_a_pack_name(tmp_path: Path) -> None:
-    project = BUILDERS["two_org_packs"](tmp_path / "p")
+    project = project_from_template("two_org_packs", tmp_path / "p")
     result = run_cli(["charter", "pack", "path", "built-in", "--json"], project)
     assert result.exit_code == 0, describe(result)
     payload = read_json_output(result)
@@ -401,14 +401,15 @@ def _assert_names_upgrade(result: Result) -> None:
 @pytest.mark.git_repo
 @pytest.mark.parametrize("argv", _legacy_invocations())
 def test_fr011_legacy_project_fails_naming_upgrade(argv: tuple[str, ...], tmp_path: Path) -> None:
-    project = BUILDERS["legacy_keys_only"](tmp_path / "legacy")
+    project = project_from_template("legacy_keys_only", tmp_path / "legacy")
     result = run_cli(list(argv), project)
     assert result.exit_code == 1, describe(result)
     _assert_names_upgrade(result)
-    # Control: the same fixture after `spec-kitty upgrade` no longer hits the gate.
-    upgraded = run_cli(["upgrade", "--yes", "--no-worktrees"], project)
-    assert upgraded.exit_code == 0, describe(upgraded)
-    after = run_cli(list(argv), project)
+    # Control: the same fixture after `spec-kitty upgrade` no longer hits the gate (the upgrade
+    # runs once per session on a template of this fixture; each row gets its own upgraded copy).
+    upgraded, outcome = upgraded_copy("legacy_keys_only", tmp_path / "upgraded")
+    assert outcome.exit_code == 0, outcome.output
+    after = run_cli(list(argv), upgraded)
     assert LEGACY_CODE not in output_of(after), describe(after)
 
 
@@ -418,7 +419,7 @@ def test_fr011_legacy_project_fails_naming_upgrade(argv: tuple[str, ...], tmp_pa
 @pytest.mark.parametrize("argv", [("--version",), ("--help",), ("init", "--help"), ("upgrade", "--dry-run", "--json")], ids=["version", "help", "init", "upgrade"])
 def test_fr011_exempt_invocations(argv: tuple[str, ...], tmp_path: Path) -> None:
     """Regression guard (passes at base): the exempt invocations never hit the legacy gate."""
-    project = BUILDERS["legacy_keys_only"](tmp_path / "legacy")
+    project = project_from_template("legacy_keys_only", tmp_path / "legacy")
     result = run_cli(list(argv), project)
     assert result.exit_code == 0, describe(result)
     assert LEGACY_CODE not in output_of(result), describe(result)
@@ -429,7 +430,7 @@ def test_fr011_exempt_invocations(argv: tuple[str, ...], tmp_path: Path) -> None
 @pytest.mark.git_repo
 @pending_until("WP14", "the gate also checks the current checkout root")
 def test_fr011_stale_worktree_checkout_detected(tmp_path: Path) -> None:
-    project = BUILDERS["two_org_packs"](tmp_path / "root")
+    project = project_from_template("two_org_packs", tmp_path / "root")
     from ._support import git
 
     worktree = tmp_path / "lane"
@@ -467,12 +468,12 @@ def test_fr011_shims_removed(tmp_path: Path) -> None:
 @covers("FR-011")
 @pending_until("WP14", "load_governance_config fails closed on governance.doctrine")
 def test_fr011_load_governance_config_fails_closed(tmp_path: Path) -> None:
-    project = BUILDERS["governance_doctrine_in_charter_yaml"](tmp_path / "p")
+    project = project_from_template("governance_doctrine_in_charter_yaml", tmp_path / "p")
     sync = importlib.import_module("charter.activation.sync")
     with pytest.raises(Exception, match="spec-kitty upgrade"):
         sync.load_governance_config(project)
     # Control: the canonical key loads.
-    canonical = BUILDERS["two_org_packs"](tmp_path / "c")
+    canonical = project_from_template("two_org_packs", tmp_path / "c")
     assert sync.load_governance_config(canonical) is not None
 
 
@@ -480,9 +481,9 @@ def test_fr011_load_governance_config_fails_closed(tmp_path: Path) -> None:
 @pending_until("WP14", "PackContext.from_config stays total on a legacy project")
 def test_fr011_pack_context_from_config_total(tmp_path: Path) -> None:
     pack_context = importlib.import_module("charter.activation.pack_context")
-    legacy = BUILDERS["legacy_keys_only"](tmp_path / "legacy")
+    legacy = project_from_template("legacy_keys_only", tmp_path / "legacy")
     ctx = pack_context.PackContext.from_config(legacy)  # must not raise
     assert tuple(ctx.org_pack_names) == ()
     # Control: the canonical two-pack project returns both packs.
-    both = pack_context.PackContext.from_config(BUILDERS["two_org_packs"](tmp_path / "two"))
+    both = pack_context.PackContext.from_config(project_from_template("two_org_packs", tmp_path / "two"))
     assert len(tuple(both.org_pack_names)) == 2

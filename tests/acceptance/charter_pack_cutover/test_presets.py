@@ -23,6 +23,7 @@ from .legacy_fixtures import (
     ORG_PACK_NAME,
     ORG_TACTIC_ID,
     finish,
+    project_from_template,
     write_doctrine_pack,
     write_org_tactic,
     write_yaml,
@@ -91,7 +92,7 @@ def test_fr001_activate_minimal_preset_writes_governed_keys(migrated_project: Pa
 @pytest.mark.integration
 @pending_until("WP08", "`--preset default` removes every governed key")
 def test_fr001_default_preset_removes_every_governed_key(tmp_path: Path, copied_builtin_pack: Path) -> None:
-    project = build_migrated_project(tmp_path / "p")
+    project = project_from_template("migrated", tmp_path / "p", build_migrated_project)
     first = activate_preset(project, "--preset", "minimal")
     assert first.exit_code == 0, describe(first)
     assert any(k.startswith("activated_") for k in active_charter(project)), "minimal wrote no key: nothing to remove"
@@ -118,7 +119,7 @@ def test_fr001_fixture_preset_listing_one_id_writes_that_id(tmp_path: Path, copi
     preset = copied_builtin_pack / "presets" / "default.yaml"
     data = preset_governed(preset)
     write_yaml(preset, {"name": "default", "description": "fixture", **data, "activated_directives": ["001-architectural-integrity-standard"]})
-    project = build_migrated_project(tmp_path / "p")
+    project = project_from_template("migrated", tmp_path / "p", build_migrated_project)
     result = activate_preset(project, "--preset", "default", "--force")
     assert result.exit_code == 0, describe(result)
     assert active_charter(project)["activated_directives"] == ["001-architectural-integrity-standard"]
@@ -177,7 +178,7 @@ def test_fr001_unknown_preset_names_pack_and_lists_presets(migrated_project: Pat
 @pending_until("WP08", "an unresolvable preset id fails and writes nothing")
 def test_fr001_unresolvable_preset_id_writes_nothing(tmp_path: Path, copied_builtin_pack: Path) -> None:
     write_yaml(copied_builtin_pack / "presets" / "ghost.yaml", {"name": "ghost", "description": "x", "activated_tactics": ["no-such-tactic-anywhere"]})
-    project = build_migrated_project(tmp_path / "p")
+    project = project_from_template("migrated", tmp_path / "p", build_migrated_project)
     before = tree_digest(project)
     result = activate_preset(project, "--preset", "ghost")
     assert result.exit_code == 1, describe(result)
@@ -190,7 +191,7 @@ def test_fr001_unresolvable_preset_id_writes_nothing(tmp_path: Path, copied_buil
 @pytest.mark.integration
 @pending_until("WP08", "customised lists refused without --force")
 def test_fr001_customised_list_refused_without_force(tmp_path: Path) -> None:
-    project = build_migrated_project(tmp_path / "p")
+    project = project_from_template("migrated", tmp_path / "p", build_migrated_project)
     config = load_yaml(project / ".kittify" / "config.yaml")
     config["activated_directives"] = ["024-locality-of-change"]
     finish(project, config)
@@ -302,7 +303,7 @@ def test_fr002_builtin_presets_are_pack_data() -> None:
 @pytest.mark.integration
 @pending_until("WP08", "activation reads the preset file")
 def test_fr002_deleting_preset_file_fails_activation(tmp_path: Path, copied_builtin_pack: Path) -> None:
-    project = build_migrated_project(tmp_path / "p")
+    project = project_from_template("migrated", tmp_path / "p", build_migrated_project)
     assert activate_preset(project, "--preset", "minimal").exit_code == 0  # control: the intact copy works
     (copied_builtin_pack / "presets" / "minimal.yaml").unlink()
     result = activate_preset(project, "--preset", "minimal", "--force")

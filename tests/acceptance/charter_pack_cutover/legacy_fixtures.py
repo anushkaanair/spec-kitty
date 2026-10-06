@@ -8,14 +8,18 @@ post-cutover module, and no builder reads a source file the cutover deletes:
 anything taken from the base tree is frozen under ``tests/fixtures/charter_pack_cutover/static/``.
 
 * :data:`BUILDERS` maps every fixture name to its builder.
+* :func:`project_from_template` copies a pristine per-session template of a builder's
+  output into a test's own directory (each builder is deterministic, so it runs once).
 * :data:`NFR001_FIXTURES` is the subset golden-compared (spec NFR-001's list).
 * :data:`EXPECTED_RELATION` maps each NFR-001 fixture to its spec NFR-001 class.
 """
 
 from __future__ import annotations
 
+import atexit
 import json
 import shutil
+import tempfile
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from functools import cache
@@ -714,3 +718,87 @@ def build_doctrine_command_fixture(project: Path) -> Path:
     }
     (project / ".gitignore").write_text(f"{DOCTRINE_REMOTE_DIR}/\n", encoding="utf-8")
     return finish(project, config)
+
+
+# --------------------------------------------------------------------------------------
+# Per-session templates (#3732 cycle 2: build once, copy per test)
+# --------------------------------------------------------------------------------------
+
+#: Builders whose output records its own absolute location (a ``file://`` remote URL, git
+#: worktree links) and therefore cannot be copied elsewhere; they always build in place.
+LOCATION_DEPENDENT_BUILDERS = frozenset({"lane_in_approved"})
+
+_TEMPLATES: dict[str, Path] = {}
+_TEMPLATE_ROOT: list[Path] = []
+
+
+def _template_root() -> Path:
+    if not _TEMPLATE_ROOT:
+        root = Path(tempfile.mkdtemp(prefix="charter-pack-cutover-templates-"))
+        atexit.register(shutil.rmtree, root, True)
+        _TEMPLATE_ROOT.append(root)
+    return _TEMPLATE_ROOT[0]
+
+
+def project_from_template(name: str, dest: Path, builder: Callable[[Path], Path] | None = None) -> Path:
+    """A fresh copy of fixture *name* at *dest* (built once per session, then copied).
+
+    *builder* defaults to ``BUILDERS[name]``. The template is never handed to a test,
+    so every test still owns an isolated project (its own files and its own ``.git``).
+    """
+    build = builder if builder is not None else BUILDERS[name]
+    if name in LOCATION_DEPENDENT_BUILDERS:
+        return build(dest)
+    template = _TEMPLATES.get(name)
+    if template is None:
+        template = build(_template_root() / name)
+        _TEMPLATES[name] = template
+    shutil.copytree(template, dest, symlinks=True)
+    return dest
+
+
+@dataclass(frozen=True)
+class UpgradedTemplate:
+    """One ``spec-kitty upgrade --yes --json --no-worktrees`` run on a pristine template."""
+
+    pristine: Path
+    upgraded: Path
+    exit_code: int
+    output: str
+    payload: Any
+
+
+_UPGRADED: dict[str, UpgradedTemplate] = {}
+
+
+def upgraded_template(name: str) -> UpgradedTemplate:
+    """The first upgrade of fixture *name*, run once per session on a template copy.
+
+    The upgrade is deterministic and location-independent (a copied upgraded project and
+    the original change identically on a further upgrade), so tests that only need the
+    first upgrade's outcome share it and work on their own copy of the result.
+    """
+    cached = _UPGRADED.get(name)
+    if cached is None:
+        from ._support import run_cli
+
+        root = _template_root() / "upgraded"
+        pristine = project_from_template(name, root / "pristine" / name)
+        upgraded = project_from_template(name, root / "upgraded" / name)
+        result = run_cli(["upgrade", "--yes", "--json", "--no-worktrees"], upgraded)
+        try:
+            from ._support import read_json_output
+
+            payload: Any = read_json_output(result)
+        except AssertionError:
+            payload = None
+        cached = UpgradedTemplate(pristine, upgraded, result.exit_code, result.output, payload)
+        _UPGRADED[name] = cached
+    return cached
+
+
+def upgraded_copy(name: str, dest: Path) -> tuple[Path, UpgradedTemplate]:
+    """A private copy of fixture *name* after its first upgrade, plus that upgrade's outcome."""
+    template = upgraded_template(name)
+    shutil.copytree(template.upgraded, dest, symlinks=True)
+    return dest, template

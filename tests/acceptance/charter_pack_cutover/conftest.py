@@ -11,10 +11,9 @@ from pathlib import Path
 import pytest
 
 from .legacy_fixtures import (
-    BUILDERS,
     MISSION_TYPES,
-    build_two_org_packs,
     finish,
+    project_from_template,
     write_text,
 )
 
@@ -30,7 +29,7 @@ MIGRATED_PROJECT_DIRECTIVE = "directive/901-migrated-project-directive.directive
 def legacy_project(request: pytest.FixtureRequest, tmp_path: Path) -> Path:
     """Build the legacy fixture named by indirect parametrisation (``BUILDERS`` key)."""
     name = str(request.param)
-    return BUILDERS[name](tmp_path / name)
+    return project_from_template(name, tmp_path / name)
 
 
 def build_migrated_project(project: Path) -> Path:
@@ -45,12 +44,12 @@ def build_migrated_project(project: Path) -> Path:
 
 @pytest.fixture
 def migrated_project(tmp_path: Path) -> Path:
-    return build_migrated_project(tmp_path / "migrated")
+    return project_from_template("migrated", tmp_path / "migrated", build_migrated_project)
 
 
 @pytest.fixture
 def two_org_packs(tmp_path: Path) -> Path:
-    return build_two_org_packs(tmp_path / "two-org-packs")
+    return project_from_template("two_org_packs", tmp_path / "two-org-packs")
 
 
 @pytest.fixture

@@ -41,7 +41,6 @@ from ._effective_set import ALL_BUILTIN, builtin_inventory, effective_set, expan
 from ._requirements import REPO_ROOT
 from ._support import active_charter, covers, describe, git, git_init_commit, load_yaml, pending_until, read_json_output, run_cli, tree_digest
 from .legacy_fixtures import (
-    BUILDERS,
     COLLISION_PATH,
     EDITED_SKILL,
     EXPECTED_RELATION,
@@ -55,6 +54,9 @@ from .legacy_fixtures import (
     UNMANIFESTED_EQUAL_SKILL,
     USER_PACK_DIR,
     build_lane_project,
+    UpgradedTemplate,
+    project_from_template,
+    upgraded_copy,
     snapshot_lists,
     write_text,
 )
@@ -65,6 +67,13 @@ CUTOVER_ID = "charter_pack_cutover"
 GOLDEN_DIR = REPO_ROOT / "tests" / "fixtures" / "charter_pack_cutover" / "golden_before"
 DEFAULT_PRESET = REPO_ROOT / "packs" / "built-in" / "presets" / "default.yaml"
 REPORT_KEYS = ("moved", "rewritten", "reset", "kept_for_review", "matches_minimal", "skills_removed", "skills_kept", "errors")
+
+
+def first_upgrade(name: str, tmp_path: Path) -> tuple[Path, UpgradedTemplate, dict[str, Any]]:
+    """A private copy of fixture *name* after its first ``upgrade --json`` (run once per session)."""
+    project, outcome = upgraded_copy(name, tmp_path / name)
+    assert isinstance(outcome.payload, dict), f"exit={outcome.exit_code}\n{outcome.output}"
+    return project, outcome, outcome.payload
 
 
 def upgrade(project: Path, *flags: str) -> tuple[Result, dict[str, Any]]:
@@ -95,7 +104,7 @@ def charter_yaml(project: Path) -> dict[str, Any]:
 
 
 def build(name: str, tmp_path: Path) -> Path:
-    return BUILDERS[name](tmp_path / name)
+    return project_from_template(name, tmp_path / name)
 
 
 def cutover_migration() -> Any:
@@ -357,10 +366,9 @@ _STALE_PARAMS = [*STALE_FIXTURES, "stale_in_pointed_charter_yaml", "mixed_stale_
 @covers("FR-012", "US2-2", "INV:Stale activation lists", "INV:Stale kind gate")
 @pytest.mark.parametrize("name", [pytest.param(n, marks=pending_until("WP12", "stale snapshot lists reset")) for n in _STALE_PARAMS])
 def test_fr012_stale_list_reset(name: str, tmp_path: Path) -> None:
-    project = build(name, tmp_path)
-    stale = _stale_keys(project, STALE_KEYS_KEPT.get(name, ()))
+    project, outcome, payload = first_upgrade(name, tmp_path)
+    stale = _stale_keys(outcome.pristine, STALE_KEYS_KEPT.get(name, ()))
     assert stale, "control: the fixture carries snapshot lists"
-    _, payload = upgrade(project)
     after = active_charter(project)
     assert not [k for k in stale if k in after], stale
     reset = report_text(cutover_report(payload), "reset")
@@ -371,9 +379,8 @@ def test_fr012_stale_list_reset(name: str, tmp_path: Path) -> None:
 @pending_until("WP12", "near-miss and customised lists kept and reported")
 def test_fr012_near_miss_and_customised_kept_and_reported(tmp_path: Path) -> None:
     for name, key in (("near_miss_stale", "activated_tactics"), ("customised_lists", "activated_directives")):
-        project = build(name, tmp_path)
-        before = active_charter(project)[key]
-        _, payload = upgrade(project)
+        project, outcome, payload = first_upgrade(name, tmp_path)
+        before = active_charter(outcome.pristine)[key]
         after = active_charter(project)
         assert after[key] == before, name
         assert key in report_text(cutover_report(payload), "kept_for_review"), name
@@ -383,9 +390,8 @@ def test_fr012_near_miss_and_customised_kept_and_reported(tmp_path: Path) -> Non
 @covers("FR-012", "INV:Released `minimal` kind gate", "EC:List equal to the `minimal` preset", "DM-01M497F0NAQARAK3JZFVWF1SD0")
 @pending_until("WP12", "the released minimal kind gate is removed and reported")
 def test_fr012_minimal_kind_gate_removed_lists_reported(tmp_path: Path) -> None:
-    project = build("minimal_equal", tmp_path)
-    before = active_charter(project)
-    _, payload = upgrade(project)
+    project, outcome, payload = first_upgrade("minimal_equal", tmp_path)
+    before = active_charter(outcome.pristine)
     after = active_charter(project)
     assert "activated_kinds" not in after
     assert after["activated_directives"] == before["activated_directives"] and after["activated_tactics"] == before["activated_tactics"]
@@ -397,8 +403,7 @@ def test_fr012_minimal_kind_gate_removed_lists_reported(tmp_path: Path) -> None:
 @covers("FR-012", "INV:Normalizer empty lists", "EC:Deliberate `[]` for a kind", "DM-01M497EW60HNWWJQCXDFA99R0H")
 @pending_until("WP12", "normalizer [] lists reset and reported with the key to restore")
 def test_fr012_normalizer_empty_lists_reset_and_reported(tmp_path: Path) -> None:
-    project = build("normalizer_empty_lists", tmp_path)
-    _, payload = upgrade(project)
+    project, _, payload = first_upgrade("normalizer_empty_lists", tmp_path)
     after = active_charter(project)
     assert not [k for k in NORMALIZER_RESET_KEYS if k in after]
     reset = report_text(cutover_report(payload), "reset")
@@ -489,9 +494,8 @@ def _nfr001_param(name: str) -> object:
 @pytest.mark.parametrize("name", [_nfr001_param(n) for n in NFR001_FIXTURES])
 def test_nfr001_effective_set_preserved(name: str, tmp_path: Path) -> None:
     record = _golden(name)["effective"]
-    project = build(name, tmp_path)
-    result, payload = upgrade(project)
-    assert result.exit_code == 0 and not payload["errors"], describe(result)
+    project, outcome, payload = first_upgrade(name, tmp_path)
+    assert outcome.exit_code == 0 and not payload["errors"], outcome.output
     builtin_now = builtin_inventory()
     after_record = effective_set(project, builtin_now)
     after = expand(after_record, builtin_now)
@@ -519,15 +523,23 @@ def _assert_charter_list_agrees(project: Path, record: dict[str, Any]) -> None:
     assert listed.get("mission-type") == sorted(record["mission_types"])
 
 
+#: NFR-001 fixtures whose ``detect()`` is false by contract (no item of the FR-012 inventory:
+#: canonical keys and layout, or a pre-rc35 project with no activation keys at all). The
+#: cutover has nothing to migrate there, so only the digest control applies.
+CUTOVER_NOT_APPLICABLE = frozenset({"two_org_packs", "pre_rc35"})
+
+
 @covers("NFR-004", "US2-4")
 @pytest.mark.parametrize("name", [pytest.param(n, marks=pending_until("WP12", "a second upgrade changes 0 bytes")) for n in NFR001_FIXTURES])
 def test_nfr004_second_upgrade_changes_zero_bytes(name: str, tmp_path: Path) -> None:
-    project = build(name, tmp_path)
-    before = tree_digest(project)
-    first, _ = upgrade(project)
-    assert first.exit_code == 0, describe(first)
+    project, first, first_payload = first_upgrade(name, tmp_path)
+    before = tree_digest(first.pristine)
+    assert first.exit_code == 0, first.output
     after_first = tree_digest(project)
     assert after_first != before, "control: the first upgrade changed something"
+    if name not in CUTOVER_NOT_APPLICABLE:
+        # The version stamp alone would satisfy the digest control; the cutover itself must have run.
+        assert CUTOVER_ID in first_payload["migrations_applied"], first_payload["migrations_applied"]
     second, _ = upgrade(project)
     assert second.exit_code == 0, describe(second)
     assert tree_digest(project) == after_first
