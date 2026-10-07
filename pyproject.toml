@@ -1806,7 +1806,6 @@ exclude = [
     "tests/specify_cli/cli/commands/agent/test_wp_header_regex_depth.py",
     "tests/specify_cli/cli/commands/charter/test_activate_preserve.py",
     "tests/specify_cli/cli/commands/charter/test_activation_layout.py",
-    "tests/specify_cli/cli/commands/charter/test_apply_compile_bridge.py",
     "tests/specify_cli/cli/commands/charter/test_charter_activate_commands_cascade_flags.py",
     "tests/specify_cli/cli/commands/charter/test_charter_activate_commands_cascade_output.py",
     "tests/specify_cli/cli/commands/charter/test_charter_activate_commands_core.py",

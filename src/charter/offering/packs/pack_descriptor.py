@@ -26,7 +26,7 @@ from ruamel.yaml import YAML
 
 from charter.offering.packs.retired_fields import SCOPE_PACK_DESCRIPTOR, raise_retired_field_at, reject_retired_fields
 
-__all__ = ["PackDescriptor", "load_pack_descriptor"]
+__all__ = ["load_pack_descriptor"]
 
 
 class PackDescriptor(BaseModel):

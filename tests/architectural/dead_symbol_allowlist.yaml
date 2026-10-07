@@ -1446,8 +1446,6 @@ widened_grandfathered_470:
     name: set_iteration_mode
   - module: specify_cli.doc_analysis.doc_state
     name: update_documentation_state
-  - module: charter.offering.packs.pack_descriptor
-    name: PackDescriptor
   - module: specify_cli.dossier.hasher
     name: WP_DESCRIPTIVE_PROJECTION_FIELDS
   - module: specify_cli.dossier.hasher
