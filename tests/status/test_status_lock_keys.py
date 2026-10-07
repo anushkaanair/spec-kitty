@@ -1,0 +1,156 @@
+"""Every Mission status writer locks the same file as ``status.emit`` (WP04 T020, plan A8 / A10).
+
+Three writers keyed the lock on the Mission slug (``move-task``, ``mark-status``
+and the lifecycle-event appenders), so on a Mission whose directory name
+differs from its slug they took a different lock file than ``emit_status_transition``
+and did not exclude it. The tracer appender (#5467) and the commit router's
+``coord_status_lock`` must re-enter that same file: one lock path per Mission.
+
+The fixture Mission has directory ``foo-01AAAAAA`` and slug ``foo``.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import pytest
+import typer
+
+import specify_cli.cli.commands.agent.tasks as tasks_module
+import specify_cli.cli.commands.agent.tasks_move_task_executor as move_task_module
+import specify_cli.retrospective.tracer_writer as tracer_module
+import specify_cli.status.emit as emit_module
+import specify_cli.status.lifecycle_events as lifecycle_module
+from specify_cli.cli.commands.agent.tasks_mark_status import _ms_apply_updates
+from specify_cli.coordination.status_transition import coord_status_lock
+from specify_cli.status import TransitionRequest, emit_status_transition, mission_write_lock
+from specify_cli.status.locking import _get_thread_locks, feature_status_lock_path
+from tests.status.conftest import seed_wp_to_planned
+
+pytestmark = [pytest.mark.unit, pytest.mark.git_repo]
+
+DIR_NAME = "foo-01AAAAAA"
+SLUG = "foo"
+
+
+@pytest.fixture
+def mission(tmp_path: Path) -> tuple[Path, Path]:
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True, capture_output=True)
+    feature_dir = tmp_path / "kitty-specs" / DIR_NAME
+    feature_dir.mkdir(parents=True)
+    seed_wp_to_planned(feature_dir, "WP01", slug=SLUG)
+    return tmp_path, feature_dir
+
+
+class _Spy:
+    """Records the lock file every ``feature_status_lock`` take resolves to."""
+
+    def __init__(self, module: Any, monkeypatch: pytest.MonkeyPatch) -> None:
+        self.paths: list[Path] = []
+        self._original = module.feature_status_lock
+        monkeypatch.setattr(module, "feature_status_lock", self._record)
+
+    @contextmanager
+    def _record(self, root: Path, key: str, **kwargs: Any) -> Iterator[Path]:
+        self.paths.append(feature_status_lock_path(root, key))
+        with self._original(root, key, **kwargs) as held:
+            yield held
+
+
+def _emit_lock_path(repo: Path, feature_dir: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    spy = _Spy(emit_module, monkeypatch)
+    emit_status_transition(TransitionRequest(feature_dir=feature_dir, mission_slug=SLUG, wp_id="WP01", to_lane="claimed", actor="t"))
+    assert len(set(spy.paths)) == 1
+    assert spy.paths[0].name == f"{DIR_NAME}.status.lock"
+    return spy.paths[0]
+
+
+class _StopAfterLock(Exception):
+    pass
+
+
+@pytest.mark.parametrize("owned", [False, True], ids=["main-checkout", "owned-checkout"])
+def test_move_task_locks_the_emit_lock_file(mission: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, owned: bool) -> None:
+    repo, feature_dir = mission
+    expected = _emit_lock_path(repo, feature_dir, monkeypatch)
+    spy = _Spy(tasks_module, monkeypatch)
+
+    def _stop(*_args: Any, **_kwargs: Any) -> None:
+        raise _StopAfterLock
+
+    monkeypatch.setattr(move_task_module, "_mt_emit_transitions", _stop)
+    st: Any = SimpleNamespace(
+        owned=SimpleNamespace(owned_root=repo) if owned else None,
+        main_repo_root=repo,
+        feature_dir=feature_dir,
+        mission_slug=SLUG,
+    )
+
+    with pytest.raises(_StopAfterLock):
+        move_task_module._mt_execute(st, SimpleNamespace())
+
+    assert spy.paths == [expected]
+
+
+@pytest.mark.parametrize("owned", [False, True], ids=["main-checkout", "owned-checkout"])
+def test_mark_status_locks_the_emit_lock_file(mission: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, owned: bool) -> None:
+    """The owned-checkout arm takes the lock too (it was a ``nullcontext``)."""
+    repo, feature_dir = mission
+    expected = _emit_lock_path(repo, feature_dir, monkeypatch)
+    spy = _Spy(tasks_module, monkeypatch)
+    monkeypatch.setattr(tasks_module, "_output_error", lambda *_a, **_k: None)
+    st: Any = SimpleNamespace(
+        owned=SimpleNamespace(owned_root=repo) if owned else None,
+        main_repo_root=repo,
+        feature_dir=feature_dir,
+        mission_slug=SLUG,
+        tasks_md=feature_dir / "tasks.md",  # absent: the phase exits right after taking the lock
+        json_output=True,
+    )
+
+    with pytest.raises(typer.Exit):
+        _ms_apply_updates(st, SimpleNamespace())
+
+    assert spy.paths == [expected]
+
+
+def test_lifecycle_appender_locks_the_emit_lock_file(mission: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    repo, feature_dir = mission
+    expected = _emit_lock_path(repo, feature_dir, monkeypatch)
+    spy = _Spy(lifecycle_module, monkeypatch)
+
+    envelope = lifecycle_module.emit_wp_created_local(feature_dir, mission_slug=SLUG, wp_id="WP01", wp_title="t", repo_root=repo)
+
+    assert envelope is not None
+    assert spy.paths == [expected]
+
+
+def test_tracer_lock_dir_is_the_mission_directory_name_and_reenters_coord_lock(mission: tuple[Path, Path]) -> None:
+    """The tracer's key is the directory name, and the router's ``coord_status_lock`` re-enters it."""
+    repo, feature_dir = mission
+    (feature_dir / "meta.json").write_text('{"mission_slug": "foo", "mission_id": "01AAAAAAAAAAAAAAAAAAAAAAAA"}', encoding="utf-8")
+    lock_dir = tracer_module._mission_lock_dir(repo, DIR_NAME)
+    assert lock_dir == feature_dir
+
+    with mission_write_lock(lock_dir, repo_root=repo) as held:
+        before = set(_get_thread_locks())
+        with coord_status_lock(repo, feature_dir) as inner:
+            assert inner == held
+            assert set(_get_thread_locks()) == before, "coord_status_lock took a second lock path"
+        assert held == feature_status_lock_path(repo, DIR_NAME)
+
+
+def test_tracer_lock_dir_for_a_slug_without_mid8(tmp_path: Path) -> None:
+    """A Mission directory without a mid8 (legacy shape) keys on that directory name."""
+    subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True, capture_output=True)
+    legacy = tmp_path / "kitty-specs" / "legacy-mission"
+    legacy.mkdir(parents=True)
+    (legacy / "meta.json").write_text('{"mission_slug": "legacy-mission"}', encoding="utf-8")
+
+    assert tracer_module._mission_lock_dir(tmp_path, "legacy-mission").name == "legacy-mission"
+    assert tracer_module._mission_lock_dir(tmp_path, "no-such-mission").name == "no-such-mission"

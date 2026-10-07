@@ -101,6 +101,7 @@ from specify_cli.git.protection_policy import ProtectionPolicy
 # ``feature_status_lock`` (D7 ×23) — the relocated ``_mt_execute`` (WP05) and
 # ``_ms_apply_updates`` (WP08) route it via ``_tasks.<attr>``.
 from specify_cli.status import feature_status_lock as feature_status_lock
+from specify_cli.status import locked_rewrite_text
 # ``get_auto_commit_default`` (D7 ×7) — the relocated ``_mt_resolve_targets``
 # (WP05) and ``_ms_resolve_context`` (WP08) route it via ``_tasks.<attr>``.
 from specify_cli.core.agent_config import get_auto_commit_default as get_auto_commit_default
@@ -1180,12 +1181,15 @@ def add_history(
         shell_part = f"shell_pid={shell_pid_val} – " if shell_pid_val else ""
         history_entry = f"- {timestamp} – {agent_name} – {shell_part}{note}"
 
-        # Add history entry to body
-        updated_body = append_activity_log(wp.body, history_entry)
+        # #5820: the read of record is the locked primitive's, so a note a
+        # concurrent writer appended after ``locate_work_package`` is kept.
+        def _append(current: str | None) -> str:
+            if current is None:
+                raise FileNotFoundError(f"{wp.path} vanished before the history note was written")
+            front, body, padding = split_frontmatter(current.removeprefix("\ufeff"))
+            return build_document(front, append_activity_log(body, history_entry), padding)
 
-        # Build and write updated document
-        updated_doc = build_document(wp.frontmatter, updated_body, wp.padding)
-        wp.path.write_text(updated_doc, encoding="utf-8")
+        locked_rewrite_text(wp.path, _append, feature_dir=_ah_feature_dir, repo_root=_ah_main_repo_root)
 
         result = {"result": "success", "task_id": task_id, "note": note}
 

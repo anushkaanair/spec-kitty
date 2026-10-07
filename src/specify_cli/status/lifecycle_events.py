@@ -281,10 +281,10 @@ def _atomic_append(path: Path, line: str) -> None:
     append_raw_rows_atomic(path, [json.loads(line)])
 
 
-def _lifecycle_write_lock(repo_root: Path | None, mission_slug: str | None) -> AbstractContextManager[Path | None]:
+def _lifecycle_write_lock(repo_root: Path | None, mission_dir_name: str | None) -> AbstractContextManager[Path | None]:
     """Return the lock context that guards a lifecycle log writer.
 
-    Mission-scoped writes (``mission_slug`` provided, i.e. every appender
+    Mission-scoped writes (``mission_dir_name`` provided, i.e. every appender
     except ``ProjectInitialized``) use the SAME mission-keyed
     :func:`feature_status_lock` that ``status/emit.py``'s
     ``emit_status_transition`` uses for ``status.events.jsonl`` -- this is
@@ -298,8 +298,8 @@ def _lifecycle_write_lock(repo_root: Path | None, mission_slug: str | None) -> A
     """
     if repo_root is None:
         return nullcontext()
-    if mission_slug is not None:
-        return feature_status_lock(repo_root, mission_slug)
+    if mission_dir_name is not None:
+        return feature_status_lock(repo_root, mission_dir_name)
     return project_event_log_lock(repo_root)
 
 

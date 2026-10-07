@@ -318,6 +318,7 @@ def test_patched_feature_status_lock_intercepts_apply_updates(tmp_path: Path) ->
     st = _make_state()
     st.main_repo_root = tmp_path
     st.mission_slug = "034-feature"
+    st.feature_dir = tmp_path / "kitty-specs" / "034-feature-01ABCDEF"
     st.tasks_md = tmp_path / "tasks.md"  # deliberately absent
     lock_mock = MagicMock(return_value=nullcontext())
     with (
@@ -326,7 +327,8 @@ def test_patched_feature_status_lock_intercepts_apply_updates(tmp_path: Path) ->
         pytest.raises(_SentinelHit),
     ):
         tasks_mark_status._ms_apply_updates(st, ports=MagicMock())
-    lock_mock.assert_called_once_with(tmp_path, "034-feature")
+    # The lock is keyed on the Mission directory name, never the slug (#5819 A8).
+    lock_mock.assert_called_once_with(tmp_path, "034-feature-01ABCDEF")
     error_mock.assert_called_once_with(True, f"tasks.md not found: {st.tasks_md}")
 
 

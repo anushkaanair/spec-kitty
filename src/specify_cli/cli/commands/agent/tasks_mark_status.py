@@ -314,7 +314,8 @@ def _ms_apply_updates(st: _MarkStatusState, ports: TasksPorts) -> None:
     from specify_cli.cli.commands.agent import tasks as _tasks
 
     del ports  # Stable phase signature; event-only apply has no commit port.
-    lock = contextlib.nullcontext() if st.owned is not None else _tasks.feature_status_lock(st.main_repo_root, st.mission_slug)
+    lock_root = st.owned.owned_root if st.owned is not None else st.main_repo_root
+    lock = _tasks.feature_status_lock(lock_root, st.feature_dir.name)
     with lock:
         if not st.tasks_md.exists():
             _tasks._output_error(st.json_output, f"tasks.md not found: {st.tasks_md}")
