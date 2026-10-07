@@ -182,7 +182,7 @@ def _make_fake_source(local_path: Path) -> MagicMock:
     ``_count_artifacts`` returns a non-empty dict for no-subdir packs.
     Used to drive ``fetch_pack`` without a real git/https/api remote.
     """
-    from specify_cli.doctrine.sources.protocol import FetchResult  # noqa: PLC0415
+    from specify_cli.charter_packs.sources.protocol import FetchResult  # noqa: PLC0415
 
     def _fake_fetch(target_dir: Path) -> FetchResult:
         (target_dir / "directives").mkdir(parents=True, exist_ok=True)
@@ -199,7 +199,7 @@ def _make_fake_source(local_path: Path) -> MagicMock:
 def test_fetch_pack_int_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """FR-007: fetch_pack must return artifacts_written as a scalar int, not a dict."""
     from charter.offering.drg.org_pack_config import load_pack_registry  # noqa: PLC0415
-    from specify_cli.doctrine.snapshot import fetch_pack  # noqa: PLC0415
+    from specify_cli.charter_packs.snapshot import fetch_pack  # noqa: PLC0415
 
     local_path = tmp_path / "pack-store"
     repo_root = tmp_path / "consumer"
@@ -212,7 +212,7 @@ def test_fetch_pack_int_contract(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     pack = registry.packs[0]
 
     monkeypatch.setattr(
-        "specify_cli.doctrine.snapshot._build_source",
+        "specify_cli.charter_packs.snapshot._build_source",
         lambda p: _make_fake_source(local_path),
     )
 
@@ -234,7 +234,7 @@ def test_fetch_pack_wrong_subdir_fails_closed(
 ) -> None:
     """A configured effective root with no artifacts must not replace last-good."""
     from charter.offering.drg.org_pack_config import load_pack_registry  # noqa: PLC0415
-    from specify_cli.doctrine.snapshot import fetch_pack  # noqa: PLC0415
+    from specify_cli.charter_packs.snapshot import fetch_pack  # noqa: PLC0415
 
     local_path = tmp_path / "pack-store"
     repo_root = tmp_path / "consumer"
@@ -247,7 +247,7 @@ def test_fetch_pack_wrong_subdir_fails_closed(
     pack = registry.packs[0]
 
     monkeypatch.setattr(
-        "specify_cli.doctrine.snapshot._build_source",
+        "specify_cli.charter_packs.snapshot._build_source",
         lambda p: _make_fake_source(local_path),
     )
 

@@ -14,7 +14,7 @@ import typer
 from typer.testing import CliRunner
 
 from charter.offering.drg.org_pack_config import OrgPackConfig
-from specify_cli.doctrine.sources.protocol import FetchResult
+from specify_cli.charter_packs.sources.protocol import FetchResult
 
 
 # ----------------------------------------------------------------------
@@ -109,7 +109,7 @@ class TestDoctrineFetchCLI:
             )
 
         monkeypatch.setattr(
-            "specify_cli.doctrine.snapshot.fetch_pack", fake_fetch_pack
+            "specify_cli.charter_packs.snapshot.fetch_pack", fake_fetch_pack
         )
 
         runner = CliRunner()
@@ -143,7 +143,7 @@ class TestDoctrineFetchCLI:
         )
         fetched_names: list[str] = []
         monkeypatch.setattr(
-            "specify_cli.doctrine.snapshot.fetch_pack",
+            "specify_cli.charter_packs.snapshot.fetch_pack",
             lambda pack, repo_root: (
                 fetched_names.append(pack.name)
                 or FetchResult(ok=True, artifacts_written=1, pack_version=None)
@@ -192,7 +192,7 @@ class TestDoctrineFetchCLI:
             """,
         )
         monkeypatch.setattr(
-            "specify_cli.doctrine.snapshot.fetch_pack",
+            "specify_cli.charter_packs.snapshot.fetch_pack",
             lambda pack, repo_root: FetchResult(
                 ok=False, artifacts_written=0, pack_version=None,
                 errors=["network unreachable"],

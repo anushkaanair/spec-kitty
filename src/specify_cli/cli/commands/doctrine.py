@@ -153,7 +153,7 @@ def fetch(
     """Fetch org doctrine pack(s) from their configured remote sources."""
     from charter.drg import load_pack_registry
     from specify_cli.core.paths import locate_project_root
-    from specify_cli.doctrine.snapshot import fetch_pack
+    from specify_cli.charter_packs.snapshot import fetch_pack
 
     repo_root = locate_project_root()
     if repo_root is None:
@@ -1050,8 +1050,8 @@ def _run_template_render(
     force: bool,
 ) -> None:
     """Dispatch template render via ``template_render.pipeline``."""
-    from specify_cli.doctrine.template_render import RenderRequest
-    from specify_cli.doctrine.template_render.pipeline import render_org_pack
+    from specify_cli.charter_packs.template_render import RenderRequest
+    from specify_cli.charter_packs.template_render.pipeline import render_org_pack
 
     if not org_name:
         console.print(

@@ -123,12 +123,12 @@ _INIT_PY = SPECIFY_CLI_ROOT / "cli" / "commands" / "init.py"
 _AGENT_CONFIG_PY = SPECIFY_CLI_ROOT / "cli" / "commands" / "agent" / "config.py"
 _RESEARCH_PY = SPECIFY_CLI_ROOT / "cli" / "commands" / "research.py"
 _MIGRATE_PY = SPECIFY_CLI_ROOT / "runtime" / "migrate.py"
-_GIT_SOURCE_PY = SPECIFY_CLI_ROOT / "doctrine" / "sources" / "git_source.py"
+_GIT_SOURCE_PY = SPECIFY_CLI_ROOT / "charter_packs" / "sources" / "git_source.py"
 _MIGRATIONS_DIR = SPECIFY_CLI_ROOT / "upgrade" / "migrations"
 
 _GUARD_CALL = "guard_destructive_removal("
 _RESEARCH_PY_REL = "src/specify_cli/cli/commands/research.py"
-_GIT_SOURCE_REL = "src/specify_cli/doctrine/sources/git_source.py"
+_GIT_SOURCE_REL = "src/specify_cli/charter_packs/sources/git_source.py"
 
 #: The ONLY first-argument variable names a git_source.py raw removal may
 #: target: the ephemeral ``.tmp-<uuid>`` clone and the ``.old-<uuid>``
@@ -293,7 +293,7 @@ _ALLOWLIST: dict[CensusKey, str] = {
     ),
     # --- doctrine/sources/git_source.py (4): ephemeral temp-clone teardown -
     CensusKey(
-        rel="src/specify_cli/doctrine/sources/git_source.py",
+        rel="src/specify_cli/charter_packs/sources/git_source.py",
         qualname="GitSource._first_install",
         token_line="shutil . rmtree ( tmp_dir , ignore_errors = True )",
         op="shutil.rmtree",
@@ -305,7 +305,7 @@ _ALLOWLIST: dict[CensusKey, str] = {
         "not the removal guard)."
     ),
     CensusKey(
-        rel="src/specify_cli/doctrine/sources/git_source.py",
+        rel="src/specify_cli/charter_packs/sources/git_source.py",
         qualname="GitSource._first_install",
         token_line="shutil . rmtree ( tmp_dir , ignore_errors = True )",
         op="shutil.rmtree",
@@ -314,7 +314,7 @@ _ALLOWLIST: dict[CensusKey, str] = {
         "ephemeral temp cleanup (#4960): removes ONLY the `.tmp-<uuid>` clone dir this fetch created when `git checkout <ref>` fails — target_dir is never touched."
     ),
     CensusKey(
-        rel="src/specify_cli/doctrine/sources/git_source.py",
+        rel="src/specify_cli/charter_packs/sources/git_source.py",
         qualname="GitSource._promote",
         token_line="shutil . rmtree ( tmp_dir , ignore_errors = True )",
         op="shutil.rmtree",
@@ -325,7 +325,7 @@ _ALLOWLIST: dict[CensusKey, str] = {
         "`.old-<uuid>` backup, never rmtree'd."
     ),
     CensusKey(
-        rel="src/specify_cli/doctrine/sources/git_source.py",
+        rel="src/specify_cli/charter_packs/sources/git_source.py",
         qualname="GitSource._promote",
         token_line="shutil . rmtree ( old_dir , ignore_errors = True )",
         op="shutil.rmtree",
