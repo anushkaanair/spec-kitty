@@ -71,7 +71,7 @@ def _builtin_mission_types() -> list[str]:
 
 
 def test_provision_emits_builtin_set_into_pointer_charter(tmp_path: Path) -> None:
-    """A pointer charter that lacks the key gains the default.yaml built-in set."""
+    """A pointer charter that lacks the key gains the default preset's mission types."""
     charter_path = _write_pointer_project(tmp_path, _CHARTER_YAML_WITHOUT_KEY)
 
     written = provision_mission_type_activations(tmp_path)
