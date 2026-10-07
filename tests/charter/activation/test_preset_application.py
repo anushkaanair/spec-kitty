@@ -69,7 +69,9 @@ def _project(tmp_path: Path, config: dict[str, Any] | None = None) -> Path:
     return root
 
 
-def _with_org_pack(root: Path, *, presets: dict[str, dict[str, Any]] | None = None, org_charter: dict[str, Any] | None = None, extra: dict[str, Any] | None = None) -> Path:
+def _with_org_pack(
+    root: Path, *, presets: dict[str, dict[str, Any]] | None = None, org_charter: dict[str, Any] | None = None, extra: dict[str, Any] | None = None
+) -> Path:
     pack = root / ORG_DIR
     _write(
         pack / "directives" / f"{ORG_DIRECTIVE_STEM}.directive.yaml",
@@ -292,7 +294,13 @@ def test_project_pack_ships_no_presets(tmp_path: Path) -> None:
 def test_unresolved_ids_are_named_and_nothing_is_written(tmp_path: Path) -> None:
     root = _with_org_pack(
         _project(tmp_path),
-        presets={"ghost": {"activated_tactics": ["acceptance-test-first", "no-such-tactic"], "activated_anti_patterns": ["no-such-smell"], "mission_type_activations": ["no-such-type"]}},
+        presets={
+            "ghost": {
+                "activated_tactics": ["acceptance-test-first", "no-such-tactic"],
+                "activated_anti_patterns": ["no-such-smell"],
+                "mission_type_activations": ["no-such-type"],
+            }
+        },
     )
     before = (root / ".kittify" / "config.yaml").read_bytes()
 
@@ -300,7 +308,11 @@ def test_unresolved_ids_are_named_and_nothing_is_written(tmp_path: Path) -> None
         plan_preset_application(root, ORG, "ghost")
 
     assert caught.value.code == "PRESET_ID_UNRESOLVED"
-    assert caught.value.unresolved == {"activated_tactics": ["no-such-tactic"], "activated_anti_patterns": ["no-such-smell"], "mission_type_activations": ["no-such-type"]}
+    assert caught.value.unresolved == {
+        "activated_tactics": ["no-such-tactic"],
+        "activated_anti_patterns": ["no-such-smell"],
+        "mission_type_activations": ["no-such-type"],
+    }
     assert caught.value.preset_file.name == "ghost.yaml"
     assert "  activated_tactics: no-such-tactic" in caught.value.detail_lines()
     assert caught.value.payload()["preset_file"].endswith("ghost.yaml")

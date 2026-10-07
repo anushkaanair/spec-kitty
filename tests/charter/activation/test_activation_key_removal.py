@@ -95,7 +95,9 @@ def test_section_key_both_written_and_removed_raises(tmp_path: Path) -> None:
 def test_activation_write_removes_from_config_target(tmp_path: Path) -> None:
     config = _write(tmp_path / ".kittify" / "config.yaml", _CONFIG_DOC)
 
-    apply_yaml_write(prepare_activation_write(tmp_path, {"activated_directives": ["024-locality-of-change"]}, remove=["activated_tactics", "activated_anti_patterns"]))
+    apply_yaml_write(
+        prepare_activation_write(tmp_path, {"activated_directives": ["024-locality-of-change"]}, remove=["activated_tactics", "activated_anti_patterns"])
+    )
 
     text = config.read_text(encoding="utf-8")
     assert "activated_tactics" not in text
