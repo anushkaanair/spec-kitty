@@ -968,13 +968,13 @@ jobs:
       - run: |
           uv sync --frozen --all-extras
           uv run --frozen pytest -m "corpus and not windows_ci" \
-            tests/acceptance/charter_pack_cutover/test_cli_surface.py \\
-            tests/acceptance/charter_pack_cutover/test_gates_latency_messaging.py \\
-            tests/acceptance/charter_pack_cutover/test_package_split.py \\
-            tests/acceptance/charter_pack_cutover/test_presets.py \\
-            tests/acceptance/charter_pack_cutover/test_project_pack_root.py \\
-            tests/acceptance/charter_pack_cutover/test_rename_skills_glossary.py \\
-            tests/acceptance/charter_pack_cutover/test_traceability.py \\
+            tests/acceptance/charter_pack_cutover/test_cli_surface.py \
+            tests/acceptance/charter_pack_cutover/test_gates_latency_messaging.py \
+            tests/acceptance/charter_pack_cutover/test_package_split.py \
+            tests/acceptance/charter_pack_cutover/test_presets.py \
+            tests/acceptance/charter_pack_cutover/test_project_pack_root.py \
+            tests/acceptance/charter_pack_cutover/test_rename_skills_glossary.py \
+            tests/acceptance/charter_pack_cutover/test_traceability.py \
             tests/contract/test_example_round_trip.py \
             tests/contract/test_mission_status_payloads.py \
             tests/contract/test_mission_status_reality.py \
