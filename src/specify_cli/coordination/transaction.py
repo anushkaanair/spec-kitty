@@ -63,6 +63,7 @@ from specify_cli.git.commit_helpers import (
 )
 from specify_cli.lanes.branch_naming import coord_mission_dir_name
 from specify_cli.status import reducer as _reducer
+from specify_cli.status.mission_write import RollbackPoint, rollback_events_log
 from specify_cli.status.locking import (
     FeatureStatusLockTimeoutError,
     feature_status_lock,
@@ -493,6 +494,8 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         self._deferred: list[Callable[[], None]] = []
         self._committed = False
         self._commit_recovery_failed_after_commit = False
+        # Operator text of the last refused log rollback (empty when it succeeded).
+        self._rollback_refusal = ""
         self._explicit_commit_message: str | None = None
         self._explicit_commit_receipt: CommitReceipt | None = None
         self._capability: GuardCapability = GuardCapability.STANDARD
@@ -1201,13 +1204,13 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                 self._rollback()
             else:
                 self._commit_recovery_failed_after_commit = True
-            raise BookkeepingCommitFailed(f"safe_commit recovery failed on {self.destination_ref!r}: {exc}") from exc
+            raise BookkeepingCommitFailed(f"safe_commit recovery failed on {self.destination_ref!r}: {exc}{self._refusal_suffix()}") from exc
         except Exception as exc:  # noqa: BLE001 — wrap as domain error
             # Rollback before re-raising. ``_rollback`` is intentionally
             # tolerant: it logs but does not raise so the caller sees
             # the original commit failure, not a rollback failure.
             self._rollback()
-            raise BookkeepingCommitFailed(f"safe_commit failed on {self.destination_ref!r}: {exc}") from exc
+            raise BookkeepingCommitFailed(f"safe_commit failed on {self.destination_ref!r}: {exc}{self._refusal_suffix()}") from exc
 
         receipt = CommitReceipt(
             commit_sha=result.sha,
@@ -1277,6 +1280,10 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
 
     # ---- private ----
 
+    def _refusal_suffix(self) -> str:
+        """The refused-rollback message appended to a commit failure (empty when the rollback succeeded)."""
+        return f" [{self._rollback_refusal}]" if self._rollback_refusal else ""
+
     def _rollback(self) -> None:
         """Surgical rollback: truncate event log; restore artifacts.
 
@@ -1287,28 +1294,33 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         guarded so a failing restore on one path still attempts the
         others.
         """
-        # 1. Surgical truncate of status.events.jsonl (FR-010). This
-        # restores the file byte-for-byte to the pre-emit state because
-        # the file is append-only.
-        try:
-            if self._events_path.exists():
-                if self._pre_emit_events_existed:
-                    with self._events_path.open("ab") as fh:
-                        fh.truncate(self._pre_emit_size)
-                else:
-                    self._events_path.unlink(missing_ok=True)
-        except OSError as exc:
-            logger.error(
-                "BookkeepingTransaction rollback: truncate of %s failed: %s",
-                self._events_path,
-                exc,
-            )
+        # 1. Surgical, verified cut of status.events.jsonl (FR-010) through the
+        # Mission write primitive: it re-enters this transaction's lock, refuses
+        # (leaving the log byte-identical) when the tail is not exactly the rows
+        # this transaction appended or is already committed, and never extends
+        # the file. The point is built here rather than captured because
+        # ``_acquire_locked`` already took the pre-emit measurements inside this
+        # transaction's own lock hold.
+        outcome = rollback_events_log(
+            RollbackPoint(
+                events_path=self._events_path,
+                status_path=self._snapshot_path,
+                pre_event_size=self._pre_emit_size,
+                pre_status_bytes=None,
+                events_existed=self._pre_emit_events_existed,
+            ),
+            expected_event_ids=self._event_ids or None,
+            repo_root=self.repo_root,
+        )
+        self._rollback_refusal = outcome.message()
 
         # 2. Restore status.json from the byte snapshot captured at
         # first append_event() (NOT a re-materialise — preserves SHA).
         # If no event was ever appended, _pre_emit_snapshot_existed is
         # None and we leave status.json alone.
-        if self._pre_emit_snapshot_existed is not None:
+        # A refused log rollback leaves the snapshot alone too: it must keep
+        # matching the log it was derived from.
+        if self._pre_emit_snapshot_existed is not None and outcome.rolled_back:
             try:
                 if self._pre_emit_snapshot_existed:
                     assert self._pre_emit_snapshot_bytes is not None  # noqa: S101

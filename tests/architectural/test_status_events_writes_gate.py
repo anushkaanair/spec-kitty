@@ -84,11 +84,10 @@ _MAX_DEPTH = 16
 #: FSM append bypass.
 ALLOWED_OUT_OF_STORE_WRITE_SITES: Mapping[tuple[str, str, str], int] = MappingProxyType(
     {
-        # Rollback truncates (not appends): restore the log byte-for-byte to
-        # the pre-emit size after a failed commit. Run inside the shells'
-        # own failure paths.
-        ("specify_cli.coordination.transaction", "Path.open", "self._events_path"): 1,
-        ("specify_cli.coordination.status_transition", "Path.open", "events_path"): 1,
+        # (The two rollback truncates of ``coordination.transaction`` and
+        # ``coordination.status_transition`` left this ledger in
+        # concurrent-mission-writers WP01 (#5819): both roll back through the
+        # Mission write primitive, ``status.mission_write``, below.)
         # Checkout materializations (not appends): write bytes git already
         # holds for the log into a worktree so materialize() can read them
         # (sparse-checkout hydration from the index).
@@ -119,6 +118,11 @@ EXPECTED_UNRESOLVED_EVENT_NAMED_WRITE_SITES: frozenset[tuple[str, str, str]] = f
         # Workflow-commit rollback truncate (keyword-only parameter; the
         # in-module callers pass a path the scanner cannot trace).
         ("specify_cli.cli.commands.agent.workflow", "Path.open", "events_path"),
+        # The Mission write primitive's verified rollback (#5819): opens the log
+        # ``r+b`` once, measures and truncates that same descriptor, never
+        # extends it. The only truncating site in ``src/specify_cli`` (the Mission
+        # write discipline gate pins that). The path is a ``RollbackPoint`` field.
+        ("specify_cli.status.mission_write", "Path.open", "point.events_path"),
         # The glossary's OWN event log (``_local_append_event``), not the
         # mission status log: parameter path, callers span modules.
         ("glossary.events", "Path.open", "event_log_path"),
@@ -149,13 +153,17 @@ KNOWN_DYNAMIC_EVENT_LOG_WRITE_SITES: frozenset[tuple[str, str, str]] = frozenset
 #: from the tree at the WP03 landing; each line says what the shell is.
 EXPECTED_LOCK_COMPOSITION_SITES: frozenset[str] = frozenset(
     {
+        # concurrent-mission-writers WP01 (#5819): the Mission write primitive
+        # (``mission_write_lock``) is the one door non-status writers take.
+        "specify_cli.status.mission_write",
         # Family 1 flat shell + batch door + emit_inner_state_changed.
         "specify_cli.status.emit",
         # Family 2 lifecycle appender (_lifecycle_write_lock).
         "specify_cli.status.lifecycle_events",
         # Family 3 BookkeepingTransaction (lock held for the txn lifetime).
         "specify_cli.coordination.transaction",
-        # Coord fallback: L1 covers snapshot, emit, commit and rollback.
+        # Coord fallback: L1 (``mission_write_lock``) covers snapshot, emit,
+        # commit and rollback.
         "specify_cli.coordination.status_transition",
         # Family 5 retro_status_lock helper (family 4 composes through it).
         "specify_cli.retrospective.lifecycle_events",
@@ -551,14 +559,19 @@ class TreeScan:
     lock_composition_modules: frozenset[str]
 
 
+#: Call names that compose the Mission status lock (``mission_write_lock`` is a thin
+#: delegate of ``feature_status_lock``; both count as a lock composition site).
+LOCK_COMPOSITION_CALLS: frozenset[str] = frozenset({"feature_status_lock", "mission_write_lock"})
+
+
 def has_lock_call_site(tree: ast.AST) -> bool:
-    """True when ``tree`` calls ``feature_status_lock(`` bare or as an attribute."""
+    """True when ``tree`` calls ``feature_status_lock(`` or ``mission_write_lock(``, bare or as an attribute."""
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
         name = func.id if isinstance(func, ast.Name) else func.attr if isinstance(func, ast.Attribute) else None
-        if name == "feature_status_lock":
+        if name in LOCK_COMPOSITION_CALLS:
             return True
     return False
 
@@ -746,9 +759,9 @@ def test_writes_gate_is_not_vacuous(case: str, source: str, kind: str, tree_scan
 #: function in the SAME module, which is exactly what a per-key count must catch.
 _LEDGERED_SHAPES: tuple[tuple[str, str, tuple[str, str, str]], ...] = (
     (
-        "path-open-truncate",
-        'def {name}(d):\n    events_path = d / "status.events.jsonl"\n    events_path.open("ab").truncate(0)\n',
-        ("specify_cli.coordination.status_transition", "Path.open", "events_path"),
+        "write-text-checkout-materialization",
+        'def {name}(d):\n    events_path = d / "status.events.jsonl"\n    events_path.write_text("")\n',
+        ("specify_cli.lanes.auto_rebase", "write_text", "events_path"),
     ),
     (
         "os-replace-rewrite",
@@ -801,4 +814,6 @@ def test_lock_census_scanner_sees_both_call_shapes() -> None:
     """Bare and attribute ``feature_status_lock(`` calls are both census hits."""
     assert has_lock_call_site(ast.parse("with feature_status_lock(root, name):\n    pass\n"))
     assert has_lock_call_site(ast.parse("with _tasks.feature_status_lock(root, name):\n    pass\n"))
+    assert has_lock_call_site(ast.parse("with mission_write_lock(feature_dir):\n    pass\n"))
+    assert has_lock_call_site(ast.parse("with _mw.mission_write_lock(feature_dir):\n    pass\n"))
     assert not has_lock_call_site(ast.parse("lock = feature_status_lock\nfeature_status_lock_path(root, name)\n"))

@@ -74,7 +74,13 @@ from specify_cli.status import emit as _emit
 from specify_cli.status.locking import (
     BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS,
     FeatureStatusLockTimeoutError,
-    feature_status_lock,
+)
+from specify_cli.status.mission_write import (
+    RollbackOutcome,
+    RollbackPoint,
+    capture_rollback_point,
+    mission_write_lock,
+    rollback_status_artifacts,
 )
 from specify_cli.status.models import (
     CurrentWpState,
@@ -386,49 +392,31 @@ def _commit_status_artifacts_to_coord(*, repo_root: Path, mission_slug: str, coo
     )
 
 
-def _snapshot_coord_status_artifacts(coord_feature_dir: Path) -> tuple[int, bytes | None]:
+def _snapshot_coord_status_artifacts(coord_feature_dir: Path, repo_root: Path) -> RollbackPoint:
     """Capture the coord event-log size + derived-snapshot bytes BEFORE emit.
 
     Paired with :func:`_restore_coord_status_artifacts` so the FR-004 coord
     fallback arm can roll an emitted-but-uncommitted event back if the subsequent
-    coord commit fails (rollback-symmetry with the transactional True-arm).
+    coord commit fails (rollback-symmetry with the transactional True-arm). Runs
+    inside :func:`coord_status_lock`; the primitive refuses a capture made outside it.
     """
-    events_path = coord_feature_dir / _EVENTS_FILENAME
-    status_path = coord_feature_dir / _DERIVED_STATUS_FILENAME
-    pre_event_size = events_path.stat().st_size if events_path.exists() else 0
-    pre_status = status_path.read_bytes() if status_path.exists() else None
-    return pre_event_size, pre_status
+    return capture_rollback_point(coord_feature_dir, repo_root=repo_root)
 
 
-def _restore_coord_status_artifacts(
-    coord_feature_dir: Path,
-    *,
-    pre_emit_event_size: int,
-    pre_emit_status_bytes: bytes | None,
-) -> None:
-    """Truncate/restore the coord status artifacts after a failed coord commit.
+def _restore_coord_status_artifacts(point: RollbackPoint, *, repo_root: Path) -> RollbackOutcome:
+    """Cut the coord status rows a failed coord commit left behind, or refuse.
 
     Mirrors ``workflow._restore_status_artifacts`` so the FR-004 coord fallback
-    arm is transactional-symmetric with the ``BookkeepingTransaction`` True-arm: a
-    commit failure truncates the just-appended event (and restores the derived
-    snapshot) rather than stranding an emitted-but-uncommitted event on the coord
-    worktree working copy.
+    arm is transactional-symmetric with the ``BookkeepingTransaction`` True-arm.
+    The Mission write primitive verifies before it cuts: a log that shrank, a tail
+    that is not whole rows, or rows already committed at HEAD are left untouched
+    (the refusal is logged by the primitive and returned for the caller).
     """
-    events_path = coord_feature_dir / _EVENTS_FILENAME
-    status_path = coord_feature_dir / _DERIVED_STATUS_FILENAME
     try:
-        if events_path.exists():
-            with events_path.open("ab") as fh:
-                fh.truncate(pre_emit_event_size)
+        return rollback_status_artifacts(point, repo_root=repo_root)
     except OSError:
-        _logger.exception("Could not truncate %s on coord commit failure", events_path)
-    try:
-        if pre_emit_status_bytes is None:
-            status_path.unlink(missing_ok=True)
-        else:
-            status_path.write_bytes(pre_emit_status_bytes)
-    except OSError:
-        _logger.exception("Could not restore %s on coord commit failure", status_path)
+        _logger.exception("Could not roll back %s on coord commit failure", point.events_path)
+        return RollbackOutcome(rolled_back=False, refusal=None, events_path=point.events_path)
 
 
 @contextmanager
@@ -436,19 +424,15 @@ def coord_status_lock(repo_root: Path, coord_feature_dir: Path) -> Iterator[Path
     """Hold the mission status lock (L1) that guards a coord-resident status log.
 
     The ONE definition of the lock the coord arm holds across emit -> commit
-    (:func:`_emit_on_coord_then_commit`): keyed on the coord feature dir's name
-    under *repo_root*'s git common dir, bounded by
-    ``BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS`` (read at call time). The commit
+    (:func:`_emit_on_coord_then_commit`): the Mission write lock for the coord
+    feature dir (keyed on its name under *repo_root*'s git common dir), bounded
+    by ``BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS`` (read at call time). The commit
     router takes it through this helper when it commits a coord-resident status
     log, so it can never sweep a transition's appended-but-uncommitted row
     (#5353). Re-entrant per thread. A timeout raises
     :class:`~specify_cli.status.locking.FeatureStatusLockTimeoutError`.
     """
-    with feature_status_lock(
-        repo_root,
-        coord_feature_dir.name,
-        timeout=BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS,
-    ) as held:
+    with mission_write_lock(coord_feature_dir, repo_root=repo_root, timeout=BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS) as held:
         yield held
 
 
@@ -540,7 +524,8 @@ def _emit_on_coord_then_commit(
     # design-notes/WP01-lock-rules.md for why this L1-across-git take is
     # accepted (rollback-safety) and bounded instead of eliminated.
     with coord_status_lock(identity.repo_root, coord_fd):
-        pre_size, pre_status = _snapshot_coord_status_artifacts(coord_fd)
+        point = _snapshot_coord_status_artifacts(coord_fd, identity.repo_root)
+        pre_size = point.pre_event_size
         committed = False
         try:
             result = emit(coord_fd)
@@ -560,11 +545,7 @@ def _emit_on_coord_then_commit(
             raise
         finally:
             if not committed:
-                _restore_coord_status_artifacts(
-                    coord_fd,
-                    pre_emit_event_size=pre_size,
-                    pre_emit_status_bytes=pre_status,
-                )
+                _restore_coord_status_artifacts(point, repo_root=identity.repo_root)
     _fan_out_committed_coord_tail(
         stream,
         mission_slug=mission_slug,
