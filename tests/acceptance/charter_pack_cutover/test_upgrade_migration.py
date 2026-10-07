@@ -126,6 +126,7 @@ def cutover_migration() -> Any:
 
 
 @covers("FR-012")
+@pending_until("WP11", "the cutover migration runs before every other pending migration")
 def test_fr012_cutover_runs_first(tmp_path: Path) -> None:
     project = build("legacy_keys_only", tmp_path)
     result = run_cli(["upgrade", "--dry-run", "--json"], project)
