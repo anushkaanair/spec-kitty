@@ -1,6 +1,6 @@
 """Tests for the data-only pack-lineage adapter (FR-006, FR-007, WP03).
 
-Covers :mod:`specify_cli.doctrine.pack_lineage`: the ``pack_id -> resolvable
+Covers :mod:`charter.offering.packs.pack_lineage`: the ``pack_id -> resolvable
 key`` adapter that feeds ``extends.resolve_extends_order`` (no second
 walker, C-002/NFR-001), fail-closed rejection of unresolvable
 ``parent_pack``/``accompanies_doctrine_pack`` edges, and the FR-007 positive
@@ -19,7 +19,7 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
 
 from charter.offering.packs.extends import resolve_extends_order
-from specify_cli.doctrine.pack_lineage import (
+from charter.offering.packs.pack_lineage import (
     PackLineageCycleError,
     UnresolvedDoctrinePackError,
     UnresolvedPackParentError,

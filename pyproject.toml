@@ -573,7 +573,6 @@ exclude = [
     "src/specify_cli/doctrine/builtin_manifest.py",
     "src/specify_cli/doctrine/org_charter_loader.py",
     "src/specify_cli/doctrine/pack_assembler.py",
-    "src/specify_cli/doctrine/pack_lineage.py",
     "src/specify_cli/doctrine/pack_manifest.py",
     "src/specify_cli/doctrine/pack_validator.py",
     "src/specify_cli/doctrine/snapshot.py",

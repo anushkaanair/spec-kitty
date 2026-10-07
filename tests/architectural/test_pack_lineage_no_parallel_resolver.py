@@ -2,13 +2,13 @@
 
 ``charter.offering.packs.extends.resolve_extends_order`` is the single canonical
 resolver for lineage-chain topology (cycle detection, missing-base
-detection, base-first ordering). ``src/specify_cli/doctrine/pack_lineage.py``
+detection, base-first ordering). ``src/charter/offering/packs/pack_lineage.py``
 adapts ``pack_id``-keyed edges into the name-keyed shape that resolver
 already consumes (see that module's docstring) -- it must never grow its own
 graph-walking logic.
 
 This guard AST-scans every ``pack_*.py`` module under
-``src/specify_cli/doctrine/`` (the pack-module surface pack_lineage.py
+``src/charter/offering/packs/`` (the pack-module surface pack_lineage.py
 belongs to) for two things:
 
 1. **Positive**: ``pack_lineage.py`` actually calls
@@ -41,7 +41,7 @@ import pytest
 pytestmark = pytest.mark.architectural
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_PACK_MODULES_ROOT = _REPO_ROOT / "src" / "specify_cli" / "doctrine"
+_PACK_MODULES_ROOT = _REPO_ROOT / "src" / "charter" / "offering" / "packs"
 _CANONICAL_RESOLVER = "resolve_extends_order"
 _ACCUMULATOR_CALLS = {"append", "insert", "extend"}
 
