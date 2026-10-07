@@ -280,6 +280,35 @@ def test_apply_unresolvable_effective_set_leaves_key_absent_and_warns(tmp_path: 
     assert any("activated_directives" in warning and "does-not-exist" in warning for warning in result.warnings), result.warnings
 
 
+def test_dry_run_reports_keys_it_would_leave_absent(tmp_path: Path) -> None:
+    """The preview matches a real run: an unresolvable absent key is listed as left absent, not promoted."""
+    config_path = _kittify_config(tmp_path)
+    _write(
+        config_path,
+        "vcs:\n  type: git\ncharter_packs:\n  org:\n    packs:\n      - name: gone\n        local_path: org-packs/does-not-exist\n",
+    )
+    _write(_answers_path(tmp_path), f"selected_directives:\n  - {_DIRECTIVE_010_CANONICAL}\n")
+    before = config_path.read_bytes()
+
+    result = UnifyCharterActivationMigration().apply(tmp_path, dry_run=True)
+
+    assert result.success is True
+    assert config_path.read_bytes() == before
+    assert result.changes_made == ["dry-run: nothing would be promoted"]
+    assert any(w.startswith("dry-run: activated_directives was left absent") and "does-not-exist" in w for w in result.warnings), result.warnings
+
+
+def test_dry_run_lists_promotions_of_resolved_keys(tmp_path: Path) -> None:
+    _write(_kittify_config(tmp_path), "activated_directives:\n  - 001-architectural-integrity-standard\n")
+    _write(_answers_path(tmp_path), f"selected_directives:\n  - {_DIRECTIVE_010_CANONICAL}\n")
+
+    result = UnifyCharterActivationMigration().apply(tmp_path, dry_run=True)
+
+    assert len(result.changes_made) == 1 and result.changes_made[0].startswith("dry-run: would promote")
+    assert "activated_directives" in result.changes_made[0]
+    assert not result.warnings
+
+
 # ---------------------------------------------------------------------------
 # resolve_selected_id_to_stem — unit coverage
 # ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@ from typing import Any
 
 from ruamel.yaml import YAML
 
-from charter.activation.activation_engine import promote_activations
+from charter.activation.activation_engine import EffectiveSet, PromotionOutcome, promote_activations
 from charter.activation.catalog import resolve_doctrine_root
 from charter.activation.kind_vocabulary import ArtifactKind, UnrepresentableDirectiveIdError, resolve_selected_id_to_stem
 
@@ -149,6 +149,22 @@ def _compute_promotions(
 
 def _unresolved_warning(unresolved: list[str]) -> str:
     return f"Unresolved answers-only ids skipped (not promoted): {', '.join(unresolved)}"
+
+
+def _dry_run_result(promotions: dict[str, list[str]], effective_sets: dict[str, EffectiveSet], unresolved: list[str]) -> MigrationResult:
+    """Preview what a real run does: the promotions it makes and the keys it leaves absent.
+
+    A key whose effective set is unresolved is never written by a real run
+    (``promote_activations`` leaves it absent), so the preview lists it among
+    the left-absent keys, with the same wording, rather than as a promotion.
+    """
+    preview = PromotionOutcome(left_absent={key: entry.reason or "unknown" for key, entry in effective_sets.items() if not entry.resolved})
+    summary = [f"{key}: +{ids}" for key, ids in promotions.items() if key not in preview.left_absent]
+    changes = [f"dry-run: would promote {summary}"] if summary else ["dry-run: nothing would be promoted"]
+    warnings = [f"dry-run: {message}" for message in preview.left_absent_messages()]
+    if unresolved:
+        warnings.append(_unresolved_warning(unresolved))
+    return MigrationResult(success=True, changes_made=changes, warnings=warnings)
 
 
 @MigrationRegistry.register
@@ -249,29 +265,27 @@ class UnifyCharterActivationMigration(BaseMigration):
                 result.warnings = [_unresolved_warning(unresolved)]
             return result
 
-        if dry_run:
-            summary = [f"{key}: +{ids}" for key, ids in promotions.items()]
-            result = MigrationResult(success=True, changes_made=[f"dry-run: would promote {summary}"])
-            if unresolved:
-                result.warnings = [_unresolved_warning(unresolved)]
-            return result
-
         # Lazy (C-002): resolving the effective set builds the doctrine
         # service; registry discovery must not pay for that.
         from charter.activation.effective_set import resolve_effective_sets
+
+        absent = [key for key in promotions if config_data.get(key) is None]
+        effective_sets = resolve_effective_sets(project_path, absent) if absent else {}
+
+        if dry_run:
+            return _dry_run_result(promotions, effective_sets, unresolved)
 
         def _save(path: Path, data: dict[str, Any]) -> None:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("w", encoding="utf-8") as fh:
                 yaml.dump(data, fh)
 
-        absent = [key for key in promotions if config_data.get(key) is None]
         outcome = promote_activations(
             promotions,
             config_path=config_path,
             config_data=config_data,
             save=_save,
-            effective_sets=resolve_effective_sets(project_path, absent) if absent else {},
+            effective_sets=effective_sets,
         )
 
         changes_made = [f"Promoted {plan.activated} into {plan.yaml_key}" for plan in outcome.committed if plan.activated]
