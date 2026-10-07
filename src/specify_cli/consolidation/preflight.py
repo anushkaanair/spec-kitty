@@ -48,7 +48,12 @@ from specify_cli.post_merge.review_artifact_consistency import (
     run_review_artifact_consistency_preflight,
 )
 from specify_cli.missions._read_path_resolver import mission_dir_aliases
-from specify_cli.status import REVIEWER_SELF_APPROVAL
+from specify_cli.status import (
+    REVIEWER_SELF_APPROVAL,
+    actor_full_identity,
+    latest_implementer_event,
+    read_events_lenient,
+)
 
 if TYPE_CHECKING:
     from specify_cli.consolidation.push_preflight import TargetBranchSyncStatus
@@ -506,9 +511,9 @@ def _enforce_review_artifact_consistency(
 
 
 def _latest_actor_for_transition(feature_dir: Path, wp_id: str, to_lane: str) -> str | None:
-    """Return the actor on WP's most recent transition into *to_lane*.
+    """Return the full identity of the actor on WP's latest transition into *to_lane*, in append order.
 
-    Scans the raw event log rather than the reduced snapshot, because the
+    Reads the event log rather than the reduced snapshot, because the
     snapshot's ``actor`` slot is overwritten on every transition -- it can
     only ever tell us who did the LATEST transition of any kind, never who
     specifically claimed/implemented versus who specifically approved.
@@ -517,34 +522,27 @@ def _latest_actor_for_transition(feature_dir: Path, wp_id: str, to_lane: str) ->
     approval (``--attest-approved-reviewed``, #5668) is a forced ``approved ->
     approved`` record, not a review, so it is never the approving transition.
     """
-    events_path = feature_dir / _STATUS_EVENTS_FILENAME
-    if not events_path.exists():
+    latest: str | None = None
+    for event in read_events_lenient(feature_dir):
+        if event.wp_id != wp_id or str(event.to_lane) != to_lane or is_approved_reviewed_attestation(event.policy_metadata):
+            continue
+        latest = actor_full_identity(event.actor) or latest
+    return latest
+
+
+def _latest_implementer_identity(feature_dir: Path, wp_id: str) -> str | None:
+    """Full recorded identity of the WP's implementer of record (#5340).
+
+    Delegates to the one projection in ``status.review_roles`` (a reviewer's
+    rework verdict is not an implementation claim) and keeps the full-identity
+    string, not the tool-scoped key, so same-tool/different-profile pairs stay
+    distinct.
+    """
+    event = latest_implementer_event(read_events_lenient(feature_dir), wp_id)
+    if event is None:
         return None
-    try:
-        raw_lines = events_path.read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return None
-    latest_key: tuple[str, str] = ("", "")
-    latest_actor: str | None = None
-    for raw_line in raw_lines:
-        try:
-            event = json.loads(raw_line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(event, dict):
-            continue
-        if event.get("wp_id") != wp_id or event.get("to_lane") != to_lane:
-            continue
-        if is_approved_reviewed_attestation(event.get("policy_metadata")):
-            continue
-        actor = event.get("actor")
-        if not actor or not str(actor).strip():
-            continue
-        key = (str(event.get("at") or ""), str(event.get("event_id") or ""))
-        if key >= latest_key:
-            latest_key = key
-            latest_actor = str(actor).strip()
-    return latest_actor
+    identity: str | None = actor_full_identity(event.actor)
+    return identity
 
 
 def _independent_reviewer_confirmed(feature_dir: Path, wp_id: str) -> bool:
@@ -559,7 +557,7 @@ def _independent_reviewer_confirmed(feature_dir: Path, wp_id: str) -> bool:
     Returns False (never suppress) when either actor is missing/unknown --
     absence of evidence is not evidence of an independent review.
     """
-    implementer = _latest_actor_for_transition(feature_dir, wp_id, "in_progress")
+    implementer = _latest_implementer_identity(feature_dir, wp_id)
     reviewer = _latest_actor_for_transition(feature_dir, wp_id, "approved")
     if not implementer or not reviewer:
         return False
