@@ -6,13 +6,14 @@ import ast
 import importlib
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
 
 from ._requirements import REMOVED_SKILL_IDS, REPO_ROOT, RETIRED_EXTRA_SKILL_IDS, is_living_path
 from ._support import covers, describe, git_init_commit, load_yaml, output_of, pending_until, read_json_output, run_cli
-from .legacy_fixtures import MISSION_TYPES, EDITED_SKILL, finish, project_from_template, write_doctrine_pack, write_text, write_yaml
+from .legacy_fixtures import MISSION_TYPES, EDITED_SKILL, finish, project_from_template, write_doctrine_pack, write_yaml
 from .test_package_split import _python_names
 
 SKILLS_ROOT = REPO_ROOT / "src" / "charter" / "offering" / "skills"
@@ -25,6 +26,8 @@ NEW_SKILLS = (
     "spk-practice-semantic-compression",
     "spk-practice-show-me",
 )
+#: Shipped bytes of removed skills, frozen at the mission base (WP01).
+STATIC_REMOVED_SKILLS = REPO_ROOT / "tests" / "fixtures" / "charter_pack_cutover" / "static" / "removed_skills"
 GLOSSARY = REPO_ROOT / "docs" / "context" / "charter.md"
 #: The FR-018-exempt glossary surfaces that record retired terms as deprecated (WP24 plan).
 GLOSSARY_SEED = REPO_ROOT / ".kittify" / "glossaries" / "spec_kitty_core.yaml"
@@ -56,8 +59,22 @@ def test_fr008_skill_families_present() -> None:
 def test_fr008_removed_names_are_retired() -> None:
     retired = importlib.import_module("specify_cli.skills.retired").RETIRED_CANONICAL_SKILL_NAMES
     assert retired, "control: the retired set is the real one"
-    missing = sorted(set(REMOVED_SKILL_IDS) | set(RETIRED_EXTRA_SKILL_IDS) - set(retired))
+    missing = sorted((set(REMOVED_SKILL_IDS) | set(RETIRED_EXTRA_SKILL_IDS)) - set(retired))
     assert missing == [], missing
+
+
+def _install_old_global_skill(catalog: Path, name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Install *name* into the user-global roots the way an older CLI did (its shipped bytes, recorded in the global inventory).
+
+    The global retirement removes only inventory-owned, unchanged copies; a hand-written
+    directory under a retired name is preserved as unproven content (asset preservation, #4017).
+    """
+    agent_skills = importlib.import_module("specify_cli.runtime.agent_skills")
+    registry = importlib.import_module("specify_cli.skills.registry")
+    shutil.copytree(STATIC_REMOVED_SKILLS / name, catalog / name)
+    with monkeypatch.context() as patch:
+        patch.setattr(agent_skills, "_discover_registry", lambda: registry.SkillRegistry(catalog))
+        agent_skills.ensure_global_agent_skills()
 
 
 @covers("FR-008", "US4-1")
@@ -67,7 +84,8 @@ def test_fr008_upgrade_installs_new_and_removes_old(tmp_path: Path, monkeypatch:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
     global_copy = home / ".claude" / "skills" / "spk-doctrine-charter" / "SKILL.md"
-    write_text(global_copy, "old global copy\n")
+    _install_old_global_skill(tmp_path / "old-catalog", "spk-doctrine-charter", monkeypatch)
+    assert global_copy.is_file(), "control: the old skill is installed in the user-global root"
     project = project_from_template("installed_removed_skills", tmp_path / "p")
     upgraded = run_cli(["upgrade", "--yes", "--no-worktrees"], project)
     # The fixture's edited copy is a managed file left for review: the upgrade contract exits 1 for it.
