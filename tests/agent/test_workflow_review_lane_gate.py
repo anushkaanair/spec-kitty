@@ -20,6 +20,7 @@ from specify_cli.coordination.workspace import CoordinationWorkspace
 from specify_cli.lanes.lifecycle_sync import LaneAutoRebaseSyncError
 from specify_cli.frontmatter import write_frontmatter
 from specify_cli.status.emit import emit_status_transition
+from specify_cli.status import RollbackPoint
 from specify_cli.status.store import append_event
 from specify_cli.status.models import StatusEvent, Lane, TransitionRequest
 from specify_cli.task_utils import extract_scalar, split_frontmatter
@@ -448,6 +449,10 @@ def test_workflow_implement_emits_rework_to_coord_status_path(
     assert primary_snapshot.work_packages["WP01"]["lane"] == Lane.PLANNED
 
 
+BEFORE_ROW = '{"event_id":"before"}\n'
+AFTER_ROW = '{"event_id":"after"}\n'
+
+
 def test_commit_workflow_change_syncs_lane_after_coord_commit(
     workflow_repo: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -488,15 +493,13 @@ def test_commit_workflow_change_syncs_lane_after_coord_commit(
 
     workflow._commit_workflow_change(
         repo_root=workflow_repo,
-        feature_dir=feature_dir,
         mission_slug=mission_slug,
         target_branch="main",
         paths=[event_path],
         message="chore: Start WP01 implementation [agent]",
         operation="planned -> claimed for WP01",
         wp_id="WP01",
-        pre_emit_event_size=0,
-        pre_emit_status_bytes=None,
+        rollback_point=RollbackPoint(events_path=event_path, status_path=feature_dir / "status.json", pre_event_size=0, pre_status_bytes=None, events_existed=True),
         auto_rebase_lane_after_commit=True,
     )
 
@@ -526,7 +529,7 @@ def test_commit_workflow_change_reverts_coord_commit_on_lane_sync_refusal(
         encoding="utf-8",
     )
     event_path = feature_dir / "status.events.jsonl"
-    event_path.write_text("before\n", encoding="utf-8")
+    event_path.write_text(BEFORE_ROW, encoding="utf-8")
     status_path = feature_dir / "status.json"
     status_path.write_text('{"lane":"planned"}\n', encoding="utf-8")
     receipt = CommitReceipt(
@@ -540,7 +543,7 @@ def test_commit_workflow_change_reverts_coord_commit_on_lane_sync_refusal(
 
     def fake_commit(**_kwargs: object) -> CommitReceipt:
         calls.append("commit")
-        event_path.write_text("before\nafter\n", encoding="utf-8")
+        event_path.write_text(BEFORE_ROW + AFTER_ROW, encoding="utf-8")
         status_path.write_text('{"lane":"claimed"}\n', encoding="utf-8")
         workflow._record_receipt(
             coord_branch,
@@ -573,21 +576,21 @@ def test_commit_workflow_change_reverts_coord_commit_on_lane_sync_refusal(
     with pytest.raises(typer.Exit):
         workflow._commit_workflow_change(
             repo_root=workflow_repo,
-            feature_dir=feature_dir,
             mission_slug=mission_slug,
             target_branch="main",
             paths=[event_path],
             message="chore: Start WP01 implementation [agent]",
             operation="planned -> claimed for WP01",
             wp_id="WP01",
-            pre_emit_event_size=len("before\n"),
-            pre_emit_status_bytes=b'{"lane":"planned"}\n',
+            rollback_point=RollbackPoint(
+                events_path=event_path, status_path=status_path, pre_event_size=len(BEFORE_ROW), pre_status_bytes=b'{"lane":"planned"}\n', events_existed=True
+            ),
             auto_rebase_lane_after_commit=True,
         )
 
     assert calls == ["commit", "sync", "revert"]
     assert workflow._WORKFLOW_COMMIT_RECEIPTS[-1]["outcome"] == "refused"
-    assert event_path.read_text(encoding="utf-8") == "before\n"
+    assert event_path.read_text(encoding="utf-8") == BEFORE_ROW
     assert status_path.read_text(encoding="utf-8") == '{"lane":"planned"}\n'
 
 

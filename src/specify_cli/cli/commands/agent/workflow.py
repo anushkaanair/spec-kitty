@@ -96,6 +96,7 @@ from specify_cli.review.cycle import (
 )
 from specify_cli.status import feature_status_lock  # noqa: F401 -- late-bound via workflow_executor._wf() / patched by tests
 from specify_cli.status import Lane
+from specify_cli.status import RollbackOutcome, RollbackPoint, rollback_status_artifacts
 from specify_cli.status import (
     ResolvedBinding,
     read_wp_frontmatter,
@@ -283,27 +284,16 @@ def _mark_receipt_refused(*, commit_sha: str) -> None:
 
 def _restore_status_artifacts(
     *,
-    events_path: Path,
-    pre_emit_event_size: int,
-    status_path: Path,
-    pre_emit_status_bytes: bytes | None,
-) -> None:
-    """Restore canonical status files after a failed workflow commit."""
-    try:
-        if events_path.exists():
-            with events_path.open("ab") as _fh:
-                _fh.truncate(pre_emit_event_size)
-    except OSError:
-        logger.exception("Could not truncate %s on commit failure", events_path)
+    rollback_point: RollbackPoint,
+    repo_root: Path | None = None,
+) -> RollbackOutcome:
+    """Roll the canonical status files back to *rollback_point* after a failed workflow commit.
 
-    try:
-        if pre_emit_status_bytes is None:
-            status_path.unlink(missing_ok=True)
-        else:
-            status_path.parent.mkdir(parents=True, exist_ok=True)
-            status_path.write_bytes(pre_emit_status_bytes)
-    except OSError:
-        logger.exception("Could not restore %s on commit failure", status_path)
+    Cuts only the rows this operation appended and refuses (``STATUS_ROLLBACK_REFUSED``,
+    files left byte-identical) when the tail is not exactly that, e.g. because it is
+    already committed (#5819, #5804). The caller reports the returned outcome.
+    """
+    return rollback_status_artifacts(rollback_point, repo_root=repo_root)
 
 
 def _safe_commit_recovery_commit_sha(exc: BaseException) -> str | None:
@@ -1589,6 +1579,9 @@ def implement(
 
     # WP06 T029: reset the commit-receipt accumulator for this invocation.
     _reset_workflow_receipts()
+    # #5796: the write-checkout claim lock of a single_branch repo-root claim is entered
+    # on this stack at the guard below and released when the command finishes.
+    claim_stack = contextlib.ExitStack()
     try:
         # Get repo root and feature slug
         repo_root = locate_project_root()
@@ -1675,10 +1668,12 @@ def implement(
         # repository root checkout, which always exists, so it never reaches
         # ``_create_workspace``. Run the shared claim seam here instead, before
         # any status event: the write-checkout refusals, then the claim base.
+        _executor.enter_checkout_claim_lock(claim_stack, main_repo_root, mission_slug, workspace)
         _guard_repo_root_claim(main_repo_root, mission_slug, normalized_wp_id, workspace)
 
         _ensure_workspace_materialized(workspace, normalized_wp_id, _create_workspace, _reenter_self_heal)
         workspace_path = workspace.worktree_path
+        _executor.warn_shared_workspace_writers(main_repo_root, mission_slug, normalized_wp_id, workspace, agent)
 
         # Seam C-005 (#3281/FR-007): the claim-ancestry gate runs HERE --
         # POST-materialize (after the self-heal above re-runs the planning-
@@ -1820,6 +1815,8 @@ def implement(
             _print_commit_summary(command_name="implement")
         print(f"Error: {e}")
         raise typer.Exit(1)
+    finally:
+        claim_stack.close()
 
     # WP06 T029: terminal commit summary for the implement command.
     _print_commit_summary(command_name="implement")
@@ -2334,6 +2331,7 @@ def review(
         workspace = resolve_workspace_for_wp(main_repo_root, mission_slug, normalized_wp_id)
         workspace = _prepare_review_workspace(workspace, main_repo_root, normalized_wp_id, agent, create_from=review_create_from)
         workspace_path = workspace.worktree_path
+        _executor.warn_shared_workspace_writers(main_repo_root, mission_slug, normalized_wp_id, workspace, agent)
 
         # Resolve git context (branch name, base branch, commit count)
         review_ctx = _resolve_review_context(workspace_path, main_repo_root, mission_slug, normalized_wp_id, wp.frontmatter)

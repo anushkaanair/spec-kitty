@@ -19,14 +19,34 @@ repo-root checkout* no allocation ever touches) and out of
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from kernel.git import GitPath
 from mission_runtime import MissionArtifactKind, MissionTopology, is_single_branch, placement_seam, single_branch_write_ref
 
-__all__ = ["dirty_paths", "in_progress_wps_in_write_checkout"]
+__all__ = ["SharedWorkspaceWriter", "dirty_paths", "in_progress_wps_in_write_checkout", "shared_workspace_writers"]
+
+#: Lanes in which a WP counts as a writer of its workspace (advisory #5099 warning).
+_WRITER_LANES: frozenset[str] = frozenset({"in_progress", "in_review"})
+_IN_PROGRESS_LANES: frozenset[str] = frozenset({"in_progress"})
+
+
+@dataclass(frozen=True)
+class SharedWorkspaceWriter:
+    """Another actor's WP that is ``in_progress`` / ``in_review`` in the same workspace."""
+
+    mission_slug: str
+    wp_id: str
+    lane: str
+    actor: str | None
+
+    def warning(self) -> str:
+        """The one-line advisory rendered by ``agent action implement`` / ``review`` (#5099)."""
+        by = self.actor or "an unknown actor"
+        return f"Warning: {self.mission_slug}/{self.wp_id} is {self.lane} by {by} in this workspace; one writer per checkout (#5099)."
 
 
 def _repo_root_lane_claim(feature_dir: Path) -> tuple[frozenset[str], str | None]:
@@ -182,9 +202,20 @@ def in_progress_wps_in_write_checkout(
     the caller's own WP, so resuming a WP it already holds ``in_progress``
     never reads as occupancy by another WP (contract's resume exemption).
     """
+    occupied = _writers_in_write_checkout(repo_root, write_checkout, lanes=_IN_PROGRESS_LANES, exclude=exclude)
+    return [(writer.mission_slug, writer.wp_id) for writer in occupied]
+
+
+def _writers_in_write_checkout(
+    repo_root: Path,
+    write_checkout: Path,
+    *,
+    lanes: Collection[str],
+    exclude: tuple[str, str] | None,
+) -> list[SharedWorkspaceWriter]:
+    """The occupancy scan of :func:`in_progress_wps_in_write_checkout`, generalised to any *lanes*."""
     from specify_cli.context.mission_resolver import FsMissionResolver
     from specify_cli.core.git_ops import get_current_branch
-    from specify_cli.status import Lane
     from specify_cli.status import read_events as _read_events
     from specify_cli.status import reduce as _reduce_events
 
@@ -196,7 +227,7 @@ def in_progress_wps_in_write_checkout(
 
     # One branch read per scan (NFR-001): every candidate is compared to it.
     current_branch = get_current_branch(write_checkout_resolved)
-    occupied: list[tuple[str, str]] = []
+    occupied: list[SharedWorkspaceWriter] = []
     # One walk of kitty-specs/ (the resolver port); the per-mission seam
     # lookup would re-walk the tree for every mission (quadratic).
     for mission in FsMissionResolver(repo_root).all_missions():
@@ -211,9 +242,57 @@ def in_progress_wps_in_write_checkout(
         for wp_id, wp_state in snapshot.work_packages.items():
             if wp_id not in repo_root_wp_ids or exclude == (mission_slug, wp_id):
                 continue
-            if wp_state.get("lane") == Lane.IN_PROGRESS:
-                occupied.append((mission_slug, wp_id))
+            lane = str(wp_state.get("lane"))
+            if lane in lanes:
+                actor = wp_state.get("actor")
+                occupied.append(SharedWorkspaceWriter(mission_slug, wp_id, lane, str(actor) if actor else None))
     return occupied
+
+
+def _lane_mates_writing(repo_root: Path, mission_slug: str, wp_id: str, lane_wp_ids: Sequence[str]) -> list[SharedWorkspaceWriter]:
+    """Other WPs of the same lane worktree that are ``in_progress`` / ``in_review``."""
+    from specify_cli.status import read_events as _read_events
+    from specify_cli.status import reduce as _reduce_events
+
+    mates = [other for other in lane_wp_ids if other != wp_id]
+    if not mates:
+        return []
+    snapshot = _reduce_events(_read_events(placement_seam(repo_root, mission_slug).read_dir(MissionArtifactKind.STATUS_STATE)))
+    writers: list[SharedWorkspaceWriter] = []
+    for other in mates:
+        state = snapshot.work_packages.get(other)
+        lane = str(state.get("lane")) if state else ""
+        if lane in _WRITER_LANES:
+            actor = state.get("actor") if state else None
+            writers.append(SharedWorkspaceWriter(mission_slug, other, lane, str(actor) if actor else None))
+    return writers
+
+
+def shared_workspace_writers(
+    repo_root: Path,
+    mission_slug: str,
+    wp_id: str,
+    workspace: Any,
+    actor: str | None,
+) -> list[SharedWorkspaceWriter]:
+    """Other actors' WPs ``in_progress`` / ``in_review`` in *workspace* (advisory, #5099; never refuses).
+
+    A single_branch repo-root workspace is the shared write checkout, so the
+    cross-Mission occupancy scan applies (generalised to both writer lanes). A lane
+    worktree is shared by the other WPs of the same lane. The calling WP is
+    excluded, and only a writer whose actor differs from *actor* is reported (an
+    unknown actor counts as different).
+    """
+    from mission_runtime import resolve_topology
+    from specify_cli.lanes.compute import is_repo_root_lane
+
+    if is_repo_root_lane(workspace):
+        if not is_single_branch(resolve_topology(repo_root, mission_slug)):
+            return []
+        found = _writers_in_write_checkout(repo_root, repo_root, lanes=_WRITER_LANES, exclude=(mission_slug, wp_id))
+    else:
+        found = _lane_mates_writing(repo_root, mission_slug, wp_id, list(getattr(workspace, "lane_wp_ids", []) or []))
+    return [writer for writer in found if writer.actor is None or writer.actor != actor]
 
 
 def _is_owned_path(path: GitPath, owned_prefixes: Sequence[str]) -> bool:

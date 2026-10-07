@@ -11,6 +11,7 @@ import specify_cli.cli.commands.agent.workflow as workflow
 import specify_cli.coordination.transaction as transaction_module
 from specify_cli.coordination.transaction import BookkeepingCommitFailed
 from specify_cli.git.commit_helpers import SafeCommitRecoveryFailed
+from specify_cli.status import RollbackPoint
 
 pytestmark = [pytest.mark.integration]
 
@@ -87,15 +88,15 @@ def test_modern_workflow_does_not_restore_after_post_commit_recovery_failure(
     with pytest.raises(typer.Exit):
         workflow._commit_workflow_change(
             repo_root=repo_root,
-            feature_dir=feature_dir,
             mission_slug="demo",
             target_branch="main",
             paths=[events_path, status_path],
             message="status: demo",
             operation="planned -> claimed",
             wp_id="WP01",
-            pre_emit_event_size=pre_size,
-            pre_emit_status_bytes=pre_status,
+            rollback_point=RollbackPoint(
+                events_path=events_path, status_path=status_path, pre_event_size=pre_size, pre_status_bytes=pre_status, events_existed=True
+            ),
         )
 
     assert events_path.read_bytes() == after_events
@@ -121,15 +122,15 @@ def test_legacy_workflow_does_not_restore_after_post_commit_recovery_failure(
     with pytest.raises(typer.Exit):
         workflow._commit_workflow_change(
             repo_root=repo_root,
-            feature_dir=feature_dir,
             mission_slug="legacy",
             target_branch="main",
             paths=[events_path, status_path],
             message="status: legacy",
             operation="planned -> claimed",
             wp_id="WP01",
-            pre_emit_event_size=pre_size,
-            pre_emit_status_bytes=pre_status,
+            rollback_point=RollbackPoint(
+                events_path=events_path, status_path=status_path, pre_event_size=pre_size, pre_status_bytes=pre_status, events_existed=True
+            ),
         )
 
     assert events_path.read_bytes() == after_events

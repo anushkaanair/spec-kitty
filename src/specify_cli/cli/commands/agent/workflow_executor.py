@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -62,6 +63,7 @@ from specify_cli.cli.commands.agent.workflow_cores import (
 from specify_cli.core.constants import MISSION_TYPE_RESEARCH
 from specify_cli.mission import get_deliverables_path, get_mission_type
 from specify_cli.status import FORCE_NOTE_HINT, Lane, WorkPackageClaimConflict, WorkPackageStartRejected, read_wp_frontmatter
+from specify_cli.status import RollbackOutcome, RollbackPoint, RollbackRefusal, capture_rollback_point, mission_write_lock
 from specify_cli import status as _status_facade
 from specify_cli.task_utils import extract_scalar
 from specify_cli.workspace.context import ResolvedWorkspace, husk_resolution_error
@@ -113,18 +115,32 @@ def _locate_wp(repo_root: Path, mission_slug: str, normalized_wp_id: str) -> Wor
 class _CommitFailureContext:
     """The status-artifact rollback inputs threaded to :func:`_handle_commit_failure`.
 
-    coord-commit-integrity (campsite, Sonar S107): bundles the four rollback
-    coordinates — the event-log path + its pre-emit size and the status-snapshot
-    path + its pre-emit bytes — that ``_restore_status_artifacts`` needs to
-    truncate/restore the artifacts to their pre-emit state. Both ``except`` arms
-    in :func:`commit_workflow_change` share one identical instance, so the
-    failure handler takes this frozen bundle plus only the arm-specific fields.
+    The rollback point is captured under the Mission write lock before the claim's
+    first status write; ``repo_root`` locates that lock for the rollback itself.
     """
 
-    events_path: Path
-    pre_emit_event_size: int
-    status_path: Path
-    pre_emit_status_bytes: bytes | None
+    rollback_point: RollbackPoint
+    repo_root: Path
+
+
+def _committed_receipt_sha(repo_root: Path, ref: str) -> str | None:
+    """Tip of *ref* (the commit that carries an already-committed claim), or ``None`` when unreadable."""
+    from kernel.git import run_git
+
+    result = run_git(repo_root, "rev-parse", "--verify", "--quiet", ref, check=False)
+    if result.returncode != 0:
+        return None
+    return result.stdout.decode("utf-8", "replace").strip() or None
+
+
+def _report_refused_rollback(outcome: RollbackOutcome, *, wp_id: str, operation: str, exc: BaseException | None) -> bool:
+    """Print the truthful account of a rollback that left the files alone; return ``True`` when the claim was committed."""
+    if outcome.refusal is RollbackRefusal.TAIL_ALREADY_COMMITTED:
+        cause = f": {exc}" if exc is not None else ""
+        print(f"{wp_id} claim was committed; the follow-up {operation} commit failed{cause}")
+        return True
+    print(outcome.message())
+    return False
 
 
 def _handle_commit_failure(
@@ -133,44 +149,41 @@ def _handle_commit_failure(
     receipt_ref: str,
     message: str,
     wp_id: str,
+    operation: str,
     rollback: _CommitFailureContext,
     error_prefix: str,
     include_recovery_note: bool,
 ) -> NoReturn:
-    """Roll back status artifacts, record a ``refused`` receipt, surface, exit.
+    """Roll back status artifacts, record the receipt, surface, exit.
 
     coord-commit-integrity WP01/T002 (campsite): the shared body of the two
     copy-paste ``except`` arms in :func:`commit_workflow_change` (the
-    BookkeepingTransaction arm and the legacy ``safe_commit`` arm). Extracted
-    verbatim so adding the T003 misroute guard does not push
-    ``commit_workflow_change`` over the complexity ceiling.
+    BookkeepingTransaction arm and the legacy ``safe_commit`` arm).
 
     When a chained ``safe_commit`` recovery already created a commit
     (``_safe_commit_recovery_commit_sha`` returns a SHA) the status artifacts
-    are NOT rolled back (the commit is real); otherwise the event log / status
-    snapshot are restored to their pre-emit bytes (from ``rollback``).
-    ``error_prefix`` is the arm-specific message head (``": {exc}"`` is always
-    appended); the legacy arm additionally appends a recovery note
-    (``include_recovery_note``).
+    are NOT rolled back (the commit is real). Otherwise the rows this operation
+    appended are cut under the Mission write lock; a rollback that refuses
+    (``STATUS_ROLLBACK_REFUSED``) leaves the files untouched, and when the rows
+    are already committed the claim is reported as committed (#5819, #5804) and
+    its receipt recorded as ``committed``. ``error_prefix`` is the arm-specific
+    message head (``": {exc}"`` is always appended); the legacy arm additionally
+    appends a recovery note (``include_recovery_note``).
     """
     w = _wf()
     recovery_commit_sha = w._safe_commit_recovery_commit_sha(exc)
+    outcome: RollbackOutcome | None = None
     if recovery_commit_sha is None:
-        w._restore_status_artifacts(
-            events_path=rollback.events_path,
-            pre_emit_event_size=rollback.pre_emit_event_size,
-            status_path=rollback.status_path,
-            pre_emit_status_bytes=rollback.pre_emit_status_bytes,
-        )
-    w._record_receipt(
-        receipt_ref,
-        message,
-        "refused",
-        sha=recovery_commit_sha,
-        wp_id=wp_id,
-    )
+        outcome = w._restore_status_artifacts(rollback_point=rollback.rollback_point, repo_root=rollback.repo_root)
+    if outcome is not None and outcome.refusal is RollbackRefusal.TAIL_ALREADY_COMMITTED:
+        w._record_receipt(receipt_ref, message, "committed", sha=_committed_receipt_sha(rollback.repo_root, receipt_ref), wp_id=wp_id)
+        _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=exc)
+        raise typer.Exit(1) from exc
+    w._record_receipt(receipt_ref, message, "refused", sha=recovery_commit_sha, wp_id=wp_id)
     error_text = f"{error_prefix}: {exc}"
-    if include_recovery_note:
+    if outcome is not None and not outcome.rolled_back:
+        error_text = f"{error_text}. {outcome.message()}"
+    elif include_recovery_note:
         recovery_note = (
             "Commit was created before staging recovery failed; status artifacts were not rolled back."
             if recovery_commit_sha is not None
@@ -184,15 +197,13 @@ def _handle_commit_failure(
 def commit_workflow_change(
     *,
     repo_root: Path,
-    feature_dir: Path,
     mission_slug: str,
     target_branch: str,
     paths: list[Path],
     message: str,
     operation: str,
     wp_id: str,
-    pre_emit_event_size: int,
-    pre_emit_status_bytes: bytes | None,
+    rollback_point: RollbackPoint,
     auto_rebase_lane_after_commit: bool = False,
 ) -> None:
     """Commit a workflow change with atomic event-log rollback on failure.
@@ -204,7 +215,7 @@ def commit_workflow_change(
 
     For legacy missions without ``coordination_branch``, falls back to
     the bare :func:`safe_commit` path but still truncates the event log
-    on commit failure to ``pre_emit_event_size``. WP08 will replace this
+    on commit failure to ``rollback_point``. WP08 will replace this
     fallback with a proper legacy bridge.
 
     Records the outcome via ``_record_receipt`` so the T029 terminal
@@ -231,14 +242,7 @@ def commit_workflow_change(
         repo_root=repo_root, mission_slug=mission_slug, kind=MissionArtifactKind.PRIMARY_METADATA
     )
     coord_branch, mission_id, mid8 = w._load_coord_branch_meta(primary_meta_dir)
-    events_path = feature_dir / w._STATUS_EVENTS_FILENAME
-    status_path = feature_dir / w._STATUS_FILENAME
-    rollback_ctx = _CommitFailureContext(
-        events_path=events_path,
-        pre_emit_event_size=pre_emit_event_size,
-        status_path=status_path,
-        pre_emit_status_bytes=pre_emit_status_bytes,
-    )
+    rollback_ctx = _CommitFailureContext(rollback_point=rollback_point, repo_root=repo_root)
     # T017: the seam-resolved STATUS_STATE placement. The MECHANISM choice
     # below (BookkeepingTransaction vs. the legacy safe_commit fallback) still
     # keys off ``_load_coord_branch_meta`` — it needs the concrete
@@ -278,12 +282,9 @@ def commit_workflow_change(
                 wp_id=wp_id,
             )
         except typer.Exit:
-            w._restore_status_artifacts(
-                events_path=events_path,
-                pre_emit_event_size=pre_emit_event_size,
-                status_path=status_path,
-                pre_emit_status_bytes=pre_emit_status_bytes,
-            )
+            outcome = w._restore_status_artifacts(rollback_point=rollback_point, repo_root=repo_root)
+            if not outcome.rolled_back:
+                _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=None)
             raise
         except Exception as exc:  # noqa: BLE001 — surface + exit
             _handle_commit_failure(
@@ -291,6 +292,7 @@ def commit_workflow_change(
                 receipt_ref=str(coord_branch),
                 message=message,
                 wp_id=wp_id,
+                operation=operation,
                 rollback=rollback_ctx,
                 error_prefix=f"Error: Failed to record {operation} via BookkeepingTransaction",
                 include_recovery_note=False,
@@ -307,12 +309,9 @@ def commit_workflow_change(
                 try:
                     w._revert_coordination_commit(receipt)
                     w._mark_receipt_refused(commit_sha=receipt.commit_sha)
-                    w._restore_status_artifacts(
-                        events_path=events_path,
-                        pre_emit_event_size=pre_emit_event_size,
-                        status_path=status_path,
-                        pre_emit_status_bytes=pre_emit_status_bytes,
-                    )
+                    outcome = w._restore_status_artifacts(rollback_point=rollback_point, repo_root=repo_root)
+                    if not outcome.rolled_back:
+                        _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=exc)
                 except Exception as rollback_exc:  # noqa: BLE001
                     print(f"Error: Failed to rollback lifecycle state after lane sync refusal: {rollback_exc}")
                 w._render_lane_auto_rebase_failure(exc)
@@ -359,10 +358,54 @@ def commit_workflow_change(
             receipt_ref=placement.ref,
             message=message,
             wp_id=wp_id,
+            operation=operation,
             rollback=rollback_ctx,
             error_prefix=f"Error: Failed to commit workflow status update for {wp_id}",
             include_recovery_note=True,
         )
+
+
+def _is_single_branch_repo_root_claim(main_repo_root: Path, mission_slug: str, workspace: ResolvedWorkspace) -> bool:
+    """True when *workspace* is a single_branch Mission's repository-root lane (the shared write checkout)."""
+    from mission_runtime import is_single_branch, resolve_topology
+    from specify_cli.lanes.compute import is_repo_root_lane
+
+    return bool(is_repo_root_lane(workspace)) and is_single_branch(resolve_topology(main_repo_root, mission_slug))
+
+
+def enter_checkout_claim_lock(stack: ExitStack, main_repo_root: Path, mission_slug: str, workspace: ResolvedWorkspace) -> None:
+    """Hold the write-checkout claim lock on *stack* for a single_branch repo-root claim (#5796).
+
+    Taken before the occupancy scan and kept until *stack* closes, i.e. through the
+    claim emit, so two claimants of the one shared checkout cannot both pass the
+    scan. A lane worktree (or a non-single_branch Mission) takes nothing. Lock
+    order: this lock first, then any Mission write lock.
+    """
+    from specify_cli.status import write_checkout_claim_lock
+
+    if _is_single_branch_repo_root_claim(main_repo_root, mission_slug, workspace):
+        stack.enter_context(write_checkout_claim_lock(main_repo_root))
+
+
+def warn_shared_workspace_writers(
+    main_repo_root: Path, mission_slug: str, wp_id: str, workspace: ResolvedWorkspace, agent: str | None
+) -> list[str]:
+    """Print the advisory #5099 warning for every other actor writing in *workspace*; return the lines.
+
+    Advisory only: the commands have no JSON mode, so the lines are human output;
+    an unreadable status or lanes surface degrades to no warning, never a refusal.
+    """
+    from specify_cli.lanes.checkout_occupancy import shared_workspace_writers
+
+    try:
+        writers = shared_workspace_writers(main_repo_root, mission_slug, wp_id, workspace, agent)
+    except (OSError, ValueError, RuntimeError):
+        logger.debug("shared-workspace probe failed for %s/%s", mission_slug, wp_id, exc_info=True)
+        return []
+    lines = [writer.warning() for writer in writers]
+    for line in lines:
+        print(line)
+    return lines
 
 
 def guard_repo_root_claim(main_repo_root: Path, mission_slug: str, wp_id: str, workspace: ResolvedWorkspace) -> None:
@@ -376,8 +419,6 @@ def guard_repo_root_claim(main_repo_root: Path, mission_slug: str, wp_id: str, w
     renders a write-checkout refusal as an ``Error:`` line with exit 1, before
     any status event is written.
     """
-    from mission_runtime import is_single_branch, resolve_topology
-    from specify_cli.lanes.compute import is_repo_root_lane
     from specify_cli.lanes.implement_support import (
         WriteCheckoutDirtyError,
         WriteCheckoutOccupiedError,
@@ -385,7 +426,7 @@ def guard_repo_root_claim(main_repo_root: Path, mission_slug: str, wp_id: str, w
         guard_repo_root_claim as _guard,
     )
 
-    if not is_repo_root_lane(workspace) or not is_single_branch(resolve_topology(main_repo_root, mission_slug)):
+    if not _is_single_branch_repo_root_claim(main_repo_root, mission_slug, workspace):
         return
     try:
         _guard(main_repo_root, mission_slug, wp_id, workspace)
@@ -860,8 +901,7 @@ def _implement_write_claim_and_commit(
     mission_slug: str,
     normalized_wp_id: str,
     target_branch: str,
-    pre_emit_event_size: int,
-    pre_emit_status_bytes: bytes | None,
+    rollback_point: RollbackPoint,
 ) -> None:
     """Auto-commit the claim's event-log/status artifacts (enables instant
     status sync). The WP file is not mutated for the claim (byte-stable, SC-004);
@@ -894,15 +934,13 @@ def _implement_write_claim_and_commit(
     # with surgical event-log truncate on failure otherwise.
     w._commit_workflow_change(
         repo_root=main_repo_root,
-        feature_dir=feature_dir,
         mission_slug=mission_slug,
         target_branch=target_branch,
         paths=[actual_wp_path, *status_artifacts],
         message=f"chore: Start {normalized_wp_id} implementation [{agent}]",
         operation=f"planned -> claimed for {normalized_wp_id}",
         wp_id=normalized_wp_id,
-        pre_emit_event_size=pre_emit_event_size,
-        pre_emit_status_bytes=pre_emit_status_bytes,
+        rollback_point=rollback_point,
         auto_rebase_lane_after_commit=True,
     )
 
@@ -976,6 +1014,49 @@ def implement_claim_transition(
     resolved_binding: ResolvedBinding | None = None,
     operator_force_note: str | None = None,
 ) -> ImplementClaimResult:
+    """Claim a WP for ``agent action implement`` inside ONE Mission write-lock hold (#5819).
+
+    The lane read, the rollback-point capture, the claim emit, the commit and any
+    rollback all run under the lock keyed on the status write surface
+    (``wf_feature_dir``; the coordination worktree's Mission directory on a coord
+    Mission), so no other writer can append between the capture and the rollback.
+    The wait is unbounded, like the review window.
+    """
+    wf_feature_dir = _wf()._canonical_status_feature_dir(main_repo_root, mission_slug)
+    with mission_write_lock(wf_feature_dir, repo_root=main_repo_root, timeout=-1):
+        return _implement_claim_transition_body(
+            repo_root=repo_root,
+            main_repo_root=main_repo_root,
+            mission_slug=mission_slug,
+            normalized_wp_id=normalized_wp_id,
+            wp=wp,
+            wp_meta=wp_meta,
+            feature_dir=feature_dir,
+            agent=agent,
+            target_branch=target_branch,
+            workspace_path=workspace_path,
+            status_execution_mode=status_execution_mode,
+            resolved_binding=resolved_binding,
+            operator_force_note=operator_force_note,
+        )
+
+
+def _implement_claim_transition_body(
+    *,
+    repo_root: Path,
+    main_repo_root: Path,
+    mission_slug: str,
+    normalized_wp_id: str,
+    wp: WorkPackage,
+    wp_meta: WPMetadata,
+    feature_dir: Path,
+    agent: str | None,
+    target_branch: str,
+    workspace_path: Path,
+    status_execution_mode: str,
+    resolved_binding: ResolvedBinding | None = None,
+    operator_force_note: str | None = None,
+) -> ImplementClaimResult:
     """Move a WP to ``in_progress`` (claiming it) if not already there.
 
     ``status_execution_mode`` is passed in already resolved from the
@@ -1011,12 +1092,10 @@ def implement_claim_transition(
     wp_slug = wp.path.stem
     fix_mode_active = has_prior_rejection(feature_dir, wp_slug, normalized_wp_id)
 
-    events_path_pre = wf_feature_dir / w._STATUS_EVENTS_FILENAME
-    status_path_pre = wf_feature_dir / w._STATUS_FILENAME
     # Capture before every status mutation, including the bare-resume path, so
-    # commit failure can restore both authoritative artifacts byte-for-byte.
-    pre_emit_event_size = events_path_pre.stat().st_size if events_path_pre.exists() else 0
-    pre_emit_status_bytes = status_path_pre.read_bytes() if status_path_pre.exists() else None
+    # commit failure can restore both authoritative artifacts. The capture refuses
+    # unless the caller holds the Mission write lock for ``wf_feature_dir``.
+    rollback_point = capture_rollback_point(wf_feature_dir, repo_root=main_repo_root)
 
     if current_lane != Lane.IN_PROGRESS or needs_agent_assignment or agent:
         # Require --agent parameter to track who is working
@@ -1060,8 +1139,7 @@ def implement_claim_transition(
             mission_slug=mission_slug,
             normalized_wp_id=normalized_wp_id,
             target_branch=target_branch,
-            pre_emit_event_size=pre_emit_event_size,
-            pre_emit_status_bytes=pre_emit_status_bytes,
+            rollback_point=rollback_point,
         )
 
         print(f"✓ Claimed {normalized_wp_id} (agent: {agent}, PID: {shell_pid}, target: {target_branch})")
@@ -1081,15 +1159,13 @@ def implement_claim_transition(
         status_artifacts = [path.resolve() for path in w._collect_status_artifacts(wf_feature_dir)]
         w._commit_workflow_change(
             repo_root=main_repo_root,
-            feature_dir=wf_feature_dir,
             mission_slug=mission_slug,
             target_branch=target_branch,
             paths=[wp.path.resolve(), *status_artifacts],
             message=f"chore: Refresh {normalized_wp_id} implementation liveness",
             operation=f"refresh implementation liveness for {normalized_wp_id}",
             wp_id=normalized_wp_id,
-            pre_emit_event_size=pre_emit_event_size,
-            pre_emit_status_bytes=pre_emit_status_bytes,
+            rollback_point=rollback_point,
             auto_rebase_lane_after_commit=True,
         )
 
@@ -1742,13 +1818,11 @@ def review_claim_transition(
         binding=resolved_binding,
     )
 
-    with w.feature_status_lock(main_repo_root, feature_dir.name):
-        # WP06 T027: capture pre-emit event-log size for
-        # surgical rollback on commit failure.
-        events_path_pre_rev = feature_dir / w._STATUS_EVENTS_FILENAME
-        status_path_pre_rev = feature_dir / w._STATUS_FILENAME
-        pre_emit_event_size_rev = events_path_pre_rev.stat().st_size if events_path_pre_rev.exists() else 0
-        pre_emit_status_bytes_rev = status_path_pre_rev.read_bytes() if status_path_pre_rev.exists() else None
+    # ``feature_dir`` is the status write surface (``_canonical_status_feature_dir``): the
+    # coordination worktree's Mission directory on a coord Mission (A15).
+    with mission_write_lock(feature_dir, repo_root=main_repo_root, timeout=-1):
+        # Capture inside the hold so a failed commit rolls back only this claim's rows.
+        rollback_point_rev = capture_rollback_point(feature_dir, repo_root=main_repo_root)
         try:
             start_review_status(
                 feature_dir=feature_dir,
@@ -1800,15 +1874,13 @@ def review_claim_transition(
         # path) or surgical-truncate fallback (legacy path).
         w._commit_workflow_change(
             repo_root=main_repo_root,
-            feature_dir=feature_dir,
             mission_slug=mission_slug,
             target_branch=target_branch,
             paths=[actual_wp_path, *status_artifacts],
             message=f"chore: Start {normalized_wp_id} review [{agent}]",
             operation=f"for_review -> in_review for {normalized_wp_id}",
             wp_id=normalized_wp_id,
-            pre_emit_event_size=pre_emit_event_size_rev,
-            pre_emit_status_bytes=pre_emit_status_bytes_rev,
+            rollback_point=rollback_point_rev,
             auto_rebase_lane_after_commit=True,
         )
 

@@ -363,6 +363,7 @@ class TestForcedPreCommitHookFailure:
 
         from specify_cli.coordination.workspace import CoordinationWorkspace
         from specify_cli.cli.commands.agent.workflow import _commit_workflow_change
+        from specify_cli.status import RollbackPoint
 
         # WP07 re-pin (coord-artifact-single-home-01M3V4BE): the coordination
         # arm now resolves through the single write-location accessor, which
@@ -411,15 +412,15 @@ class TestForcedPreCommitHookFailure:
         with pytest.raises(typer.Exit):
             _commit_workflow_change(
                 repo_root=repo_root,
-                feature_dir=feature_dir,
                 mission_slug=mission["mission_slug"],
                 target_branch="main",
                 paths=[events_path, status_path],
                 message="chore: Start WP01 implementation [claude]",
                 operation="planned -> claimed for WP01",
                 wp_id="WP01",
-                pre_emit_event_size=pre_size,
-                pre_emit_status_bytes=pre_status_bytes,
+                rollback_point=RollbackPoint(
+                    events_path=events_path, status_path=status_path, pre_event_size=pre_size, pre_status_bytes=pre_status_bytes, events_existed=True
+                ),
             )
 
         assert _sha256(events_path) == pre_events_sha

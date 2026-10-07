@@ -1034,6 +1034,11 @@ class TestCommitWorkflowChange:
             }),
             encoding="utf-8",
         )
+        from specify_cli.status import RollbackOutcome, RollbackPoint
+
+        point = RollbackPoint(
+            events_path=events_path, status_path=status_path, pre_event_size=len("before\n"), pre_status_bytes=b'{"lane":"old"}', events_existed=True
+        )
         restore_calls: list[object] = []
 
         def _raise_exit(**kwargs: object) -> None:
@@ -1049,34 +1054,25 @@ class TestCommitWorkflowChange:
         monkeypatch.setattr(
             workflow,
             "_restore_status_artifacts",
-            lambda **kwargs: restore_calls.append(kwargs),
+            lambda **kwargs: restore_calls.append(kwargs) or RollbackOutcome(rolled_back=True, refusal=None, events_path=events_path),
         )
 
         workflow._reset_workflow_receipts()
         with pytest.raises(typer.Exit):
             workflow._commit_workflow_change(
                 repo_root=tmp_path,
-                feature_dir=feature_dir,
                 mission_slug="001-test",
                 target_branch="main",
                 paths=[],
                 message="chore: WP01 claimed [claude]",
                 operation="implement",
                 wp_id="WP01",
-                pre_emit_event_size=len("before\n"),
-                pre_emit_status_bytes=b'{"lane":"old"}',
+                rollback_point=point,
             )
 
         assert len(workflow._WORKFLOW_COMMIT_RECEIPTS) == 1
         assert workflow._WORKFLOW_COMMIT_RECEIPTS[0]["outcome"] == "refused"
-        assert restore_calls == [
-            {
-                "events_path": events_path,
-                "pre_emit_event_size": len("before\n"),
-                "status_path": status_path,
-                "pre_emit_status_bytes": b'{"lane":"old"}',
-            }
-        ]
+        assert restore_calls == [{"rollback_point": point, "repo_root": tmp_path}]
         workflow._reset_workflow_receipts()
 
 
