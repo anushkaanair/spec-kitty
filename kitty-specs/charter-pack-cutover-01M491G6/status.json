@@ -391,7 +391,7 @@
     },
     "WP12": {
       "actor": "claude",
-      "agent": "claude",
+      "agent": null,
       "agent_profile": "architect-alphonso",
       "agent_profile_version": "1.0",
       "force_count": 1,
@@ -401,9 +401,11 @@
       "last_transition_at": "2026-10-07T19:21:52.635124+00:00",
       "model": "__resolved_model_absent__",
       "notes": [
-        "FR-012 resets/skills/summary done; acceptance 207 passed 0 failed 0 xpassed; repo charter.yaml reset ([] x2 + default paradigms list); dry-run parity re-pointed per orchestrator ruling (a)"
+        "FR-012 resets/skills/summary done; acceptance 207 passed 0 failed 0 xpassed; repo charter.yaml reset ([] x2 + default paradigms list); dry-run parity re-pointed per orchestrator ruling (a)",
+        "Changes requested: test_no_dead_symbols red (7 WP12 symbols); skills tests depend on sources WP18 deletes"
       ],
       "provider": "__resolved_provider_absent__",
+      "review": null,
       "review_result": {
         "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP12-cutover-migration-resets-and-summary/review-cycle-1.md",
         "reference": "review-cycle://charter-pack-cutover-01M491G6/WP12-cutover-migration-resets-and-summary/review-cycle-1.md",
@@ -411,14 +413,14 @@
         "verdict": "changes_requested"
       },
       "role": "reviewer",
-      "shell_pid": 25063,
-      "shell_pid_created_at": "1791399827.77",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
       "subtasks": {
-        "T061": "done",
-        "T062": "done",
-        "T063": "done",
-        "T064": "done",
-        "T065": "done"
+        "T061": "planned",
+        "T062": "planned",
+        "T063": "planned",
+        "T064": "planned",
+        "T065": "planned"
       }
     },
     "WP13": {
