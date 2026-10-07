@@ -1,4 +1,4 @@
-"""Approval must work after a forced review exit (#5446, deadlock comment 2026-10-06).
+"""Forced review exits (#5446): approval must work after one, and none may go unnoted on any surface.
 
 A forced ``in_review -> in_progress`` with no verdict makes the status reducer
 write ``review_result: null`` into the WP state and carry it through later
@@ -14,6 +14,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from click.testing import Result
+from typer.testing import CliRunner
 
 from kernel.clock import now_utc_iso
 from specify_cli.status import Lane
@@ -85,3 +87,46 @@ def test_approval_after_a_forced_review_exit_writes_its_review_artifact(tmp_path
     files = h.review_cycle_files(m)
     assert len(files) == 1, files
     assert files[0].startswith("review-cycle-")
+
+
+def _force_out_of_review(surface: str, m: h.ReworkMission, monkeypatch: pytest.MonkeyPatch, *note: str) -> Result:
+    """Force WP01 to ``blocked`` through one transition surface; ``note`` is the surface's own note flag."""
+    if surface == "move-task":
+        return h.move(m, h.WP, "blocked", h.THIRD, "--force", *([] if not note else ["--note", *note]))
+    if surface == "status-emit":
+        from specify_cli.cli.commands.agent import status as status_module
+
+        monkeypatch.setattr(status_module, "locate_project_root", lambda *_a, **_k: m.repo)
+        monkeypatch.setattr(status_module, "get_main_repo_root", lambda *_a, **_k: m.repo)
+        argv = ["emit", h.WP, "--to", "blocked", "--actor", "operator", "--mission", m.mission_slug, "--force", "--json"]
+        return CliRunner().invoke(status_module.app, [*argv, *([] if not note else ["--reason", *note])])
+    from specify_cli.orchestrator_api import _common
+    from specify_cli.orchestrator_api.commands import app as orchestrator_app
+
+    monkeypatch.setattr(_common, "_get_main_repo_root", lambda: m.repo)
+    argv = ["transition", "--mission", m.mission_slug, "--wp", h.WP, "--to", "blocked", "--actor", "operator", "--force"]
+    return CliRunner().invoke(orchestrator_app, [*argv, *([] if not note else ["--note", *note])])
+
+
+@pytest.mark.parametrize("surface", ["move-task", "status-emit", "orchestrator-api"])
+@pytest.mark.parametrize("lane", ["in_review", "approved"])
+def test_unnoted_force_out_of_review_is_refused_on_every_surface(surface: str, lane: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#5446: the transition pipeline refuses a verdict-less force out of in_review/approved on every surface."""
+    m = h.build_mission(tmp_path, monkeypatch)
+    h.drive_to_for_review(m)
+    for target in {"in_review": ("in_review",), "approved": ("in_review", "approved")}[lane]:
+        assert h.move(m, h.WP, target, h.REVIEWER).exit_code == 0
+    before = h.events(m)
+
+    refused = _force_out_of_review(surface, m, monkeypatch)
+
+    assert refused.exit_code != 0, refused.output
+    assert "--force requires a non-blank --note" in refused.output
+    assert h.events(m) == before
+
+    noted = _force_out_of_review(surface, m, monkeypatch, "reviewer unavailable")
+
+    assert noted.exit_code == 0, noted.output
+    last = [e for e in h.events(m) if "to_lane" in e][-1]
+    assert last["to_lane"] == "blocked"
+    assert "reviewer unavailable" in str(last["reason"])

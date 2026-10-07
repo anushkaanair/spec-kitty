@@ -26,6 +26,8 @@ from specify_cli.status.emit import (
     emit_status_transition_batch,
 )
 from specify_cli.status.models import (
+    FORCE_NOTE_HINT,
+    FORCE_NOTE_REQUIRED,
     DoneEvidence,
     InnerStateChanged,
     Lane,
@@ -617,3 +619,32 @@ class TestLaneHeadStamping:
         assert calls == []
         assert prepared.event is not None
         assert prepared.event.policy_metadata == {"agent": "claude"}
+
+
+_VERDICT = ReviewResult(reviewer="r", verdict="changes_requested", reference="review:WP01")
+
+
+@pytest.mark.parametrize(
+    ("from_lane", "overrides", "outcome"),
+    [
+        pytest.param("in_review", {"force": True}, "note-refusal", id="in-review-no-note"),
+        pytest.param("approved", {"force": True, "reason": "  "}, "note-refusal", id="approved-blank-note"),
+        pytest.param("in_review", {"force": True, "reason": "reviewer away"}, "admitted", id="a-note-admits-it"),
+        # A verdict or a migration actor skips the review-exit rule; the FSM's own force rule (actor + reason) still applies.
+        pytest.param("in_review", {"force": True, "review_result": _VERDICT}, "fsm-refusal", id="a-verdict-skips-the-rule"),
+        pytest.param("in_review", {"force": True, "actor": "migration:backfill"}, "fsm-refusal", id="migration-actor-skips-the-rule"),
+        pytest.param("for_review", {"force": True}, "fsm-refusal", id="for-review-is-not-a-verdict-lane"),
+    ],
+)
+def test_forced_exit_from_a_verdict_lane_needs_a_verdict_or_a_note(from_lane: str, overrides: dict[str, Any], outcome: str, feature_dir: Path) -> None:
+    """#5446: a verdict-less, note-less forced exit from in_review/approved gets the named note refusal; the exemptions do not."""
+    request = _request(to_lane="blocked", **overrides)
+
+    if outcome == "admitted":
+        assert _prepare(feature_dir, request, from_lane).event is not None
+        return
+    with pytest.raises(TransitionError) as raised:
+        _prepare(feature_dir, request, from_lane)
+    assert (FORCE_NOTE_REQUIRED in str(raised.value)) is (outcome == "note-refusal")
+    if outcome == "note-refusal":
+        assert FORCE_NOTE_HINT in str(raised.value)

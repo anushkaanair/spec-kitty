@@ -27,7 +27,7 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from pathlib import Path
 
-from specify_cli.status import LANE_HEAD_KEY, StatusEvent, actor_identity_str
+from specify_cli.status import LANE_HEAD_KEY, MIGRATION_ACTOR_PREFIX, StatusEvent, actor_identity_str
 
 from .git_probes import (
     GitProbeError,
@@ -51,16 +51,8 @@ _REVIEW_LANES: frozenset[str] = frozenset({"for_review", "in_review"})
 # issue 4).
 _ENTERED_IMPLEMENTATION_LANES: frozenset[str] = frozenset({"claimed", "in_progress"})
 
-#: Actor prefix of every migration-synthesized lifecycle event (FR-011, spec.md).
-#: Migrations record their provenance as ``migration:<module>`` (e.g. the
-#: birth-cutover backfill's ``migration:backfill_runtime_state`` seed events,
-#: ``specify_cli.migration.backfill_runtime_state.BACKFILL_ACTOR``). Such an
-#: event reconstructs state; it never represents governed work, so it must not
-#: open, close, or extend a work window, nor count as "entered implementation".
-#: Without this, a FAILed consolidation's cutover appended unstamped seed
-#: ``planned -> claimed`` events after the cancel and every re-run REFUSEd with
-#: ``open_window`` — the FAIL's recovery could never succeed.
-MIGRATION_ACTOR_PREFIX = "migration:"
+# ``MIGRATION_ACTOR_PREFIX`` (``specify_cli.status``): a migration-synthesized event reconstructs
+# state and never opens, closes or extends a work window (FR-011).
 
 
 class WindowKind(StrEnum):

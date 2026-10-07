@@ -806,7 +806,13 @@ def move_task(
         str | None,
         typer.Option("--done-override-reason", help="Required when --to done and merge ancestry cannot be verified; recorded in history/event reason"),
     ] = None,
-    force: Annotated[bool, typer.Option("--force", help="Force move even with unchecked subtasks (does not bypass planned rollback feedback requirement)")] = False,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help=("Force move even with unchecked subtasks (does not bypass planned rollback feedback requirement). Out of in_review or approved it needs --note."),
+        ),
+    ] = False,
     tracker_ref: Annotated[
         list[str] | None,
         typer.Option(

@@ -366,10 +366,11 @@ def _decide_mid_flight(run: _Run) -> None:
 
 
 def _approve_wp01(run: _Run) -> None:
-    for lane in ("for_review", "in_review", "approved"):
+    # #5721: a forced entry into ``in_review`` makes the later approval no review, so only the last hop is forced.
+    for lane, force in (("for_review", ()), ("in_review", ()), ("approved", ("--force",))):
         _cli(
             run.repo, "agent", "tasks", "move-task", "WP01", "--to", lane, "--mission", run.handle,
-            "--agent", _AGENT, "--force", "--note", _AGENT,
+            "--agent", _AGENT, *force, "--note", _AGENT,
         )  # fmt: skip
     _cli(
         run.repo, "agent", "acceptance-verdict", "--mission", run.handle, "--criterion", "FR-001", "--result", "pass",

@@ -306,7 +306,7 @@ def emit(
     ] = None,
 
     force: Annotated[bool, typer.Option("--force", help="Force transition bypassing guards")] = False,
-    reason: Annotated[str | None, typer.Option("--reason", help="Reason for forced transition")] = None,
+    reason: Annotated[str | None, typer.Option("--reason", help="Reason for forced transition (required with --force out of in_review or approved)")] = None,
     evidence_json: Annotated[str | None, typer.Option("--evidence-json", help="JSON string with done evidence")] = None,
     review_ref: Annotated[str | None, typer.Option("--review-ref", help="Review feedback reference")] = None,
     review_result_json: Annotated[

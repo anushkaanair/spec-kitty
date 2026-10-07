@@ -143,6 +143,16 @@ def decode_actor(value: Any) -> ActorField:
     return str(value)
 
 
+#: The operator override of a review-lane exit, as every refusal names it (#5446).
+FORCE_NOTE_HINT = "`--force --note <why>`"
+#: The one refusal for a ``--force`` with no usable note (CLI preflight, lifecycle guard and transition pipeline alike).
+FORCE_NOTE_REQUIRED = "--force requires a non-blank --note explaining why the review lane is being left"
+#: Actor prefix of an event a migration synthesized (e.g. ``migration:backfill_runtime_state``).
+#: Such an event reconstructs state and never represents governed work: it never opens, closes or
+#: extends a consolidation work window (FR-011) and it is exempt from the review-exit force-note rule (#5446).
+MIGRATION_ACTOR_PREFIX = "migration:"
+
+
 def actor_identity_str(actor: ActorField) -> str:
     """Project an actor to its plain-string identity for guard / snapshot / display.
 

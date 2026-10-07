@@ -46,6 +46,9 @@ from kernel.clock import now_utc_iso
 from . import emit as _emit
 from .lane_head import LANE_HEAD_KEY
 from .models import (
+    FORCE_NOTE_HINT,
+    FORCE_NOTE_REQUIRED,
+    MIGRATION_ACTOR_PREFIX,
     DoneEvidence,
     GuardContext,
     InnerStateChanged,
@@ -216,6 +219,29 @@ def _stamped_policy_metadata(
     return {**(request_policy_metadata or {}), LANE_HEAD_KEY: sha}
 
 
+#: Lanes a WP leaves only through a recorded verdict or a noted operator force (#5446).
+_VERDICT_GATED_LANES: frozenset[str] = frozenset({Lane.IN_REVIEW, Lane.APPROVED})
+
+
+def _refuse_unnoted_review_exit(request: TransitionRequest, from_lane: str) -> None:
+    """Refuse a forced exit from ``in_review``/``approved`` that is no verdict and carries no note (#5446).
+
+    The one door every transition surface (``move-task``, ``agent status emit``,
+    ``orchestrator-api transition``, ``agent action implement``) goes through. A
+    transition that records a ``review_result`` is a verdict and is exempt; so is a
+    ``migration:`` actor, which reconstructs state rather than acting.
+    """
+    if not request.force or from_lane not in _VERDICT_GATED_LANES or request.review_result is not None:
+        return
+    if request.actor is not None and actor_identity_str(request.actor).startswith(MIGRATION_ACTOR_PREFIX):
+        return
+    if not (request.reason or "").strip():
+        raise _emit.TransitionError(
+            f"{request.wp_id} cannot leave {from_lane} by force without a note. {FORCE_NOTE_REQUIRED}; "
+            f"as an operator pass {FORCE_NOTE_HINT} (`--reason <why>` on `agent status emit`)."
+        )
+
+
 def prepare_transition(
     *,
     request: TransitionRequest,
@@ -329,6 +355,8 @@ def prepare_transition(
             annotation=None,
             mirror_frontmatter_lane=True,
         )
+
+    _refuse_unnoted_review_exit(request, from_lane)
 
     # Step 4: done-evidence.
     done_evidence: DoneEvidence | None = None
