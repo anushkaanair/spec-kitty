@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
-from specify_cli.status.emit import TransitionError, parse_agent_boundary_string
+from specify_cli.status.emit import TransitionError
+from specify_cli.status.models import parse_agent_boundary_string
 from specify_cli.status.locking import feature_status_lock
 from specify_cli.status.review_claim_predicate import review_claim_decision
 from specify_cli.status.models import (
@@ -46,7 +47,14 @@ from specify_cli.workspace import canonicalize_feature_dir
 #: ``_GENERIC_IMPLEMENTATION_ACTORS`` spelling here only ever gated the
 #: claim/in_progress start path; ``move-task`` silently lacked the same
 #: allowance until FIX-M2-03).
-GENERIC_IMPLEMENTATION_ACTORS = frozenset({"implement-command", "unknown", "user"})
+#: The placeholder a refusal names when no actor is on record.
+_UNKNOWN_ACTOR = "unknown"
+#: The operator override of a review-lane exit, as every refusal names it (#5446).
+FORCE_NOTE_HINT = "`--force --note <why>`"
+#: The one refusal for a ``--force`` with no usable ``--note`` (CLI preflight and lifecycle guard alike).
+FORCE_NOTE_REQUIRED = "--force requires a non-blank --note explaining why the review lane is being left"
+
+GENERIC_IMPLEMENTATION_ACTORS = frozenset({"implement-command", _UNKNOWN_ACTOR, "user"})
 
 
 class WorkPackageClaimConflict(TransitionError):
@@ -59,9 +67,15 @@ class WorkPackageClaimConflict(TransitionError):
         requesting_actor: ActorField,
         *,
         review: bool = False,
+        submitted: bool = False,
     ) -> None:
-        kind = "review" if review else "implementation"
-        super().__init__(f"WP {wp_id} is already claimed for {kind} by '{claimed_by}'")
+        if submitted:
+            # A for_review WP is a submission, not a claim: say who may withdraw it.
+            holder = claimed_by if claimed_by not in ("", _UNKNOWN_ACTOR) else "none on record"
+            super().__init__(f"WP {wp_id} is in for_review; only its implementer of record ({holder}) may withdraw it, or an operator with {FORCE_NOTE_HINT}")
+        else:
+            kind = "review" if review else "implementation"
+            super().__init__(f"WP {wp_id} is already claimed for {kind} by '{claimed_by}'")
         self.wp_id = wp_id
         self.claimed_by = claimed_by
         self.requesting_actor = actor_identity_str(requesting_actor)
@@ -172,6 +186,74 @@ def _admits_implementer_of_record(
         return False
 
 
+_REVIEW_LANES: frozenset[Lane] = frozenset({Lane.FOR_REVIEW, Lane.IN_REVIEW, Lane.APPROVED})
+
+
+def _reject_force_outside_review_lanes(
+    wp_id: str,
+    current_lane: Lane,
+    review_lane_exit: bool,
+    operator_force_note: str | None,
+) -> None:
+    """Refuse an operator force, before any write, unless the WP is in a review lane."""
+    if operator_force_note is None:
+        return
+    if not operator_force_note.strip():
+        raise WorkPackageStartRejected(FORCE_NOTE_REQUIRED)
+    if not review_lane_exit or current_lane not in _REVIEW_LANES:
+        raise WorkPackageStartRejected(f"--force only applies to a WP in for_review, in_review or approved; {wp_id} is in '{current_lane}'")
+
+
+def _review_lane_exit_reason(
+    *,
+    feature_dir: Path,
+    mission_slug: str,
+    wp_id: str,
+    current_lane: Lane,
+    current_actor: object | None,
+    actor: ActorField,
+    repo_root: Path | None,
+    operator_force_note: str | None,
+) -> str:
+    """Return the honest event reason for leaving a review lane, or raise the refusal (#5446)."""
+    if operator_force_note is not None:
+        return f"Operator force: {operator_force_note.strip()}"
+    if current_lane == Lane.IN_REVIEW:
+        raise WorkPackageClaimConflict(wp_id, str(current_actor or _UNKNOWN_ACTOR), actor, review=True)
+    if current_lane == Lane.APPROVED:
+        raise WorkPackageStartRejected(
+            f"WP {wp_id} is approved; implementation cannot resume it. To rework it run "
+            f"`spec-kitty agent tasks move-task {wp_id} --to planned --review-feedback-file <file>`, "
+            f"or, as an operator, {FORCE_NOTE_HINT}"
+        )
+    if not _admits_implementer_of_record(
+        feature_dir=feature_dir,
+        mission_slug=mission_slug,
+        wp_id=wp_id,
+        actor=actor,
+        repo_root=repo_root,
+    ):
+        raise WorkPackageClaimConflict(
+            wp_id,
+            _implementer_of_record_label(feature_dir, mission_slug, wp_id, repo_root),
+            actor,
+            submitted=True,
+        )
+    return f"Implementer of record withdrew {wp_id} from for_review to continue implementation"
+
+
+def _implementer_of_record_label(feature_dir: Path, mission_slug: str, wp_id: str, repo_root: Path | None) -> str:
+    """Name the implementer of record for a refusal message; ``"unknown"`` on any read failure."""
+    from specify_cli.coordination.status_transition import read_events_transactional
+    from specify_cli.status.review_roles import latest_implementer_actor
+
+    try:
+        events = read_events_transactional(feature_dir=feature_dir, mission_slug=mission_slug, repo_root=repo_root)
+        return latest_implementer_actor(events, wp_id) or _UNKNOWN_ACTOR
+    except Exception:  # a failed read only degrades the message; the refusal stands
+        return _UNKNOWN_ACTOR
+
+
 def start_implementation_status(
     *,
     feature_dir: Path,
@@ -182,11 +264,18 @@ def start_implementation_status(
     execution_mode: str,
     repo_root: Path | None = None,
     policy_metadata: dict[str, Any] | None = None,
-    allow_rework: bool = False,
-    rework_reason: str = "Re-implementing after review feedback",
+    review_lane_exit: bool = False,
+    operator_force_note: str | None = None,
     annotation_delta: WPInnerStateDelta | None = None,
 ) -> WorkPackageStartResult:
-    """Idempotently move a WP into ``in_progress`` for an implementation actor."""
+    """Idempotently move a WP into ``in_progress`` for an implementation actor.
+
+    ``review_lane_exit`` is an explicit opt-in held only by ``agent action
+    implement``: without it every review lane (``for_review``, ``in_review``,
+    ``approved``) is rejected. With it, a review lane is left only by the
+    implementer of record withdrawing an unclaimed ``for_review`` submission, or
+    by an operator supplying ``operator_force_note`` (#5446).
+    """
     # Lazy import breaks the status↔coordination cycle (status/__init__ imports
     # this module; coordination.status_transition imports back into status via
     # coordination.transaction). Deferring to call time lets the facade finish
@@ -212,6 +301,8 @@ def start_implementation_status(
 
         if current_lane == Lane.GENESIS:
             raise WorkPackageStartRejected(f"WP {wp_id} is not finalized; run `spec-kitty agent mission finalize-tasks`")
+
+        _reject_force_outside_review_lanes(wp_id, current_lane, review_lane_exit, operator_force_note)
 
         if current_lane == Lane.PLANNED:
             events = emit_status_transition_batch_transactional(
@@ -251,7 +342,7 @@ def start_implementation_status(
 
         if current_lane == Lane.CLAIMED:
             if not _actors_compatible(current_actor, actor, allow_generic_existing=True):
-                raise WorkPackageClaimConflict(wp_id, current_actor or "unknown", actor)
+                raise WorkPackageClaimConflict(wp_id, current_actor or _UNKNOWN_ACTOR, actor)
             events = emit_status_transition_batch_transactional(
                 [
                     TransitionRequest(
@@ -288,11 +379,21 @@ def start_implementation_status(
                     actor=actor,
                     repo_root=repo_root,
                 ):
-                    raise WorkPackageClaimConflict(wp_id, current_actor or "unknown", actor)
+                    raise WorkPackageClaimConflict(wp_id, current_actor or _UNKNOWN_ACTOR, actor)
                 return WorkPackageStartResult(wp_id, Lane.IN_PROGRESS, Lane.IN_PROGRESS, actor, (), no_op=True, claimed_by=actor_identity_str(actor))
             return WorkPackageStartResult(wp_id, Lane.IN_PROGRESS, Lane.IN_PROGRESS, actor, (), no_op=True, claimed_by=current_actor)
 
-        if allow_rework and current_lane in {Lane.FOR_REVIEW, Lane.APPROVED, Lane.IN_REVIEW}:
+        if review_lane_exit and current_lane in _REVIEW_LANES:
+            reason = _review_lane_exit_reason(
+                feature_dir=feature_dir,
+                mission_slug=mission_slug,
+                wp_id=wp_id,
+                current_lane=current_lane,
+                current_actor=current_actor,
+                actor=actor,
+                repo_root=repo_root,
+                operator_force_note=operator_force_note,
+            )
             event = emit_status_transition_transactional(
                 TransitionRequest(
                     feature_dir=feature_dir,
@@ -301,7 +402,7 @@ def start_implementation_status(
                     to_lane=Lane.IN_PROGRESS,
                     actor=actor,
                     force=True,
-                    reason=rework_reason,
+                    reason=reason,
                     workspace_context=workspace_context,
                     execution_mode=execution_mode,
                     repo_root=repo_root,
@@ -395,7 +496,7 @@ def start_review_status(
                 requesting_role,
             )
             if decision.is_collision:
-                raise WorkPackageClaimConflict(wp_id, decision.holder or "unknown", actor, review=True)
+                raise WorkPackageClaimConflict(wp_id, decision.holder or _UNKNOWN_ACTOR, actor, review=True)
             return WorkPackageStartResult(wp_id, Lane.IN_REVIEW, Lane.IN_REVIEW, actor, (), no_op=True, claimed_by=current_actor)
 
     raise WorkPackageStartRejected(f"WP {wp_id} is in '{current_lane}', cannot start review")

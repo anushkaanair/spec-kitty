@@ -599,7 +599,9 @@ def _guard_rejected_verdict(req: MoveTaskRequest) -> RefuseExit1 | None:
         return None
     if req.review_verdict is None:
         return RefuseExit1(
-            f"{req.task_id} {req.review_artifact_name} has no parseable review verdict.\nRepair the review artifact before approving or marking done."
+            f"{req.task_id} has no parseable review verdict: the review result recorded in the status event log is unreadable.\n"
+            f"Send {req.task_id} back with `spec-kitty agent tasks move-task {req.task_id} --to planned "
+            "--review-feedback-file <file>`, then run a new review before approving or marking done."
         )
     if req.review_verdict == "rejected" and req.skip_review_artifact_check and not (req.note.strip() if isinstance(req.note, str) else ""):
         return RefuseExit1("--skip-review-artifact-check requires --note so override evidence is durable.")

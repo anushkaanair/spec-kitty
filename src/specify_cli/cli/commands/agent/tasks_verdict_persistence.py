@@ -579,7 +579,9 @@ def resolve_review_verdict_facts(
       verdict recorded; the caller's guard already treats
       ``review_artifact_name is None`` as "nothing to refuse on" (G2: absent
       is "no approval [blocker]", not a crash).
-    - **damaged** (``slot_present=True, result=None``) -> a non-``None``
+    - **cleared** (``cleared_without_verdict=True``) -> same as absent: the
+      reducer wrote ``None`` on an ``in_review`` exit with no verdict (#5446).
+    - **damaged** (``slot_present=True, result=None``, not cleared) -> a non-``None``
       synthetic ``review_artifact_name`` paired with ``review_verdict=None``
       — this is deliberate, not an oversight: the caller's guard refuses on
       exactly that combination ("no parseable review verdict"), so a
@@ -606,7 +608,9 @@ def resolve_review_verdict_facts(
     wp_id = _wp_id_from_stem(wp_path.stem)
     status_read_feature_dir = _resolve_verdict_read_feature_dir(wp_path)
     lookup = event_sourced_review_result(status_read_feature_dir, wp_id)
-    if not lookup.slot_present:
+    if not lookup.slot_present or lookup.cleared_without_verdict:
+        # A cleared slot (forced review exit, #5446) is "no verdict on record",
+        # the same as an absent one; the events keep any earlier rejection.
         return None, None, None
     if lookup.result is None:
         synthetic_path = verdict_wp_dir / "review-cycle-damaged-event-record.md"
@@ -771,7 +775,10 @@ def _persist_approved_review_cycle(st: _MoveTaskState, ports: TasksPorts) -> Ver
     # reader (``event_sourced_review_result``) already fails closed rather
     # than fabricate a verdict, and this writer must not paper over that
     # ambiguity with a synthesized approval write.
-    if lookup.slot_present and lookup.result is None:
+    # A slot cleared by a verdict-less review exit (``cleared_without_verdict``,
+    # #5446) is NOT damage: it falls through like an absent slot and gets its
+    # first-pass approval artifact.
+    if lookup.slot_present and lookup.result is None and not lookup.cleared_without_verdict:
         return None
     # :852 idempotency (unchanged, PRESERVED): the current event-sourced
     # verdict is already something other than a stale rejection (i.e.

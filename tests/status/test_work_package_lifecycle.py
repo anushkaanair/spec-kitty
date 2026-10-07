@@ -473,28 +473,169 @@ def test_start_implementation_resumes_in_progress_user_actor_noop(tmp_path: Path
     assert len(read_events(feature_dir)) == 2
 
 
-def test_start_implementation_allows_forced_rework_from_review_lane(tmp_path: Path) -> None:
-    feature_dir = _feature_dir(tmp_path)
-    append_event(
-        feature_dir,
-        _event("01CCCC0000000000000000003C", from_lane=Lane.IN_PROGRESS, to_lane=Lane.FOR_REVIEW, actor="implementer"),
-    )
-
-    result = start_implementation_status(
+def _start_wp(
+    feature_dir: Path,
+    tmp_path: Path,
+    actor: str = "claude",
+    *,
+    review_lane_exit: bool = False,
+    operator_force_note: str | None = None,
+) -> WorkPackageStartResult:
+    return start_implementation_status(
         feature_dir=feature_dir,
         mission_slug="099-lifecycle-test",
         wp_id="WP01",
-        actor="claude",
+        actor=actor,
         workspace_context="worktree:/nonexistent/wp01",
         execution_mode="worktree",
         repo_root=tmp_path,
-        allow_rework=True,
-        rework_reason="review changes requested",
+        review_lane_exit=review_lane_exit,
+        operator_force_note=operator_force_note,
     )
 
-    assert result.from_lane == Lane.FOR_REVIEW
-    assert result.to_lane == Lane.IN_PROGRESS
-    assert read_events(feature_dir)[-1].reason == "review changes requested"
+
+def _seed_review_lane(feature_dir: Path, lane: Lane, *, implementer: str = "claude") -> None:
+    """planned -> claimed -> in_progress (``implementer``) -> for_review [-> in_review [-> approved]]."""
+    chain = [
+        ("01AAAA0000000000000000001A", Lane.PLANNED, Lane.CLAIMED, implementer),
+        ("01AAAA0000000000000000002A", Lane.CLAIMED, Lane.IN_PROGRESS, implementer),
+        ("01AAAA0000000000000000003A", Lane.IN_PROGRESS, Lane.FOR_REVIEW, implementer),
+        ("01AAAA0000000000000000004A", Lane.FOR_REVIEW, Lane.IN_REVIEW, "codex"),
+        ("01AAAA0000000000000000005A", Lane.IN_REVIEW, Lane.APPROVED, "codex"),
+    ]
+    for event_id, src, dst, who in chain:
+        append_event(feature_dir, _event(event_id, from_lane=src, to_lane=dst, actor=who))
+        if dst == lane:
+            return
+    raise AssertionError(lane)
+
+
+def test_start_implementation_refuses_other_actor_on_for_review(tmp_path: Path) -> None:
+    """#5446 (was ``allows_forced_rework_from_review_lane``): a non-implementer is refused."""
+    feature_dir = _feature_dir(tmp_path)
+    _seed_review_lane(feature_dir, Lane.FOR_REVIEW)
+    before = len(read_events(feature_dir))
+
+    with pytest.raises(WorkPackageClaimConflict) as exc_info:
+        _start_wp(feature_dir, tmp_path, actor="gemini", review_lane_exit=True)
+
+    assert exc_info.value.claimed_by == "claude"
+    message = str(exc_info.value)
+    assert "already claimed" not in message
+    assert "in for_review; only its implementer of record (claude) may withdraw it" in message
+    assert "--force --note" in message
+    assert len(read_events(feature_dir)) == before
+
+
+def test_implementer_of_record_withdraws_for_review_with_honest_reason(tmp_path: Path) -> None:
+    feature_dir = _feature_dir(tmp_path)
+    _seed_review_lane(feature_dir, Lane.FOR_REVIEW)
+
+    result = _start_wp(feature_dir, tmp_path, review_lane_exit=True)
+
+    assert (result.from_lane, result.to_lane) == (Lane.FOR_REVIEW, Lane.IN_PROGRESS)
+    last = read_events(feature_dir)[-1]
+    assert last.reason == "Implementer of record withdrew WP01 from for_review to continue implementation"
+    assert last.force is True
+
+
+def test_generic_only_implementer_is_refused_on_for_review(tmp_path: Path) -> None:
+    feature_dir = _feature_dir(tmp_path)
+    _seed_review_lane(feature_dir, Lane.FOR_REVIEW, implementer="user")
+
+    with pytest.raises(WorkPackageClaimConflict) as exc_info:
+        _start_wp(feature_dir, tmp_path, actor="claude", review_lane_exit=True)
+
+    assert "already claimed" not in str(exc_info.value)
+    assert "only its implementer of record" in str(exc_info.value)
+
+
+@pytest.mark.parametrize("actor", ["claude", "gemini"])
+def test_in_review_is_refused_to_everyone_without_force(tmp_path: Path, actor: str) -> None:
+    feature_dir = _feature_dir(tmp_path)
+    _seed_review_lane(feature_dir, Lane.IN_REVIEW)
+    before = len(read_events(feature_dir))
+
+    with pytest.raises(WorkPackageClaimConflict, match="review by 'codex'"):
+        _start_wp(feature_dir, tmp_path, actor=actor, review_lane_exit=True)
+
+    assert len(read_events(feature_dir)) == before
+
+
+def test_approved_is_refused_naming_the_rework_route(tmp_path: Path) -> None:
+    feature_dir = _feature_dir(tmp_path)
+    _seed_review_lane(feature_dir, Lane.APPROVED)
+    before = len(read_events(feature_dir))
+
+    with pytest.raises(WorkPackageStartRejected) as exc_info:
+        _start_wp(feature_dir, tmp_path, review_lane_exit=True)
+
+    message = str(exc_info.value)
+    assert "move-task WP01 --to planned --review-feedback-file" in message
+    assert "--force --note" in message
+    assert len(read_events(feature_dir)) == before
+
+
+@pytest.mark.parametrize("lane", [Lane.FOR_REVIEW, Lane.IN_REVIEW, Lane.APPROVED])
+def test_operator_force_with_note_leaves_any_review_lane(tmp_path: Path, lane: Lane) -> None:
+    feature_dir = _feature_dir(tmp_path)
+    _seed_review_lane(feature_dir, lane)
+
+    result = _start_wp(feature_dir, tmp_path, actor="gemini", review_lane_exit=True, operator_force_note="  reviewer is gone  ")
+
+    assert (result.from_lane, result.to_lane) == (lane, Lane.IN_PROGRESS)
+    last = read_events(feature_dir)[-1]
+    assert last.reason == "Operator force: reviewer is gone"
+    assert last.force is True
+    assert last.actor == "gemini"
+
+
+@pytest.mark.parametrize("lane", [Lane.PLANNED, Lane.CLAIMED, Lane.IN_PROGRESS])
+def test_operator_force_is_refused_outside_review_lanes_before_any_write(tmp_path: Path, lane: Lane) -> None:
+    feature_dir = _feature_dir(tmp_path)
+    append_event(feature_dir, _event("01AAAA0000000000000000001A", from_lane=Lane.GENESIS, to_lane=Lane.PLANNED))
+    if lane != Lane.PLANNED:
+        append_event(feature_dir, _event("01AAAA0000000000000000002A", from_lane=Lane.PLANNED, to_lane=Lane.CLAIMED))
+    if lane == Lane.IN_PROGRESS:
+        append_event(feature_dir, _event("01AAAA0000000000000000003A", from_lane=Lane.CLAIMED, to_lane=Lane.IN_PROGRESS))
+    before = len(read_events(feature_dir))
+
+    with pytest.raises(WorkPackageStartRejected, match="--force only applies"):
+        _start_wp(feature_dir, tmp_path, review_lane_exit=True, operator_force_note="why")
+
+    assert len(read_events(feature_dir)) == before
+
+
+def test_operator_force_on_done_stays_rejected(tmp_path: Path) -> None:
+    feature_dir = _feature_dir(tmp_path)
+    append_event(feature_dir, _event("01DDDD0000000000000000004D", from_lane=Lane.APPROVED, to_lane=Lane.DONE))
+
+    with pytest.raises(WorkPackageStartRejected, match="--force only applies"):
+        _start_wp(feature_dir, tmp_path, review_lane_exit=True, operator_force_note="why")
+
+
+def test_blank_operator_note_is_refused(tmp_path: Path) -> None:
+    feature_dir = _feature_dir(tmp_path)
+    _seed_review_lane(feature_dir, Lane.IN_REVIEW)
+    before = len(read_events(feature_dir))
+
+    with pytest.raises(WorkPackageStartRejected, match="non-blank --note"):
+        _start_wp(feature_dir, tmp_path, review_lane_exit=True, operator_force_note="   ")
+
+    assert len(read_events(feature_dir)) == before
+
+
+@pytest.mark.parametrize("lane", [Lane.FOR_REVIEW, Lane.IN_REVIEW, Lane.APPROVED])
+def test_callers_without_review_lane_exit_keep_the_old_refusal(tmp_path: Path, lane: Lane) -> None:
+    """``spec-kitty implement`` and ``orchestrator-api start-implementation`` never opt in (#5446)."""
+    feature_dir = _feature_dir(tmp_path)
+    _seed_review_lane(feature_dir, lane)
+    before = len(read_events(feature_dir))
+
+    with pytest.raises(WorkPackageStartRejected, match="cannot start implementation"):
+        _start_wp(feature_dir, tmp_path)
+
+    assert len(read_events(feature_dir)) == before
 
 
 def test_start_implementation_rejects_unstartable_lane(tmp_path: Path) -> None:
@@ -877,3 +1018,10 @@ def test_slot_occupant_resume_does_no_extra_event_read(tmp_path: Path, monkeypat
     monkeypatch.setattr(st, "read_events_transactional", _boom)
 
     assert _start(feature_dir, tmp_path, "claude").no_op is True
+
+
+def test_for_review_refusal_with_no_implementer_on_record_says_so() -> None:
+    message = str(WorkPackageClaimConflict("WP01", "unknown", "gemini", submitted=True))
+
+    assert "implementer of record (none on record)" in message
+    assert "'unknown'" not in message

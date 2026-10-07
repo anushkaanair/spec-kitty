@@ -6,7 +6,7 @@ from typing import cast
 
 import pytest
 
-from specify_cli.status import is_latest_implementer, latest_implementer_actor
+from specify_cli.status import is_latest_implementer, latest_implementer_actor, latest_implementer_event
 from specify_cli.status.models import ActorField, Lane, StatusEvent
 from specify_cli.status.work_package_lifecycle import _actor_key
 
@@ -120,3 +120,42 @@ def test_is_latest_implementer_false_for_a_different_tool() -> None:
 
 def test_is_latest_implementer_false_when_requester_projects_to_no_key() -> None:
     assert is_latest_implementer(IMPL, None) is False
+
+
+def test_latest_implementer_event_returns_the_qualifying_event() -> None:
+    claim = _ev(Lane.PLANNED, Lane.CLAIMED, IMPL)
+    events = [claim, _ev(Lane.IN_REVIEW, Lane.IN_PROGRESS, REVW, review_ref="review-cycle-1.md")]
+    assert latest_implementer_event(events, "WP01") is claim
+    assert latest_implementer_event(events, "WP02") is None
+
+
+def test_latest_implementer_event_skips_generic_and_migration_actors() -> None:
+    claim = _ev(Lane.PLANNED, Lane.CLAIMED, IMPL)
+    events = [claim, _ev(Lane.CLAIMED, Lane.IN_PROGRESS, "unknown"), _ev(Lane.CLAIMED, Lane.IN_PROGRESS, "implement-command")]
+    assert latest_implementer_event(events, "WP01") is claim
+
+
+def test_latest_implementer_event_keeps_the_full_recorded_identity() -> None:
+    other = "claude:opus:reviewer-renata:reviewer"
+    event = latest_implementer_event([_ev(Lane.PLANNED, Lane.CLAIMED, IMPL)], "WP01")
+    assert event is not None and event.actor == IMPL and event.actor != other
+
+
+@pytest.mark.parametrize(
+    ("actor", "expected"),
+    [
+        pytest.param({"tool": "claude", "model": "opus", "profile": "ivan", "role": "implementer"}, "claude:opus:ivan", id="dict-drops-role"),
+        pytest.param("claude:opus:ivan:reviewer", "claude:opus:ivan", id="compact-drops-role"),
+        pytest.param("claude", "claude::", id="bare-tool"),
+        pytest.param({"tool": "claude", "role": "reviewer"}, "claude::", id="dict-tool-only"),
+        pytest.param(":opus", ":opus", id="no-tool-segment-kept-as-recorded"),
+        pytest.param({"role": "reviewer"}, None, id="role-only-dict"),
+        pytest.param("  ", None, id="blank"),
+        pytest.param(None, None, id="missing"),
+    ],
+)
+def test_actor_full_identity_is_tool_model_profile(actor: object, expected: str | None) -> None:
+    """#5340: one actor reduction for the hollow-review check; the role never splits one agent in two."""
+    from specify_cli.status import actor_full_identity
+
+    assert actor_full_identity(actor) == expected

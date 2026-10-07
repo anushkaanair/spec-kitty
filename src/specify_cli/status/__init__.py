@@ -31,8 +31,10 @@ from .models import (
     ULID_PATTERN,
     VerificationResult,
     WPInnerStateDelta,
+    actor_full_identity,
     actor_identity_str,
     decode_actor,
+    parse_agent_boundary_string,
     get_all_lanes,
     get_all_lane_values,
 )
@@ -76,6 +78,7 @@ from .store import (
     read_event_stream,
     read_event_stream_from_text,
     read_events,
+    read_events_lenient,
     read_events_from_text,
     read_events_raw,
 )
@@ -144,7 +147,6 @@ from .emit import (
     emit_inner_state_changed,
     emit_resolved_binding,
     emit_status_transition,
-    parse_agent_boundary_string,
 )
 from .resolved_binding import (
     ResolvedBinding,
@@ -325,8 +327,11 @@ from .views import (
 from .review_roles import (
     is_latest_implementer,
     latest_implementer_actor,
+    latest_implementer_event,
 )
 from .work_package_lifecycle import (
+    FORCE_NOTE_HINT,
+    FORCE_NOTE_REQUIRED,
     GENERIC_IMPLEMENTATION_ACTORS,
     WorkPackageClaimConflict,
     WorkPackageStartRejected,
@@ -431,6 +436,7 @@ __all__ = [
     "parse_review_result_json",
     "AgentAssignment",
     "CurrentWpState",
+    "actor_full_identity",
     "actor_identity_str",
     "_actor_key",
     "ALLOWED_TRANSITIONS",
@@ -497,9 +503,12 @@ __all__ = [
     "TASKS_STARTED",
     "MissionNotCompletedError",
     "TransitionRequest",
+    "FORCE_NOTE_HINT",
+    "FORCE_NOTE_REQUIRED",
     "GENERIC_IMPLEMENTATION_ACTORS",
     "is_latest_implementer",
     "latest_implementer_actor",
+    "latest_implementer_event",
     "WorkPackageClaimConflict",
     "WorkPackageStartRejected",
     "build_saas_lifecycle_queue_event",
@@ -620,6 +629,7 @@ __all__ = [
     "fire_saas_fanout",
     "WPStatusChangeMetadata",
     "read_events",
+    "read_events_lenient",
     "read_events_from_text",
     "read_events_raw",
     "read_wp_frontmatter",

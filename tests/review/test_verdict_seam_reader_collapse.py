@@ -301,6 +301,21 @@ def test_damaged_record_fails_closed_not_crash(tmp_path: Path) -> None:
     )
 
 
+def test_cleared_slot_resolves_as_no_verdict_on_record(tmp_path: Path) -> None:
+    """#5446: a slot cleared by a verdict-less review exit is not damage."""
+    feature_dir = _feature_dir(tmp_path)
+    wp_file = _write_wp_file(feature_dir, "WP01", "WP01-demo")
+    cleared = ReviewResultLookup(slot_present=True, result=None, cleared_without_verdict=True)
+
+    with patch(
+        "specify_cli.cli.commands.agent.tasks_verdict_persistence.event_sourced_review_result",
+        return_value=cleared,
+    ):
+        facts = resolve_review_verdict_facts(wp_file)
+
+    assert facts == (None, None, None)
+
+
 # ===========================================================================
 # T029 (SC-004) -- parametrized damaged-record proof over the distinct
 # safety-gate reader shapes this WP repointed.
@@ -321,6 +336,22 @@ def test_status_display_fails_closed_on_damaged_record(tmp_path: Path) -> None:
 
     assert stale and stale[0]["damaged"] is True
     assert work_packages[0]["_damaged_verdict"] is True
+
+
+def test_status_display_does_not_flag_a_cleared_slot(tmp_path: Path) -> None:
+    """#5446: a slot cleared by a verdict-less review exit is not "damaged"."""
+    feature_dir = _feature_dir(tmp_path)
+    work_packages: list[dict[str, object]] = [{"id": "WP01", "lane": Lane.DONE}]
+    cleared = ReviewResultLookup(slot_present=True, result=None, cleared_without_verdict=True)
+
+    with patch(
+        "specify_cli.cli.commands.agent.tasks_parsing_validation.event_sourced_review_result",
+        return_value=cleared,
+    ):
+        stale, _ = _apply_review_status_flags(work_packages, feature_dir=feature_dir, events=[], stall_threshold_minutes=30)
+
+    assert not stale
+    assert "_damaged_verdict" not in work_packages[0]
 
 
 def test_merge_gate_fails_closed_on_damaged_record_never_blocks(tmp_path: Path) -> None:

@@ -62,6 +62,7 @@ from .wp_metadata import coerce_legacy_dependencies, read_wp_frontmatter
 
 from .models import (
     ActorField,
+    parse_agent_boundary_string,
     DoneEvidence,
     EventStream,
     InnerStateChanged,
@@ -1382,34 +1383,6 @@ def build_resolved_actor(
 
 # Compatibility alias for the WP10 test/import surface.
 _build_resolved_actor = build_resolved_actor
-
-
-def parse_agent_boundary_string(
-    raw: str,
-) -> tuple[str, str | None, str | None, str | None]:
-    """Parse the compact ``--agent`` CLI value into ``(tool, model, profile, role)``.
-
-    THIN, non-synthesizing boundary parser for FR-005. Unlike
-    :func:`specify_cli.status.wp_metadata._resolve_agent_from_colon_string` (the
-    **persisted-frontmatter** parser, which fills an absent segment with a
-    tool-derived synthetic default such as ``"unknown-model"`` or
-    ``"{tool}-default"``), this parser leaves an absent segment as ``None`` —
-    a self-asserted live-claim actor must never fabricate identity it was never
-    given (C-002/C-007).
-
-    Accepts both the bare ``tool`` form (``"claude"``) and the full compact
-    ``tool:model:profile:role`` form; missing trailing segments and empty
-    interior segments (``"claude::reviewer-renata:"``) both normalize to
-    ``None``. Raises :class:`ValueError` for an empty ``tool`` segment — a
-    tool is required to identify the agent at all.
-    """
-    segments = raw.split(":")
-    while len(segments) < 4:
-        segments.append("")
-    tool, model_seg, profile_seg, role_seg = segments[:4]
-    if not tool:
-        raise ValueError(f"Empty agent tool in --agent value: {raw!r}")
-    return tool, (model_seg or None), (profile_seg or None), (role_seg or None)
 
 
 def build_self_asserting_actor(

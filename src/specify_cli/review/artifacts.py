@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -255,7 +256,9 @@ class ReviewCycleArtifact:
     def write(self, path: Path) -> None:
         """Write this artifact to disk as a markdown file with YAML frontmatter.
 
-        The parent directory is created if it does not exist.
+        The parent directory is created if it does not exist. The file is
+        created exclusively: an existing file is never replaced and raises
+        :class:`FileExistsError` (#5194).
 
         Serialization is delegated to :func:`kernel.yaml_io.serialize_mapping`
         (#3058 follow-up): its rt/preserve_quotes/default_flow_style/width=4096
@@ -281,7 +284,12 @@ class ReviewCycleArtifact:
         # CRLF on Windows, while Git's clean conversion can store LF in the
         # governed-ref blob; exact durability read-back must compare the same
         # bytes on both sides rather than normalize that mismatch away.
-        path.write_bytes(content.encode("utf-8"))
+        #
+        # Exclusive create (#5194): a review-cycle file that already exists is
+        # evidence of an earlier cycle and is never replaced. ``FileExistsError``
+        # propagates so the caller sees the collision instead of losing a cycle.
+        with path.open("xb") as handle:
+            handle.write(content.encode("utf-8"))
 
     @classmethod
     def from_file(cls, path: Path) -> ReviewCycleArtifact:
@@ -382,13 +390,21 @@ class ReviewCycleArtifact:
         return max((_cycle_number_or_zero(p) for p in candidates), default=0)
 
     @staticmethod
-    def next_cycle_number(sub_artifact_dir: Path) -> int:
+    def next_cycle_number(
+        sub_artifact_dir: Path,
+        sibling_dirs: Iterable[Path] = (),
+    ) -> int:
         """Return the next cycle number for a new artifact in *sub_artifact_dir*.
 
         Derives the result as ``max(parsed cycle numbers) + 1`` — never a count
         of files present (FR-006 / I-2) — so a numbering gap (e.g. cycles 1 and
         3 present, 2 missing) cannot produce a number that collides with an
         existing artifact. Returns 1 if no review-cycle-*.md files exist.
+
+        *sibling_dirs* are the other surfaces readers consult for this work
+        package's cycles (#5194: cycle 1 on PRIMARY, the write surface COORD).
+        The maximum is taken over the union of every directory, so a cycle
+        recorded on another surface is never numbered again.
 
         Raises:
             ValueError: if any sibling filename matches the
@@ -399,26 +415,29 @@ class ReviewCycleArtifact:
                 silently excluding it from the derivation (which would
                 reproduce the identical defect one level down). Also raised
                 (defensively) if the derived next number already names a file
-                that exists on disk.
+                that exists on disk in any of the directories.
         """
-        parsed_numbers, unparseable_names = _parse_review_cycle_candidates(
-            sub_artifact_dir
-        )
-        if unparseable_names:
-            raise ValueError(
-                f"Cannot determine next cycle number in {sub_artifact_dir}: "
-                "unparseable review-cycle filename(s): "
-                f"{', '.join(sorted(unparseable_names))}"
-            )
+        all_dirs = [sub_artifact_dir, *(d for d in sibling_dirs if d != sub_artifact_dir)]
+        parsed_numbers: list[int] = []
+        for directory in all_dirs:
+            numbers, unparseable_names = _parse_review_cycle_candidates(directory)
+            if unparseable_names:
+                raise ValueError(
+                    f"Cannot determine next cycle number in {directory}: "
+                    "unparseable review-cycle filename(s): "
+                    f"{', '.join(sorted(unparseable_names))}"
+                )
+            parsed_numbers.extend(numbers)
         if not parsed_numbers:
             return 1
         next_number = max(parsed_numbers) + 1
-        collision_path = sub_artifact_dir / _review_cycle_filename(next_number)
-        if collision_path.exists():
-            raise ValueError(
-                f"Cannot allocate cycle number {next_number} in "
-                f"{sub_artifact_dir}: {collision_path.name} already exists"
-            )
+        for directory in all_dirs:
+            collision_path = directory / _review_cycle_filename(next_number)
+            if collision_path.exists():
+                raise ValueError(
+                    f"Cannot allocate cycle number {next_number} in "
+                    f"{sub_artifact_dir}: {collision_path.name} already exists"
+                )
         return next_number
 
 

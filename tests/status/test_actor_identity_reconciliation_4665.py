@@ -105,7 +105,7 @@ def _claim(
     feature_dir: Path,
     *,
     actor: ActorField,
-    allow_rework: bool = False,
+    review_lane_exit: bool = False,
     policy_metadata: dict[str, object] | None = None,
 ) -> WorkPackageStartResult:
     return start_implementation_status(
@@ -116,7 +116,7 @@ def _claim(
         workspace_context="worktree:/nonexistent/wp01",
         execution_mode="worktree",
         repo_root=feature_dir.parent.parent,
-        allow_rework=allow_rework,
+        review_lane_exit=review_lane_exit,
         policy_metadata=policy_metadata,
     )
 

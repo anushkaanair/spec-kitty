@@ -286,7 +286,12 @@ def _status_emit(repo: Path, mission_slug: str, *, to: str) -> object:
 def test_approving_shells_warn_when_a_code_lane_approval_has_no_lane_head(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, shell: str, topology: str, warned: bool
 ) -> None:
-    """#5668: the lane has no checkout here, so no lane head is recorded; only a code lane's approval is warned about."""
+    """#5668 / #5721: only a code lane's approval is warned about.
+
+    The shells here force the approval, which is no review approval (#5721), so the line that
+    speaks is the forced-approval warning (it also says an unstamped work package refuses); a
+    ``single_branch`` lane is never bounded, so it gets no warning at all.
+    """
     repo, mission_slug, _ = _build_mission(tmp_path, f"approve-{shell}-{topology}", topology=topology)
     _seed_canonical_wp_state(repo, mission_slug, "WP01", "for_review", actor="claude", assignee="Owner", shell_pid="1234", timestamp="2026-09-28T01:00:00Z")
     monkeypatch.chdir(repo)
@@ -295,4 +300,5 @@ def test_approving_shells_warn_when_a_code_lane_approval_has_no_lane_head(
     result = (_move_task if shell == "move-task" else _status_emit)(repo, mission_slug, to="approved")
 
     assert result.exit_code == 0, result.output
-    assert ("no lane head could be recorded for WP01's approval" in result.output) is warned
+    assert ("the forced approval of WP01 is not a review approval" in result.output) is warned
+    assert "Warning:" not in result.output or warned

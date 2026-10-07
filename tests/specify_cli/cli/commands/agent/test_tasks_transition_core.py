@@ -427,9 +427,13 @@ def _approve_request(**overrides: Any) -> MoveTaskRequest:
 
 
 def test_unparseable_verdict_refuses() -> None:
-    outcome = decide_transition(_approve_request(review_verdict=None, review_artifact_name="review-cycle-1.md"))
+    outcome = decide_transition(_approve_request(review_verdict=None, review_artifact_name="review-cycle-damaged-event-record.md"))
     assert isinstance(outcome, RefuseExit1)
+    assert "review-cycle-damaged" not in outcome.error
     assert "no parseable review verdict" in outcome.error
+    assert "Repair the review artifact" not in outcome.error
+    assert "status event log" in outcome.error
+    assert "move-task WP01 --to planned --review-feedback-file <file>" in outcome.error
 
 
 def test_rejected_verdict_without_skip_proceeds() -> None:

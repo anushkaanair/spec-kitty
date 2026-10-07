@@ -422,3 +422,44 @@ def test_emit_allows_for_review_with_lane_commit(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert _extract_json(result.output)["to_lane"] == "for_review"
+
+
+@pytest.mark.regression
+def test_emit_prints_the_forced_approval_warning(tmp_path: Path, feature_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#5721: ``agent status emit`` prints the forced-approval line through ``approval_warnings``.
+
+    The fixture has no lane map; the warnings speak only for a code lane, so the lookup is stubbed.
+    """
+    from specify_cli.consolidation import approved_bound
+
+    monkeypatch.setattr(approved_bound, "_maps_to_code_lane", lambda *_args: True)
+    _walk_to_in_review(tmp_path, feature_dir)
+    rejected = _emit(tmp_path, "--to", "in_progress", "--force", "--reason", "operator pulls it back")
+    assert rejected.exit_code == 0, rejected.output
+
+    result = _emit(
+        tmp_path,
+        "--to",
+        "approved",
+        "--force",
+        "--reason",
+        "operator restamp",
+        "--evidence-json",
+        json.dumps({"review": {"reviewer": "ops", "verdict": "approved", "reference": "PR#9"}}),
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "forced approval of WP01 is not a review approval" in strip_ansi(result.stderr)
+
+
+def test_emit_prints_no_forced_approval_warning_for_a_review_verdict(tmp_path: Path, feature_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from specify_cli.consolidation import approved_bound
+
+    monkeypatch.setattr(approved_bound, "_maps_to_code_lane", lambda *_args: True)
+    _walk_to_in_review(tmp_path, feature_dir)
+
+    verdict = json.dumps({"reviewer": "alice", "verdict": "approved", "reference": "PR#1"})
+    result = _emit(tmp_path, "--to", "approved", "--review-result-json", verdict)
+
+    assert result.exit_code == 0, result.output
+    assert "not a review approval" not in strip_ansi(result.stderr)

@@ -454,10 +454,10 @@ def emit(
                 reload_exc,
             )
 
-        from specify_cli.consolidation.approved_bound import unstamped_approval_warning
+        from specify_cli.consolidation.approved_bound import approval_warnings
+        from specify_cli.status import read_events
 
-        warning = unstamped_approval_warning(event, repo_root=main_repo_root, mission_slug=mission_slug)
-        if warning is not None:
+        for warning in approval_warnings(event, lambda: read_events(output_feature_dir), repo_root=main_repo_root, mission_slug=mission_slug):
             typer.echo(warning, err=True)
 
         # Build result

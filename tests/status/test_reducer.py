@@ -1149,7 +1149,7 @@ class TestEventSourcedReviewResultReader:
 
     def test_lookup_from_state_slot_null(self) -> None:
         lookup = review_result_from_state({"lane": "planned", "review_result": None})
-        assert lookup == ReviewResultLookup(slot_present=True, result=None)
+        assert lookup == ReviewResultLookup(slot_present=True, result=None, cleared_without_verdict=True)
 
     def test_lookup_from_state_slot_populated(self) -> None:
         rr = ReviewResult(reviewer="r", verdict="approved", reference="review-cycle://m/WP01/1.md")
@@ -1161,6 +1161,7 @@ class TestEventSourcedReviewResultReader:
         treated as ``slot_present=True, result=None`` — fail-closed, not a crash."""
         lookup = review_result_from_state({"lane": "approved", "review_result": "not-a-mapping"})
         assert lookup == ReviewResultLookup(slot_present=True, result=None)
+        assert lookup.cleared_without_verdict is False
 
         lookup_missing_fields = review_result_from_state({"lane": "approved", "review_result": {"reviewer": "r"}})
         assert lookup_missing_fields == ReviewResultLookup(slot_present=True, result=None)

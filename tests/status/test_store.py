@@ -717,3 +717,29 @@ def test_slug_resolver_resolves_under_symlinked_root(tmp_path: Path) -> None:
 
     # No false reject: the legitimate slug resolves to its real mission_id.
     assert resolver.resolve("034-feature-name") == "01LEGITSYMROOTK5ZJ9E5008XY"
+
+
+def test_read_events_lenient_decodes_through_from_dict_fills_defaults_and_skips_bad_lines(tmp_path: Path) -> None:
+    """#5340: one advisory reader for the hollow-review check; append order, never raising."""
+    from specify_cli.status import read_events_lenient
+
+    structured = {"tool": "claude", "model": None, "profile": "ivan", "role": "implementer"}
+    lines = [
+        json.dumps({"event_id": "e1", "wp_id": "WP01", "from_lane": "planned", "to_lane": "claimed", "actor": structured}),
+        "not json",
+        "[1, 2]",
+        "",
+        json.dumps({"event_id": "e2", "wp_id": "WP01", "from_lane": "claimed", "to_lane": "nowhere", "actor": "x"}),
+        json.dumps({"event_id": "e3", "wp_id": "WP01", "from_lane": "claimed", "to_lane": "in_progress", "actor": {"tool": "claude"}}),
+        json.dumps({"kind": "annotation", "wp_id": "WP01"}),
+        json.dumps({"event_type": "DecisionPointOpened", "wp_id": "WP01"}),
+        json.dumps({"wp_id": "WP01", "from_lane": "in_review", "to_lane": "approved", "actor": "rev", "at": None, "force": True}),
+    ]
+    (tmp_path / EVENTS_FILENAME).write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    events = read_events_lenient(tmp_path)
+
+    assert [(e.event_id, str(e.to_lane)) for e in events] == [("e1", "claimed"), ("", "approved")]
+    assert events[0].actor == structured and events[0].execution_mode == "" and events[0].at == ""
+    assert events[1].force is True and events[1].actor == "rev"
+    assert read_events_lenient(tmp_path / "absent") == []
