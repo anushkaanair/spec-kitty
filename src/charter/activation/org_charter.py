@@ -31,7 +31,7 @@ Public API
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -41,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
+from charter.activation.activation_engine import EffectiveSet
 from charter.activation.activations import ActivationEntry, _activation_identity_key
 from charter.activation.org_pack_discovery import last_non_empty_token, union_required_tokens
 from charter.activation.kind_vocabulary import (
@@ -335,6 +336,28 @@ def _normalize_required_ids(
     return normalized
 
 
+def _effective_sets_for_absent_keys(repo_root: Path, promotions: Mapping[str, list[str]], config_data: Mapping[str, Any]) -> dict[str, EffectiveSet]:
+    """The effective set of every absent promoted key (FR-015, #4400).
+
+    Activation keys resolve through the one public seam. A ``required_<kind>``
+    whose key is not an activation key (``activated_assets``: the kind is not
+    charter-activatable, so no activation filter reads the key) has nothing
+    effective to preserve; it resolves to an empty set and is written as the
+    org-required list, as before.
+    """
+    from charter.activation.effective_set import resolve_effective_sets
+    from charter.activation.pack_manager import YAML_KEY_MAP
+
+    absent = [key for key in promotions if config_data.get(key) is None]
+    activation_keys = set(YAML_KEY_MAP.values())
+    seam_keys = [key for key in absent if key in activation_keys]
+    sets = resolve_effective_sets(repo_root, seam_keys) if seam_keys else {}
+    for key in absent:
+        if key not in activation_keys:
+            sets[key] = EffectiveSet(kind=key.removeprefix("activated_"), yaml_key=key)
+    return sets
+
+
 def _promote_org_required_to_config(policy: OrgCharterPolicy, repo_root: Path) -> list[str]:
     """Union every ``required_<kind>`` in *policy* into ``config.activated_<kind>``.
 
@@ -374,7 +397,6 @@ def _promote_org_required_to_config(policy: OrgCharterPolicy, repo_root: Path) -
     """
     from charter.activation.activation_engine import promote_activations
     from charter.activation.catalog import resolve_doctrine_root
-    from charter.activation.effective_set import resolve_effective_sets
     from charter.activation.pack_manager import resolve_activation_write_target
 
     target_path, config_data, save = resolve_activation_write_target(repo_root)
@@ -411,13 +433,12 @@ def _promote_org_required_to_config(policy: OrgCharterPolicy, repo_root: Path) -
         for kind, raw_ids in required_by_kind.items()
     }
 
-    absent = [key for key in promotions if config_data.get(key) is None]
     outcome = promote_activations(
         promotions,
         config_path=target_path,
         config_data=config_data,
         save=save,
-        effective_sets=resolve_effective_sets(repo_root, absent) if absent else {},
+        effective_sets=_effective_sets_for_absent_keys(repo_root, promotions, config_data),
     )
 
     promoted = [f"Promoted {len(plan.activated)} org-required id(s) into {plan.yaml_key} (config-authority)." for plan in outcome.committed if plan.activated]

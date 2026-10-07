@@ -76,7 +76,6 @@ __all__ = [
     "ActivationPlan",
     "EffectiveSet",
     "NoActivationRestrictionsError",
-    "PromotionOutcome",
     "UnknownActivationIdError",
     "commit_plan",
     "plan_activation",

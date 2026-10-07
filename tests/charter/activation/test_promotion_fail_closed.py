@@ -107,3 +107,24 @@ def test_mixed_keys_commit_only_the_resolvable_ones() -> None:
     assert config == {other: ["t1", "t2"]}
     assert len(save.calls) == 1 and _KEY not in save.calls[0]
     assert set(outcome.left_absent) == {_KEY}
+
+
+def test_org_charter_union_leaves_an_unresolvable_key_absent_and_reports_it(tmp_path: Path) -> None:
+    """Caller level (org-charter union, US5 AS-2): a missing second org pack makes the set unresolvable."""
+    from ruamel.yaml import YAML
+
+    from charter.activation.org_charter import _promote_org_required_to_config, load_org_charter_policies
+
+    pack = tmp_path / "org-packs" / "acme"
+    pack.mkdir(parents=True)
+    (pack / "org-charter.yaml").write_text('schema_version: "1"\norg_name: acme\nrequired_directives:\n  - DIRECTIVE_001\n', encoding="utf-8")
+    config = tmp_path / ".kittify" / "config.yaml"
+    config.parent.mkdir()
+    packs = [{"name": "acme", "local_path": "org-packs/acme"}, {"name": "gone", "local_path": "org-packs/does-not-exist"}]
+    with config.open("w", encoding="utf-8") as fh:
+        YAML().dump({"charter_packs": {"org": {"packs": packs}}, "mission_type_activations": ["software-dev"]}, fh)
+
+    messages = _promote_org_required_to_config(load_org_charter_policies(tmp_path), tmp_path)
+
+    assert "activated_directives" not in YAML(typ="safe").load(config.read_text(encoding="utf-8"))
+    assert any("activated_directives" in message and "does-not-exist" in message for message in messages), messages

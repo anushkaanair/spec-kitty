@@ -2,8 +2,8 @@
 
 While a kind's activation key is ABSENT, the activation-aware resolver treats
 the kind as unrestricted — every available artifact is effective. The first
-``charter activate`` for that kind materialized ``default.yaml`` instead, which
-is a strict subset of the available corpus, so one unrelated activation
+``charter activate`` for that kind materialized a shipped default list instead,
+which is a strict subset of the available corpus, so one unrelated activation
 silently deactivated everything outside it. Five projects lost 15 directives
 and 11 procedures this way (``adversarial-squad-deployment`` and
 ``red-main-release-discipline`` among them), and the new-policy tests of the
@@ -11,8 +11,9 @@ day passed throughout, because they only asserted that the *newly* activated
 artifact resolved.
 
 These tests assert the dimension those missed: what was effective before is
-still effective after, measured through the consumer surface
-(``PackContext.from_config``), not by reading the YAML back.
+still effective after (effective before ⊆ effective after), measured through
+the consumer surfaces (``PackContext.from_config`` and the activation-aware
+doctrine service), not by reading the YAML back.
 """
 
 from __future__ import annotations
@@ -23,7 +24,6 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from charter.activation.default_pack import load_default_pack_activation_ids
 from charter.activation.invocation_context import ProjectContext
 from charter.activation.pack_context import PackContext
 from charter.activation.pack_manager import ActiveCharterManager
@@ -58,8 +58,11 @@ def _available(project_root: Path, kind: str) -> set[str]:
     return set(ActiveCharterManager().list_available(ProjectContext.from_repo(project_root), kind))
 
 
-def _outside_default(yaml_key: str, ids: set[str]) -> set[str]:
-    return ids - set(load_default_pack_activation_ids().get(yaml_key, []))
+def _effective_directives(repo: Path) -> set[str]:
+    """The directive ids the activation-aware service has in force."""
+    from charter.activation.doctrine_service_builder import build_activation_aware_doctrine_service
+
+    return set(build_activation_aware_doctrine_service(repo).directives)
 
 
 def test_first_activation_keeps_every_previously_effective_directive(
@@ -68,19 +71,17 @@ def test_first_activation_keeps_every_previously_effective_directive(
     project_root = project_without_activation_keys
     before = PackContext.from_config(project_root)
     assert before.activated_directives is None, "fixture invalid: the kind must start unrestricted, or there is no narrowing to observe"
+    effective_before = _effective_directives(project_root)
+    assert len(effective_before) > 1, "fixture invalid: only one directive is effective, so this test could not observe a narrowing"
 
     result = _activate(project_root, "directive", "001-architectural-integrity-standard")
     assert result.exit_code == 0, result.output
 
     after = PackContext.from_config(project_root)
-    assert after.activated_directives is not None
-    effective = set(after.activated_directives)
+    assert after.activated_directives is not None, "control: the activation wrote the directive key"
+    assert set(after.activated_directives) >= _available(project_root, "directive")
 
-    previously_effective = _available(project_root, "directive")
-    assert _outside_default("activated_directives", previously_effective), (
-        "fixture invalid: every available directive is already in default.yaml, so this test could not observe the reported narrowing"
-    )
-    lost = previously_effective - effective
+    lost = effective_before - _effective_directives(project_root)
     assert not lost, f"#4253: activating one directive deactivated {len(lost)} previously effective directive(s): {sorted(lost)}"
 
 

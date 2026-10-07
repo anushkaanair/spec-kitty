@@ -90,7 +90,7 @@ from charter.activation.charter_yaml_io import (
     yaml_documents_equal,
     update_charter_yaml_section,
 )
-from charter.activation.pack_context import ActiveCharterConfigError, resolve_charter_yaml_pointer
+from charter.activation.pack_context import ActiveCharterConfigError, PackContext, resolve_charter_yaml_pointer
 from charter.offering.missions.mission_type_repository import (
     ORG_MISSION_TYPES_SUBDIR,
     PROJECT_MISSION_TYPES_RELATIVE_TO_KITTYFY_ROOT,
@@ -430,14 +430,19 @@ def _preservation_set(
 ) -> tuple[list[str], list[str]]:
     """What ``activate`` materializes for an absent key, plus any warning (#4253, #4399).
 
-    Only an absent key of a kind whose absent meaning is "all" needs a set: a
-    present key is appended to, and a "required" kind (skills) must not
-    preserve the whole catalogue (``activate skill X`` would activate every
-    skill). The set comes from the one public seam; when it is unresolved,
-    activation falls back to *available* and warns, naming the reason.
+    A present key needs no set (it is appended to). For an absent key of a
+    "required" kind (skills) the in-force set is what ``PackContext`` puts in
+    force while the key is absent (org-required plus built-in defaults), never
+    the whole catalogue (``activate skill X`` would activate every skill). For
+    an "all" kind the set comes from the one public seam; when it is
+    unresolved, activation falls back to *available* and warns, naming the
+    reason.
     """
-    if when_absent != "all" or data.get(yaml_key) is not None:
+    if data.get(yaml_key) is not None:
         return [], []
+    if when_absent != "all":
+        in_force = getattr(PackContext.from_config(repo_root), yaml_key, None)
+        return sorted(str(item) for item in in_force or ()), []
     from charter.activation.effective_set import resolve_effective_sets
 
     effective = resolve_effective_sets(repo_root, [yaml_key])[yaml_key]
@@ -994,7 +999,6 @@ class ActiveCharterManager:
             If ``kind`` is not in the canonical charter kind universe.
         """
         return frozenset(entry.artifact_id for entry in self.list_available_detailed(ctx, kind, layer_roots=layer_roots))
-
 
 
 # Re-export the engine's structured errors for callers that import them from
