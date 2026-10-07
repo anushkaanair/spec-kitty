@@ -476,7 +476,7 @@ def _resolve_chain(
 
     Delegates the topology walk (cycle detection, missing-base detection,
     base-first ordering) to the canonical charter-layer resolver
-    :func:`charter.activation.org_extends.resolve_extends_order`. This module no longer
+    :func:`charter.offering.packs.extends.resolve_extends_order`. This module no longer
     maintains its own depth-first walk — per C-005 / R-10 there is a single
     ``extends:`` resolution mechanism, and the charter-layer functions are it
     (FR-008). This loader only maps the resolved order back to the loaded
@@ -506,7 +506,7 @@ def _resolve_chain(
     OrgCharterCycleError
         When a cycle is detected (a pack already in the chain re-appears).
     """
-    from charter.activation.org_extends import (
+    from charter.offering.packs.extends import (
         ExtendsBaseNotFoundError,
         ExtendsCycleError,
         resolve_extends_order,
