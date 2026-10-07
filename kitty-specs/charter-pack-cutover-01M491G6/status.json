@@ -256,7 +256,7 @@
     },
     "WP08": {
       "actor": "claude",
-      "agent": "claude",
+      "agent": null,
       "agent_profile": "architect-alphonso",
       "agent_profile_version": "1.0",
       "force_count": 1,
@@ -269,6 +269,7 @@
         "Ready for review: charter activate --preset (replace semantics, org union, OD-6 refusal+diff, one write) and charter pack list/path over the offering; 4 error codes; NFR-003 green. Flagged: new PRESET_APPLY_FAILED fallback code needs owner approval."
       ],
       "provider": "__resolved_provider_absent__",
+      "review": null,
       "review_result": {
         "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP08-activate-preset-and-pack-list/review-cycle-1.md",
         "reference": "review-cycle://charter-pack-cutover-01M491G6/WP08-activate-preset-and-pack-list/review-cycle-1.md",
@@ -276,14 +277,14 @@
         "verdict": "changes_requested"
       },
       "role": "reviewer",
-      "shell_pid": 15996,
-      "shell_pid_created_at": "1791385728.2",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
       "subtasks": {
-        "T041": "done",
-        "T042": "done",
-        "T043": "done",
-        "T044": "done",
-        "T045": "done"
+        "T041": "planned",
+        "T042": "planned",
+        "T043": "planned",
+        "T044": "planned",
+        "T045": "planned"
       }
     },
     "WP09": {
