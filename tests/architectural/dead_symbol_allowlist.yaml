@@ -325,6 +325,13 @@ categories:
       raise, public for external filtering" shape of ``LegacyOrgPackDoctrineKeyWarning`` above; deleted
       with the legacy read fallback by WP14 (FR-011).'
     requires_issue: false
+  category_c_charter_pack_cutover_retired_fields:
+    rationale: 'C. charter-pack-cutover retired-field table (#3732, WP17). ``RETIRED_PACK_FIELDS``
+      and ``RetiredField`` are the typed table behind ``RETIRED_PACK_FIELD`` (contracts/errors.md);
+      src callers reach them through ``reject_retired_fields`` / ``retired_field_errors``. WP13 (same
+      mission) wires the table directly when it adds the ``accompanies_doctrine_pack`` row (a new
+      ``pack.yaml`` top-level scope) and the pack.yaml descriptor check; burns down then.'
+    requires_issue: false
   category_e_charter_activation_split_forward_api:
     rationale: 'E. charter-activation-split forward API (#806). EXPERIMENTAL deliberately retains its
       replay semantics, so these restored upstream helpers are public but currently unwired. TODO(triage):
@@ -407,119 +414,112 @@ entries:
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.builtin_manifest
+- module: charter.offering.packs.builtin_manifest
   name: GENERATED_BY
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.builtin_manifest
+- module: charter.offering.packs.builtin_manifest
   name: MANIFEST_FILENAME
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.builtin_manifest
+- module: charter.offering.packs.builtin_manifest
   name: build_builtin_manifest
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.builtin_manifest
+- module: charter.offering.packs.builtin_manifest
   name: enumerate_constituents
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_lineage
+- module: charter.offering.packs.pack_lineage
   name: PackLineageCycleError
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_lineage
+- module: charter.offering.packs.pack_lineage
   name: UnresolvedDoctrinePackError
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_lineage
+- module: charter.offering.packs.pack_lineage
   name: UnresolvedPackParentError
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_lineage
+- module: charter.offering.packs.pack_lineage
   name: resolve_accompanying_doctrine_pack
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_lineage
+- module: charter.offering.packs.pack_lineage
   name: resolve_pack_lineage_order
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_manifest
-  name: CharterProfile
-  category: category_a_slice_f_deferred
-  rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
-    schema/lineage/hash public API, declared now but not wired to production callers until the deferred
-    integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
-    suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_manifest
+- module: charter.offering.packs.pack_manifest
   name: HASH_EXCLUDED_FIELDS
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_manifest
+- module: charter.offering.packs.pack_manifest
   name: SCHEMA_VERSION
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_manifest
+- module: charter.activation.synthesizer.manifest
   name: absorb_synthesis_manifest
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_manifest
+- module: charter.offering.packs.pack_manifest
   name: compute_pack_manifest_hash
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_manifest
+- module: charter.offering.packs.pack_manifest
   name: counts_by_kind
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_manifest
+- module: charter.offering.packs.pack_manifest
   name: load_pack_manifest
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
     schema/lineage/hash public API, declared now but not wired to production callers until the deferred
     integration WP (#3518). Library-first slice; the AST ratchet + schema/identity/counts/lineage unit
     suites exercise these meanwhile. Operator-confirmed deferred-API landing.'
-- module: specify_cli.doctrine.pack_manifest
+- module: charter.offering.packs.pack_manifest
   name: sort_constituents
   category: category_a_slice_f_deferred
   rationale: 'pack-metadata-manifest-unification (#3500-#3503, ADR 2026-08-16-1): the unified pack-manifest
@@ -722,19 +722,25 @@ entries:
 - module: specify_cli.core.worktree_topology
   name: WPTopologyEntry
   category: category_b_grandfathered_legacy
-- module: specify_cli.doctrine.org_charter
+# charter-pack-cutover-01M491G6 WP05 (#3732): both were "imported" in src only by the deleted
+# specify_cli.doctrine.config alias re-exports (C-001); the real users are tests
+# (registry round-trips). Not new debt: unmasked by deleting the conduit.
+- module: charter.offering.drg.org_pack_config
+  name: PackRegistry
+  category: category_b_grandfathered_legacy
+- module: charter.offering.drg.org_pack_config
+  name: save_pack_registry
+  category: category_b_grandfathered_legacy
+- module: charter.activation.org_charter
   name: GovernancePolicy
   category: category_b_grandfathered_legacy
-- module: specify_cli.doctrine.org_charter
+- module: charter.activation.org_charter
   name: REQUIRED_KIND_FIELDS
   category: category_b_grandfathered_legacy
-- module: specify_cli.doctrine.org_charter
+- module: charter.activation.org_charter
   name: apply_org_charter_pre_fill
   category: category_b_grandfathered_legacy
-- module: specify_cli.doctrine.pack_assembler
-  name: AssemblyResult
-  category: category_b_grandfathered_legacy
-- module: specify_cli.doctrine.pack_assembler
+- module: charter.offering.packs.pack_assembler
   name: ConflictItem
   category: category_b_grandfathered_legacy
 - module: specify_cli.frontmatter
@@ -984,10 +990,10 @@ entries:
 - module: specify_cli.charter_activate
   name: StepRemovalWarning
   category: category_c_wp_in_flight_charter_activation
-- module: specify_cli.doctrine.org_charter
+- module: charter.activation.org_charter
   name: OrgCharterCycleError
   category: category_c_wp_in_flight_charter_activation
-- module: specify_cli.doctrine.org_charter
+- module: charter.activation.org_charter
   name: OrgCharterExtensionError
   category: category_c_wp_in_flight_charter_activation
 - module: charter.activation.activation_engine
@@ -1240,38 +1246,23 @@ entries:
   name: DRG_DIRNAME
   category: category_d_charter_code_topology_relocation_forward_api
 - module: kernel.charter_pack_paths
-  name: DRG_FRAGMENT
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
   name: LegacyDoctrineRootWarning
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: ORG_CHARTER_FILENAME
   category: category_d_charter_code_topology_relocation_forward_api
 - module: kernel.charter_pack_paths
   name: PRESETS_DIRNAME
   category: category_d_charter_code_topology_relocation_forward_api
 - module: kernel.charter_pack_paths
-  name: PROJECT_GRAPH_FILENAME
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: pack_drg_fragment
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: pack_org_charter
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
   name: pack_presets_dir
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: project_pack_path
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: project_pack_root
   category: category_d_charter_code_topology_relocation_forward_api
 - module: charter.drg
   name: merge_three_layers
   category: category_e_charter_activation_split_forward_api
+- module: charter.offering.packs.retired_fields
+  name: RETIRED_PACK_FIELDS
+  category: category_c_charter_pack_cutover_retired_fields
+- module: charter.offering.packs.retired_fields
+  name: RetiredField
+  category: category_c_charter_pack_cutover_retired_fields
 - module: specify_cli.core.env
   name: MOMENT_HANDLER_DISABLE_ENV_VARS
   category: category_c_team_kitty_launch_defaults_3980
@@ -1478,7 +1469,7 @@ widened_grandfathered_470:
     name: set_iteration_mode
   - module: specify_cli.doc_analysis.doc_state
     name: update_documentation_state
-  - module: specify_cli.doctrine.pack_descriptor
+  - module: charter.offering.packs.pack_descriptor
     name: PackDescriptor
   - module: specify_cli.dossier.hasher
     name: WP_DESCRIPTIVE_PROJECTION_FIELDS
@@ -1543,7 +1534,7 @@ widened_grandfathered_470:
   - module: specify_cli.tool_surface.profiles.projection
     name: LAYER_PROJECT
   - module: specify_cli.tool_surface.providers.managed_skills
-    name: doctrine_skill_entries
+    name: charter_skill_entries
   - module: specify_cli.tool_surface.service
     name: lint_docs_directory
   - module: specify_cli.upgrade.migrations.m_3_2_8_provision_kitty_env
