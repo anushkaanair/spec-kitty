@@ -30,6 +30,16 @@ only") is never resolvable here, so a careless caller cannot seed the whole
 skill catalogue; ``mission-type`` is an activation ledger, not a corpus, and is
 refused with :class:`ValueError`.
 
+Every unresolved set (except the required-only ``skill``) also carries
+:attr:`~charter.activation.activation_engine.EffectiveSet.fallback_ids`: the
+best-effort union of what is available across every *readable* layer (the
+built-in layer, each declared org pack root that is a directory, the project
+layer, and the service keys when the service builds). Promotion never writes it;
+only the tolerant single activation ``ActiveCharterManager.activate`` seeds an
+absent key from it, so that activation never narrows below the readable chain
+(#4400 review cycle 1). It is computed here, once, rather than re-scanned by a
+second copy in ``pack_manager``.
+
 Import direction: this module imports :mod:`charter.activation.pack_manager` at
 module scope; ``pack_manager`` imports this module lazily inside
 ``ActiveCharterManager.activate`` (one direction only). The result type,
@@ -41,7 +51,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -50,8 +60,9 @@ from charter.activation.invocation_context import ProjectContext
 from charter.activation.layer_roots import resolve_layer_roots
 from charter.activation.pack_manager import YAML_KEY_MAP, ActiveCharterManager
 from charter.offering.artifact_kinds import MISSION_TYPE_TOKEN, ArtifactKind
-from charter.offering.drg.org_pack_config import load_pack_registry
+from charter.offering.drg.org_pack_config import load_pack_registry, resolve_org_roots
 from charter.offering.pack_paths import built_in_dir
+from kernel.charter_pack_paths import resolve_project_pack_read_root
 
 __all__ = ["resolve_effective_sets"]
 
@@ -156,6 +167,67 @@ def _resolve_one(offering: _Offering, ctx: ProjectContext, token: str, yaml_key:
     return EffectiveSet(kind=token, yaml_key=yaml_key, ids=frozenset(ids))
 
 
+def _readable_roots(repo_root: Path) -> list[dict[str, Path]]:
+    """One root map per scan: the base layers, then base plus each readable declared org root.
+
+    Best effort, unlike :func:`_declared_org_roots`: a missing or non-directory
+    org root is skipped (that is why the set is unresolved), and a malformed
+    registry contributes no org root rather than failing the fallback.
+    """
+    base: dict[str, Path] = {}
+    project = resolve_project_pack_read_root(repo_root, quiet=True)
+    if project.is_dir():
+        base["project"] = project
+    try:
+        org_roots = [root for root in resolve_org_roots(repo_root, quiet=True) if root.is_dir()]
+    except Exception as exc:  # noqa: BLE001 — a malformed registry must not empty the fallback
+        logger.debug("org pack registry unreadable for the fallback scan: %s", exc)
+        org_roots = []
+    return [base, *({**base, "org": root} for root in org_roots)]
+
+
+def _fallback_service(repo_root: Path) -> Any:  # noqa: ANN401 — the doctrine service has no public protocol
+    """The activation-aware service, or ``None`` when it cannot be built (best effort)."""
+    from charter.activation.doctrine_service_builder import build_activation_aware_doctrine_service
+
+    try:
+        return build_activation_aware_doctrine_service(repo_root)
+    except Exception as exc:  # noqa: BLE001 — the fallback degrades to the scanned ids
+        logger.debug("doctrine service unavailable for the fallback: %s", exc)
+        return None
+
+
+def _fallback_ids(roots: list[dict[str, Path]], ctx: ProjectContext, token: str, service: Any) -> frozenset[str]:  # noqa: ANN401
+    """The union of ids available across every readable layer (``EffectiveSet.fallback_ids``)."""
+    manager = ActiveCharterManager()
+    ids: set[str] = set()
+    for layer_roots in roots:
+        try:
+            ids.update(manager.list_available(ctx, token, layer_roots=layer_roots))
+        except Exception as exc:  # noqa: BLE001 — one unreadable pack must not drop the rest
+            logger.debug("layer roots %s unreadable for %r: %s", layer_roots, token, exc)
+    if service is not None and token not in (_DIRECTIVE, MISSION_TYPE_TOKEN):
+        mapping = getattr(service, YAML_KEY_MAP[token].removeprefix("activated_"), None)
+        if isinstance(mapping, Mapping):
+            ids.update(str(key) for key in mapping)
+    return frozenset(ids)
+
+
+def _with_fallbacks(repo_root: Path, results: dict[str, EffectiveSet], service: Any) -> dict[str, EffectiveSet]:  # noqa: ANN401
+    """Attach ``fallback_ids`` to every unresolved set except a required-only kind's."""
+    needing = [key for key, entry in results.items() if not entry.resolved and entry.reason != _REQUIRED_ONLY]
+    if not needing:
+        return results
+    roots = _readable_roots(repo_root)
+    if service is None and any(results[key].kind not in (_DIRECTIVE, MISSION_TYPE_TOKEN) for key in needing):
+        service = _fallback_service(repo_root)
+    ctx = ProjectContext(repo_root=repo_root)
+    for key in needing:
+        entry = results[key]
+        results[key] = replace(entry, fallback_ids=_fallback_ids(roots, ctx, entry.kind, service))
+    return results
+
+
 def resolve_effective_sets(repo_root: Path, yaml_keys: Iterable[str]) -> dict[str, EffectiveSet]:
     """Return what is effective for each of *yaml_keys* while that key is absent.
 
@@ -172,7 +244,9 @@ def resolve_effective_sets(repo_root: Path, yaml_keys: Iterable[str]) -> dict[st
     -------
     dict[str, EffectiveSet]
         One entry per key. ``resolved=False`` (with ``reason``) means the caller
-        must leave the key absent and report it; never write a bare list.
+        must leave the key absent and report it; never write a bare list. Such
+        an entry carries ``fallback_ids`` (see the module docstring) for the
+        tolerant single activation only.
 
     Raises
     ------
@@ -187,14 +261,16 @@ def resolve_effective_sets(repo_root: Path, yaml_keys: Iterable[str]) -> dict[st
             results[key] = EffectiveSet(kind=token, yaml_key=key, resolved=False, reason=_REQUIRED_ONLY)
         else:
             pending[key] = token
-    if not pending:
-        return results
-    try:
-        offering = _load_offering(repo_root, with_service=any(token != _DIRECTIVE for token in pending.values()))
-    except _UnresolvableError as exc:
-        logger.debug("effective sets for %s unresolved: %s", sorted(pending), exc)
-        results.update({key: EffectiveSet(kind=token, yaml_key=key, resolved=False, reason=str(exc)) for key, token in pending.items()})
-        return results
-    ctx = ProjectContext(repo_root=repo_root)
-    results.update({key: _resolve_one(offering, ctx, token, key) for key, token in pending.items()})
-    return results
+    service: Any = None
+    if pending:
+        try:
+            offering = _load_offering(repo_root, with_service=any(token != _DIRECTIVE for token in pending.values()))
+        except _UnresolvableError as exc:
+            logger.debug("effective sets for %s unresolved: %s", sorted(pending), exc)
+            results.update({key: EffectiveSet(kind=token, yaml_key=key, resolved=False, reason=str(exc)) for key, token in pending.items()})
+        else:
+            service = offering.service
+            ctx = ProjectContext(repo_root=repo_root)
+            results.update({key: _resolve_one(offering, ctx, token, key) for key, token in pending.items()})
+    ordered = {key: results[key] for key in tokens}
+    return _with_fallbacks(repo_root, ordered, service)

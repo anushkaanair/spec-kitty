@@ -22,9 +22,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
+from ruamel.yaml import YAML
 from typer.testing import CliRunner
 
+from charter.activation.doctrine_service_builder import build_activation_aware_doctrine_service
 from charter.activation.invocation_context import ProjectContext
+from charter.activation.layer_roots import resolve_layer_roots
 from charter.activation.pack_context import PackContext
 from charter.activation.pack_manager import ActiveCharterManager
 from specify_cli.cli.commands.charter import charter_app
@@ -263,3 +266,93 @@ def test_an_id_that_diverges_from_its_stem_survives_activation(tmp_path: Path) -
     assert result.exit_code == 0, result.output
 
     assert "acme-release-proc" in _effective_procedures(repo), "#4399 MAJOR 2: the divergent-id org procedure was written by stem and filtered back out"
+
+
+# ---------------------------------------------------------------------------
+# #4400 (WP06 review cycle 1): the tolerant fallback never narrows below the
+# readable chain. When the effective set of an absent key cannot be resolved,
+# ``activate`` seeds the key from the seam's ``EffectiveSet.fallback_ids``: the
+# union over the built-in layer, EVERY readable declared org root and the
+# project layer. The CLI's ``layer_roots`` map holds org pack #1 only, so
+# seeding from it deactivated org packs 2+.
+# ---------------------------------------------------------------------------
+
+ALREADY_EFFECTIVE = "already effective"
+
+
+def _fb_tactic(directory: Path, tactic_id: str) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{tactic_id}.tactic.yaml").write_text(
+        f'schema_version: "1.0"\nid: {tactic_id}\nname: {tactic_id}\npurpose: Fixture tactic.\nsteps:\n  - title: Act\n    description: Do the thing.\n',
+        encoding="utf-8",
+    )
+
+
+def _fb_project(tmp_path: Path, packs: list[str]) -> Path:
+    root = tmp_path / "project"
+    (root / ".kittify").mkdir(parents=True)
+    with (root / ".kittify" / "config.yaml").open("w", encoding="utf-8") as fh:
+        YAML().dump({"charter_packs": {"org": {"packs": [{"name": name, "local_path": f"org-packs/{name}"} for name in packs]}}}, fh)
+    return root
+
+
+def _fb_config(root: Path) -> dict[str, object]:
+    data = YAML(typ="safe").load((root / ".kittify" / "config.yaml").read_text(encoding="utf-8"))
+    assert isinstance(data, dict)
+    return data
+
+
+def _fb_effective_tactics(root: Path) -> set[str]:
+    return {str(key) for key in build_activation_aware_doctrine_service(root).tactics}
+
+
+def _fb_activate(root: Path, kind: str, artifact_id: str) -> list[str]:
+    return ActiveCharterManager().activate(ProjectContext(repo_root=root), kind, artifact_id, layer_roots=resolve_layer_roots(root)).warnings
+
+
+def test_missing_middle_org_root_keeps_pack_three_effective(tmp_path: Path) -> None:
+    root = _fb_project(tmp_path, ["a", "b", "c"])
+    _fb_tactic(root / "org-packs" / "a" / "tactics", "org-a-tactic")
+    _fb_tactic(root / "org-packs" / "c" / "tactics", "org-c-tactic")
+    assert "org-c-tactic" in _fb_effective_tactics(root), "control: pack c is effective while the key is absent"
+
+    warnings = _fb_activate(root, "tactic", "org-a-tactic")
+
+    written = _fb_config(root)["activated_tactics"]
+    assert isinstance(written, list) and {"org-a-tactic", "org-c-tactic"} <= set(written)
+    assert "org-c-tactic" in _fb_effective_tactics(root)
+    assert any("could not be resolved because" in w and "org-packs/b" in w and "across all readable layers" in w for w in warnings), warnings
+    assert not any(ALREADY_EFFECTIVE in w for w in warnings), "the engine must not claim nothing in force was deactivated"
+
+
+def test_service_build_failure_keeps_both_readable_org_packs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import charter.activation.doctrine_service_builder as builder
+
+    root = _fb_project(tmp_path, ["a", "c"])
+    _fb_tactic(root / "org-packs" / "a" / "tactics", "org-a-tactic")
+    _fb_tactic(root / "org-packs" / "c" / "tactics", "org-c-tactic")
+    assert "org-c-tactic" in _fb_effective_tactics(root), "control"
+
+    def broken(repo_root: Path) -> None:
+        raise RuntimeError(f"cannot build for {repo_root.name}")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(builder, "build_activation_aware_doctrine_service", broken)
+        warnings = _fb_activate(root, "tactic", "org-a-tactic")
+
+    written = _fb_config(root)["activated_tactics"]
+    assert isinstance(written, list) and {"org-a-tactic", "org-c-tactic"} <= set(written)
+    assert "org-c-tactic" in _fb_effective_tactics(root)
+    assert any("doctrine service cannot be built" in w for w in warnings), warnings
+    assert not any(ALREADY_EFFECTIVE in w for w in warnings)
+
+
+def test_resolved_set_still_reports_nothing_deactivated(tmp_path: Path) -> None:
+    root = _fb_project(tmp_path, ["a", "c"])
+    _fb_tactic(root / "org-packs" / "a" / "tactics", "org-a-tactic")
+    _fb_tactic(root / "org-packs" / "c" / "tactics", "org-c-tactic")
+
+    warnings = _fb_activate(root, "tactic", "org-a-tactic")
+
+    assert any(ALREADY_EFFECTIVE in w for w in warnings), warnings
+    assert not any("could not be resolved" in w for w in warnings)

@@ -154,6 +154,66 @@ def test_mission_type_and_unknown_keys_are_refused(project: Path) -> None:
         _resolve(project, ["activated_nonsense"])
 
 
+def test_resolved_set_and_skill_carry_no_fallback(project: Path) -> None:
+    results = _resolve(project, ["activated_tactics", "activated_skills"])
+
+    assert results["activated_tactics"].fallback_ids == frozenset()
+    assert results["activated_skills"].fallback_ids == frozenset(), "a required-only kind never seeds the catalogue"
+
+
+def test_missing_middle_org_root_fallback_spans_every_readable_root(project: Path) -> None:
+    _tactic(project / "org-packs" / "c" / "tactics", "org-c-tactic")
+    _config(project, [{"name": "acme", "local_path": ORG1}, {"name": "gone", "local_path": "org-packs/does-not-exist"}, {"name": "c", "local_path": "org-packs/c"}])
+
+    result = _resolve(project, ["activated_tactics"])["activated_tactics"]
+
+    assert not result.resolved
+    assert _builtin_ids("tactic") <= result.fallback_ids
+    assert {"acme-pairing", "org-c-tactic", PROJECT_TACTIC} <= result.fallback_ids
+
+
+def test_service_build_failure_fallback_spans_both_org_packs(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import charter.activation.doctrine_service_builder as builder
+
+    def broken(repo_root: Path) -> None:
+        raise RuntimeError(f"cannot build for {repo_root.name}")
+
+    monkeypatch.setattr(builder, "build_activation_aware_doctrine_service", broken)
+
+    result = _resolve(project, ["activated_tactics"])["activated_tactics"]
+
+    assert not result.resolved
+    assert {"acme-pairing", "acme-two-tactic", PROJECT_TACTIC} <= result.fallback_ids
+
+
+def test_malformed_registry_fallback_keeps_builtin_and_project(project: Path) -> None:
+    _config(project, 7)
+
+    result = _resolve(project, ["activated_tactics"])["activated_tactics"]
+
+    assert not result.resolved
+    assert _builtin_ids("tactic") | {PROJECT_TACTIC} <= result.fallback_ids
+
+
+def test_fallback_skips_an_org_root_that_raises_on_scan(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    real = ActiveCharterManager.list_available
+
+    def exploding(self: ActiveCharterManager, ctx: ProjectContext, kind: str, *, layer_roots: dict[str, Path] | None = None) -> frozenset[str]:
+        if layer_roots and "org" in layer_roots and layer_roots["org"].name == "acme-two":
+            raise OSError("permission denied")
+        return frozenset(real(self, ctx, kind, layer_roots=layer_roots))
+
+    monkeypatch.setattr(ActiveCharterManager, "list_available", exploding)
+
+    result = _resolve(project, ["activated_tactics"])["activated_tactics"]
+
+    assert not result.resolved
+    assert result.reason is not None and "permission denied" in result.reason
+    # One unreadable root does not drop the rest; the service (which built) still contributes.
+    assert {"acme-pairing", PROJECT_TACTIC} <= result.fallback_ids
+    assert _builtin_ids("tactic") <= result.fallback_ids
+
+
 def test_malformed_org_registry_is_unresolved(project: Path) -> None:
     _config(project, 7)
 

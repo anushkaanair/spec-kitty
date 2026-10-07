@@ -226,6 +226,7 @@ def plan_activation(
     config_data: Mapping[str, Any],
     effective_ids: Iterable[str] = (),
     effective_when_absent: str = "all",
+    effective_ids_in_force: bool = True,
     cascade_scope: Any = None,  # noqa: ANN401
 ) -> ActivationPlan:
     """Compute the post-state for activating *artifact_id* — purely (FR-011/012).
@@ -274,6 +275,13 @@ def plan_activation(
         empty-availability branch it guarded cannot occur.
         ``promote_activations`` is a different planner
         (:func:`_plan_promotion`) with its own fail-closed absent-key contract.
+    effective_ids_in_force:
+        ``True`` (default) when *effective_ids* is what was in force while the
+        key was absent; the plan then reports that nothing in force was
+        deactivated. ``False`` when the caller materialized a substitute (the
+        effective set was unresolved, or ``mission-type``, whose absent key
+        puts nothing in force); the claim would be false, so it is not made and
+        the caller reports what it used instead.
     cascade_scope:
         Reserved for the WP11 cascade engine; threaded but not consumed here
         (never collapsed to a bool — Contract C3.3).
@@ -326,11 +334,12 @@ def plan_activation(
         materialized = list(dict.fromkeys(effective_ids))
         if not materialized and effective_when_absent == "all":
             materialized = list(dict.fromkeys(available_ids))
-        warnings.append(
-            f"Kind {kind!r} had no explicit activation set. "
-            f"Initialized from the {len(materialized)} artifact(s) already effective, "
-            "so nothing in force was deactivated."
-        )
+        if effective_ids_in_force:
+            warnings.append(
+                f"Kind {kind!r} had no explicit activation set. "
+                f"Initialized from the {len(materialized)} artifact(s) already effective, "
+                "so nothing in force was deactivated."
+            )
         new_list = list(materialized)
     else:
         new_list = list(current)
@@ -491,6 +500,15 @@ class EffectiveSet:
         leave the key absent and report :attr:`reason` (never write a bare list).
     reason:
         Why the set is unresolved; ``None`` when resolved.
+    fallback_ids:
+        Set only when :attr:`resolved` is ``False``: the best-effort union of
+        the ids available across every *readable* layer (the built-in layer,
+        each declared org pack root that can be read, the project layer, plus
+        the activation-aware service's keys when it can be built). It is not
+        the effective set and no promotion writes it; only a tolerant single
+        activation (``ActiveCharterManager.activate``) materializes it, so
+        that activation never narrows below the whole readable chain. Empty
+        for a required-only kind (``skill``).
     """
 
     kind: str
@@ -498,6 +516,7 @@ class EffectiveSet:
     ids: frozenset[str] = frozenset()
     resolved: bool = True
     reason: str | None = None
+    fallback_ids: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True)

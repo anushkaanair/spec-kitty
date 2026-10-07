@@ -427,34 +427,43 @@ def _preservation_set(
     data: Mapping[str, Any],
     available: frozenset[str],
     when_absent: str,
-) -> tuple[list[str], list[str]]:
-    """What ``activate`` materializes for an absent key, plus any warning (#4253, #4399).
+) -> tuple[list[str], list[str], bool]:
+    """What ``activate`` materializes for an absent key (#4253, #4399, #4400).
 
-    A present key needs no set (it is appended to). ``mission-type`` is an
-    activation ledger, not a corpus: its available ids are kept. For an absent key of a
+    Returns ``(ids, warnings, in_force)``. ``in_force`` is ``True`` when *ids*
+    is what was in force while the key was absent, so the engine may say that
+    nothing in force was deactivated; ``False`` when *ids* is a substitute and
+    *warnings* already says what was used.
+
+    A present key needs no set (it is appended to). For an absent key of a
     "required" kind (skills) the in-force set is what ``PackContext`` puts in
     force while the key is absent (org-required plus built-in defaults), never
     the whole catalogue (``activate skill X`` would activate every skill). For
-    an "all" kind the set comes from the one public seam; when it is
-    unresolved, activation falls back to *available* and warns, naming the
-    reason.
+    an "all" kind the set comes from the one public seam. When the seam cannot
+    resolve it, activation stays tolerant but never narrower than the whole
+    readable chain: it seeds from the seam's ``fallback_ids`` (built-in, every
+    readable declared org root, project). ``mission-type`` is an activation
+    ledger, not a corpus: its available ids are kept.
     """
     if data.get(yaml_key) is not None:
-        return [], []
+        return [], [], True
     if kind == MISSION_TYPE_TOKEN:
         # An activation ledger, not a corpus: the seam has no effective set for it.
-        return sorted(available), []
+        return sorted(available), [], True
     if when_absent != "all":
         in_force = getattr(PackContext.from_config(repo_root), yaml_key, None)
-        return sorted(str(item) for item in in_force or ()), []
+        return sorted(str(item) for item in in_force or ()), [], True
     from charter.activation.effective_set import resolve_effective_sets
 
     effective = resolve_effective_sets(repo_root, [yaml_key])[yaml_key]
     if effective.resolved:
-        return sorted(effective.ids), []
+        return sorted(effective.ids), [], True
+    seeded = sorted(effective.fallback_ids | available)
     logger.debug("effective set for %r unresolved: %s", yaml_key, effective.reason)
-    warning = f"The effective {kind} set could not be resolved ({effective.reason}); initialized from the {len(available)} available artifact(s) instead."
-    return sorted(available), [warning]
+    warning = (
+        f"The effective {kind} set could not be resolved because {effective.reason}; initialized from the {len(seeded)} ids available across all readable layers."
+    )
+    return seeded, [warning], False
 
 
 @dataclass(frozen=True)
@@ -712,7 +721,7 @@ class ActiveCharterManager:
 
         available = self.list_available(ctx, kind, layer_roots=layer_roots)
         when_absent = self._effective_when_absent(kind)
-        preserved, preservation_warnings = _preservation_set(repo_root, kind, yaml_key, data, available, when_absent)
+        preserved, preservation_warnings, in_force = _preservation_set(repo_root, kind, yaml_key, data, available, when_absent)
 
         # plan_activation validates BEFORE computing any post-state (NFR-003);
         # on an unknown ID it raises UnknownActivationIdError and no write
@@ -725,6 +734,7 @@ class ActiveCharterManager:
             config_data=data,
             effective_ids=preserved,
             effective_when_absent=when_absent,
+            effective_ids_in_force=in_force,
         )
 
         result = ActivationResult(activated=list(plan.activated), warnings=preservation_warnings + list(plan.warnings))
