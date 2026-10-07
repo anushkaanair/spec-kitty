@@ -291,7 +291,7 @@
     },
     "WP17": {
       "actor": "claude",
-      "agent": "claude",
+      "agent": null,
       "agent_profile": "reviewer-renata",
       "agent_profile_version": "1.0",
       "force_count": 1,
@@ -304,6 +304,7 @@
         "Five renames done, no aliases (ActiveCharterManager, ActiveCharterConfigError, ACTIVE_CHARTER_CONFIG_INVALID read via exc.code, charter_pack_id + RETIRED_PACK_FIELD via new charter.offering.packs.retired_fields, ToolSurfaceKind.CHARTER_SKILL/--kind charter-skill); org-charter schema_version 2 (1 and 2 chain-compatible); golden + ERROR_CODES.md updated. Tests: WP17 acceptance 4/4 green; acceptance suite 97 passed/255 xfailed/0 failed/0 xpassed; tests/charter+tests/doctrine 7577 passed; core/next/charter cmds/agent cmds etc 4325 passed; tool_surface+skills 1772 passed; arch gates 417+113 passed; test-fast 2281 passed; ruff clean; mypy no new errors; surface ids not persisted."
       ],
       "provider": "__resolved_provider_absent__",
+      "review": null,
       "review_result": {
         "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP17-three-names-and-charter-pack-id/review-cycle-1.md",
         "reference": "review-cycle://charter-pack-cutover-01M491G6/WP17-three-names-and-charter-pack-id/review-cycle-1.md",
@@ -311,14 +312,14 @@
         "verdict": "changes_requested"
       },
       "role": "reviewer",
-      "shell_pid": 24935,
-      "shell_pid_created_at": "1791363657.67",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
       "subtasks": {
-        "T083": "done",
-        "T084": "done",
-        "T085": "done",
-        "T086": "done",
-        "T087": "done"
+        "T083": "planned",
+        "T084": "planned",
+        "T085": "planned",
+        "T086": "planned",
+        "T087": "planned"
       }
     },
     "WP18": {
