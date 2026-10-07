@@ -446,3 +446,80 @@ def test_migration_identity() -> None:
     assert migration.runs_first is True and migration.runs_on_worktrees is False
     assert migration.target_version == "4.0.0rc6"
     assert migration.can_apply(Path(".")) == (True, "")
+
+
+# --------------------------------------------------------------------------- #
+# An unreadable .gitignore (review cycle 1, finding 3)
+# --------------------------------------------------------------------------- #
+
+_UNREADABLE_GITIGNORE_KINDS = ("symlink", "non_utf8", "directory")
+
+
+def _plant_unreadable_gitignore(project: Path, kind: str) -> None:
+    gitignore = project / ".gitignore"
+    if kind == "symlink":
+        _write(project, "real-gitignore", f"{LEGACY}/**\n")
+        gitignore.symlink_to("real-gitignore")
+    elif kind == "non_utf8":
+        gitignore.write_bytes(b"\xff\xfe" + f"{LEGACY}/**\n\xe9\n".encode("latin-1"))
+    else:
+        (gitignore / "nested").mkdir(parents=True)
+
+
+def _canonical_project(project: Path) -> None:
+    _write(project, ".kittify/config.yaml", "charter_packs:\n  org:\n    packs: []\n")
+    _write(project, f"{NEW}/graph.yaml", "nodes: []\n")
+    _stamp(project, "4.0.0rc6")
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink")
+@pytest.mark.parametrize("kind", _UNREADABLE_GITIGNORE_KINDS)
+@pytest.mark.usefixtures("registry")
+def test_unreadable_gitignore_does_not_select_a_canonical_project(tmp_path: Path, kind: str) -> None:
+    _canonical_project(tmp_path)
+    _plant_unreadable_gitignore(tmp_path, kind)
+    migration = CharterPackCutoverMigration()
+    assert migration.detect(tmp_path) is False
+    assert migration.structural_detect(tmp_path) is False
+    assert CUTOVER_ID not in [m.migration_id for m in MigrationRegistry.get_applicable("4.0.0rc6", "4.0.0rc6", tmp_path)]
+    result = MigrationRunner(tmp_path).upgrade("4.0.0rc6", include_worktrees=False)
+    assert result.success, result.errors
+    assert CUTOVER_ID not in result.migrations_applied
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX symlink")
+@pytest.mark.parametrize("kind", _UNREADABLE_GITIGNORE_KINDS)
+@pytest.mark.usefixtures("registry")
+def test_unreadable_gitignore_on_a_legacy_project_is_kept_for_review(tmp_path: Path, kind: str) -> None:
+    files = _legacy_tree(tmp_path)
+    _stamp(tmp_path, "4.0.0rc6")
+    _plant_unreadable_gitignore(tmp_path, kind)
+    before = _digest(tmp_path)
+    result = MigrationRunner(tmp_path).upgrade("4.0.0rc6", include_worktrees=False)
+    assert result.success, result.errors
+    assert CUTOVER_ID in result.migrations_applied
+    assert sorted(p.relative_to(tmp_path / NEW).as_posix() for p in (tmp_path / NEW).rglob("*") if p.is_file()) == files
+    report = _report(result.migration_results[CUTOVER_ID])
+    assert report["rewritten"] == []
+    assert len(report["kept_for_review"]) == 1
+    assert report["kept_for_review"][0].startswith(".gitignore could not be read safely (")
+    assert f"check it for {LEGACY} rules by hand" in report["kept_for_review"][0]
+    # The unreadable .gitignore (and a symlink's target) is left exactly as it was.
+    after = _digest(tmp_path)
+    assert {k: v for k, v in after.items() if k in {".gitignore", "real-gitignore"}} == {k: v for k, v in before.items() if k in {".gitignore", "real-gitignore"}}
+    assert (tmp_path / ".gitignore").is_dir() is (kind == "directory")
+
+
+def test_gitignore_write_failure_is_a_named_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _write(tmp_path, ".gitignore", f"{LEGACY}/**\n")
+
+    def _refuse(path: Path, content: str) -> None:
+        raise PermissionError(f"Permission denied: {path}")
+
+    monkeypatch.setattr(cutover, "write_gitignore_text", _refuse)
+    result = _apply(tmp_path)
+    assert not result.success
+    denied = f"Permission denied: {tmp_path / '.gitignore'}"
+    assert result.errors == [f".gitignore could not be written ({denied}); make it writable, then run `spec-kitty upgrade` again"]
+    assert _report(result)["rewritten"] == []
+    assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == f"{LEGACY}/**\n"

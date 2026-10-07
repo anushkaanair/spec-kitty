@@ -70,7 +70,7 @@ from kernel.atomic import atomic_write
 from kernel.charter_pack_paths import KITTIFY_DIRNAME, PROJECT_PACK_ROOT, PROJECT_PACK_ROOT_POSIX
 from specify_cli.asset_preservation import guard_destructive_removal
 from specify_cli.asset_preservation.backup import write_file_verbatim
-from specify_cli.gitignore_manager import read_gitignore_text, write_gitignore_text
+from specify_cli.gitignore_manager import GitignorePathError, read_gitignore_text, write_gitignore_text
 from specify_cli.migration.legacy_charter_layout import (
     LEGACY_PROJECT_ROOT_POSIX,
     LEGACY_PROJECT_ROOT_RELPATH,
@@ -540,16 +540,32 @@ def _gitignore_rewrite(lines: list[str]) -> tuple[list[str], list[str]]:
 
 
 def _rewrite_gitignore(run: _Run) -> None:
+    """Rewrite ``.gitignore`` rules naming the retired root.
+
+    A ``.gitignore`` that cannot be read safely (a symlink, not UTF-8, a
+    directory, no permission) is reported for review, never actionable: an
+    otherwise canonical project must not be selected because of it, and the
+    run must not fail on it. A readable one whose rewrite cannot be written is
+    a named error (the rules are known to need the rewrite).
+    """
     path = run.project / _GITIGNORE
-    text = read_gitignore_text(path)
+    try:
+        text = read_gitignore_text(path)
+    except (GitignorePathError, OSError) as exc:
+        run.report.kept_for_review.append(f"{_GITIGNORE} could not be read safely ({exc}); check it for {LEGACY_PROJECT_ROOT_POSIX} rules by hand")
+        return
     if text is None or LEGACY_PROJECT_ROOT_POSIX not in text:
         return
     lines, changes = _gitignore_rewrite(text.splitlines(keepends=True))
     if not changes:
         return
-    run.report.rewritten.extend(f"{_GITIGNORE}: {change}" for change in changes)
     if not run.dry_run:
-        write_gitignore_text(path, "".join(lines))
+        try:
+            write_gitignore_text(path, "".join(lines))
+        except (GitignorePathError, OSError) as exc:
+            run.report.errors.append(f"{_GITIGNORE} could not be written ({exc}); make it writable, then run `spec-kitty upgrade` again")
+            return
+    run.report.rewritten.extend(f"{_GITIGNORE}: {change}" for change in changes)
 
 
 def _rewrite_path_references(run: _Run) -> None:
