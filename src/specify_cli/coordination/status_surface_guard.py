@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from kernel.git import GitCommandError, run_git, tree_entry
+from kernel.git import GitCommandError, blob_at
 from specify_cli.coordination.event_prefix import DuplicateEventIdError, MalformedEventLogLineError, event_ids_of
 from specify_cli.coordination.transaction_errors import BookkeepingStatusSurfaceUnreadable
 
@@ -40,19 +40,6 @@ def _working_tree_event_ids(raw: bytes) -> set[str]:
         if isinstance(event, dict) and "event_id" in event:
             ids.add(str(event["event_id"]))
     return ids
-
-
-def _committed_log(worktree_root: Path, relative: str) -> bytes | None:
-    """Bytes of ``HEAD:<relative>``, or ``None`` when HEAD is readable and does not track the path.
-
-    Raises:
-        GitCommandError: HEAD or the blob could not be read (also a timeout or a git that did not start).
-    """
-    entry = tree_entry(worktree_root, "HEAD", relative)
-    if entry is None:
-        return None
-    # Read the blob the listing named, so both reads answer for the same commit.
-    return run_git(worktree_root, "cat-file", "blob", entry.oid).stdout
 
 
 def committed_events_missing_from_worktree(worktree_root: Path, events_path: Path) -> list[str]:
@@ -75,7 +62,7 @@ def committed_events_missing_from_worktree(worktree_root: Path, events_path: Pat
         return BookkeepingStatusSurfaceUnreadable(worktree_root=worktree_root, events_path=events_path, reason=reason)
 
     try:
-        committed = _committed_log(worktree_root, relative)
+        committed = blob_at(worktree_root, "HEAD", relative)
     except GitCommandError as exc:
         raise _unreadable(f"the log at HEAD could not be read ({exc})") from exc
     if committed is None:

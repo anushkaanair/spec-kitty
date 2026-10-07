@@ -322,3 +322,24 @@ def test_commit_paths_first_parent(tmp_path: Path) -> None:
     with _stub() as run:
         listing.commit_paths(tmp_path, "abc", first_parent=True)
     assert _argv(run) == ("-c", "diff.relative=false", "show", "--name-only", "--format=", "-z", "--no-renames", "--first-parent", "-m", "abc", "--")
+
+
+def test_blob_at_reads_the_blob_the_listing_named(tmp_path: Path) -> None:
+    oid = "587be6b4c3f93f93c489c0111bba5596147a26cb"
+    raw = f"100644 blob {oid}\tsrc/a\x00".encode()
+    results = [GitResult(returncode=0, stdout=raw, stderr=b""), GitResult(returncode=0, stdout=b"payload", stderr=b"")]
+    with patch.object(listing, "run_git", side_effect=results) as run:
+        assert listing.blob_at(tmp_path, "HEAD", "src/a") == b"payload"
+    assert run.call_args.args[1:] == ("cat-file", "blob", oid)
+
+
+def test_blob_at_is_none_when_the_ref_does_not_track_the_path(tmp_path: Path) -> None:
+    with _stub(b"") as run:
+        assert listing.blob_at(tmp_path, "HEAD", "missing") is None
+    assert run.call_count == 1
+
+
+def test_blob_at_propagates_git_failure(tmp_path: Path) -> None:
+    failure = GitCommandError(argv=("ls-tree",), cwd=tmp_path, returncode=128, stderr="fatal: bad ref")
+    with patch.object(listing, "run_git", side_effect=failure), pytest.raises(GitCommandError):
+        listing.blob_at(tmp_path, "HEAD", "src/a")
