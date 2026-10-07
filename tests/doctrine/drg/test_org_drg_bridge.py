@@ -1310,7 +1310,7 @@ class TestResolutionPrecedence:
 
         If a bare id could bind to an *earlier fragment's* node, whether a
         pack's edge resolved would depend on the operator's
-        ``organisation_packs:`` ordering — an order-dependent graph is a
+        ``charter_packs.org.packs`` ordering — an order-dependent graph is a
         silent-difference generator of the same family this mission closes.
         Both orderings must produce the same verdict.
         """

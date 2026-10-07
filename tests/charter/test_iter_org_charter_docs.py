@@ -88,7 +88,7 @@ def _register_org_pack(repo_root: Path, pack_root: Path, *, name: str = "securit
                 # this key; unrelated to the org-pack union this fixture
                 # exercises, so no other activation key is written.
                 "mission_type_activations": ["software-dev"],
-                "doctrine": {"org": {"packs": [{"name": name, "local_path": str(pack_root)}]}},
+                "charter_packs": {"org": {"packs": [{"name": name, "local_path": str(pack_root)}]}},
             },
             fh,
         )

@@ -41,7 +41,7 @@ def _write_governance_with_selections(repo_root: Path) -> None:
         textwrap.dedent(
             """
             governance:
-              doctrine:
+              charter:
                 selected_styleguides:
                   - my-project-styleguide
                 selected_directives:

@@ -83,7 +83,7 @@ def _write_config(repo_root: Path, pack_root: Path, *, activated: list[str] | No
     (the absent regime); a list writes it verbatim (include/exclude regimes).
     """
     data: dict[str, object] = {
-        "doctrine": {"org": {"packs": [{"name": _PACK_NAME, "local_path": str(pack_root)}]}},
+        "charter_packs": {"org": {"packs": [{"name": _PACK_NAME, "local_path": str(pack_root)}]}},
     }
     if activated is not None:
         data["activated_agent_profiles"] = activated

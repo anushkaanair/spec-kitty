@@ -65,7 +65,7 @@ class TestDoctrineFetchCLI:
         _write_config(
             tmp_path,
             """
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: security
@@ -87,7 +87,7 @@ class TestDoctrineFetchCLI:
         _write_config(
             tmp_path,
             """
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: security
@@ -125,7 +125,7 @@ class TestDoctrineFetchCLI:
         _write_config(
             tmp_path,
             """
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: security
@@ -152,7 +152,7 @@ class TestDoctrineFetchCLI:
         _write_config(
             tmp_path,
             """
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: security
@@ -176,7 +176,7 @@ class TestDoctrineFetchCLI:
         _write_config(
             tmp_path,
             """
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: security

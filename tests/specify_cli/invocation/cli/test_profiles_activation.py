@@ -201,7 +201,7 @@ class TestListActivationFilter:
         _write_config(
             tmp_path,
             {
-                "doctrine": {
+                "charter_packs": {
                     "org": {
                         "packs": [
                             {"name": "acme", "local_path": str(org_root)},

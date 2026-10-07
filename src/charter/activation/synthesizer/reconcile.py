@@ -44,7 +44,7 @@ from charter.offering.drg.loader import DRGLoadError as DRGLoadError  # re-expor
 from charter.offering.drg.loader import has_graph_files, load_graph_or_dir, merge_layers
 from charter.offering.drg.models import DRGEdge, DRGGraph, DRGNode
 from charter.offering.drg.validator import dangling_endpoints, duplicate_edge_triples
-from kernel.charter_pack_paths import PROJECT_PACK_ROOT, resolve_project_pack_read_root
+from kernel.charter_pack_paths import PROJECT_PACK_ROOT, project_pack_root
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -596,7 +596,7 @@ def reconcile_synthesis(
     # root (warn-once) only while a project has not been migrated. The
     # manifest bookkeeping paths (`rel_content`) always name the project
     # charter pack root (FR-016).
-    doctrine_dir = resolve_project_pack_read_root(repo_root)
+    doctrine_dir = project_pack_root(repo_root)
     existing_overlay = _load_existing_overlay(doctrine_dir)
     merged_overlay = (
         fresh_overlay

@@ -268,7 +268,7 @@ def write_org_pack_config(repo_root: Path, org_root: Path, *, pack_name: str = O
     (config_dir / "config.yaml").write_text(
         "\n".join(
             [
-                "doctrine:",
+                "charter_packs:",
                 "  org:",
                 "    packs:",
                 f"      - name: {pack_name}",
@@ -1126,7 +1126,7 @@ def write_two_pack_org_config(
     (config_dir / "config.yaml").write_text(
         "\n".join(
             [
-                "doctrine:",
+                "charter_packs:",
                 "  org:",
                 "    packs:",
                 f"      - name: {pack_a_name}",

@@ -89,7 +89,7 @@ def _write_config_with_org_pack(project_root: Path, pack_local_path: str) -> Non
     fixtures must provision it like a real ``spec-kitty init``/``upgrade`` would.
     """
     (project_root / ".kittify" / "config.yaml").write_text(
-        "doctrine:\n"
+        "charter_packs:\n"
         "  org:\n"
         "    packs:\n"
         "      - name: orgzilla\n"

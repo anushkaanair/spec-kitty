@@ -158,7 +158,7 @@ class TestLayerAwareActivation:
         (project_root / ".kittify" / "config.yaml").write_text(
             textwrap.dedent(
                 f"""\
-                doctrine:
+                charter_packs:
                   org:
                     packs:
                       - name: acme

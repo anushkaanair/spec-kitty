@@ -923,18 +923,3 @@ def test_legacy_entry_lines_use_shared_renderer_and_reason_rule() -> None:
     assert _legacy_entry_lines({"urn": "tactic:t", "kind": "tactic"}, {}) == ["replaceable_builtins:", "- urn: tactic:t"]
 
 
-def test_legacy_organisation_packs_deprecation_warns_at_most_once(tmp_path: Path) -> None:
-    import warnings
-
-    from specify_cli.cli.commands._doctrine_collect import _collect_org_layer_data
-
-    pack = _write_org_override_pack(tmp_path, sanction=None)
-    (tmp_path / ".kittify").mkdir(exist_ok=True)
-    (tmp_path / ".kittify" / "config.yaml").write_text(f'organisation_packs:\n  - name: acme-org\n    path: "{pack}"\n')
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        _collect_org_layer_data(tmp_path)
-
-    legacy = [w for w in caught if issubclass(w.category, DeprecationWarning) and "organisation_packs" in str(w.message)]
-    assert len(legacy) <= 1

@@ -33,14 +33,8 @@ from kernel.charter_pack_paths import KITTIFY_DIRNAME
 from specify_cli.migration.legacy_charter_layout import detect_legacy_charter_layout
 
 __all__ = [
-    "EXEMPT_COMMANDS",
-    "LEGACY_CHARTER_STATE",
-    "LegacyFinding",
     "check_legacy_charter_layout",
     "current_checkout_root",
-    "find_checkout_root",
-    "first_legacy_finding",
-    "render_legacy_charter_message",
     "usage_errors_first",
 ]
 

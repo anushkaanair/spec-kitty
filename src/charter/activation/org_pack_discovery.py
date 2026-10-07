@@ -29,6 +29,7 @@ from ruamel.yaml.error import YAMLError
 from charter.activation.schemas import DoctrineSelectionConfig
 from charter.activation.skill_preparation import SkillPreparationError, require_valid_skill_namespace
 from charter.offering.artifact_kinds import SELECTION_OVERLAYABLE_KIND_FIELDS, ArtifactKind
+from kernel.charter_pack_paths import pack_org_charter
 
 __all__ = [
     # `_enumerate_org_pack_paths` retired from __all__ (#3520 chain fold): its
@@ -155,7 +156,7 @@ def _iter_org_charter_docs(repo_root: Path) -> list[tuple[str, dict[str, Any]]]:
     yaml = YAML(typ="safe")
     docs: list[tuple[str, dict[str, Any]]] = []
     for name, pack_path in _enumerate_org_pack_paths(repo_root):
-        charter_path = pack_path / "org-charter.yaml"
+        charter_path = pack_org_charter(pack_path)
         if not charter_path.exists():
             continue
         try:
@@ -266,7 +267,7 @@ def require_org_skill_policy_readable(repo_root: Path, *, org_decides: bool) -> 
                 f"org pack {name!r} is configured but its path is not an existing directory ({pack_path}); "
                 f"run `spec-kitty charter fetch --pack {name}`, or remove the pack from .kittify/config.yaml"
             )
-        charter_path = pack_path / "org-charter.yaml"
+        charter_path = pack_org_charter(pack_path)
         if org_decides and charter_path.exists():
             _require_readable_required_skills(yaml, name, charter_path)
 
@@ -290,9 +291,11 @@ def _require_readable_required_skills(yaml: YAML, pack_name: str, charter_path: 
 def _load_doctrine_selection(repo_root: Path) -> DoctrineSelectionConfig:
     """Return the charter's :class:`DoctrineSelectionConfig` for *repo_root*.
 
-    Best-effort lookup: any failure (missing governance.yaml, parse
-    error, unexpected exception) collapses to a default-constructed
-    :class:`DoctrineSelectionConfig`.  This keeps the resolver hot path
+    Best-effort lookup: a failure (missing governance.yaml, parse error,
+    unexpected exception) collapses to a default-constructed
+    :class:`DoctrineSelectionConfig`. A retired shape (``RetiredPackFieldError``,
+    or the retired ``governance.doctrine`` key as ``ActiveCharterConfigError``)
+    propagates instead, so its selections are never dropped in silence.  This keeps the resolver hot path
     resilient (NFR-005) so a malformed governance file never crashes
     prompt rendering — the authority-paths block will simply lack
     charter-declared entries.
@@ -306,11 +309,16 @@ def _load_doctrine_selection(repo_root: Path) -> DoctrineSelectionConfig:
     additions append in first-seen order across packs.
     """
 
+    from charter.activation.pack_context import ActiveCharterConfigError
     from charter.activation.sync import load_governance_config
+    from charter.offering.packs.retired_fields import RetiredPackFieldError
 
     try:
         governance = load_governance_config(repo_root)
         selection = governance.charter
+    except (RetiredPackFieldError, ActiveCharterConfigError):
+        # A retired shape is not a parse failure: never dropped in silence (#3732, FR-011).
+        raise
     except Exception:  # noqa: BLE001 — best-effort governance load
         selection = DoctrineSelectionConfig()
 

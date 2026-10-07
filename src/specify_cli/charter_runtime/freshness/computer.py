@@ -93,7 +93,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass
-from kernel.charter_pack_paths import PROJECT_GRAPH_FILENAME, resolve_project_pack_read_root
+from kernel.charter_pack_paths import PROJECT_GRAPH_FILENAME, project_pack_root
 from kernel.clock import from_epoch
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
@@ -333,12 +333,12 @@ def _doctrine_graph_path(repo_root: Path) -> Path:
     Read through the temporary dual-root reader (FR-011, removed by WP14) so a
     project that still has only the retired root keeps reporting its graph.
     """
-    return resolve_project_pack_read_root(repo_root, quiet=True) / PROJECT_GRAPH_FILENAME
+    return project_pack_root(repo_root) / PROJECT_GRAPH_FILENAME
 
 
 def _project_pack_read_root(repo_root: Path) -> Path:
     """Return the project charter pack root to read from (FR-016)."""
-    return resolve_project_pack_read_root(repo_root, quiet=True)
+    return project_pack_root(repo_root)
 
 
 def _safe_load_yaml(path: Path) -> dict[str, object] | None:

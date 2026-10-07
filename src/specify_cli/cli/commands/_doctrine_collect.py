@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from charter.bundle import CHARTER_YAML
 from charter.drg import ArtifactKind
-from kernel.charter_pack_paths import resolve_project_pack_read_root
+from kernel.charter_pack_paths import pack_org_charter, project_pack_root
 from ._profile_health_render import _SELECTION_KIND_PLURALS
 
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ _ORG_ARTIFACT_DIRS: tuple[str, ...] = tuple(kind.plural for kind in ArtifactKind
 
 def _project_pack_root_or_none(repo_root: Path) -> Path | None:
     """Return the project pack root to read for *repo_root*, or ``None`` when absent."""
-    project_pack = resolve_project_pack_read_root(repo_root, quiet=True)
+    project_pack = project_pack_root(repo_root)
     return project_pack if project_pack.exists() else None
 
 
@@ -177,7 +177,7 @@ def _summarize_org_charter(snapshot_path: Path) -> dict[str, object]:
     Gracefully degrades when the optional
     ``charter.activation.org_charter`` module is not yet shipped (WP09).
     """
-    charter_path = snapshot_path / "org-charter.yaml"
+    charter_path = pack_org_charter(snapshot_path)
     if not charter_path.exists():
         return {"present": False}
 
@@ -1080,16 +1080,14 @@ def _read_project_selections(repo_root: Path) -> dict[str, list[str]]:
         return selections
     try:
         from charter.activation.charter_yaml_io import load_charter_yaml
+        from charter.activation.sync import require_canonical_governance
 
         data = load_charter_yaml(charter_yaml)
         governance_block = (data or {}).get("governance") or {}
-        # CR-01 (charter-authority-flip-01M14RB3 WP03): the selection block's
-        # key was renamed doctrine -> charter. This diagnostic reads the raw
-        # dict directly (see the docstring above) rather than through
-        # charter.activation.sync.load_governance_config's warn-once compat shim, so it
-        # carries its own narrow read of both keys, preferring the canonical
-        # one.
-        doctrine_block = governance_block.get("charter") or governance_block.get("doctrine") or {}
+        # Canonical key only: a retired ``governance.doctrine`` raises (the CLI-root
+        # LEGACY_CHARTER_STATE gate refuses such a project first); the diagnostic
+        # then degrades to empty selections below instead of crashing.
+        doctrine_block = require_canonical_governance(governance_block, source=charter_yaml).get("charter") or {}
         for kind in _SELECTION_KIND_PLURALS:
             value = doctrine_block.get(f"selected_{kind}")
             if isinstance(value, list):

@@ -136,7 +136,7 @@ def test_collector_and_gate_recipe_reach_identical_verdicts(tmp_path: Path) -> N
     pack_b = _write_pack(tmp_path, "pack-b", "DIRECTIVE_003", None)
     (tmp_path / ".kittify").mkdir()
     (tmp_path / ".kittify" / "config.yaml").write_text(
-        f'doctrine:\n  org:\n    packs:\n      - name: pack-a\n        local_path: "{pack_a}"\n      - name: pack-b\n        local_path: "{pack_b}"\n'
+        f'charter_packs:\n  org:\n    packs:\n      - name: pack-a\n        local_path: "{pack_a}"\n      - name: pack-b\n        local_path: "{pack_b}"\n'
     )
 
     collected = _collect_org_layer_data(tmp_path)
@@ -180,7 +180,7 @@ def test_collector_and_gate_recipe_report_identical_policy_errors(tmp_path: Path
 
     pack_a = _write_pack(tmp_path, "pack-a", "DIRECTIVE_001", None)
     (tmp_path / ".kittify").mkdir()
-    (tmp_path / ".kittify" / "config.yaml").write_text(f'doctrine:\n  org:\n    packs:\n      - name: pack-a\n        local_path: "{pack_a}"\n')
+    (tmp_path / ".kittify" / "config.yaml").write_text(f'charter_packs:\n  org:\n    packs:\n      - name: pack-a\n        local_path: "{pack_a}"\n')
     (tmp_path / ".kittify" / "doctrine").mkdir()
     (tmp_path / ".kittify" / "doctrine" / "replaceable-builtins.yaml").write_text("revoked_pack_sanctions:\n  - pack: pack-a\n  - pack: ghost-pack\n")
 

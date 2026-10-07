@@ -206,7 +206,7 @@ def _write_org_procedure(pack_root: Path, *, stem: str, declared_id: str) -> Non
 
 
 def _declare_org_packs(repo: Path, *pack_roots: Path) -> None:
-    lines = ["mission_type_activations:", "  - software-dev", "doctrine:", "  org:", "    packs:"]
+    lines = ["mission_type_activations:", "  - software-dev", "charter_packs:", "  org:", "    packs:"]
     for index, root in enumerate(pack_roots):
         lines.append(f"      - name: preservation-fixture-{index}")
         lines.append(f"        local_path: {root}")

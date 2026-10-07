@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from kernel.charter_pack_paths import resolve_project_pack_read_root
+from kernel.charter_pack_paths import project_pack_root
 
 from .hasher import hash_content
 from .offering.artifact_kinds import DIRECT_WRITE_KINDS, ArtifactKind
@@ -307,7 +307,7 @@ def validate_synthesis_state(repo_root: Path) -> BundleValidationResult:
     result = BundleValidationResult()
     _check_stale_failed_dirs(repo_root, result)
 
-    doctrine_root = resolve_project_pack_read_root(repo_root, quiet=True)
+    doctrine_root = project_pack_root(repo_root)
     provenance_root = repo_root / PROVENANCE_DIR
     manifest_path = repo_root / SYNTHESIS_MANIFEST_PATH
 

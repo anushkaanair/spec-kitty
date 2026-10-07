@@ -436,7 +436,7 @@ def repo_with_inline_ref_org_profile(tmp_path: Path) -> Path:
         "agents:\n"
         "  available:\n"
         "    - claude\n"
-        "doctrine:\n"
+        "charter_packs:\n"
         "  org:\n"
         "    packs:\n"
         "      - name: example-org\n"

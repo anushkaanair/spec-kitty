@@ -41,7 +41,7 @@ from charter.offering.drg.org_pack_config import (
     load_pack_registry,
     resolve_relative_path_within_root,
 )
-from kernel.charter_pack_paths import PROJECT_PACK_ROOT, resolve_project_pack_read_root
+from kernel.charter_pack_paths import PROJECT_PACK_ROOT, project_pack_root
 from kernel.resolution import resolve_rejecting_loops
 
 if TYPE_CHECKING:
@@ -88,7 +88,7 @@ def _consumer_policy_path(repo_root: Path) -> Path:
     Resolved through the project pack read root (FR-016), so a project still on
     the retired ``.kittify/doctrine/`` tree is read there until it migrates.
     """
-    return resolve_project_pack_read_root(repo_root, quiet=True) / PACK_POLICY_FILENAME
+    return project_pack_root(repo_root) / PACK_POLICY_FILENAME
 
 #: Pre-contract location some packs still ship; advisory only, never a sanction.
 LEGACY_TEMPLATE_RELPATH = "templates/setup/replaceable-builtins.yaml"

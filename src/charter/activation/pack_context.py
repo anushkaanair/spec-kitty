@@ -70,6 +70,10 @@ class ActiveCharterConfigError(KittyInternalConsistencyError):
     def __init__(self, body: str) -> None:
         super().__init__("ACTIVE_CHARTER_CONFIG_INVALID", body)
 
+    def __str__(self) -> str:
+        """The code and the body, so a generic renderer or log keeps the remediation."""
+        return f"{self.code}: {self.body}" if self.body else self.code
+
 
 # ---------------------------------------------------------------------------
 # Built-in constants
@@ -747,9 +751,9 @@ def _absent_key_default(kind: ArtifactKind, repo_root: Path) -> frozenset[str] |
 def _read_org_packs(repo_root: Path, _data: dict[str, Any]) -> tuple[tuple[str, ...], tuple[Path, ...]]:
     """Resolve org pack names and root paths from config data.
 
-    Delegates to ``charter.offering.drg.org_pack_config.load_pack_registry``
-    so that legacy ``organisation_packs`` form and deprecation warnings
-    are handled consistently with the rest of the codebase.
+    Delegates to ``charter.offering.drg.org_pack_config.load_pack_registry``,
+    which reads only the canonical ``charter_packs.org.packs``: a config that
+    carries only a retired key yields no packs, never an error.
 
     Returns
     -------

@@ -99,7 +99,7 @@ def layered_project(tmp_path: Path) -> Path:
     (kittify / "config.yaml").write_text(
         textwrap.dedent(
             f"""\
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: acme

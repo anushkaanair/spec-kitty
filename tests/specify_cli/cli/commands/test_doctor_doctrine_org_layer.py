@@ -56,10 +56,11 @@ def tmp_repo_with_org_pack(tmp_path: Path) -> Path:
     (kittify / "config.yaml").write_text(
         dedent(
             f"""\
-            organisation_packs:
-              - name: example-org
-                source: local_path
-                path: {pack_dest}
+            charter_packs:
+              org:
+                packs:
+                  - name: example-org
+                    local_path: {pack_dest}
             """
         )
     )
@@ -190,10 +191,11 @@ def test_render_org_layer_section_no_crash_on_missing_pack(
     (kittify / "config.yaml").write_text(
         dedent(
             """\
-            organisation_packs:
-              - name: missing-pack
-                source: local_path
-                path: /nonexistent/path/to/pack
+            charter_packs:
+              org:
+                packs:
+                  - name: missing-pack
+                    local_path: /nonexistent/path/to/pack
             """
         )
     )
@@ -374,10 +376,11 @@ def test_collect_org_layer_data_error_on_missing_pack(
     (kittify / "config.yaml").write_text(
         dedent(
             """\
-            organisation_packs:
-              - name: ghost-pack
-                source: local_path
-                path: /nonexistent/path/to/ghost-pack
+            charter_packs:
+              org:
+                packs:
+                  - name: ghost-pack
+                    local_path: /nonexistent/path/to/ghost-pack
             """
         )
     )
@@ -401,7 +404,7 @@ def _build_kittify_config_for_test(
     (config_dir / "config.yaml").write_text(
         dedent(
             f"""
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: {pack_name}
@@ -417,7 +420,7 @@ def test_doctor_doctrine_json_includes_org_drg_key_when_packs_configured(
 ) -> None:
     """``doctor doctrine --json`` includes ``org_drg`` key when org packs configured.
 
-    Uses the WP06 ``organisation_packs`` config format (which ``load_org_drg`` reads),
+    Uses the canonical ``charter_packs.org.packs`` config format (which ``load_org_drg`` reads),
     distinct from the ``doctrine.org.packs`` format (which ``load_pack_registry`` reads).
     The ``org_drg`` key is populated from ``_collect_org_layer_data`` regardless
     of whether ``load_pack_registry`` finds packs.

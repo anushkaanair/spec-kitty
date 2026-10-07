@@ -30,7 +30,7 @@ def repo_root(tmp_path: Path) -> Path:
 
 
 def _project_skills(root: Path) -> Path:
-    return root / ".kittify" / "doctrine" / "skills"
+    return root / ".kittify" / "charter-packs" / "skills"
 
 
 def test_model_health_flags() -> None:

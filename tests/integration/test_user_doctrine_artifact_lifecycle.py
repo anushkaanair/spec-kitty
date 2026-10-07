@@ -238,7 +238,7 @@ _CHARTER_YAML_SELECTING_STYLEGUIDE = textwrap.dedent(
     """\
     schema_version: '2.0.0'
     governance:
-      doctrine:
+      charter:
         selected_styleguides:
           - caveman-comments
     catalog:

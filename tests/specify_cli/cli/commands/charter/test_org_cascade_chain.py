@@ -57,7 +57,7 @@ def _write_org_pack_config(project_root: Path, packs: list[tuple[str, str]]) -> 
     Carries ``mission_type_activations`` (WP04, C-A1): ``PackContext.from_config``
     fails closed without it.
     """
-    lines: list[str] = ["doctrine:", "  org:", "    packs:"]
+    lines: list[str] = ["charter_packs:", "  org:", "    packs:"]
     for name, local_path in packs:
         lines.append(f"      - name: {name}")
         lines.append(f"        local_path: {local_path}")
