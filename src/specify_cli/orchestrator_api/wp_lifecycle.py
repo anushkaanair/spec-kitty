@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from contextlib import ExitStack
 from kernel.clock import now_utc_stamp
 from pathlib import Path
 from dataclasses import dataclass
@@ -440,6 +441,30 @@ def resolve_workspace(
     _emit(envelope)
 
 
+def _enter_checkout_claim_lock(stack: ExitStack, main_repo_root: Path, mission: str, wp: str) -> None:
+    """Hold the write-checkout claim lock on *stack* when *wp* claims a single_branch repo-root lane (#5796, plan A7).
+
+    Entered before the occupancy scan in :func:`_resolve_start_workspace` and kept until
+    *stack* closes, i.e. through the claim emit. Any other WP (lane worktree, legacy
+    Mission, non-single_branch Mission) takes nothing; a Mission whose lanes cannot be
+    read takes nothing here and fails later with its usual error envelope.
+    """
+    from kernel.errors import GuardedReadError
+    from specify_cli.lanes.compute import is_repo_root_lane
+    from specify_cli.lanes.implement_support import _is_single_branch_mission
+    from specify_cli.status import write_checkout_claim_lock
+
+    try:
+        if not _is_single_branch_mission(main_repo_root, mission):
+            return
+        assignment = _lane_assignment_or_legacy(main_repo_root, mission, wp)
+        if isinstance(assignment, _StartWorkspace) or not is_repo_root_lane(assignment[1]):
+            return
+    except (ValueError, FileNotFoundError, GuardedReadError):
+        return
+    stack.enter_context(write_checkout_claim_lock(main_repo_root))
+
+
 def start_implementation(
     mission: str = typer.Option(..., "--mission", help=_HELP_MISSION_SLUG),
     wp: str = typer.Option(..., "--wp", help=_HELP_WP_ID),
@@ -447,6 +472,12 @@ def start_implementation(
     policy: str = typer.Option(None, "--policy", help=_HELP_POLICY),
 ) -> None:
     """Composite transition: planned->claimed->in_progress (idempotent)."""
+    with ExitStack() as claim_stack:
+        _start_implementation(mission, wp, actor, policy, claim_stack)
+
+
+def _start_implementation(mission: str, wp: str, actor: str, policy: str | None, claim_stack: ExitStack) -> None:
+    """Body of :func:`start_implementation`; *claim_stack* carries the checkout claim lock to the claim emit."""
     cmd = "start-implementation"
 
     # Policy required
@@ -513,6 +544,7 @@ def start_implementation(
     # when the mission has lanes, mirroring the native implement flow so
     # merge-mission has a lane branch to integrate. Legacy / non-lane missions
     # keep the historical bare path.
+    _enter_checkout_claim_lock(claim_stack, main_repo_root, mission, wp)
     start_ws = _resolve_start_workspace(cmd, main_repo_root, mission, mission_dir, wp)
     workspace_path = start_ws.workspace_path
     prompt_path = str(wp_path)

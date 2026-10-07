@@ -29,11 +29,13 @@ from specify_cli.git.commit_helpers import (
 )
 from specify_cli.lanes import implement_support
 from specify_cli.lanes.implement_support import create_lane_workspace
-from specify_cli.status import read_events, reduce as reduce_status_events
+from specify_cli.status import mission_write_lock, read_events, reduce as reduce_status_events
 from specify_cli.workspace import context as workspace_context
 from specify_cli.workspace.context import resolve_workspace_for_wp
 
 if TYPE_CHECKING:
+    from contextlib import ExitStack
+
     from specify_cli.lanes.implement_support import LaneWorkspaceResult
     from specify_cli.lanes.models import ExecutionLane, LanesManifest
     from specify_cli.workspace.context import ResolvedWorkspace
@@ -131,10 +133,10 @@ def _validate_base_ref(repo_root: Path, base_ref: str) -> str:
     return resolved[1]
 
 
-def _ensure_vcs_in_meta(feature_dir: Path) -> VCSBackend:
+def _ensure_vcs_in_meta(feature_dir: Path, repo_root: Path | None = None) -> VCSBackend:
     """Ensure VCS is selected and locked in meta.json (printing adapter over the seam's decision)."""
     try:
-        locked = implement_support.ensure_vcs_locked(feature_dir)
+        locked = implement_support.ensure_vcs_locked(feature_dir, repo_root=repo_root)
     except MissionMetaReadError as exc:
         console.print(f"[red]Error:[/red] Invalid JSON in meta.json: {exc}")
         raise typer.Exit(1) from exc
@@ -388,6 +390,31 @@ def select_workspace(ctx: ImplementContext, wp_id: str, preflight: ClaimPrefligh
     return WorkspaceSelection(resolved_workspace, lanes_manifest, lane)
 
 
+def enter_checkout_claim_lock(stack: ExitStack, ctx: ImplementContext, selection: WorkspaceSelection) -> None:
+    """Hold the write-checkout claim lock on *stack* for a single_branch repo-root claim (#5796).
+
+    Entered before :func:`allocate` (whose occupancy scan it protects) and kept until
+    *stack* closes, i.e. through the claim emit and the claim commit. Reuses the one
+    predicate ``agent action implement`` uses; a lane worktree or a non-single_branch
+    Mission takes nothing. Lock order: this lock outermost, then the Mission lock.
+    """
+    from specify_cli.cli.commands.agent import workflow_executor
+
+    workflow_executor.enter_checkout_claim_lock(stack, ctx.repo_root, ctx.mission_slug, selection.resolved_workspace)
+
+
+def hold_mission_write_lock(stack: ExitStack, ctx: ImplementContext) -> None:
+    """Hold the Mission write lock on *stack* from the claim emit through the claim commit (#5468).
+
+    The key is the Mission directory the claim emit itself re-enters
+    (``start_implementation_status`` locks ``resolve_status_lock_root`` + ``feature_dir.name``),
+    so the emit nests inside this hold and the claim commit stages a consistent snapshot of
+    the status files. Unbounded wait (``timeout=-1``): the initiating command queues rather
+    than failing.
+    """
+    stack.enter_context(mission_write_lock(ctx.mission_dir, repo_root=ctx.repo_root, timeout=-1))
+
+
 def allocate(ctx: ImplementContext, wp_id: str, selection: WorkspaceSelection, base: str | None) -> AllocationResult:
     """Refusals, VCS lock, effective base, then allocate or reuse the workspace."""
     repo_root, mission_slug, feature_dir, wp_file, declared_deps = ctx.repo_root, ctx.mission_slug, ctx.mission_dir, ctx.wp_file, ctx.declared_deps
@@ -404,7 +431,7 @@ def allocate(ctx: ImplementContext, wp_id: str, selection: WorkspaceSelection, b
     # #5738: a claim whose auto-commit cannot land on the checked-out branch is
     # refused here too, before the VCS lock, the lane worktree and the status write.
     implement_claim._raise_if_claim_commit_head_mismatch(repo_root, mission_slug, wp_id, ctx.auto_commit)
-    vcs_backend = _ensure_vcs_in_meta(feature_dir)
+    vcs_backend = _ensure_vcs_in_meta(feature_dir, repo_root)
 
     # #3571: when --base is provided, validate the ref (planning-lane
     # "ignored" warning applied here, FR-007) and thread the EFFECTIVE

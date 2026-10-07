@@ -172,8 +172,11 @@ def _ensure_repo_root_checkout_available(
          resuming itself is structurally never "another WP". The scan reads
          every candidate mission's status log, so a caller that already ran
          it earlier in the SAME ``implement`` call passes
-         ``occupancy_verified=True`` to skip the repeat (the claim that
-         would change the answer only lands after allocation).
+         ``occupancy_verified=True`` to skip the repeat. That is sound
+         because the caller holds the write-checkout claim lock
+         (:func:`~specify_cli.status.write_checkout_claim_lock`) from the
+         scan to the claim emit: the claim that would change the answer
+         cannot land in between (#5796).
       4. Dirty -- skipped when THIS wp_id is itself already ``in_progress``
          (a genuine resume; the checkout is expected to carry its own
          uncommitted work).
@@ -1013,17 +1016,24 @@ def resolve_execution_lane(resolved_workspace: ResolvedWorkspace, lanes_feature_
     return lanes_manifest, lane
 
 
-def ensure_vcs_locked(feature_dir: Path) -> bool:
+def ensure_vcs_locked(feature_dir: Path, *, repo_root: Path | None = None) -> bool:
     """Lock the VCS backend to git in ``meta.json`` on a mission's first claim; return whether it wrote the lock.
 
     Hard-fails on a missing or malformed ``meta.json`` (post-#2091 contract: ``allow_missing``
     semantics must never mask the guard): raises :class:`MissionMetaMissing` or
     ``MissionMetaReadError``.
+
+    The read-modify-write of ``meta.json`` runs under the Mission write lock (re-entrant),
+    because the claim commit stages that file and a concurrent claim would otherwise
+    commit or overwrite a half-written copy (#5468, plan A6).
     """
-    meta = load_meta_fail_closed(feature_dir)
-    if meta is None:
-        raise MissionMetaMissing(feature_dir)
-    if "vcs" in meta:
-        return False
-    set_vcs_lock(feature_dir, vcs_type="git", locked_at=now_utc_iso())
-    return True
+    from specify_cli.status import mission_write_lock
+
+    with mission_write_lock(feature_dir, repo_root=repo_root, timeout=-1):
+        meta = load_meta_fail_closed(feature_dir)
+        if meta is None:
+            raise MissionMetaMissing(feature_dir)
+        if "vcs" in meta:
+            return False
+        set_vcs_lock(feature_dir, vcs_type="git", locked_at=now_utc_iso())
+        return True
