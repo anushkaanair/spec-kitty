@@ -277,3 +277,4 @@ Status is managed via `status.events.jsonl`. Use `spec-kitty agent tasks move-ta
 
 - CHANGELOG Before/After must list `DefaultCharterPackMissingError` → `DefaultPresetMissingError` (`DEFAULT_PRESET_MISSING`), the deletion of `src/charter/activation/default_pack.py`, and the owner-approved codes `PRESET_INVALID` and `RESYNTHESIS_FAILED`.
 - `src/specify_cli/provisioning/__init__.py` changed in WP09 (docstring, `__all__`): covered by the Unreleased changelog entry; no version bump (mission rule).
+- From WP18 review: projects already migrated by `m_3_2_0rc35_kittify_profile_handoff` keep the old `/ad-hoc-profile-load` text in their prompt overrides (the migration is marker-gated and is not re-applied). The runbook must tell operators to replace it with `/spk-charter-profile-load` (or name the follow-up issue if a migration is added).
