@@ -275,7 +275,7 @@
     },
     "WP11": {
       "actor": "claude",
-      "agent": "claude",
+      "agent": null,
       "agent_profile": "reviewer-renata",
       "agent_profile_version": "1.0",
       "force_count": 1,
@@ -288,6 +288,7 @@
         "Cutover migration I: predicate, report, every key/root/path FR-012 row, runs_first, total detect/structural_detect, collision preflight, guarded move; repo .kittify/doctrine -> .kittify/charter-packs (14 renames). Acceptance 124 passed/1 skipped/229 xfailed/0 failed/0 xpassed; new unit tests 87 passed; upgrade+migration+asset_preservation+dry-run parity 1105 passed (1 env red); tests/upgrade 1080 passed (9 env reds: shallow history); make test-fast 2281 passed; gates green except pre-existing retired_fields FR-016 hit; ruff clean; mypy no new errors. Out-of-ownership edits logged in history (runner.py failed runs_first not recorded)."
       ],
       "provider": "__resolved_provider_absent__",
+      "review": null,
       "review_result": {
         "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP11-cutover-migration-keys-and-paths/review-cycle-1.md",
         "reference": "review-cycle://charter-pack-cutover-01M491G6/WP11-cutover-migration-keys-and-paths/review-cycle-1.md",
@@ -295,15 +296,15 @@
         "verdict": "changes_requested"
       },
       "role": "reviewer",
-      "shell_pid": 1439,
-      "shell_pid_created_at": "1791372496.14",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
       "subtasks": {
-        "T055": "done",
-        "T056": "done",
-        "T057": "done",
-        "T058": "done",
-        "T059": "done",
-        "T060": "done"
+        "T055": "planned",
+        "T056": "planned",
+        "T057": "planned",
+        "T058": "planned",
+        "T059": "planned",
+        "T060": "planned"
       }
     },
     "WP12": {
