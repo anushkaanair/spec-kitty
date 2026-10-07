@@ -430,7 +430,8 @@ def _preservation_set(
 ) -> tuple[list[str], list[str]]:
     """What ``activate`` materializes for an absent key, plus any warning (#4253, #4399).
 
-    A present key needs no set (it is appended to). For an absent key of a
+    A present key needs no set (it is appended to). ``mission-type`` is an
+    activation ledger, not a corpus: its available ids are kept. For an absent key of a
     "required" kind (skills) the in-force set is what ``PackContext`` puts in
     force while the key is absent (org-required plus built-in defaults), never
     the whole catalogue (``activate skill X`` would activate every skill). For
@@ -440,6 +441,9 @@ def _preservation_set(
     """
     if data.get(yaml_key) is not None:
         return [], []
+    if kind == MISSION_TYPE_TOKEN:
+        # An activation ledger, not a corpus: the seam has no effective set for it.
+        return sorted(available), []
     if when_absent != "all":
         in_force = getattr(PackContext.from_config(repo_root), yaml_key, None)
         return sorted(str(item) for item in in_force or ()), []

@@ -44,7 +44,7 @@ import pytest
 from ruamel.yaml import YAML
 from typer.testing import CliRunner
 
-from charter.activation.activation_engine import promote_activations
+from charter.activation.activation_engine import EffectiveSet, promote_activations
 from specify_cli.charter_runtime.freshness import compute_freshness
 from specify_cli.cli.commands.charter import charter_app
 
@@ -513,6 +513,7 @@ def test_promote_activations_migration_path_triggers_no_synthesis(
         config_path=config_path,
         config_data=config_data,
         save=_save,
+        effective_sets={"activated_paradigms": EffectiveSet(kind="paradigm", yaml_key="activated_paradigms")},
     )
 
     assert saved["data"]["activated_paradigms"] == [_REAL_PARADIGM_STEM_A]
