@@ -6,6 +6,13 @@ holds the reviewer, so the implementer's ordinary rework resume (and the
 reviewer's next claim) looked like an ownership conflict. The guard resolves
 "who is the WP's latest implementer" from this projection instead of the slot.
 
+This module is the single implementer-of-record authority: the ownership guard
+and the consolidation hollow-review check both read it
+(:func:`latest_implementer_event` is the one scan; :func:`latest_implementer_actor`
+projects its actor). The reducer's ``implementer_of_record`` snapshot slot is
+claim provenance (the ``planned -> claimed`` claimant), not an implementer
+authority; do not read it to decide who implemented a WP. (#5340)
+
 This is a pure leaf: it performs no I/O and reads only the events it is given
 (precedent: :mod:`specify_cli.status.review_claim_predicate`). Contract:
 ``kitty-specs/rework-is-not-an-override-01M3MQV6/contracts/ownership-role-allowance.md``.
@@ -18,7 +25,7 @@ from collections.abc import Sequence
 from specify_cli.status.models import Lane, StatusEvent, actor_identity_str
 from specify_cli.status.work_package_lifecycle import GENERIC_IMPLEMENTATION_ACTORS, _actor_key
 
-__all__ = ["is_latest_implementer", "latest_implementer_actor"]
+__all__ = ["is_latest_implementer", "latest_implementer_actor", "latest_implementer_event"]
 
 _IMPLEMENTING_LANES: frozenset[str] = frozenset({Lane.CLAIMED.value, Lane.IN_PROGRESS.value})
 _REVIEWER_SOURCE_LANES: frozenset[str] = frozenset({Lane.FOR_REVIEW.value, Lane.IN_REVIEW.value, Lane.APPROVED.value})
@@ -46,20 +53,30 @@ def _qualifies(event: StatusEvent) -> bool:
     return _actor_key(event.actor) not in GENERIC_IMPLEMENTATION_ACTORS
 
 
+def latest_implementer_event(events: Sequence[StatusEvent], wp_id: str) -> StatusEvent | None:
+    """Return ``wp_id``'s latest qualifying implementing claim event, or ``None``.
+
+    Scans newest-first (append order) for the first event into
+    ``claimed``/``in_progress`` that is neither a reviewer rework verdict nor
+    made by a generic placeholder actor. Callers needing the full recorded
+    identity (not the tool-scoped key) read it from the returned event.
+    """
+    for event in reversed(events):
+        if event.wp_id == wp_id and _qualifies(event):
+            return event
+    return None
+
+
 def latest_implementer_actor(events: Sequence[StatusEvent], wp_id: str) -> str | None:
     """Return the actor of ``wp_id``'s latest implementing claim, or ``None``.
 
-    Scans newest-first for the first event into ``claimed``/``in_progress`` that
-    is neither a reviewer rework verdict nor made by a generic placeholder actor.
     A string actor is returned as recorded; a dict-shaped resolved-binding actor
     is returned as its identity string (bare tool), which ``_actor_key`` accepts.
     """
-    for event in reversed(events):
-        if event.wp_id != wp_id or not _qualifies(event):
-            continue
-        actor = actor_identity_str(event.actor)
-        return actor or None
-    return None
+    event = latest_implementer_event(events, wp_id)
+    if event is None:
+        return None
+    return actor_identity_str(event.actor) or None
 
 
 def is_latest_implementer(latest: str | None, actor: object) -> bool:

@@ -45,6 +45,31 @@ def _seed_wp_lane(feature_dir: Path, wp_id: str, lane: str) -> None:
     append_event(feature_dir, event)
 
 
+def _seed_submitted_by(feature_dir: Path, wp_id: str, actor: str) -> None:
+    """Seed ``wp_id`` as implemented and submitted for review by *actor*.
+
+    Since #5446 only the implementer of record may pull an unclaimed
+    ``for_review`` WP back to ``in_progress`` through ``agent action
+    implement``, so a rework fixture needs a real implementation history.
+    """
+    hops = ((Lane.PLANNED, Lane.CLAIMED), (Lane.CLAIMED, Lane.IN_PROGRESS), (Lane.IN_PROGRESS, Lane.FOR_REVIEW))
+    for index, (from_lane, to_lane) in enumerate(hops):
+        append_event(
+            feature_dir,
+            StatusEvent(
+                event_id=f"test-{wp_id}-submitted-{index}",
+                mission_slug=feature_dir.name,
+                wp_id=wp_id,
+                from_lane=from_lane,
+                to_lane=to_lane,
+                at=f"2026-01-01T00:00:0{index}+00:00",
+                actor=actor,
+                force=True,
+                execution_mode="worktree",
+            ),
+        )
+
+
 def _write_wp_file(path: Path, wp_id: str, lane: str) -> None:
     frontmatter = {
         "work_package_id": wp_id,
@@ -303,7 +328,7 @@ def test_workflow_implement_uses_main_current_lane_for_rework_from_sparse_lane(
     _write_current_analysis_report(feature_dir, workflow_repo)
     main_wp_path = tasks_dir / "WP01-test.md"
     _write_wp_file(main_wp_path, "WP01", lane="for_review")
-    _seed_wp_lane(feature_dir, "WP01", "for_review")
+    _seed_submitted_by(feature_dir, "WP01", "test-agent")
 
     workspace = lane_worktree_path(workflow_repo, mission_slug)
     _mark_fake_worktree(workspace)
@@ -386,7 +411,7 @@ def test_workflow_implement_emits_rework_to_coord_status_path(
     # Diverge the coord canonical state to ``for_review`` and commit it on the coord
     # branch, so ``implement`` reads (and reworks) the coord status path.
     (coord_feature_dir / "status.events.jsonl").unlink(missing_ok=True)
-    _seed_wp_lane(coord_feature_dir, "WP01", "for_review")
+    _seed_submitted_by(coord_feature_dir, "WP01", "test-agent")
     _git(coord_worktree, "add", "-A")
     _git(coord_worktree, "commit", "-q", "-m", "coord: WP01 for_review")
 
@@ -870,6 +895,40 @@ def test_review_prompt_numbers_feedback_path_by_writer_max_plus_one_on_gap(
     # The count-based derivation (len(glob) + 1 = 3) is exactly the
     # pre-#3243 off-by-one this PR retires; it must not come back.
     assert "review-feedback-3.md" not in content
+
+
+def test_review_prompt_numbers_feedback_path_across_every_read_surface(
+    workflow_repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#5194: the advertised feedback path counts every surface a reader consults.
+
+    A cycle recorded on another surface (cycle 1 on PRIMARY while a
+    coordination-routed write lands on COORD) must not be numbered again, so
+    the prompt advertises the number the rejection writer will allocate.
+    """
+    from specify_cli.review import cycle as review_cycle
+
+    _wp_path, feature_slug = _setup_review_fixture(workflow_repo)
+    other_surface = tmp_path / "other-surface" / "WP01-test"
+    other_surface.mkdir(parents=True)
+    (other_surface / "review-cycle-2.md").write_text("cycle 2 on another surface\n", encoding="utf-8")
+    monkeypatch.setattr(
+        review_cycle,
+        "_review_cycle_read_candidate_dirs",
+        lambda *_args, **_kwargs: (other_surface,),
+    )
+
+    result = CliRunner().invoke(
+        workflow.app,
+        ["review", "WP01", "--mission", feature_slug, "--agent", "test-reviewer"],
+    )
+
+    assert result.exit_code == 0, result.stdout
+    content = _prompt_path_from_output(result.stdout).read_text(encoding="utf-8")
+    assert "review-feedback-3.md" in content
+    assert "review-feedback-1.md" not in content
 
 
 def test_review_prompt_fails_closed_on_unparseable_cycle_sibling(

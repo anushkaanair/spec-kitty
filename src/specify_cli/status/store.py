@@ -766,6 +766,44 @@ def read_events(feature_dir: Path) -> list[StatusEvent]:
     return read_events_from_text(feature_dir, path.read_text(encoding="utf-8"))
 
 
+#: Neutral values :func:`read_events_lenient` supplies for fields a minimal or hand-written record omits.
+_LENIENT_DEFAULTS: dict[str, Any] = {"event_id": "", "at": "", "actor": "", "force": False, "execution_mode": ""}
+
+
+def _lenient_lane_event(raw_line: str) -> StatusEvent | None:
+    """One lane ``StatusEvent`` decoded through :meth:`StatusEvent.from_dict`, or ``None`` when the line is no lane event or cannot be decoded."""
+    try:
+        obj = json.loads(raw_line)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(obj, dict) or is_non_lane_event(obj) or obj.get("kind") == ANNOTATION_KIND:
+        return None
+    data = {**obj, **{key: value for key, value in _LENIENT_DEFAULTS.items() if obj.get(key) is None}}
+    try:
+        return StatusEvent.from_dict(data)
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
+def read_events_lenient(feature_dir: Path) -> list[StatusEvent]:
+    """Read the lane ``StatusEvent`` objects of *feature_dir*'s log in append order, never raising.
+
+    For advisory readers (the consolidation hollow-review check) that must not fail on a
+    damaged or hand-written log, unlike :func:`read_events`: each line decodes through
+    :meth:`StatusEvent.from_dict` (so a structured actor and the review fields survive),
+    a missing ``event_id`` / ``at`` / ``actor`` / ``force`` / ``execution_mode`` takes a
+    neutral default, and a line that still cannot be decoded (bad JSON, no lane, an
+    unknown lane, a malformed actor) is skipped. Annotations and non-lane rows are
+    skipped; no ``mission_id`` back-fill. An absent or unreadable file yields ``[]``.
+    """
+    try:
+        text = _events_path(feature_dir).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    events = (_lenient_lane_event(line) for line in text.splitlines() if line.strip())
+    return [event for event in events if event is not None]
+
+
 def read_event_stream(feature_dir: Path) -> EventStream:
     """Read the events file into an :class:`EventStream`.
 

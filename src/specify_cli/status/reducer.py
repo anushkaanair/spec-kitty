@@ -196,6 +196,11 @@ class ReviewResultLookup:
 
     slot_present: bool
     result: ReviewResult | None
+    #: ``True`` only for a raw ``None`` slot: the reducer writes ``None`` when a
+    #: WP leaves ``in_review`` with no verdict (a forced exit, #5446). That is
+    #: "no verdict on record", not a damaged record. Malformed values stay
+    #: ``False`` so they keep failing closed.
+    cleared_without_verdict: bool = False
 
 
 def review_result_from_state(state: Mapping[str, Any]) -> ReviewResultLookup:
@@ -204,7 +209,7 @@ def review_result_from_state(state: Mapping[str, Any]) -> ReviewResultLookup:
         return ReviewResultLookup(slot_present=False, result=None)
     raw = state["review_result"]
     if raw is None:
-        return ReviewResultLookup(slot_present=True, result=None)
+        return ReviewResultLookup(slot_present=True, result=None, cleared_without_verdict=True)
     if not isinstance(raw, Mapping):
         return ReviewResultLookup(slot_present=True, result=None)
     try:

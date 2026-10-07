@@ -61,7 +61,7 @@ from specify_cli.cli.commands.agent.workflow_cores import (
 )
 from specify_cli.core.constants import MISSION_TYPE_RESEARCH
 from specify_cli.mission import get_deliverables_path, get_mission_type
-from specify_cli.status import Lane, WorkPackageClaimConflict, WorkPackageStartRejected, read_wp_frontmatter
+from specify_cli.status import FORCE_NOTE_HINT, Lane, WorkPackageClaimConflict, WorkPackageStartRejected, read_wp_frontmatter
 from specify_cli import status as _status_facade
 from specify_cli.task_utils import extract_scalar
 from specify_cli.workspace.context import ResolvedWorkspace, husk_resolution_error
@@ -743,6 +743,15 @@ class ImplementClaimResult:
     wp_agent_assignment: AgentAssignment
 
 
+def _print_review_lane_hint(current_lane: Lane, wp_id: str) -> None:
+    """Name the legitimate routes out of ``in_review`` after a refused claim (#5446).
+
+    A refused ``for_review`` withdrawal needs no hint: its conflict message already names the routes.
+    """
+    if current_lane == Lane.IN_REVIEW:
+        print(f"  {wp_id} is under review: wait for the reviewer's verdict, or as an operator re-run with {FORCE_NOTE_HINT}.")
+
+
 def _implement_start_claim(
     *,
     main_repo_root: Path,
@@ -755,6 +764,7 @@ def _implement_start_claim(
     status_execution_mode: str,
     workspace_path: Path,
     resolved_binding: ResolvedBinding | None,
+    operator_force_note: str | None = None,
 ) -> str:
     """Emit the claim status event, guarded by the runtime operational-context
     precondition. Returns ``shell_pid``. Raises ``typer.Exit(1)`` on
@@ -815,7 +825,10 @@ def _implement_start_claim(
             workspace_context=f"{status_execution_mode}:{workspace_path}",
             execution_mode=status_execution_mode,
             repo_root=main_repo_root,
-            allow_rework=current_lane in {Lane.FOR_REVIEW, Lane.APPROVED, Lane.IN_REVIEW},
+            # #5446: only this command may leave a review lane, and only as the
+            # implementer of record or with an operator force + note.
+            review_lane_exit=True,
+            operator_force_note=operator_force_note,
             # WP07/T026 (FR-004/FR-014): the claim triple rides the
             # planned -> claimed transition's policy_metadata sidecar
             # instead of a separate WP-file write -- WP01's reducer folds
@@ -829,6 +842,7 @@ def _implement_start_claim(
         )
     except WorkPackageClaimConflict as exc:
         print(f"Error: {exc}")
+        _print_review_lane_hint(current_lane, normalized_wp_id)
         raise typer.Exit(1) from exc
     except WorkPackageStartRejected as exc:
         print(f"Error: {exc}")
@@ -960,6 +974,7 @@ def implement_claim_transition(
     workspace_path: Path,
     status_execution_mode: str,
     resolved_binding: ResolvedBinding | None = None,
+    operator_force_note: str | None = None,
 ) -> ImplementClaimResult:
     """Move a WP to ``in_progress`` (claiming it) if not already there.
 
@@ -1025,6 +1040,7 @@ def implement_claim_transition(
             status_execution_mode=status_execution_mode,
             workspace_path=workspace_path,
             resolved_binding=resolved_binding,
+            operator_force_note=operator_force_note,
         )
 
         if current_lane == Lane.IN_PROGRESS:

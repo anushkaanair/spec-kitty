@@ -252,8 +252,9 @@ def build_kanban_status(mission_slug: str | None = None) -> dict:
         if not wp_id:
             continue
         lookup = event_sourced_review_result(feature_dir, wp_id)
-        if not lookup.slot_present:
-            # absent -- legitimately no verdict recorded yet, not damage.
+        if not lookup.slot_present or lookup.cleared_without_verdict:
+            # absent or cleared by a verdict-less review exit (#5446) --
+            # legitimately no verdict recorded, not damage.
             continue
         if lookup.result is None:
             # refuse (FR-012): distinct board entry, not a command crash —

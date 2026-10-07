@@ -172,7 +172,8 @@ def _apply_wp_review_verdict_flag(
     "no artifact yet" case).
     """
     lookup = event_sourced_review_result(feature_dir, wp_id)
-    if not lookup.slot_present:
+    if not lookup.slot_present or lookup.cleared_without_verdict:
+        # Absent, or cleared by a verdict-less review exit (#5446): no damage.
         return
     if lookup.result is None:
         # refuse (FR-012): the event log recorded a verdict transition for

@@ -32,7 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from specify_cli.review.cycle import is_non_resolvable_review_ref as _is_non_resolvable_review_ref
-from specify_cli.status import AgentAssignment, Lane
+from specify_cli.status import FORCE_NOTE_REQUIRED, AgentAssignment, Lane
 
 if TYPE_CHECKING:
     from specify_cli.status import StatusEvent
@@ -54,6 +54,23 @@ class ImplementRequest:
     agent: str | None
     allow_sparse_checkout: bool
     acknowledge_not_bulk_edit: bool
+    force: bool = False
+    note: str | None = None
+
+
+def validate_force_note(force: bool, note: str | None) -> str | None:
+    """Return the operator force note, or raise ``ValueError`` on a bad pairing (#5446).
+
+    ``--force`` needs a non-blank ``--note``; ``--note`` alone is meaningless.
+    Runs before any status read or write.
+    """
+    if force:
+        if note is None or not note.strip():
+            raise ValueError(FORCE_NOTE_REQUIRED)
+        return note.strip()
+    if note is not None:
+        raise ValueError("--note only applies together with --force")
+    return None
 
 
 @dataclass(frozen=True, slots=True)

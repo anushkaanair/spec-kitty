@@ -145,7 +145,7 @@ def review_feedback_source_path(sub_artifact_dir: Path, cycle_number: int) -> Pa
     return sub_artifact_dir / f"review-feedback-{cycle_number}.md"
 
 
-def next_review_feedback_source_path(sub_artifact_dir: Path) -> Path:
+def next_review_feedback_source_path(sub_artifact_dir: Path, sibling_dirs: tuple[Path, ...] = ()) -> Path:
     """Return the reviewer-facing feedback path for the NEXT review cycle.
 
     The cycle number is derived through :meth:`ReviewCycleArtifact.
@@ -160,6 +160,11 @@ def next_review_feedback_source_path(sub_artifact_dir: Path) -> Path:
     outright, so the printed rejection command was not runnable — the exact
     #3430 failure shape one level up).
 
+    *sibling_dirs* (#5194) are the other surfaces readers consult, from
+    :func:`_review_cycle_read_candidate_dirs`; the number is taken over the
+    union, exactly as the allocator does, so the advertised path matches the
+    cycle that will be written.
+
     Raises:
         ValueError: propagate :meth:`ReviewCycleArtifact.next_cycle_number`'s
             refusal (unparseable sibling filename, or a colliding next number)
@@ -169,7 +174,7 @@ def next_review_feedback_source_path(sub_artifact_dir: Path) -> Path:
     """
     return review_feedback_source_path(
         sub_artifact_dir,
-        ReviewCycleArtifact.next_cycle_number(sub_artifact_dir),
+        ReviewCycleArtifact.next_cycle_number(sub_artifact_dir, sibling_dirs),
     )
 
 
@@ -286,6 +291,28 @@ def _review_cycle_wp_dir(
 
     resolved_dir: Path = seam.read_dir(kind)
     return resolved_dir / "tasks" / wp_slug
+
+
+def _review_cycle_read_candidate_dirs(
+    repo_root: Path,
+    mission_slug: str,
+    wp_slug: str,
+    *,
+    owned: OwnedCheckout | None = None,
+) -> tuple[Path, ...]:
+    """Every ``tasks/<wp>`` dir a reader may find ``review-cycle-N.md`` in (#5194).
+
+    Mirrors the candidates :func:`_review_cycle_wp_dir` consults: the REVIEW_CYCLE
+    surface (COORD under a coordination topology) and the PRIMARY
+    WORK_PACKAGE_TASK surface it falls back to. The allocator numbers a new
+    cycle from the union, so a cycle recorded on one surface is never numbered
+    again by a write to the other. Read-only: nothing here resolves a write
+    location.
+    """
+    seam = placement_seam(repo_root, mission_slug, owned=owned)
+    candidates = [_review_cycle_wp_dir(repo_root, mission_slug, wp_slug, owned=owned)]
+    candidates.append(seam.read_dir(MissionArtifactKind.WORK_PACKAGE_TASK) / "tasks" / wp_slug)
+    return tuple(dict.fromkeys(candidates))
 
 
 def _has_review_cycle_files(wp_dir: Path) -> bool:
@@ -983,9 +1010,10 @@ def _allocate_and_write_review_cycle_while_locked(
     affected_files: list[AffectedFile],
     body: str,
     reproduction_command: str | None = None,
+    sibling_dirs: tuple[Path, ...] = (),
 ) -> tuple[ReviewCycleArtifact, Path, str]:
     """Allocate, write, and validate with an already-held status lock."""
-    cycle_n = ReviewCycleArtifact.next_cycle_number(sub_artifact_dir)
+    cycle_n = ReviewCycleArtifact.next_cycle_number(sub_artifact_dir, sibling_dirs)
     filename = _validate_review_cycle_filename(f"review-cycle-{cycle_n}.md")
     artifact = ReviewCycleArtifact(
         cycle_number=cycle_n,
@@ -1047,6 +1075,7 @@ def _allocate_and_write_review_cycle_locked(
     affected_files: list[AffectedFile],
     body: str,
     reproduction_command: str | None = None,
+    sibling_dirs: tuple[Path, ...] = (),
 ) -> tuple[ReviewCycleArtifact, Path, str]:
     """Allocate the next cycle number, build, write, and validate the artifact.
 
@@ -1096,6 +1125,7 @@ def _allocate_and_write_review_cycle_locked(
             affected_files=affected_files,
             body=body,
             reproduction_command=reproduction_command,
+            sibling_dirs=sibling_dirs,
         )
 
 
@@ -1109,6 +1139,7 @@ def _adopt_or_allocate_review_cycle_locked(
     affected_files: list[AffectedFile],
     body: str,
     reproduction_command: str | None = None,
+    sibling_dirs: tuple[Path, ...] = (),
     owned: OwnedCheckout | None = None,
     surface_root: Path | None = None,
 ) -> tuple[ReviewCycleArtifact, Path, str, bool]:
@@ -1148,6 +1179,7 @@ def _adopt_or_allocate_review_cycle_locked(
                 affected_files=affected_files,
                 body=body,
                 reproduction_command=reproduction_command,
+                sibling_dirs=sibling_dirs,
             )
             return artifact, artifact_path, filename, False
 
@@ -1192,6 +1224,7 @@ def _adopt_or_allocate_review_cycle_locked(
                 affected_files=affected_files,
                 body=body,
                 reproduction_command=reproduction_command,
+                sibling_dirs=sibling_dirs,
             )
             return artifact, artifact_path, filename, False
 
@@ -1344,6 +1377,7 @@ def create_rejected_review_cycle(
     write_location = _review_cycle_write_location(main_repo_root, safe_mission_slug, owned=owned)
     surface_root = write_location.surface_root
     sub_artifact_dir = _review_cycle_write_dir(write_location, safe_wp_slug)
+    sibling_dirs = _review_cycle_read_candidate_dirs(main_repo_root, safe_mission_slug, safe_wp_slug, owned=owned)
 
     resolved_body = _resolve_review_body(
         feedback_source=feedback_source,
@@ -1368,6 +1402,7 @@ def create_rejected_review_cycle(
             affected_files=parsed_affected,
             body=resolved_body,
             reproduction_command=reproduction_command,
+            sibling_dirs=sibling_dirs,
         )
         already_committed = False
     else:
@@ -1382,6 +1417,7 @@ def create_rejected_review_cycle(
             reproduction_command=reproduction_command,
             owned=owned,
             surface_root=surface_root,
+            sibling_dirs=sibling_dirs,
         )
     pointer = build_review_cycle_pointer(safe_mission_slug, safe_wp_slug, filename)
 

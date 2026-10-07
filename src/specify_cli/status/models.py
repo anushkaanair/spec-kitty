@@ -159,6 +159,61 @@ def actor_identity_str(actor: ActorField) -> str:
     return actor
 
 
+def parse_agent_boundary_string(
+    raw: str,
+) -> tuple[str, str | None, str | None, str | None]:
+    """Parse the compact ``--agent`` CLI value into ``(tool, model, profile, role)``.
+
+    THIN, non-synthesizing boundary parser for FR-005. Unlike
+    :func:`specify_cli.status.wp_metadata._resolve_agent_from_colon_string` (the
+    **persisted-frontmatter** parser, which fills an absent segment with a
+    tool-derived synthetic default such as ``"unknown-model"`` or
+    ``"{tool}-default"``), this parser leaves an absent segment as ``None`` —
+    a self-asserted live-claim actor must never fabricate identity it was never
+    given (C-002/C-007).
+
+    Accepts both the bare ``tool`` form (``"claude"``) and the full compact
+    ``tool:model:profile:role`` form; missing trailing segments and empty
+    interior segments (``"claude::reviewer-renata:"``) both normalize to
+    ``None``. Raises :class:`ValueError` for an empty ``tool`` segment — a
+    tool is required to identify the agent at all.
+    """
+    segments = raw.split(":")
+    while len(segments) < 4:
+        segments.append("")
+    tool, model_seg, profile_seg, role_seg = segments[:4]
+    if not tool:
+        raise ValueError(f"Empty agent tool in --agent value: {raw!r}")
+    return tool, (model_seg or None), (profile_seg or None), (role_seg or None)
+
+
+_IDENTITY_PARTS = ("tool", "model", "profile")
+
+
+def actor_full_identity(actor: object) -> str | None:
+    """The full identity of a recorded actor: ``tool:model:profile`` (absent parts empty), or ``None`` when blank.
+
+    The role is not part of it: the implement claim stamps role ``implementer`` and the
+    approval role ``reviewer``, so the same agent would never compare equal to itself
+    (#5340). A structured (dict) actor and a compact ``tool:model:profile:role`` string
+    reduce to the same text (the compact string through :func:`parse_agent_boundary_string`),
+    so ``"claude"`` and ``{"tool": "claude", "role": "reviewer"}`` are one identity. A compact
+    string with no tool segment is compared as recorded.
+    """
+    if isinstance(actor, dict):
+        parts: tuple[object, ...] = tuple(actor.get(key) for key in _IDENTITY_PARTS)
+    else:
+        text = str(actor).strip() if actor else ""
+        if not text:
+            return None
+        try:
+            parts = parse_agent_boundary_string(text)[:3]
+        except ValueError:
+            return text
+    identity = ":".join(str(part or "").strip() for part in parts)
+    return identity if identity.strip(":") else None
+
+
 @dataclass(frozen=True)
 class CurrentWpState:
     """Current WP state resolved from a single in-transaction reduction.

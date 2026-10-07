@@ -122,6 +122,7 @@ from specify_cli.workspace.context import (
 # it on this module would be vacuous: import and patch it at its home module.
 from specify_cli.cli.commands.agent.workflow_cores import (
     ImplementRequest,
+    validate_force_note,
     ReviewRequest,
     auto_claim_failure_message as _auto_claim_failure_message,
     normalize_wp_id as _normalize_wp_id,
@@ -1491,10 +1492,33 @@ def _resolve_dispatch_binding(
 def implement(
     wp_id: Annotated[str | None, typer.Argument(help="Work package ID (e.g., WP01, wp01, WP01-slug) - auto-detects first planned if omitted")] = None,
     mission: Annotated[str | None, typer.Option("--mission", help="Mission slug")] = None,
-    agent: Annotated[str | None, typer.Option("--agent", help="Agent name (required for auto-move to in_progress)")] = None,
+    agent: Annotated[
+        str | None,
+        typer.Option(
+            "--agent",
+            help=(
+                "Agent name (required for auto-move to in_progress). With --force, name the agent that "
+                "will implement: it is recorded as the implementer of record."
+            ),
+        ),
+    ] = None,
     model: Annotated[str | None, typer.Option("--model", help=_MODEL_OPT_HELP)] = None,
     profile: Annotated[str | None, typer.Option("--profile", help=_PROFILE_OPT_HELP)] = None,
     invocation_id: Annotated[str | None, typer.Option("--invocation-id", help=_INVOCATION_ID_OPT_HELP)] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            help=(
+                "Operator override: take a WP out of for_review, in_review or approved. Requires --note. "
+                "Refused for a WP in any other lane."
+            ),
+        ),
+    ] = False,
+    note: Annotated[
+        str | None,
+        typer.Option("--note", help="Why the review lane is being left; recorded in the status event. Only valid with --force."),
+    ] = None,
     allow_sparse_checkout: Annotated[
         bool,
         typer.Option(
@@ -1541,6 +1565,16 @@ def implement(
     if owned_checkout is not None:
         _refuse_owned_action(owned_checkout, mission, action="implement")
 
+    # #5446: validate the operator force BEFORE any status read or write.
+    try:
+        operator_force_note = validate_force_note(force, note)
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        raise typer.Exit(1) from exc
+    if force and not agent:
+        print("Error: --force requires --agent (it becomes the implementer of record)")
+        raise typer.Exit(1)
+
     # T009: the raw CLI-option surface, unresolved -- threaded through the
     # early preflight phases below instead of five separate positional args.
     request = ImplementRequest(
@@ -1549,6 +1583,8 @@ def implement(
         agent=agent,
         allow_sparse_checkout=allow_sparse_checkout,
         acknowledge_not_bulk_edit=acknowledge_not_bulk_edit,
+        force=force,
+        note=operator_force_note,
     )
 
     # WP06 T029: reset the commit-receipt accumulator for this invocation.
@@ -1705,6 +1741,7 @@ def implement(
             workspace_path=workspace_path,
             status_execution_mode=status_execution_mode,
             resolved_binding=resolved_binding,
+            operator_force_note=request.note,
         )
         wp = claim_result.wp
         wp_slug = claim_result.wp_slug
@@ -2323,7 +2360,11 @@ def review(
         # review once the write seam's single-home flip ships (review-cycle
         # artifacts now live ONLY under the coordination worktree for a
         # coordination-routed Mission).
-        from specify_cli.review.cycle import _review_cycle_write_dir, _review_cycle_write_location
+        from specify_cli.review.cycle import (
+            _review_cycle_read_candidate_dirs,
+            _review_cycle_write_dir,
+            _review_cycle_write_location,
+        )
 
         wp_slug = wp.path.stem
         write_location = _review_cycle_write_location(main_repo_root, mission_slug)
@@ -2341,7 +2382,11 @@ def review(
         # refuse after the reviewer has already authored feedback into it
         # (the #3430 "printed command not runnable as printed" shape).
         try:
-            review_feedback_path = next_review_feedback_source_path(sub_artifact_dir)
+            # #5194: number across every surface a reader consults, like the allocator.
+            # No owned checkout to pass: review() refuses --owned-checkout up front (_refuse_owned_action).
+            review_feedback_path = next_review_feedback_source_path(
+                sub_artifact_dir, _review_cycle_read_candidate_dirs(main_repo_root, mission_slug, wp_slug)
+            )
         except ValueError as cycle_err:
             print(
                 "Error: cannot determine the next review-cycle number for "

@@ -304,17 +304,27 @@ def _mt_emit_transitions(st: _MoveTaskState, ports: TasksPorts) -> None:
         emit_review_ref = None
     st.event = event
     st.final_hop_actor = final_hop_actor
-    _mt_warn_unstamped_approval(st)
+    _mt_warn_approval(st)
 
 
-def _mt_warn_unstamped_approval(st: _MoveTaskState) -> None:
-    """#5668: tell the operator now when this approval recorded no lane head (``consolidate`` will refuse it)."""
+def _mt_warn_approval(st: _MoveTaskState) -> None:
+    """Tell the operator now when this approval recorded no lane head (#5668) or is a forced approval that is no review (#5721)."""
     import typer
 
-    from specify_cli.consolidation.approved_bound import unstamped_approval_warning
+    from specify_cli.cli.commands.agent import tasks as _tasks
+    from specify_cli.consolidation.approved_bound import approval_warnings
 
-    warning = unstamped_approval_warning(st.event, repo_root=st.main_repo_root, mission_slug=st.mission_slug)
-    if warning is not None:
+    def _load() -> list[StatusEvent]:
+        return list(
+            _tasks.read_events_transactional(
+                feature_dir=st.feature_dir,
+                mission_slug=st.mission_slug,
+                repo_root=st.main_repo_root,
+                owned=st.owned,
+            )
+        )
+
+    for warning in approval_warnings(st.event, _load, repo_root=st.main_repo_root, mission_slug=st.mission_slug):
         typer.echo(warning, err=True)
 
 
