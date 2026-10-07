@@ -24,7 +24,7 @@ from pathlib import Path
 import pytest
 
 from charter.offering.artifact_kinds import ArtifactKind
-from specify_cli.doctrine.pack_manifest import (
+from charter.offering.packs.pack_manifest import (
     Constituent,
     counts_by_kind,
     resolve_counts,
@@ -113,14 +113,12 @@ class TestSnapshotWriteStaysRecognisable:
 
     def test_write_pack_manifest_is_recognisable(self, tmp_path) -> None:
         from specify_cli.doctrine.pack_assembler import _has_recognisable_pack_manifest
-        from specify_cli.doctrine.snapshot import write_pack_manifest
-        from specify_cli.doctrine.sources.protocol import FetchResult
+        from charter.offering.packs.pack_manifest import write_pack_manifest
 
         local = tmp_path / "snap"
         (local / "directives").mkdir(parents=True)
         (local / "directives" / "a.directive.yaml").write_text("id: A\n", encoding="utf-8")
-        result = FetchResult(ok=True, artifacts_written=1, pack_version="git")
-        write_pack_manifest(local, result, source_url="https://x/y", source_type="git")
+        write_pack_manifest(local, pack_version="git", etag=None, source_url="https://x/y", source_type="git")
 
         manifest = Path(local) / "pack-manifest.yaml"
         assert manifest.is_file()

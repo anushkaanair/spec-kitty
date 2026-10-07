@@ -209,6 +209,21 @@ _FACADE_TABLE: dict[str, list[tuple[str, str]]] = {
     # ``specify_cli``/``runtime`` -> ``charter.offering.provenance`` import that
     # ``test_runtime_charter_doctrine_boundary.py`` forbids. Same source
     # module, same identity-reexport shape. FACADE-ONLY.
+    # New door (mission ``charter-pack-cutover-01M491G6`` WP04, #3732, FR-010 /
+    # OD-9): the charter pack model and tooling moved from ``specify_cli.doctrine``
+    # to ``charter.offering.packs``; ``specify_cli`` reaches it only through this
+    # facade (research A.3 #8). Offering-side names only. FACADE-ONLY.
+    "charter.packs": [
+        ("RECOGNISED_ARTIFACT_DIRS", "charter.offering.packs.pack_manifest"),
+        ("builtin_manifest_is_fresh", "charter.offering.packs.builtin_manifest"),
+        ("count_snapshot_artifacts", "charter.offering.packs.pack_manifest"),
+        ("generate_builtin_manifest", "charter.offering.packs.builtin_manifest"),
+        ("safe_urlsplit", "charter.offering.packs.pack_manifest"),
+        ("snapshot_sha256", "charter.offering.packs.pack_manifest"),
+        ("source_fingerprint", "charter.offering.packs.pack_manifest"),
+        ("strip_source_credentials", "charter.offering.packs.pack_manifest"),
+        ("write_pack_manifest", "charter.offering.packs.pack_manifest"),
+    ],
     "charter.provenance": [
         ("is_built_in_pack_path", "charter.offering.provenance"),
         ("to_portable_source_path", "charter.offering.provenance"),

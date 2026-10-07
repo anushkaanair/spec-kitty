@@ -27,7 +27,14 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 from ruamel.yaml import YAML
 
 from .errors import ManifestIntegrityError
+from charter.offering.artifact_kinds import ArtifactKind
 from charter.offering.packs.hashing import hash_manifest_payload
+from charter.offering.packs.pack_manifest import (
+    CharterProfile,
+    Constituent,
+    PackManifest,
+    finalize_pack_manifest,
+)
 from .synthesize_pipeline import canonical_yaml
 from kernel.charter_pack_paths import KITTIFY_DIRNAME, LEGACY_PROJECT_PACK_DIRNAME, PROJECT_PACK_ROOT
 from kernel.paths import to_posix
@@ -394,6 +401,52 @@ def verify(manifest: SynthesisManifest, repo_root: Path) -> None:
             )
 
 
+# ---------------------------------------------------------------------------
+# Charter absorption into the unified pack manifest (IC-01 / T002)
+# ---------------------------------------------------------------------------
+
+
+def absorb_synthesis_manifest(manifest: SynthesisManifest) -> PackManifest:
+    """Absorb a charter ``SynthesisManifest`` into the unified schema (PP-M2).
+
+    The charter bundle's ``artifacts[]`` become canonical ``constituents[]``
+    (each preserving its ``provenance_path``), and the **entire** charter-only
+    field-set is carried onto a :class:`CharterProfile` so nothing is dropped:
+    ``mission_id``, ``bundle_content_hash``, ``synthesizer_version``,
+    ``run_id``, ``adapter_id``, ``adapter_version``, ``created_at``,
+    ``schema_version`` and the load-bearing ``built_in_only``.
+
+    This is a lossless in-memory bridge. It does **not** change the on-disk
+    ``synthesis-manifest.yaml`` format, so every existing charter-manifest
+    reader (freshness / preflight / lint / bundle / versioning / the rc35
+    migrations) keeps reading the unchanged bytes (T003).
+    """
+    constituents = [
+        Constituent(
+            kind=ArtifactKind(entry.kind),
+            id=entry.slug,
+            path=entry.path,
+            content_hash=entry.content_hash,
+            provenance_path=entry.provenance_path,
+        )
+        for entry in manifest.artifacts
+    ]
+    profile = CharterProfile(
+        mission_id=manifest.mission_id,
+        bundle_content_hash=manifest.bundle_content_hash,
+        synthesizer_version=manifest.synthesizer_version,
+        run_id=manifest.run_id,
+        adapter_id=manifest.adapter_id,
+        adapter_version=manifest.adapter_version,
+        created_at=manifest.created_at,
+        schema_version=manifest.schema_version,
+        built_in_only=manifest.built_in_only,
+    )
+    return finalize_pack_manifest(
+        PackManifest(constituents=constituents, charter=profile)
+    )
+
+
 __all__ = [
     "ManifestArtifactEntry",
     "SynthesisManifest",
@@ -404,4 +457,5 @@ __all__ = [
     "compute_manifest_hash",
     "verify",
     "verify_manifest_hash",
+    "absorb_synthesis_manifest",
 ]

@@ -46,10 +46,9 @@ from charter.offering.drg.override_policy import (
     load_pack_sanction,
     pack_sanction_present,
 )
+from charter.packs import write_pack_manifest
 
 from .pack_validator import validate_pack
-from .snapshot import write_pack_manifest
-from .sources.protocol import FetchResult
 
 if TYPE_CHECKING:
     # Type-checking-only: this module has no static top-level runtime
@@ -434,12 +433,8 @@ def assemble_pack(
     )
     write_pack_manifest(
         output_dir,
-        FetchResult(
-            ok=True,
-            artifacts_written=artifacts_written,
-            pack_version=None,
-            errors=[],
-        ),
+        pack_version=None,
+        etag=None,
         source_url=",".join(str(p) for p in input_packs),
         source_type="assemble",
     )

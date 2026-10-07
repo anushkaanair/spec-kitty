@@ -299,10 +299,7 @@ def regenerate_graph(
         write_reference_graph_with_overlay,
     )
     from charter.drg import DRGValidationError
-    from specify_cli.doctrine.builtin_manifest import (
-        builtin_manifest_is_fresh,
-        generate_builtin_manifest,
-    )
+    from charter.packs import builtin_manifest_is_fresh, generate_builtin_manifest
 
     doctrine_root = _doctrine_root()
 
