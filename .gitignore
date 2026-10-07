@@ -101,9 +101,9 @@ kitty-specs/*/.kittify/dossiers/*/snapshot-latest.json
 # subdirectories (directive/, tactic/, styleguide/, procedure/, overlays/)
 # and graph.yaml. Tracked upstream as Priivacy-ai/spec-kitty#1166.
 # Mission charter-pack-cutover (#3732, FR-016/FR-012 "Ignore rules"): these
-# are the rules of the retired `.kittify/doctrine/` root carried over with
-# the prefix rewritten; what is tracked is unchanged. Files already tracked
-# under the retired root stay tracked until the cutover migration moves them.
+# are the rules of the retired project layer root, carried over with only the
+# prefix rewritten; what is tracked is unchanged. Files already tracked under
+# the retired root stay tracked until the cutover migration moves them.
 .kittify/charter-packs/**
 !.kittify/charter-packs/directive/
 !.kittify/charter-packs/directive/**
