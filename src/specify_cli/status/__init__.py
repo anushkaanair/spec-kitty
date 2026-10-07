@@ -389,6 +389,26 @@ from .lane_head import (
     LANE_HEAD_KEY,
 )
 
+# concurrent-mission-writers-01M4BT23 WP01 (#5819): the Mission write primitive
+# and the single_branch checkout claim lock. Kept in their own import block and
+# their own ``__all__`` region below.
+from .locking import (
+    CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS,
+    write_checkout_claim_lock,
+)
+from .mission_write import (
+    MISSION_WRITE_LOCK_TIMEOUT_SECONDS,
+    STATUS_ROLLBACK_REFUSED,
+    RollbackOutcome,
+    RollbackPoint,
+    RollbackRefusal,
+    capture_rollback_point,
+    locked_rewrite_text,
+    mission_write_lock,
+    rollback_events_log,
+    rollback_status_artifacts,
+)
+
 
 def uninitialized_status_error(mission_slug: str, wp_id: str, feature_dir: Path) -> str:
     """Return the cycle-aware missing-status message without eager dependency-graph imports."""
@@ -666,6 +686,19 @@ __all__ = [
     "registered_worktree_paths",
     "scan_workspace_husks",
     "write_derived_views",
+    # concurrent-mission-writers-01M4BT23 WP01 (#5819): Mission write primitive.
+    "CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS",
+    "MISSION_WRITE_LOCK_TIMEOUT_SECONDS",
+    "STATUS_ROLLBACK_REFUSED",
+    "RollbackOutcome",
+    "RollbackPoint",
+    "RollbackRefusal",
+    "capture_rollback_point",
+    "locked_rewrite_text",
+    "mission_write_lock",
+    "rollback_events_log",
+    "rollback_status_artifacts",
+    "write_checkout_claim_lock",
 ]
 
 

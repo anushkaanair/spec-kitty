@@ -22,6 +22,7 @@ hierarchy is in that mission's ``design-notes/WP01-lock-rules.md``):
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -323,5 +324,49 @@ def project_event_log_lock(
     log, independently of any mission-level lock (F2-T1, F2.md section 3.3).
     """
     lock_path = _git_common_dir(repo_root) / LOCK_DIRECTORY / f"{_PROJECT_LOCK_SENTINEL}.status.lock"
+    with _named_status_lock(lock_path, timeout=timeout) as held_path:
+        yield held_path
+
+
+#: Bound (seconds) for the single_branch checkout claim lock. Longer than the Mission
+#: lock bound: the hold spans an occupancy scan and a claim emit, never a commit queue.
+CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS: float = 120.0
+
+_CHECKOUT_LOCK_PREFIX = "__checkout-"
+_CHECKOUT_LOCK_SUFFIX = "__"
+_STATUS_LOCK_SUFFIX = ".status.lock"
+_CHECKOUT_DIGEST_LENGTH = 16
+
+
+def _checkout_claim_lock_path(write_checkout: Path) -> Path:
+    identity = os.path.normcase(str(write_checkout.resolve()))
+    digest = hashlib.sha1(identity.encode("utf-8"), usedforsecurity=False).hexdigest()[:_CHECKOUT_DIGEST_LENGTH]
+    key = f"{_CHECKOUT_LOCK_PREFIX}{digest}{_CHECKOUT_LOCK_SUFFIX}"
+    return Path(_git_common_dir(write_checkout) / LOCK_DIRECTORY / f"{key}{_STATUS_LOCK_SUFFIX}")
+
+
+def _is_checkout_claim_lock_key(lock_key: str) -> bool:
+    name = Path(lock_key).name
+    return name.startswith(_CHECKOUT_LOCK_PREFIX) and name.endswith(_CHECKOUT_LOCK_SUFFIX + _STATUS_LOCK_SUFFIX)
+
+
+@contextmanager
+def write_checkout_claim_lock(
+    write_checkout: Path,
+    *,
+    timeout: float = CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS,
+) -> Iterator[Path]:
+    """Serialize WP claims of one write checkout (the single_branch occupancy scan -> claim emit).
+
+    Keyed on the case-normalized resolved checkout root under the git common dir.
+    Lock order is fixed: **this lock first, then any Mission write lock**. Taking it
+    while the calling thread already holds a Mission lock (and not this checkout's
+    lock) raises ``RuntimeError`` instead of risking a deadlock against a claimant
+    that takes them in the right order.
+    """
+    lock_path = _checkout_claim_lock_path(write_checkout)
+    held = _get_thread_locks()
+    if str(lock_path) not in held and any(not _is_checkout_claim_lock_key(key) for key in held):
+        raise RuntimeError("checkout claim lock must be taken before any Mission lock")
     with _named_status_lock(lock_path, timeout=timeout) as held_path:
         yield held_path
