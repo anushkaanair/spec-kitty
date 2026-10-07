@@ -1144,9 +1144,11 @@ def run_acceptance_matrix_driver(base_path: str, ours_path: str, theirs_path: st
 # create-window split (ADR 2026-08-03-1) means a coord mission's review
 # cycles land on TWO different physical surfaces during the migration window
 # (cycle 1 on PRIMARY at ``tasks/<wp>/``, a later cycle mis-numbered "1" again
-# on COORD because ``ReviewCycleArtifact.next_cycle_number`` globs only the
-# worktree it is called from) -- so a genuine, DIFFERENT-content collision
-# under the SAME ``review-cycle-N.md`` filename is reachable, not
+# on COORD, when ``ReviewCycleArtifact.next_cycle_number`` globbed only the
+# worktree it was called from). Since #5194 the allocator numbers across every
+# read surface, so new cycles no longer collide; artifacts written before that
+# fix can still carry such a collision -- a genuine, DIFFERENT-content
+# collision under the SAME ``review-cycle-N.md`` filename is reachable, not
 # hypothetical.
 #
 # THE ORIGINAL DESIGN DECISION (T077, weighed against FR-006 / C-002(b)):

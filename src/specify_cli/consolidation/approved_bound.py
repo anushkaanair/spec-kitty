@@ -50,6 +50,8 @@ ATTEST_APPROVED_FLAG = "--attest-approved-reviewed"
 
 _APPROVED_LANE = "approved"
 _DONE_LANE = "done"
+_IN_REVIEW_LANE = "in_review"
+_APPROVED_VERDICT = "approved"
 _MAX_NAMED_COMMITS = 3
 _SHORT_SHA = 7
 _ATTEST_REASON = '--attest-reason "<what you checked>"'
@@ -217,21 +219,73 @@ def is_approved_reviewed_attestation(policy_metadata: Mapping[str, object] | Non
 
 
 def _is_approval_transition(event: StatusEvent) -> bool:
-    """True iff *event* is a review's approval of a work package.
+    """True iff *event* is a move that can be a review's approval of a work package.
 
     Two transitions are: ``-> approved``, and an unforced ``in_review -> done``, which the
     state machine allows and which finishes a review that approved the work without the
     ``approved`` stop (its stamp is the reviewed tip). The ``approved -> done`` record the
     run itself writes is not one, and neither is a forced move to ``done``: neither is a
-    review. An operator attestation of an approval is read separately.
+    review. An operator attestation of an approval is read separately. A forced move to
+    ``approved`` is only a candidate: :func:`_is_forced_review_approval` decides it.
     """
     if str(event.to_lane) == _APPROVED_LANE:
         return True
     return str(event.to_lane) == _DONE_LANE and not event.force and str(event.from_lane) != _APPROVED_LANE
 
 
-def _is_approval(event: StatusEvent) -> bool:
-    return _is_approval_transition(event) or is_approved_reviewed_attestation(event.policy_metadata)
+def _entered_review_by_claim(earlier: Sequence[StatusEvent], wp_id: str) -> bool:
+    """True iff *wp_id*'s latest move into ``in_review`` in *earlier* is a reviewer's claim, i.e. not forced.
+
+    ``agent action review`` (and an unforced ``move-task --to in_review``) records the claim as an
+    unforced ``for_review -> in_review``. A forced move into ``in_review`` is the operator placing the
+    work package there; no reviewer claimed it (#5721).
+    """
+    entry = next((event for event in reversed(earlier) if event.wp_id == wp_id and str(event.to_lane) == _IN_REVIEW_LANE), None)
+    return entry is not None and not entry.force
+
+
+def _is_claimed_review_verdict(event: StatusEvent, earlier: Sequence[StatusEvent]) -> bool:
+    """True iff the forced *event* is a reviewer's approval verdict: a hop out of ``in_review`` that carries an
+    approved ``review_result``, after a review claim (:func:`_entered_review_by_claim`).
+
+    Nothing else the event carries is a review (#5721): an ``evidence.review`` reference (a typed
+    ``--approval-ref``, the synthetic ``auto-approval:`` token, or the ``review-cycle://`` pointer the
+    approval's own auto-committed artifact yields) and a reviewer name are written by the forced move itself.
+    """
+    result = event.review_result
+    return str(event.from_lane) == _IN_REVIEW_LANE and result is not None and result.verdict == _APPROVED_VERDICT and _entered_review_by_claim(earlier, event.wp_id)
+
+
+def _is_forced_review_approval(event: StatusEvent, earlier: Callable[[], Sequence[StatusEvent]]) -> bool:
+    """True iff the forced move to ``approved`` *event* is a review's approval (#5721).
+
+    Two are: a reviewer's verdict on a claimed review (:func:`_is_claimed_review_verdict`) and an
+    arbiter override of a rejection; both are judged on the log strictly before *event* (*earlier*
+    builds it). An approved-reviewed attestation is read before this is asked. Any other forced
+    move is the operator restamping the lane, which is no review.
+    """
+    # Lazy, like every consolidation -> review import (preflight's too): no consolidation
+    # module loads a review module at import time, and only a forced approval needs this one.
+    from specify_cli.review.arbiter import is_arbiter_override_history
+
+    log = earlier()
+    if _is_claimed_review_verdict(event, log):
+        return True
+    return bool(is_arbiter_override_history(log, event.wp_id, str(event.from_lane), _APPROVED_LANE, True))
+
+
+def _is_forced_approved_move(event: StatusEvent) -> bool:
+    return event.force and str(event.to_lane) == _APPROVED_LANE and not is_approved_reviewed_attestation(event.policy_metadata)
+
+
+def _is_approval(events: Sequence[StatusEvent], index: int) -> bool:
+    """True iff ``events[index]`` is an approval: the log before it only matters to a forced move to ``approved``."""
+    event = events[index]
+    if is_approved_reviewed_attestation(event.policy_metadata):
+        return True
+    if not _is_approval_transition(event):
+        return False
+    return not _is_forced_approved_move(event) or _is_forced_review_approval(event, lambda: events[:index])
 
 
 def _newest_approval(events: Sequence[StatusEvent], wp_id: str) -> StatusEvent | None:
@@ -241,11 +295,13 @@ def _newest_approval(events: Sequence[StatusEvent], wp_id: str) -> StatusEvent |
     (:func:`_is_approval_transition`) or an operator attestation of an approval
     (:data:`APPROVED_REVIEWED`, any ``to_lane``). The ``approved -> done`` event is
     neither, so the restamp the run itself writes is never read; forced moves to ``done``
-    and migration-synthesized events (FR-011) never count.
+    and migration-synthesized events (FR-011) never count. A forced move to ``approved``
+    that records no review (:func:`_is_forced_review_approval`) is skipped, so the newest
+    review approval stays the bound (#5721).
     """
     newest: StatusEvent | None = None
-    for event in events:
-        if event.wp_id == wp_id and not is_migration_event(event) and _is_approval(event):
+    for index, event in enumerate(events):
+        if event.wp_id == wp_id and not is_migration_event(event) and _is_approval(events, index):
             newest = event
     return newest
 
@@ -300,6 +356,66 @@ def unstamped_approval_warning(event: StatusEvent | None, *, repo_root: Path, mi
         f"Warning: no lane head could be recorded for {event.wp_id}'s approval; `spec-kitty consolidate` will refuse it "
         f"({BoundRefusalCode.APPROVAL_STAMP_MISSING.value}) until it is approved again or attested."
     )
+
+
+def _log_before(events: Sequence[StatusEvent], event: StatusEvent) -> Sequence[StatusEvent]:
+    """The part of *events* strictly before *event* (all of it when *event* is not in the log)."""
+    for index, candidate in enumerate(events):
+        if candidate.event_id == event.event_id:
+            return events[:index]
+    return events
+
+
+def forced_approval_warning(event: StatusEvent | None, load_events: Callable[[], Sequence[StatusEvent]]) -> str | None:
+    """The one-line warning for a forced move to ``approved`` that records no review, else ``None`` (#5721).
+
+    Such a move is not a review approval, so it does not restamp the approval bound:
+    ``consolidate`` keeps the work package bound at its last review approval. Whether it is a
+    review is judged against the log strictly before *event*, read through *load_events*
+    (:func:`_is_forced_review_approval`); a log or an event that cannot be classified is no warning
+    (the warning is advisory and printed after the transition landed).
+    """
+    if event is None or not _is_forced_approved_move(event):
+        return None
+    try:
+        is_review = _is_forced_review_approval(event, lambda: _log_before(load_events(), event))
+    except Exception:
+        # Advisory only, printed after the transition landed: a log or an event it cannot
+        # classify never turns a recorded move into a failed command.
+        logger.debug("could not classify %s's forced approval", event.wp_id, exc_info=True)
+        return None
+    if is_review:
+        return None
+    return (
+        f"Warning: the forced approval of {event.wp_id} is not a review approval; `spec-kitty consolidate` still bounds "
+        f"{event.wp_id} at its last review approval (commits made since refuse with {BoundRefusalCode.LANE_MOVED_AFTER_APPROVAL.value}), "
+        "and refuses it as unstamped when it has none."
+    )
+
+
+def approval_warnings(event: StatusEvent | None, load_events: Callable[[], Sequence[StatusEvent]], *, repo_root: Path, mission_slug: str) -> list[str]:
+    """The warning lines a shell prints after persisting *event*, classified once (#5668, #5721).
+
+    A forced approval that is not a review gets :func:`forced_approval_warning` only: that line
+    already says an unstamped work package refuses. Every other approval, an arbiter override
+    or a forced approval that could not be classified included, gets
+    :func:`unstamped_approval_warning` when it recorded no approval stamp. Neither line prints
+    for a work package outside a code lane: a planning lane (and every ``single_branch`` lane)
+    is never stamped and never bounded, so ``consolidate`` has nothing to say about it.
+    """
+    try:
+        if event is None or not _maps_to_code_lane(repo_root, mission_slug, event.wp_id):
+            return []
+        forced = forced_approval_warning(event, load_events)
+        if forced is not None:
+            return [forced]
+        unstamped = unstamped_approval_warning(event, repo_root=repo_root, mission_slug=mission_slug)
+    except Exception:
+        # Advisory only, printed after the move landed: an event the shell cannot
+        # classify never turns a recorded transition into a failed command.
+        logger.debug("could not classify the approval warnings for a persisted event", exc_info=True)
+        return []
+    return [] if unstamped is None else [unstamped]
 
 
 def commits_beyond(repo_root: Path, tip: str, excluded: Sequence[str]) -> list[str]:
@@ -404,6 +520,7 @@ __all__ = [
     "BoundRefusal",
     "BoundRefusalCode",
     "approval_stamp",
+    "approval_warnings",
     "check_lane",
     "commits_beyond",
     "content_commits",
@@ -412,5 +529,4 @@ __all__ = [
     "refusal_codes",
     "render_refusals",
     "resolves_commit",
-    "unstamped_approval_warning",
 ]

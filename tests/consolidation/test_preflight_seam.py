@@ -106,7 +106,7 @@ def _write_transition(tmp_path: Path, *, wp_id: str, to_lane: str, actor: str, e
 # --- hollow-review: item #9 reviewer-identity disambiguation --------------
 
 
-def test_latest_actor_for_transition_picks_the_latest_by_timestamp(tmp_path: Path) -> None:
+def test_latest_actor_for_transition_picks_the_latest_in_append_order(tmp_path: Path) -> None:
     _write_transition(
         tmp_path,
         wp_id="WP01",
@@ -124,7 +124,8 @@ def test_latest_actor_for_transition_picks_the_latest_by_timestamp(tmp_path: Pat
         event_id="01B",
         at="2026-07-21T01:00:00Z",
     )
-    assert preflight._latest_actor_for_transition(tmp_path, "WP01", "in_progress") == "implementer-b"
+    # The full identity is ``tool:model:profile`` (#5340): a bare compact actor is its tool alone.
+    assert preflight._latest_actor_for_transition(tmp_path, "WP01", "in_progress") == "implementer-b::"
 
 
 def test_latest_actor_for_transition_no_events_file(tmp_path: Path) -> None:
@@ -1180,3 +1181,11 @@ def test_pre_mutation_refusal_for_an_interrupted_fold_prints_the_fold_guidance_n
     assert "an earlier run was interrupted inside the one-directory fold" in out
     assert "spec-kitty consolidate --abort" in out
     assert "Merge aborted before any state change" not in out
+
+
+def test_latest_actor_for_transition_follows_append_order_not_the_timestamp(tmp_path: Path) -> None:
+    """#5340: both sides of the hollow-review check read the one lenient reader in append order."""
+    _write_transition(tmp_path, wp_id="WP01", to_lane="approved", actor="reviewer-a", event_id="01B", at="2026-07-21T01:00:00Z")
+    _write_transition(tmp_path, wp_id="WP01", to_lane="approved", actor="reviewer-b", event_id="01A", at="2026-07-21T00:00:00Z")
+
+    assert preflight._latest_actor_for_transition(tmp_path, "WP01", "approved") == "reviewer-b::"

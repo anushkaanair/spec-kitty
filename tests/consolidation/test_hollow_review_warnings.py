@@ -205,3 +205,122 @@ def test_malformed_event_lines_are_skipped(tmp_path: Path) -> None:
         handle.write("not json\n[1, 2]\n\n")
 
     assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {"WP01": ["force_count=2"]}
+
+
+def _loop_event(event_id: str, actor: str, from_lane: str, to_lane: str, *, review_ref: str | None = None) -> dict[str, object]:
+    event: dict[str, object] = {"event_id": event_id, "wp_id": "WP01", "actor": actor, "from_lane": from_lane, "to_lane": to_lane}
+    if review_ref:
+        event.update({"force": True, "review_ref": review_ref})
+    return event
+
+
+def _write_loop(feature_dir: Path, steps: list[tuple[str, str, str]], *, force_count: int = 4) -> None:
+    """status.json plus an event log of ``(actor, from, to)`` steps; the third arg may carry ``@ref``."""
+    feature_dir.mkdir(parents=True)
+    (feature_dir / "status.json").write_text(
+        json.dumps({"work_packages": {"WP01": {"force_count": force_count}}}), encoding="utf-8"
+    )
+    events = []
+    for n, (actor, src, dst) in enumerate(steps):
+        to_lane, _, ref = dst.partition("@")
+        events.append(_loop_event(f"e{n:02d}", actor, src, to_lane, review_ref=ref or None))
+    (feature_dir / "status.events.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
+
+
+def _loop_steps(implementer: str, reviewer: str) -> list[tuple[str, str, str]]:
+    return [
+        (implementer, "planned", "claimed"),
+        (implementer, "claimed", "in_progress"),
+        (implementer, "in_progress", "for_review"),
+        (reviewer, "for_review", "in_review"),
+        (reviewer, "in_review", "in_progress@review-cycle-1.md"),
+        (implementer, "in_progress", "for_review"),
+        (reviewer, "for_review", "in_review"),
+        (reviewer, "in_review", "approved"),
+    ]
+
+
+@pytest.mark.regression
+def test_rework_loop_with_independent_reviewer_does_not_warn(tmp_path: Path) -> None:
+    """#5340: the reviewer's rework verdict (``in_review -> in_progress``) is not an implementation claim.
+
+    Read as one, the reviewer became "the implementer" and approving made them
+    look like a self-reviewer, so an honest reject -> rework -> approve loop
+    raised a false hollow-review warning.
+    """
+    feature_dir = tmp_path / "kitty-specs" / "034-test"
+    _write_loop(feature_dir, _loop_steps("claude", "codex"))
+
+    assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {}
+
+
+def test_rework_loop_where_the_implementer_approves_still_warns(tmp_path: Path) -> None:
+    """Non-vacuity: the implementer approving its own work still warns."""
+    feature_dir = tmp_path / "kitty-specs" / "034-test"
+    _write_loop(feature_dir, _loop_steps("claude", "claude"))
+
+    assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {"WP01": ["force_count=3"]}
+
+
+def test_same_tool_different_profile_pair_does_not_newly_warn(tmp_path: Path) -> None:
+    """Full-identity comparison is kept: one tool with two profiles is not a self-review (H3)."""
+    feature_dir = tmp_path / "kitty-specs" / "034-test"
+    _write_loop(
+        feature_dir,
+        _loop_steps("claude:opus:implementer-ivan:implementer", "claude:opus:reviewer-renata:reviewer"),
+    )
+
+    assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {}
+
+
+def _dict_actor(tool: str, *, profile: str | None = None, role: str | None = None) -> dict[str, str | None]:
+    return {"model": None, "profile": profile, "role": role, "tool": tool}
+
+
+def _write_dict_loop(feature_dir: Path, implementer: object, reviewer: object) -> None:
+    feature_dir.mkdir(parents=True)
+    (feature_dir / "status.json").write_text(json.dumps({"work_packages": {"WP01": {"force_count": 3}}}), encoding="utf-8")
+    lanes = [("planned", "claimed"), ("claimed", "in_progress"), ("in_progress", "for_review"), ("for_review", "in_review")]
+    events = [
+        {"event_id": f"e{n}", "wp_id": "WP01", "actor": implementer, "from_lane": a, "to_lane": b}
+        for n, (a, b) in enumerate(lanes)
+    ]
+    events.append({"event_id": "e9", "wp_id": "WP01", "actor": reviewer, "from_lane": "in_review", "to_lane": "approved"})
+    (feature_dir / "status.events.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
+
+
+def test_dict_actor_self_approval_still_warns(tmp_path: Path) -> None:
+    """The same structured actor implementing and approving is a self-review (#5340)."""
+    feature_dir = tmp_path / "kitty-specs" / "034-test"
+    actor = _dict_actor("claude", role="implementer")
+    _write_dict_loop(feature_dir, actor, actor)
+
+    assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {"WP01": ["force_count=3"]}
+
+
+def test_same_tool_dict_actors_with_different_profiles_do_not_warn(tmp_path: Path) -> None:
+    feature_dir = tmp_path / "kitty-specs" / "034-test"
+    _write_dict_loop(
+        feature_dir,
+        _dict_actor("claude", profile="implementer-ivan", role="implementer"),
+        _dict_actor("claude", profile="reviewer-renata", role="reviewer"),
+    )
+
+    assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {}
+
+
+@pytest.mark.regression
+@pytest.mark.parametrize(
+    ("implementer", "reviewer"),
+    [
+        pytest.param(_dict_actor("claude", role="implementer"), _dict_actor("claude", role="reviewer"), id="dict-roles"),
+        pytest.param("claude", _dict_actor("claude", role="reviewer"), id="compact-and-dict"),
+        pytest.param("claude:opus:ivan:implementer", {"tool": "claude", "model": "opus", "profile": "ivan", "role": "reviewer"}, id="full-compact-and-dict"),
+    ],
+)
+def test_the_same_tool_model_and_profile_is_a_self_review_whatever_the_role(tmp_path: Path, implementer: object, reviewer: object) -> None:
+    """#5340: the claim stamps role implementer and the approval role reviewer; the role never makes two actors different."""
+    feature_dir = tmp_path / "kitty-specs" / "034-test"
+    _write_dict_loop(feature_dir, implementer, reviewer)
+
+    assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {"WP01": ["force_count=3"]}

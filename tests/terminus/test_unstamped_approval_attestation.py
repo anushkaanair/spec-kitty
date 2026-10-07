@@ -142,7 +142,17 @@ def test_an_approval_recorded_without_a_lane_head_warns_at_approval_time(tmp_pat
 
     run_git(mission.repo, "worktree", "remove", "--force", str(lane_worktree(mission, LANE_A)))
     run_git(mission.repo, "branch", "-D", mission.lane_branches["WP01"])
-    unstamped = run_terminus(mission, emit)
+    forced = run_terminus(mission, emit)
+    # A forced approval out of ``approved`` is no review (#5721): its own warning speaks, the unstamped line is not repeated.
+    assert forced.returncode == 0 and "is not a review approval" in forced.stderr and _WARNING_PREFIX not in forced.stderr, forced.stderr
+
+    # A review approval (an unforced claim into in_review, then the verdict) recorded with no lane head warns as unstamped.
+    resubmit = [*emit[:4], "--to", "for_review", "--force", "--actor", ACTOR, "--reason", "review again", "--mission", mission.slug]
+    claim = [*emit[:4], "--to", "in_review", "--actor", ACTOR, "--mission", mission.slug]
+    for step in (resubmit, claim):
+        moved = run_terminus(mission, step)
+        assert moved.returncode == 0, moved.stderr
+    unstamped = run_terminus(mission, [arg for arg in emit if arg != "--force"])
 
     assert unstamped.returncode == 0, unstamped.stderr
     warning = f"{_WARNING_PREFIX} for WP01's approval; `spec-kitty consolidate` will refuse it ({_MISSING}) until it is approved again or attested."

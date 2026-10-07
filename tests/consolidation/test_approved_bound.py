@@ -31,7 +31,8 @@ from specify_cli.consolidation.canceled_attestation import ATTESTATION_KEY
 from specify_cli.consolidation.git_probes import GitProbeError
 from specify_cli.consolidation.reconciliation import ApprovedWpCommitSet, approval_stamp_anchors, build_approved_wp_set, lane_tips_moved_refusal
 from specify_cli.lanes.models import ExecutionLane, LanesManifest
-from specify_cli.status import LANE_HEAD_KEY, Lane, StatusEvent
+from specify_cli.status import LANE_HEAD_KEY, DoneEvidence, Lane, ReviewResult, StatusEvent
+from specify_cli.status.models import ReviewApproval
 from tests.terminus.conftest import CoordMission
 from tests.terminus.lanes_fixture import build_lanes_mission
 
@@ -99,6 +100,9 @@ class _Repo:
         metadata: dict[str, str] | None = None,
         from_lane: Lane = Lane.IN_REVIEW,
         force: bool = False,
+        review_ref: str | None = None,
+        evidence: DoneEvidence | None = None,
+        review_result: ReviewResult | None = None,
     ) -> None:
         self.seq += 1
         policy = dict(metadata or {})
@@ -115,6 +119,9 @@ class _Repo:
                 actor=actor,
                 force=force,
                 execution_mode="worktree",
+                review_ref=review_ref,
+                evidence=evidence,
+                review_result=review_result,
                 policy_metadata=policy or None,
             )
         )
@@ -161,6 +168,36 @@ def _approved_lane(repo: _Repo) -> str:
 
 _RUN_DONE = {"from_lane": Lane.APPROVED}  # the ``approved -> done`` record the run itself writes
 _FORCED = {"force": True}
+# What ``move-task <WP> --to approved --force`` really writes (traces/design-decisions.md, #5721): an
+# ``evidence.review`` whose reviewer is auto-detected (``git config user.name``) and whose reference is the
+# synthetic ``auto-approval:`` token, no ``review_result``, no ``review_ref``.
+_DETECTED_REVIEWER = "Real Operator"
+_BARE_EVIDENCE = DoneEvidence(review=ReviewApproval(reviewer=_DETECTED_REVIEWER, verdict="approved", reference="auto-approval:WP01:20261007"))
+
+
+def _forced_from(lane: str) -> dict[str, Any]:
+    return {"force": True, "from_lane": Lane(lane), "evidence": _BARE_EVIDENCE}
+
+
+_REJECTION = {"from_lane": Lane.FOR_REVIEW, "review_ref": "feedback://WP01/review-cycle-1.md"}
+_REVIEWED_FORCE = {  # a reviewer forcing past an unrelated gate: the hop out of in_review carries a review_result
+    "force": True,
+    "from_lane": Lane.IN_REVIEW,
+    "evidence": _BARE_EVIDENCE,
+    "review_result": ReviewResult(reviewer=_DETECTED_REVIEWER, verdict="approved", reference="auto-approval:WP01:20261007"),
+}
+# A reviewer's claim: ``agent action review`` records an unforced ``for_review -> in_review``.
+_GENUINE_CLAIM = ("in_review", None, {}, "reviewer", {"from_lane": Lane.FOR_REVIEW, "review_ref": "action-review-claim"})
+# An operator forcing the work package into in_review: no reviewer claimed it.
+_FORCED_CLAIM = ("in_review", None, {}, "operator", {"from_lane": Lane.APPROVED, "force": True})
+_EXPLICIT_APPROVAL_REF = {  # --approval-ref PR#42: a reference the operator typed is no review (#5721)
+    "force": True,
+    "from_lane": Lane.FOR_REVIEW,
+    "evidence": DoneEvidence(review=ReviewApproval(reviewer=_DETECTED_REVIEWER, verdict="approved", reference="PR#42")),
+}
+# --self-review-fallback writes the same bare evidence on the approval event (its own record is a separate lifecycle event).
+_SELF_REVIEW_FALLBACK = _forced_from("for_review")
+_REGRESSION = pytest.mark.regression
 
 
 @pytest.mark.parametrize(
@@ -185,6 +222,104 @@ _FORCED = {"force": True}
             [("approved", "s1", {}, "claude", {}), ("in_progress", "s2", {}, "claude", {}), ("done", "s8", {}, "claude", {})],
             "s8",
             id="unforced-review-straight-to-done-is-the-approval",
+        ),
+        pytest.param(
+            [("approved", "s1", {}, "claude", {}), ("approved", "s2", {}, "claude", _forced_from("approved"))],
+            "s1",
+            id="forced-approved-to-approved-is-no-stamp",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [
+                ("approved", "s1", {}, "claude", {}),
+                ("canceled", None, {}, "claude", {"from_lane": Lane.APPROVED}),
+                ("approved", "s3", {}, "claude", _forced_from("canceled")),
+            ],
+            "s1",
+            id="forced-canceled-to-approved-is-no-stamp",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [
+                ("approved", "s1", {}, "claude", {}),
+                ("in_progress", None, {}, "claude", {"from_lane": Lane.APPROVED}),
+                ("approved", "s3", {}, "claude", _forced_from("in_progress")),
+            ],
+            "s1",
+            id="forced-in-progress-to-approved-is-no-stamp",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [("approved", "s3", {}, "claude", _forced_from("in_progress"))],
+            None,
+            id="forced-approval-alone-leaves-no-stamp",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [
+                ("approved", "s1", {}, "claude", {}),
+                ("planned", None, {}, "claude", _REJECTION),
+                ("approved", "s3", {}, "claude", {**_forced_from("planned"), "evidence": None}),
+            ],
+            "s3",
+            id="arbiter-override-counts",
+        ),
+        pytest.param(
+            [("approved", "s1", {}, "claude", {}), ("approved", "s5", {ATTESTATION_KEY: bound.APPROVED_REVIEWED}, "operator", _forced_from("approved"))],
+            "s5",
+            id="forced-attestation-counts",
+        ),
+        pytest.param(
+            [("approved", "s1", {}, "claude", {}), _GENUINE_CLAIM, ("approved", "s4", {}, "claude", _REVIEWED_FORCE)],
+            "s4",
+            id="review-result-after-a-genuine-claim-counts",
+        ),
+        pytest.param(
+            [("approved", "s1", {}, "claude", {}), _FORCED_CLAIM, ("approved", "s4", {}, "claude", _REVIEWED_FORCE)],
+            "s1",
+            id="review-result-after-a-forced-in-review-entry-is-no-stamp",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [("approved", "s1", {}, "claude", {}), _GENUINE_CLAIM, _FORCED_CLAIM, ("approved", "s4", {}, "claude", _REVIEWED_FORCE)],
+            "s1",
+            id="only-the-latest-in-review-entry-decides",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [("approved", "s1", {}, "claude", {}), ("approved", "s4", {}, "claude", _REVIEWED_FORCE)],
+            "s1",
+            id="review-result-with-no-claim-on-record-is-no-stamp",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [("approved", "s1", {}, "claude", {}), _GENUINE_CLAIM, ("approved", "s4", {}, "operator", _EXPLICIT_APPROVAL_REF)],
+            "s1",
+            id="explicit-approval-ref-is-no-stamp",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [
+                ("approved", "s1", {}, "claude", {}),
+                _GENUINE_CLAIM,
+                (
+                    "approved",
+                    "s4",
+                    {},
+                    "claude",
+                    _forced_from("in_review")
+                    | {"evidence": DoneEvidence(review=ReviewApproval(reviewer="rev", verdict="approved", reference="review-cycle://m/WP01/review-cycle-2.md"))},
+                ),
+            ],
+            "s1",
+            id="own-review-cycle-pointer-without-a-review-result-is-no-stamp",
+            marks=_REGRESSION,
+        ),
+        pytest.param(
+            [("approved", "s1", {}, "claude", {}), ("approved", "s4", {}, "operator", _SELF_REVIEW_FALLBACK)],
+            "s1",
+            id="self-review-fallback-is-no-stamp",
+            marks=_REGRESSION,
         ),
     ],
 )
@@ -239,6 +374,19 @@ def test_content_after_approval_refuses_and_names_commits_and_path(repo: _Repo) 
     assert text.startswith("LANE_MOVED_AFTER_APPROVAL: ")
     assert all(sha[:7] in text for sha in reversed(late[-3:])) and late[0][:7] not in text
     assert "and 1 more" in text and "src/late3.py" in text and "WP01" in text and _LANE in text
+
+
+@_REGRESSION
+def test_forced_reapproval_does_not_restamp_the_lane_past_a_late_commit(repo: _Repo) -> None:
+    """#5721: review approved at S, a commit landed later, and a bare ``move-task --to approved --force`` must not move the bound past it."""
+    _approved_lane(repo)
+    repo.commit("src/late.py")
+    repo.event("WP01", Lane.APPROVED, repo.tip(_BRANCH), from_lane=Lane.APPROVED, force=True, evidence=_BARE_EVIDENCE)
+
+    refusal = repo.check()
+
+    assert refusal is not None and refusal.code is BoundRefusalCode.LANE_MOVED_AFTER_APPROVAL
+    assert "src/late.py" in refusal.render(_SLUG)
 
 
 def test_several_work_packages_render_one_line_each_and_one_recovery_block() -> None:
@@ -702,3 +850,181 @@ def test_the_public_entry_reads_a_lane_whose_branch_is_gone_as_empty_and_names_a
 
     git.git("branch", "-D", lane)
     assert refusal() is None
+
+
+# ---------------------------------------------------------------------------
+# the forced-approval warning (#5721)
+# ---------------------------------------------------------------------------
+
+
+def _forced_event(holder: _Repo, **extra: Any) -> StatusEvent:
+    holder.event("WP01", Lane.APPROVED, "s2", **extra)
+    return holder.events[-1]
+
+
+def test_forced_approval_warning_names_a_forced_approval_that_records_no_review() -> None:
+    holder = _Repo(Path("."))
+    event = _forced_event(holder, **_forced_from("in_progress"))
+
+    warning = bound.forced_approval_warning(event, lambda: holder.events)
+
+    assert warning is not None and "forced approval of WP01 is not a review approval" in warning
+    assert "last review approval" in warning and "LANE_MOVED_AFTER_APPROVAL" in warning
+
+
+def test_a_forced_non_review_approval_prints_only_the_forced_warning(tmp_path: Path) -> None:
+    """Classified once: the forced warning already says an unstamped work package refuses, so the unstamped line is not repeated."""
+    mission = build_lanes_mission(tmp_path)
+    holder = _Repo(Path("."))
+    holder.event("WP01", Lane.APPROVED, None, **_forced_from("in_progress"))
+
+    warnings = bound.approval_warnings(holder.events[0], lambda: holder.events, repo_root=mission.repo, mission_slug=mission.slug)
+
+    assert len(warnings) == 1 and "is not a review approval" in warnings[0]
+
+
+@_REGRESSION
+def test_an_unstamped_arbiter_override_still_warns(tmp_path: Path) -> None:
+    """#5721: an arbiter override is a review approval, so the forced warning is silent and the unstamped warning must print."""
+    mission = build_lanes_mission(tmp_path)
+    holder = _Repo(Path("."))
+    holder.event("WP01", Lane.PLANNED, None, **_REJECTION)
+    holder.event("WP01", Lane.APPROVED, None, force=True, from_lane=Lane.PLANNED)
+    override = holder.events[-1]
+
+    warnings = bound.approval_warnings(override, lambda: holder.events, repo_root=mission.repo, mission_slug=mission.slug)
+
+    assert len(warnings) == 1 and "APPROVAL_STAMP_MISSING" in warnings[0]
+    assert bound.unstamped_approval_warning(override, repo_root=mission.repo, mission_slug=mission.slug) is not None
+
+
+def test_an_unclassifiable_forced_approval_falls_back_to_the_unstamped_warning(tmp_path: Path) -> None:
+    """When the log cannot be read the forced warning is silent, so an unstamped approval still warns."""
+    mission = build_lanes_mission(tmp_path)
+    holder = _Repo(Path("."))
+    holder.event("WP01", Lane.APPROVED, None, **_forced_from("in_progress"))
+
+    def unreadable() -> list[StatusEvent]:
+        raise OSError("log gone")
+
+    warnings = bound.approval_warnings(holder.events[0], unreadable, repo_root=mission.repo, mission_slug=mission.slug)
+
+    assert len(warnings) == 1 and "APPROVAL_STAMP_MISSING" in warnings[0]
+    assert bound.approval_warnings(None, unreadable, repo_root=mission.repo, mission_slug=mission.slug) == []
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        pytest.param(_REVIEWED_FORCE, id="review-result-after-a-genuine-claim"),
+        pytest.param({"force": True, "from_lane": Lane.APPROVED, "metadata": {ATTESTATION_KEY: bound.APPROVED_REVIEWED}}, id="attestation"),
+        pytest.param({"force": False, "from_lane": Lane.IN_REVIEW}, id="unforced"),
+    ],
+)
+def test_forced_approval_warning_is_silent_for_a_review_or_an_unforced_approval(extra: dict[str, Any]) -> None:
+    holder = _Repo(Path("."))
+    lane, stamp, metadata, actor, claim = _GENUINE_CLAIM
+    holder.event("WP01", Lane(lane), stamp, actor=actor, metadata=metadata, **claim)
+    event = _forced_event(holder, **extra)
+
+    assert bound.forced_approval_warning(event, lambda: holder.events) is None
+
+
+@_REGRESSION
+@pytest.mark.parametrize(
+    ("claim", "extra"),
+    [
+        pytest.param(_GENUINE_CLAIM, _EXPLICIT_APPROVAL_REF, id="explicit-approval-ref"),
+        pytest.param(_FORCED_CLAIM, _REVIEWED_FORCE, id="review-result-after-a-forced-in-review-entry"),
+    ],
+)
+def test_forced_approval_warning_names_a_stated_reference_and_a_forced_review_entry(
+    claim: tuple[str, str | None, dict[str, str], str, dict[str, Any]], extra: dict[str, Any]
+) -> None:
+    """#5721: neither a typed reference nor a review_result after a forced entry into in_review is a review."""
+    holder = _Repo(Path("."))
+    lane, stamp, metadata, actor, claim_extra = claim
+    holder.event("WP01", Lane(lane), stamp, actor=actor, metadata=metadata, **claim_extra)
+    event = _forced_event(holder, **extra)
+
+    warning = bound.forced_approval_warning(event, lambda: holder.events)
+
+    assert warning is not None and "is not a review approval" in warning
+
+
+def test_a_force_override_reference_is_not_review_evidence() -> None:
+    """#5721: ``_approval_evidence`` falls back to ``force-override`` when no ``--approval-ref`` is given."""
+    holder = _Repo(Path("."))
+    evidence = DoneEvidence(review=ReviewApproval(reviewer=_DETECTED_REVIEWER, verdict="approved", reference="force-override"))
+    event = _forced_event(holder, force=True, from_lane=Lane.FOR_REVIEW, evidence=evidence)
+
+    warning = bound.forced_approval_warning(event, lambda: holder.events)
+
+    assert warning is not None and "is not a review approval" in warning
+
+
+def test_forced_approval_warning_is_silent_for_an_arbiter_override_and_when_the_log_is_unreadable() -> None:
+    holder = _Repo(Path("."))
+    holder.event("WP01", Lane.PLANNED, None, **_REJECTION)
+    override = _forced_event(holder, force=True, from_lane=Lane.PLANNED)
+
+    def unreadable() -> list[StatusEvent]:
+        raise OSError("log gone")
+
+    assert bound.forced_approval_warning(override, lambda: holder.events) is None
+    assert bound.forced_approval_warning(_forced_event(_Repo(Path(".")), **_forced_from("approved")), unreadable) is None
+    assert bound.forced_approval_warning(None, lambda: []) is None
+
+
+def test_forced_approval_warning_never_fails_on_an_event_it_cannot_classify(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The warning is advisory and printed after the move landed: a classification error is no warning (#5721)."""
+    event = _forced_event(_Repo(Path(".")), **_forced_from("approved"))
+
+    def broken(*_args: object, **_kwargs: object) -> bool:
+        raise ValueError("not a valid Lane")
+
+    monkeypatch.setattr(bound, "_is_forced_review_approval", broken)
+    assert bound.forced_approval_warning(event, lambda: []) is None
+
+
+def test_move_task_prints_the_forced_approval_warning_on_stderr(capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from specify_cli.cli.commands.agent import tasks as tasks_module
+    from specify_cli.cli.commands.agent.tasks_move_task_executor import _mt_warn_approval
+
+    holder = _Repo(Path("."))
+    event = _forced_event(holder, **_forced_from("in_progress"))
+    monkeypatch.setattr(tasks_module, "read_events_transactional", lambda **_: holder.events)
+    monkeypatch.setattr(bound, "_maps_to_code_lane", lambda *_args: True)
+    state: Any = SimpleNamespace(event=event, feature_dir=Path("."), mission_slug=_SLUG, main_repo_root=Path("."), owned=None)
+
+    _mt_warn_approval(state)
+
+    captured = capsys.readouterr()
+    assert "forced approval of WP01 is not a review approval" in captured.err and captured.out == ""
+
+    state.event = None
+    _mt_warn_approval(state)
+    assert capsys.readouterr().err == ""
+
+
+def test_approval_warnings_never_fail_on_an_event_they_cannot_classify() -> None:
+    """The warnings are advisory and printed after the move landed: an unclassifiable event is no warning (#5721)."""
+    from types import SimpleNamespace
+    from typing import cast
+
+    odd_event = cast(StatusEvent, SimpleNamespace(wp_id="WP01", to_lane="approved"))  # no force / evidence / policy_metadata
+    assert bound.approval_warnings(odd_event, lambda: [], repo_root=Path("."), mission_slug="m") == []
+
+
+def test_approval_warnings_are_silent_outside_a_code_lane(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A planning or single_branch lane is never bounded, so neither warning prints for it (#5721)."""
+    holder = _Repo(Path("."))
+    event = _forced_event(holder, **_forced_from("in_progress"))
+
+    monkeypatch.setattr(bound, "_maps_to_code_lane", lambda *_args: True)
+    assert bound.approval_warnings(event, lambda: holder.events, repo_root=Path("."), mission_slug=_SLUG)
+
+    monkeypatch.setattr(bound, "_maps_to_code_lane", lambda *_args: False)
+    assert bound.approval_warnings(event, lambda: holder.events, repo_root=Path("."), mission_slug=_SLUG) == []
