@@ -35,6 +35,7 @@ from specify_cli import app as root_app
 from specify_cli.cli.commands.agent import workflow
 from specify_cli.core.commit_guard import GuardCapability
 from specify_cli.git.commit_helpers import SafeCommitHeadMismatch, safe_commit
+from specify_cli.status import RollbackPoint
 from tests.characterization.test_trio_json_envelope import _build_mission_repo
 
 pytestmark = [pytest.mark.integration, pytest.mark.git_repo]
@@ -120,15 +121,19 @@ def test_incomplete_triple_coord_topology_fails_loud_never_reaches_legacy(
     with pytest.raises(typer.Exit) as exc_info:
         workflow._commit_workflow_change(
             repo_root=tmp_path,
-            feature_dir=feature_dir,
             mission_slug="001-demo",
             target_branch="whatever",
             paths=[events_path, status_path],
             message="chore: WP01 review claim",
             operation="for_review -> in_review for WP01",
             wp_id="WP01",
-            pre_emit_event_size=len('{"event_id":"before"}\n'),
-            pre_emit_status_bytes=b'{"before":true}\n',
+            rollback_point=RollbackPoint(
+                events_path=events_path,
+                status_path=status_path,
+                pre_event_size=len('{"event_id":"before"}\n'),
+                pre_status_bytes=b'{"before":true}\n',
+                events_existed=True,
+            ),
         )
 
     assert exc_info.value.exit_code == 1
@@ -182,15 +187,19 @@ def test_complete_triple_still_routes_modern_not_guarded(
 
     workflow._commit_workflow_change(
         repo_root=tmp_path,
-        feature_dir=feature_dir,
         mission_slug="001-demo",
         target_branch="whatever",
         paths=[feature_dir / "status.events.jsonl"],
         message="chore: WP01 review claim",
         operation="for_review -> in_review for WP01",
         wp_id="WP01",
-        pre_emit_event_size=3,
-        pre_emit_status_bytes=b"{}\n",
+        rollback_point=RollbackPoint(
+            events_path=feature_dir / "status.events.jsonl",
+            status_path=feature_dir / "status.json",
+            pre_event_size=3,
+            pre_status_bytes=b"{}\n",
+            events_existed=True,
+        ),
     )
 
     assert len(modern_calls) == 1, "a complete coord triple must route to the modern path"

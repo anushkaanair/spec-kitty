@@ -115,9 +115,6 @@ EXPECTED_UNRESOLVED_EVENT_NAMED_WRITE_SITES: frozenset[tuple[str, str, str]] = f
         # the log onto the trusted target checkout. The path comes from a
         # trust helper called with several filenames, so callers disagree.
         ("specify_cli.consolidation.bookkeeping_projection", "write_bytes", "trusted_target_events_path"),
-        # Workflow-commit rollback truncate (keyword-only parameter; the
-        # in-module callers pass a path the scanner cannot trace).
-        ("specify_cli.cli.commands.agent.workflow", "Path.open", "events_path"),
         # The Mission write primitive's verified rollback (#5819): opens the log
         # ``r+b`` once, measures and truncates that same descriptor, never
         # extends it. The only truncating site in ``src/specify_cli`` (the Mission
