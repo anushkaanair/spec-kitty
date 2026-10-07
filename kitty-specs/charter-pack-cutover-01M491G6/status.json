@@ -31,7 +31,8 @@
       "model": "__resolved_model_absent__",
       "notes": [
         "Acceptance suite + golden before-sets ready: 82 passed, 244 xfailed (strict, per-WP), 1 skipped (windows_ci), 0 failed/xpassed. 26 golden sets + cli_before.json frozen at b9c2365a; FR-018 floor 2459 at fcf7a827. Two logged mechanical edits outside owned trees (corpus registry, ci-module-registry deferred bucket).",
-        "Cycle 2: all 7 blocking findings fixed; 81 passed / 271 xfailed / 0 failed; serial 6m31s, -n4 2m52s"
+        "Cycle 2: all 7 blocking findings fixed; 81 passed / 271 xfailed / 0 failed; serial 6m31s, -n4 2m52s",
+        "Review passed (cycle 2): all 7 cycle-1 findings fixed and red for the right reason under --runxfail; caching isolation verified; full suite -n4 81p/1s/271xf, 0 failed/0 xpassed."
       ],
       "provider": "__resolved_provider_absent__",
       "review": null,
