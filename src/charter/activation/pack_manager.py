@@ -1,6 +1,6 @@
 """Charter pack activation manager (FR-001, FR-002, FR-026, FR-027).
 
-Provides ``CharterPackManager`` — the single interface for activating and
+Provides ``ActiveCharterManager`` — the single interface for activating and
 deactivating doctrine artifacts in a project's ``.kittify/config.yaml`` and for
 discovering which artifacts are *available* across the built-in, org-pack, and
 project doctrine layers.
@@ -90,7 +90,7 @@ from charter.activation.charter_yaml_io import (
     yaml_documents_equal,
     update_charter_yaml_section,
 )
-from charter.activation.pack_context import CharterPackConfigError, resolve_charter_yaml_pointer
+from charter.activation.pack_context import ActiveCharterConfigError, resolve_charter_yaml_pointer
 from charter.offering.missions.mission_type_repository import (
     ORG_MISSION_TYPES_SUBDIR,
     PROJECT_MISSION_TYPES_RELATIVE_TO_KITTYFY_ROOT,
@@ -113,7 +113,7 @@ __all__ = [
     "ACTIVATION_YAML_KEYS",
     "ActivationResult",
     "AvailableArtifact",
-    "CharterPackManager",
+    "ActiveCharterManager",
     "MergeResult",
     "YAML_KEY_MAP",
     "resolve_activation_write_target",
@@ -232,7 +232,7 @@ def _scan_layout_for(kind: ArtifactKind | None) -> tuple[str, str, bool]:
     (``packs/built-in/missions/``), **not** ``_SRC_ROOT`` — mission
     ``doctrine-consumer-surface-missions-extraction-01KZ6G6H`` (FR-005)
     relocated ``missions/``'s data subdirectories there; see
-    :meth:`CharterPackManager._scan_layer_dirs`'s flat-kind branch, the one
+    :meth:`ActiveCharterManager._scan_layer_dirs`'s flat-kind branch, the one
     place this distinction actually matters for resolution.
 
     Templates (FR-025) are intentionally **not** handled here; ``template`` is
@@ -268,6 +268,19 @@ def _resolve_org_layer_dir(root: Path, kind: ArtifactKind, base_dir: str) -> Pat
     return root / base_dir / "org"
 
 
+def _kittify_root_of_project_pack(project_pack_root: Path) -> Path:
+    """Return the ``.kittify`` directory that holds *project_pack_root*.
+
+    The project layer root handed out by
+    :func:`charter.activation.layer_roots.resolve_layer_roots` is always a
+    direct child of ``<repo>/.kittify`` (the project pack root, or the retired
+    legacy root it falls back to until FR-011), so its parent is ``.kittify``.
+    Project mission types live at ``.kittify/missions/mission_types/``, outside
+    the pack, and are resolved from here.
+    """
+    return project_pack_root.parent
+
+
 def _resolve_layer_candidate(
     layer: str,
     root: Path,
@@ -279,13 +292,14 @@ def _resolve_layer_candidate(
     """Resolve the scan directory for one ``(layer, root)`` pair.
 
     Returns ``None`` when the ``(layer, kind, layered)`` combination has no
-    known directory layout — :meth:`CharterPackManager._scan_layer_dirs`
+    known directory layout — :meth:`ActiveCharterManager._scan_layer_dirs`
     then skips that layer for this kind (mirrors the pre-extraction
     ``else: continue`` branch).
     """
     if layered and layer == "project" and kind is not None:
+        # ``root`` is the project pack root (``.kittify/charter-packs/``).
         kind_dir = _PROJECT_KIND_DIRS.get(kind, kind.plural)
-        return cast(Path, root / "doctrine" / kind_dir)
+        return cast(Path, root / kind_dir)
     if layered and layer == "org" and kind is not None:
         return _resolve_org_layer_dir(root, kind, base_dir)
     if layered and layer == "built-in" and kind is not None:
@@ -334,7 +348,7 @@ def _resolve_layer_candidate(
         # <pack_root>/mission_types/*.yaml (CL-005; see ADR
         # docs/adr/3.x/2026-08-13-1-mission-type-roster-layering-seam.md).
         # `root` here is the org pack root itself (see
-        # specify_cli.cli.commands.charter._layer_roots.resolve_layer_roots
+        # charter.activation.layer_roots.resolve_layer_roots
         # -> charter.drg.resolve_org_roots), the same root
         # _resolve_org_layer_dir's flat-layout branch joins onto for the
         # ArtifactKind case above. The ``mission_types`` segment is the
@@ -345,19 +359,20 @@ def _resolve_layer_candidate(
     if kind is None and layer == "project":
         # FR-005: the project-layer mission-type roster is flat and
         # non-recursive -- .kittify/missions/mission_types/*.yaml (CL-005).
-        # `root` here is already `repo_root / ".kittify"` (see
-        # resolve_layer_roots), so the join consumes the authority's own
-        # under-`.kittify` tail constant (derived in
-        # charter.offering.missions.mission_type_repository beside the
-        # repo-root-relative tuple it comes from, #3427) rather than
-        # re-spelling the layout locally. This joins to a FLAT sibling of, not
-        # nested inside, the pre-existing per-mission-instance
+        # `root` here is the project pack root (see
+        # charter.activation.layer_roots.resolve_layer_roots), which is NOT
+        # where the roster lives: the roster sits under `.kittify` itself, so
+        # the join starts from `_kittify_root_of_project_pack(root)` and
+        # consumes the authority's own under-`.kittify` tail constant
+        # (charter.offering.missions.mission_type_repository, #3427) rather
+        # than re-spelling the layout locally. This joins to a FLAT sibling
+        # of, not nested inside, the pre-existing per-mission-instance
         # `.kittify/missions/<mission_name>/` convention --
         # `_mission_dir_if_valid` (src/specify_cli/mission.py) only
         # recognizes a subdirectory holding a file literally named
         # `mission.yaml`, which this roster's `*.yaml` files (named after
         # mission-type ids) never are.
-        return root.joinpath(*PROJECT_MISSION_TYPES_RELATIVE_TO_KITTYFY_ROOT)
+        return _kittify_root_of_project_pack(root).joinpath(*PROJECT_MISSION_TYPES_RELATIVE_TO_KITTYFY_ROOT)
     return None
 
 
@@ -408,7 +423,7 @@ logger = logging.getLogger(__name__)
 
 
 def _chain_complete_available(
-    manager: CharterPackManager,
+    manager: ActiveCharterManager,
     ctx: ProjectContext,
     kind: str,
     repo_root: Path,
@@ -419,7 +434,7 @@ def _chain_complete_available(
     #4399 squad MAJOR: the CLI's ``layer_roots`` map deliberately truncates the
     org chain to the first pack — a documented back-compat contract for
     ``charter list --all-layers`` and every consumer typed
-    ``dict[str, Path]`` (see ``_layer_roots.resolve_org_root_chain``). Reusing
+    ``dict[str, Path]`` (see ``charter.activation.layer_roots.resolve_org_root_chain``). Reusing
     that map as the preservation source meant artifacts in org packs 2+ were
     absent from the preserved set, so the first activation kept silently
     deactivating them — #4253's exact failure mode in a supported
@@ -458,11 +473,11 @@ def _effective_ids_for_kind(repo_root: Path, kind: str) -> tuple[str, ...]:
     #4253's fix materializes this set when a kind's activation key is absent
     (the unrestricted state), instead of the narrower default pack. #4399's
     squad round showed why it must come from the RESOLVER rather than from
-    :meth:`CharterPackManager.list_available`:
+    :meth:`ActiveCharterManager.list_available`:
 
     * ``list_available`` is handed the CLI's ``layer_roots`` map, which
       deliberately truncates the declared org chain to pack #1 (a documented
-      back-compat contract — see ``_layer_roots.resolve_org_root_chain``), so
+      back-compat contract — see ``charter.activation.layer_roots.resolve_org_root_chain``), so
       artifacts in org packs 2+ were absent from the preserved set and stayed
       deactivated;
     * the resolver filters Pattern-B/C kinds (procedures, agent profiles, …)
@@ -604,7 +619,7 @@ def _save_charter_yaml_activation(charter_path: Path, data: dict[str, Any]) -> N
     ``"activation"`` pseudo-section — so unrelated sections are structurally
     preserved rather than conventionally preserved (Landmine 3 / INV-9).
 
-    Safe to call once per changed key (``CharterPackManager.activate`` /
+    Safe to call once per changed key (``ActiveCharterManager.activate`` /
     ``deactivate``) or once for a batch of keys (``merge_defaults``,
     ``charter.activation.activation_engine.promote_activations``): only the keys
     actually present in ``data`` are written, and re-writing an unchanged
@@ -620,9 +635,9 @@ def resolve_activation_write_target(
 ) -> tuple[Path, dict[str, Any], Callable[[Path, dict[str, Any]], None]]:
     """Resolve the ``(path, loaded document, save)`` triple for activation writes.
 
-    Shared by :class:`CharterPackManager` and the two other activation
+    Shared by :class:`ActiveCharterManager` and the two other activation
     writers (``specify_cli.cli.commands.charter.interview`` and
-    ``specify_cli.doctrine.org_charter``) so pointer resolution has exactly
+    ``charter.activation.org_charter``) so pointer resolution has exactly
     one implementation on the write side — mirroring
     :meth:`charter.activation.pack_context.PackContext.from_config` on the read side
     (INV-2/INV-5/INV-9).
@@ -635,7 +650,7 @@ def resolve_activation_write_target(
 
     Present pointer -> migrated project: the target is the pointed-at
     ``charter.yaml``; a dangling/unreadable pointer is a fail-loud
-    :class:`~charter.activation.pack_context.CharterPackConfigError` (INV-5, re-homed
+    :class:`~charter.activation.pack_context.ActiveCharterConfigError` (INV-5, re-homed
     #2530) rather than a silent fallback to the legacy config-embedded keys.
     Writes route through :func:`_save_charter_yaml_activation`, touching
     only the flat activation keys (INV-9).
@@ -648,7 +663,7 @@ def resolve_activation_write_target(
         return config_path, config_data, functools.partial(_save_config, yaml=yaml_inst)
 
     if not charter_path.exists():
-        raise CharterPackConfigError(
+        raise ActiveCharterConfigError(
             f".kittify/config.yaml 'charter:' pointer names {charter_path}, "
             f"which does not exist.\nRemediation: run the charter-bundle "
             f"migration (`spec-kitty upgrade`) to (re)generate it, or fix "
@@ -656,7 +671,7 @@ def resolve_activation_write_target(
         )
     charter_data = load_charter_yaml(charter_path)
     if not isinstance(charter_data, dict):
-        raise CharterPackConfigError(f"{charter_path} root must be a mapping.")
+        raise ActiveCharterConfigError(f"{charter_path} root must be a mapping.")
     return charter_path, charter_data, _save_charter_yaml_activation
 
 
@@ -694,11 +709,11 @@ def _load_default_pack() -> dict[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# CharterPackManager
+# ActiveCharterManager
 # ---------------------------------------------------------------------------
 
 
-class CharterPackManager:
+class ActiveCharterManager:
     """Manages activation/deactivation and availability of doctrine artifacts.
 
     All mutating methods read from and write to ``.kittify/config.yaml`` using
@@ -920,9 +935,9 @@ class CharterPackManager:
 
         The built-in layer is rooted under the installed doctrine package
         (``src/doctrine``). Org/project roots are supplied **as data** (C-008).
-        Org roots use the pack layout ``doctrine/<plural>/org``. Project roots
-        use the live project overlay layout ``doctrine/<singular>`` for kinds
-        synthesized into ``.kittify/doctrine``. Non-existent directories are
+        Org roots use the pack layout ``doctrine/<plural>/org``. The project
+        root is the project pack root (``.kittify/charter-packs/``) and uses
+        the flat ``<singular>`` kind layout. Non-existent directories are
         skipped so a layer that is simply not present contributes nothing.
         """
         kind = _resolve_kind(kind_token)
