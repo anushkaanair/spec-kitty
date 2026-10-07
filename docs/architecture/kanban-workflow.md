@@ -2,7 +2,7 @@
 title: Kanban Workflow Explained
 description: "How Spec Kitty tracks work-package progress: the nine lanes, the 27 allowed transitions and their guards, the append-only event log, and who moves work between them."
 doc_status: active
-updated: '2026-09-30'
+updated: '2026-10-07'
 audience: docs/context/audience/internal/lead-developer.md
 related:
 - docs/architecture/ai-agent-architecture.md
@@ -491,6 +491,8 @@ Users can override lane transitions when needed:
 # Force move (e.g., to un-block stuck work or leave a terminal lane)
 spec-kitty agent tasks move-task WP01 --to planned --force --note "Reopening after hotfix"
 ```
+
+A work package leaves `in_review` or `approved` only through a recorded review verdict or an operator force with a note. The rule lives in the transition pipeline, so it holds on every surface: `move-task --force --note`, `agent status emit --force --reason`, `orchestrator-api transition --force --note` and `agent action implement --force --note`. Without the note the move is refused before anything is written. See ADR [2026-10-07-3](../adr/4.x/2026-10-07-3-review-lane-exit-requires-verdict-or-forced-note.md).
 
 External orchestrators should request equivalent transitions through `spec-kitty orchestrator-api transition ...`, including review-handoff evidence such as `--subtasks-complete`, `--implementation-evidence-present`, `--review-ref`, and `--evidence-json`, so host validation and audit history stay consistent.
 

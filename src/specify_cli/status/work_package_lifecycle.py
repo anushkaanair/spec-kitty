@@ -16,6 +16,8 @@ from specify_cli.status.models import parse_agent_boundary_string
 from specify_cli.status.locking import feature_status_lock
 from specify_cli.status.review_claim_predicate import review_claim_decision
 from specify_cli.status.models import (
+    FORCE_NOTE_HINT,
+    FORCE_NOTE_REQUIRED,
     ActorField,
     Lane,
     StatusEvent,
@@ -49,10 +51,6 @@ from specify_cli.workspace import canonicalize_feature_dir
 #: allowance until FIX-M2-03).
 #: The placeholder a refusal names when no actor is on record.
 _UNKNOWN_ACTOR = "unknown"
-#: The operator override of a review-lane exit, as every refusal names it (#5446).
-FORCE_NOTE_HINT = "`--force --note <why>`"
-#: The one refusal for a ``--force`` with no usable ``--note`` (CLI preflight and lifecycle guard alike).
-FORCE_NOTE_REQUIRED = "--force requires a non-blank --note explaining why the review lane is being left"
 
 GENERIC_IMPLEMENTATION_ACTORS = frozenset({"implement-command", _UNKNOWN_ACTOR, "user"})
 

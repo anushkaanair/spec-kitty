@@ -1565,6 +1565,8 @@ _Canonical status management commands_
 │    --force                                     Force transition bypassing    │
 │                                                guards                        │
 │    --reason                              TEXT  Reason for forced transition  │
+│                                                (required with --force out of │
+│                                                in_review or approved)        │
 │    --evidence-json                       TEXT  JSON string with done         │
 │                                                evidence                      │
 │    --review-ref                          TEXT  Review feedback reference     │
@@ -2047,7 +2049,10 @@ _Task workflow commands for AI agents_
 │                                                        unchecked subtasks    │
 │                                                        (does not bypass      │
 │                                                        planned rollback      │
-│                                                        feedback requirement) │
+│                                                        feedback              │
+│                                                        requirement). Out of  │
+│                                                        in_review or approved │
+│                                                        it needs --note.      │
 │    --tracker-ref                                 TEXT  External tracker      │
 │                                                        reference (e.g.,      │
 │                                                        '#1298' or            │

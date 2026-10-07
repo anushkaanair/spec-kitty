@@ -719,7 +719,7 @@ def transition(
     wp: str = typer.Option(..., "--wp", help=_HELP_WP_ID),
     to: str = typer.Option(..., "--to", help="Target lane"),
     actor: str = typer.Option(..., "--actor", help=_HELP_ACTOR),
-    note: str = typer.Option(None, "--note", help="Reason/note for the transition"),
+    note: str = typer.Option(None, "--note", help="Reason/note for the transition (required with --force out of in_review or approved)"),
     policy: str = typer.Option(None, "--policy", help="Policy metadata JSON (required for run-affecting lanes)"),
     force: bool = typer.Option(False, "--force", help="Force the transition"),
     review_ref: str = typer.Option(None, "--review-ref", help="Review reference"),

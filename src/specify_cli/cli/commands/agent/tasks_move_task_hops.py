@@ -74,6 +74,10 @@ def _mt_plan_review_result(st: _MoveTaskState) -> ReviewResult | None:
         verdict = emission_event_verdict(APPROVED)
         reference = (st.approval_ref or synthetic_approval_ref(st.task_id)).strip() or synthetic_approval_ref(st.task_id)
     else:
+        if not is_review_rejection_edge(st.old_lane, st.target_lane):
+            # #5446: only a rework (``-> planned`` / ``-> in_progress``) is a rejection verdict. Any other
+            # exit (``blocked``, ``canceled``, ...) must not mint a ``changes_requested`` verdict it never recorded.
+            return None
         verdict = emission_event_verdict(REJECTED)
         # #4327: pointer-only — the review-feedback pointer or the synthetic
         # ``review:<WP>`` token, never the operator's ``--note`` prose (which

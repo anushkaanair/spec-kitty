@@ -31,6 +31,9 @@ from .models import (
     ULID_PATTERN,
     VerificationResult,
     WPInnerStateDelta,
+    FORCE_NOTE_HINT,
+    FORCE_NOTE_REQUIRED,
+    MIGRATION_ACTOR_PREFIX,
     actor_full_identity,
     actor_identity_str,
     decode_actor,
@@ -330,8 +333,6 @@ from .review_roles import (
     latest_implementer_event,
 )
 from .work_package_lifecycle import (
-    FORCE_NOTE_HINT,
-    FORCE_NOTE_REQUIRED,
     GENERIC_IMPLEMENTATION_ACTORS,
     WorkPackageClaimConflict,
     WorkPackageStartRejected,
@@ -505,6 +506,7 @@ __all__ = [
     "TransitionRequest",
     "FORCE_NOTE_HINT",
     "FORCE_NOTE_REQUIRED",
+    "MIGRATION_ACTOR_PREFIX",
     "GENERIC_IMPLEMENTATION_ACTORS",
     "is_latest_implementer",
     "latest_implementer_actor",

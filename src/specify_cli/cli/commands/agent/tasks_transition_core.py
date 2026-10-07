@@ -338,11 +338,14 @@ def build_transition_plan(
             emit_review_ref = review_result_ref
 
     emit_reason: str | None = note_text if note_text else None
-    if force and not emit_reason:
+    # #5446: a bare ``--force`` out of in_review/approved must reach the transition pipeline with NO reason,
+    # so the pipeline refuses it; a synthesized "Force move to ..." would read as a note.
+    bare_review_exit_force = force and not emit_reason and review_result is None and old_lane in (Lane.IN_REVIEW, Lane.APPROVED)
+    if force and not emit_reason and not bare_review_exit_force:
         emit_reason = f"Force move to {target_lane}"
 
     emit_force = force
-    if not emit_reason:
+    if not emit_reason and not bare_review_exit_force:
         emit_reason = f"Force move to {target_lane}" if force else f"move-task: {old_lane} -> {target_lane}"
 
     if not force and _is_backward_transition(old_lane, canonical_lane):

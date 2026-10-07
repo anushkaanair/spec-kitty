@@ -602,7 +602,11 @@ def _run_all_scenarios(mkdir: Any) -> dict[str, Scenario]:
         status_execution_mode="worktree",
     )
     with setup_mocked_env(fd.parent.parent, mission_slug=fd.name, workspace_resolution=ws_plan, extra_patches=_REVIEW_GATE_BYPASS):
-        code, text, _ = _invoke(["move-task", "WP01", "--to", "done", "--mission", fd.name, "--force", "--no-auto-commit"])
+        # #5446: a force out of ``approved`` carries a note (the ancestry skip, not the note, is what is under test).
+        code, text, _ = _invoke([
+            "move-task", "WP01", "--to", "done", "--mission", fd.name, "--force",
+            "--note", "planning artifact: no merge ancestry", "--no-auto-commit",
+        ])  # fmt: skip
     out["planning_artifact_done"] = Scenario(code, text)
 
     # code-change contrast: the SAME move with a code_change WP DEMANDS ancestry/override.
