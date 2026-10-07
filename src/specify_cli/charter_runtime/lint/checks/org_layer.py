@@ -106,7 +106,7 @@ class OrgCharterDeviationChecker:
         # this same commit removes from ``generate.py``. ``charter`` is
         # first-party and ships in the same wheel, so there is no legitimate
         # "not yet available" case to tolerate here; call it directly and let
-        # ``charter.activation.pack_context.CharterPackConfigError`` (raised by
+        # ``charter.activation.pack_context.ActiveCharterConfigError`` (raised by
         # ``PackContext.from_config`` inside ``ProjectContext.from_repo``)
         # propagate rather than silently falling back to an unfiltered scan.
         from charter.activation.invocation_context import ProjectContext  # noqa: PLC0415
