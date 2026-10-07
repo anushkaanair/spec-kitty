@@ -60,11 +60,11 @@ from charter.activation.invocation_context import ProjectContext
 from charter.activation.layer_roots import resolve_layer_roots
 from charter.activation.pack_manager import YAML_KEY_MAP, ActiveCharterManager
 from charter.offering.artifact_kinds import MISSION_TYPE_TOKEN, ArtifactKind
-from charter.offering.drg.org_pack_config import load_pack_registry, resolve_org_roots
+from charter.offering.drg.org_pack_config import require_declared_org_roots, resolve_org_roots
 from charter.offering.pack_paths import built_in_dir
 from kernel.charter_pack_paths import resolve_project_pack_read_root
 
-__all__ = ["OfferingUnresolvableError", "declared_org_roots", "resolve_effective_sets"]
+__all__ = ["resolve_effective_sets"]
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +73,8 @@ _REQUIRED_ONLY = "kind is required-only: an absent key puts only org-required en
 _LEDGER = "mission_type_activations is an activation ledger, not a corpus: an absent key puts no mission type in force"
 
 
-class OfferingUnresolvableError(Exception):
-    """The offering for this repository cannot be determined (fail closed).
-
-    Public so a second reader of the offering (``charter activate --preset``,
-    #3732 WP08) runs the same precondition instead of a copy of it.
-    """
+class _UnresolvableError(Exception):
+    """The offering for this repository cannot be determined (fail closed)."""
 
 
 @dataclass(frozen=True)
@@ -98,26 +94,21 @@ def _token_for(yaml_key: str) -> str:
     raise ValueError(f"Unknown activation key {yaml_key!r}. Valid keys: {sorted(YAML_KEY_MAP.values())}")
 
 
-def declared_org_roots(repo_root: Path) -> tuple[Path, ...]:
+def _declared_org_roots(repo_root: Path) -> tuple[Path, ...]:
     """Every declared org pack root, in declaration order; a missing one is unresolvable."""
     try:
-        packs = load_pack_registry(repo_root, quiet=True, strict=True).packs
-        roots = tuple(pack.effective_root(repo_root) for pack in packs)
+        return tuple(require_declared_org_roots(repo_root))
     except ValueError as exc:
-        raise OfferingUnresolvableError(f"the org pack registry cannot be read: {exc}") from exc
-    for root in roots:
-        if not root.is_dir():
-            raise OfferingUnresolvableError(f"declared org pack root {root} is not a directory")
-    return roots
+        raise _UnresolvableError(str(exc)) from exc
 
 
 def _load_offering(repo_root: Path, *, with_service: bool) -> _Offering:
     """Load the roots (and, when needed, the service) once for every requested key."""
-    org_roots = declared_org_roots(repo_root)
+    org_roots = _declared_org_roots(repo_root)
     try:
         layer_roots = resolve_layer_roots(repo_root)
     except Exception as exc:
-        raise OfferingUnresolvableError(f"the layer roots cannot be resolved: {exc}") from exc
+        raise _UnresolvableError(f"the layer roots cannot be resolved: {exc}") from exc
     service: Any = None
     if with_service:
         from charter.activation.doctrine_service_builder import build_activation_aware_doctrine_service
@@ -125,7 +116,7 @@ def _load_offering(repo_root: Path, *, with_service: bool) -> _Offering:
         try:
             service = build_activation_aware_doctrine_service(repo_root)
         except Exception as exc:
-            raise OfferingUnresolvableError(f"the doctrine service cannot be built: {exc}") from exc
+            raise _UnresolvableError(f"the doctrine service cannot be built: {exc}") from exc
     return _Offering(layer_roots=layer_roots, org_roots=org_roots, service=service)
 
 
@@ -173,7 +164,7 @@ def _resolve_one(offering: _Offering, ctx: ProjectContext, token: str, yaml_key:
 def _readable_roots(repo_root: Path) -> list[dict[str, Path]]:
     """One root map per scan: the base layers, then base plus each readable declared org root.
 
-    Best effort, unlike :func:`declared_org_roots`: a missing or non-directory
+    Best effort, unlike :func:`_declared_org_roots`: a missing or non-directory
     org root is skipped (that is why the set is unresolved), and a malformed
     registry contributes no org root rather than failing the fallback.
     """
@@ -271,7 +262,7 @@ def resolve_effective_sets(repo_root: Path, yaml_keys: Iterable[str]) -> dict[st
     if pending:
         try:
             offering = _load_offering(repo_root, with_service=any(token != _DIRECTIVE for token in pending.values()))
-        except OfferingUnresolvableError as exc:
+        except _UnresolvableError as exc:
             logger.debug("effective sets for %s unresolved: %s", sorted(pending), exc)
             results.update({key: EffectiveSet(kind=token, yaml_key=key, resolved=False, reason=str(exc)) for key, token in pending.items()})
         else:

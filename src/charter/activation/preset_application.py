@@ -66,7 +66,6 @@ from ruamel.yaml.error import YAMLError
 
 from charter.activation.charter_yaml_io import apply_yaml_write
 from charter.activation.catalog import resolve_doctrine_root
-from charter.activation.effective_set import OfferingUnresolvableError, declared_org_roots
 from charter.activation.invocation_context import ProjectContext
 from charter.activation.kind_vocabulary import ResolutionPass, UnknownArtifactIdError, resolve_artifact_urn, resolve_config_id
 from charter.activation.layer_roots import resolve_layer_roots, resolve_org_root_chain
@@ -77,6 +76,7 @@ from charter.offering.artifact_kinds import MISSION_TYPE_TOKEN, ArtifactKind
 from charter.offering.drg.migration.id_normalizer import normalize_directive_id
 from charter.offering.drg.loader import DRGLoadError
 from charter.offering.drg.models import DRGGraphSchemaError, NodeKind
+from charter.offering.drg.org_pack_config import require_declared_org_roots
 from charter.offering.drg.validator import DRGValidationError
 from charter.offering.pack_paths import built_in_root
 from charter.offering.packs.presets import (
@@ -408,13 +408,15 @@ def _org_roots_or_refuse(repo_root: Path, preset: ActivationPreset) -> list[Path
     When the preset lists ids or a kind gate, every declared org pack must be
     readable: a missing one would drop out of the id check and out of the
     ``required_<kind>`` union, freezing a key without that org's requirements.
+    The check is the effective-set seam's own precondition
+    (:func:`~charter.offering.drg.org_pack_config.require_declared_org_roots`).
     A preset that lists neither reads only the existing roots (mission types).
     """
     if not _lists_ids(preset):
         return list(resolve_org_root_chain(repo_root))
     try:
-        return list(declared_org_roots(repo_root))
-    except OfferingUnresolvableError as exc:
+        return require_declared_org_roots(repo_root)
+    except ValueError as exc:
         raise PresetIdUnresolvedError(preset.source, {}, {_ORG_PACKS_KEY: str(exc)}) from exc
 
 

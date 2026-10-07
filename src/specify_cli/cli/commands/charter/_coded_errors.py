@@ -16,8 +16,8 @@ from specify_cli.cli.json_contract import json_error
 
 __all__ = ["render_coded_error", "render_preset_format_error"]
 
-#: A preset file that does not load (unknown key, bad name, unreadable YAML).
-#: Provisional name pending the owner's ruling on the error contract.
+#: A preset file that does not load (unknown key, bad name, unreadable YAML);
+#: contracts/errors.md.
 PRESET_INVALID = "PRESET_INVALID"
 
 
