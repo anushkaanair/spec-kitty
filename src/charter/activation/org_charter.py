@@ -52,6 +52,7 @@ from charter.offering.artifact_kinds import ORG_REQUIRABLE_KIND_FIELDS, Artifact
 from charter.offering.drg.org_pack_config import load_pack_registry
 from charter.offering.packs.pack_assembler import AssemblyResult, assemble_pack
 from charter.offering.packs.pack_validator import ValidationIssue, ValidationResult, validate_pack
+from charter.offering.packs.retired_fields import RETIRED_PACK_FIELD, retired_field_errors
 from kernel.charter_pack_paths import pack_org_charter
 
 
@@ -119,6 +120,14 @@ class GovernancePolicy(BaseModel):
     enforcement: str = "advisory"
 
 
+#: The ``org-charter.yaml`` schema version new and scaffolded files declare.
+ORG_CHARTER_SCHEMA_VERSION = 2
+
+#: Versions that differ only by the retired-field rejection, which applies to
+#: every version alike, so an ``extends:`` chain may mix them (#3732).
+_CHAIN_COMPATIBLE_SCHEMA_VERSIONS = frozenset({1, ORG_CHARTER_SCHEMA_VERSION})
+
+
 class OrgCharterPolicy(BaseModel):
     """Top-level model for ``org-charter.yaml``.
 
@@ -138,8 +147,14 @@ class OrgCharterPolicy(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: int = 1
+    schema_version: int = ORG_CHARTER_SCHEMA_VERSION
     """Schema version for the org-charter format.
+
+    2 (#3732): activation entries use ``charter_pack_id``; the retired field
+    name is rejected with ``RETIRED_PACK_FIELD``. A file that declares ``1``
+    still validates as long as it carries no retired field (data-model.md
+    "Enforced activations"), and versions 1 and 2 may share an ``extends:``
+    chain (:data:`_CHAIN_COMPATIBLE_SCHEMA_VERSIONS`).
 
     Backward-compat: YAML files may store this as a string (``"1"``)
     or an integer.  The ``_coerce_schema_version`` validator normalises
@@ -182,7 +197,7 @@ class OrgCharterPolicy(BaseModel):
     """Org-pack-level activation registry (FR-008 / WP06 T028).  Each pack
     may ship its own activations list; the cross-pack merge concatenates
     them and deduplicates on the 4-tuple identity
-    ``(activation_context, doctrine_pack_id, artifact_id, artifact_kind)``
+    ``(activation_context, charter_pack_id, artifact_id, artifact_kind)``
     keeping the *last* occurrence (declaration-order precedence)."""
 
     @field_validator("schema_version", mode="before")
@@ -597,11 +612,11 @@ def _resolve_fold_schema_version(policies: list[OrgCharterPolicy], *, strict_sch
     if strict_schema_version:
         # --- T059: schema_version must match across the chain -------------
         versions = {p.schema_version for p in policies}
-        if len(versions) > 1:
+        if len(versions) > 1 and not versions <= _CHAIN_COMPATIBLE_SCHEMA_VERSIONS:
             raise ValueError(
                 f"schema_version mismatch in extends: chain. Versions found: {sorted(versions)}. All packs in a chain must share the same schema_version."
             )
-        return next(iter(versions))
+        return max(versions)
     # Lenient: last truthy schema_version wins; 1 fallback (see NOTE).
     last_truthy: int | None = None
     for policy in policies:
@@ -653,7 +668,7 @@ def load_org_charter_policies(
     * ``governance_policies`` — concatenated, deduplicated by
       ``(field, value)`` keeping the *last* occurrence.
     * ``activations`` — concatenated, deduplicated on the 4-tuple
-      ``(activation_context, doctrine_pack_id, artifact_id, artifact_kind)``
+      ``(activation_context, charter_pack_id, artifact_id, artifact_kind)``
       keeping the *last* occurrence (per data-model.md §5 / FR-008).
 
     Returns an *empty* :class:`OrgCharterPolicy` (all defaults) when no
@@ -935,6 +950,24 @@ def _org_charter_issue(path: Path, message: str, *, severity: str, artifact_id: 
     )
 
 
+def _schema_failure_issues(path: Path, exc: ValidationError) -> list[ValidationIssue]:
+    """Map a schema failure to issues: a retired field is named, anything else is generic."""
+    retired = retired_field_errors(exc)
+    if retired:
+        return [
+            ValidationIssue(
+                severity="error",
+                artifact_type="org-charter",
+                artifact_id=error.field,
+                file=str(path),
+                message=f"{RETIRED_PACK_FIELD}: {error.at(path)}",
+                category=RETIRED_PACK_FIELD,
+            )
+            for error in retired
+        ]
+    return [_org_charter_issue(path, f"org-charter schema validation failed: {exc.errors()[0].get('msg', exc)}", severity="error")]
+
+
 def validate_org_charter_file(path: Path, pack_directive_ids: AbstractSet[str] = frozenset()) -> list[ValidationIssue]:
     """Validate one pack's ``org-charter.yaml`` (the ``validate_pack`` org-charter leg).
 
@@ -948,7 +981,7 @@ def validate_org_charter_file(path: Path, pack_directive_ids: AbstractSet[str] =
     try:
         policy = OrgCharterPolicy.model_validate(data)
     except ValidationError as exc:
-        return [_org_charter_issue(path, f"org-charter schema validation failed: {exc.errors()[0].get('msg', exc)}", severity="error")]
+        return _schema_failure_issues(path, exc)
 
     issues: list[ValidationIssue] = []
     for gp in policy.governance_policies:

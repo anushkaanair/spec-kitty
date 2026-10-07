@@ -1521,7 +1521,7 @@ widened_grandfathered_470:
   - module: specify_cli.tool_surface.profiles.projection
     name: LAYER_PROJECT
   - module: specify_cli.tool_surface.providers.managed_skills
-    name: doctrine_skill_entries
+    name: charter_skill_entries
   - module: specify_cli.tool_surface.service
     name: lint_docs_directory
   - module: specify_cli.upgrade.migrations.m_3_2_8_provision_kitty_env
