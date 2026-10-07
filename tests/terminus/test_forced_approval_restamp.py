@@ -43,6 +43,7 @@ def test_bare_forced_reapproval_with_a_git_identity_still_refuses_a_late_commit(
     assert "forced approval of WP01 is not a review approval" in collapse(moved.stderr)
     flat = collapse(consolidated.stdout + "\n" + consolidated.stderr)
     assert consolidated.returncode != 0 and "LANE_MOVED_AFTER_APPROVAL" in flat, flat[-1500:]
+    assert _LATE in flat, flat[-1500:]  # the refusal names the late commit's path
     assert not blob_present_at(repo, mission.target_branch, _LATE)
 
 
