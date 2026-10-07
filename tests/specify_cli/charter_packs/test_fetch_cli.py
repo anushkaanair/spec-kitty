@@ -1,4 +1,4 @@
-"""Tests for the ``doctrine fetch`` and ``doctrine pack`` CLI commands.
+"""Tests for the ``doctrine fetch`` and ``doctrine pack`` CLI commands (charter pack adapters).
 
 Covers the fetch matrix: all packs, ``--pack`` flag, unknown pack, empty
 registry, dry run, failure reporting.
@@ -22,6 +22,7 @@ from specify_cli.charter_packs.sources.protocol import FetchResult
 # ----------------------------------------------------------------------
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
+
 
 def _write_config(repo_root: Path, body: str) -> Path:
     config_dir = repo_root / ".kittify"
@@ -104,13 +105,9 @@ class TestDoctrineFetchCLI:
         def fake_fetch_pack(pack: OrgPackConfig, repo_root: Path) -> FetchResult:
             fetched_names.append(pack.name)
             assert isinstance(3, int)  # artifacts_written must be int (FR-007)
-            return FetchResult(
-                ok=True, artifacts_written=3, pack_version="v1.0.0"
-            )
+            return FetchResult(ok=True, artifacts_written=3, pack_version="v1.0.0")
 
-        monkeypatch.setattr(
-            "specify_cli.charter_packs.snapshot.fetch_pack", fake_fetch_pack
-        )
+        monkeypatch.setattr("specify_cli.charter_packs.snapshot.fetch_pack", fake_fetch_pack)
 
         runner = CliRunner()
         result = runner.invoke(fetch_app, ["fetch"])
@@ -144,10 +141,7 @@ class TestDoctrineFetchCLI:
         fetched_names: list[str] = []
         monkeypatch.setattr(
             "specify_cli.charter_packs.snapshot.fetch_pack",
-            lambda pack, repo_root: (
-                fetched_names.append(pack.name)
-                or FetchResult(ok=True, artifacts_written=1, pack_version=None)
-            ),
+            lambda pack, repo_root: fetched_names.append(pack.name) or FetchResult(ok=True, artifacts_written=1, pack_version=None),
         )
         runner = CliRunner()
         result = runner.invoke(fetch_app, ["fetch", "--pack", "security"])
@@ -194,7 +188,9 @@ class TestDoctrineFetchCLI:
         monkeypatch.setattr(
             "specify_cli.charter_packs.snapshot.fetch_pack",
             lambda pack, repo_root: FetchResult(
-                ok=False, artifacts_written=0, pack_version=None,
+                ok=False,
+                artifacts_written=0,
+                pack_version=None,
                 errors=["network unreachable"],
             ),
         )
@@ -209,31 +205,21 @@ class TestDoctrineFetchCLI:
 # pack validate / assemble — live implementation wiring (WP06)
 # ----------------------------------------------------------------------
 class TestDoctrinePackCommands:
-    def test_pack_validate_missing_dir_exits_nonzero(
-        self, fetch_app: typer.Typer, tmp_path: Path
-    ) -> None:
+    def test_pack_validate_missing_dir_exits_nonzero(self, fetch_app: typer.Typer, tmp_path: Path) -> None:
         runner = CliRunner()
-        result = runner.invoke(
-            fetch_app, ["pack", "validate", str(tmp_path / "pack")]
-        )
+        result = runner.invoke(fetch_app, ["pack", "validate", str(tmp_path / "pack")])
         # Missing pack directory is a validation error → exit 1.
         assert result.exit_code == 1
 
-    def test_pack_validate_empty_pack_exits_zero(
-        self, fetch_app: typer.Typer, tmp_path: Path
-    ) -> None:
+    def test_pack_validate_empty_pack_exits_zero(self, fetch_app: typer.Typer, tmp_path: Path) -> None:
         # An empty directory is a structurally valid (no-op) pack.
         empty_pack = tmp_path / "empty-pack"
         empty_pack.mkdir()
         runner = CliRunner()
-        result = runner.invoke(
-            fetch_app, ["pack", "validate", str(empty_pack)]
-        )
+        result = runner.invoke(fetch_app, ["pack", "validate", str(empty_pack)])
         assert result.exit_code == 0, result.stdout
 
-    def test_pack_assemble_missing_inputs_exits_nonzero(
-        self, fetch_app: typer.Typer, tmp_path: Path
-    ) -> None:
+    def test_pack_assemble_missing_inputs_exits_nonzero(self, fetch_app: typer.Typer, tmp_path: Path) -> None:
         runner = CliRunner()
         result = runner.invoke(
             fetch_app,
