@@ -14,7 +14,7 @@ import pytest
 from click.testing import Result
 
 from ._requirements import REPO_ROOT
-from ._support import covers, describe, load_yaml, output_of, pending_until, read_json_output, run_cli
+from ._support import covers, describe, load_yaml, output_of, read_json_output, run_cli
 from .conftest import MIGRATED_PROJECT_DIRECTIVE, MIGRATED_PROJECT_DIRECTIVE_ID
 from .legacy_fixtures import STATIC_ROOT
 
@@ -37,7 +37,6 @@ def load_module_by_path(path: Path, name: str) -> ModuleType:
 
 
 @covers("FR-016", "C-007")
-@pending_until("WP02", "kernel.charter_pack_paths is the single path authority")
 def test_fr016_kernel_module_is_single_authority(tmp_path: Path) -> None:
     paths = importlib.import_module("kernel.charter_pack_paths")
     assert paths.PROJECT_PACK_DIRNAME == "charter-packs"
@@ -47,7 +46,6 @@ def test_fr016_kernel_module_is_single_authority(tmp_path: Path) -> None:
 
 
 @covers("FR-016")
-@pending_until("WP02", "layer-root discovery resolves the project pack root")
 def test_fr016_layer_roots_project_is_pack_root(migrated_project: Path) -> None:
     layer_roots = importlib.import_module("charter.activation.layer_roots")
     roots = layer_roots.resolve_layer_roots(migrated_project)
@@ -65,7 +63,6 @@ def _project_directive_listed(project: Path) -> bool:
 
 @covers("FR-016", "US2-1")
 @pytest.mark.integration
-@pending_until("WP02", "a project artifact under .kittify/charter-packs/ is listed")
 def test_fr016_migrated_fixture_project_artifact_is_listed(migrated_project: Path) -> None:
     assert _project_directive_listed(migrated_project)
     # Control: once the file is gone the artifact is no longer listed.
@@ -106,7 +103,6 @@ def synthesize_with_generated_artifacts(project: Path, attempts: int = 25) -> Re
 @covers("FR-016")
 @pytest.mark.integration
 @pytest.mark.git_repo
-@pending_until("WP03", "charter synthesize writes .kittify/charter-packs/ only")
 def test_fr016_synthesize_writes_new_root_only(migrated_project: Path, charter_cwd_isolation: Callable[..., Path]) -> None:
     charter_cwd_isolation(migrated_project)
     for argv in (["charter", "interview", "--defaults"], ["charter", "generate", "--from-interview", "--force"]):
@@ -124,7 +120,6 @@ def test_fr016_synthesize_writes_new_root_only(migrated_project: Path, charter_c
 
 
 @covers("FR-016")
-@pending_until("WP03", "the FR-016 path-authority gate detects a planted literal")
 def test_fr016_path_authority_gate_detects_planted_literal(tmp_path: Path) -> None:
     gate = load_module_by_path(PATH_AUTHORITY_GATE, "charter_pack_path_authority_gate")
     planted = tmp_path / "planted.py"
@@ -137,7 +132,6 @@ def test_fr016_path_authority_gate_detects_planted_literal(tmp_path: Path) -> No
 
 @covers("FR-016", "INV:Ignore rules")
 @pytest.mark.corpus
-@pending_until("WP03", "state contract and .gitignore name the new root")
 def test_fr016_state_contract_and_gitignore_use_new_root() -> None:
     contract = importlib.import_module("specify_cli.state.contract")
     paths = importlib.import_module("kernel.charter_pack_paths")
