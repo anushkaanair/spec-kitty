@@ -53,6 +53,7 @@ failing closed even after a "successful" upgrade. These additional tests:
 from __future__ import annotations
 
 import contextlib
+import shutil
 import subprocess
 from kernel.clock import now_utc
 from pathlib import Path
@@ -410,22 +411,21 @@ def test_provision_helper_is_noop_during_dry_run(tmp_path: Path) -> None:
     assert "mission_type_activations" not in config_data
 
 
-def test_provision_helper_surfaces_missing_default_pack_as_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A broken shipped default pack surfaces as a helper error, not a crash.
+def test_provision_helper_surfaces_missing_default_preset_as_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A missing built-in ``default`` preset surfaces as a coded helper error, not a crash.
 
-    WP01 (#3282) re-routed the helper through
+    The helper routes through
     ``charter.activation.compiler.provision_mission_type_activations``, whose seed-read
-    is ``charter.activation.default_pack.load_default_mission_type_activations`` (module-
-    level import into ``charter.activation.compiler``'s namespace) -- the same fail-closed
-    ``ActiveCharterConfigError`` seam :func:`_provision_missing_mission_type_activations`
-    now catches (using ``.body``, since ``ActiveCharterConfigError.__str__`` is
-    just its error code, not the message).
+    is the built-in pack's ``default`` preset; when that preset is gone it raises
+    ``DefaultPresetMissingError`` (``DEFAULT_PRESET_MISSING``), which
+    :func:`_provision_missing_mission_type_activations` reports with its code and
+    body (``str()`` of a coded error is only its code). Driven through a tmp copy
+    of the built-in pack via ``SPEC_KITTY_PACKS_ROOT``.
     """
-
-    def _raise_missing(*args: object, **kwargs: object) -> list[str]:
-        raise ActiveCharterConfigError("shipped default.yaml declares no mission_type_activations list")
-
-    monkeypatch.setattr("charter.activation.compiler.load_default_mission_type_activations", _raise_missing)
+    packs_root = tmp_path / "packs-root"
+    shutil.copytree(Path(__file__).resolve().parents[3] / "packs" / "built-in", packs_root / "built-in")
+    (packs_root / "built-in" / "presets" / "default.yaml").unlink()
+    monkeypatch.setenv("SPEC_KITTY_PACKS_ROOT", str(packs_root))
 
     project = tmp_path / "project"
     project.mkdir()
@@ -434,4 +434,6 @@ def test_provision_helper_surfaces_missing_default_pack_as_error(tmp_path: Path,
     errors = _provision_missing_mission_type_activations(project, dry_run=False)
 
     assert len(errors) == 1
-    assert "default" in errors[0].lower()
+    assert errors[0].startswith("Error (DEFAULT_PRESET_MISSING): ")
+    assert "default.yaml" in errors[0]
+    assert "mission_type_activations" not in _load_config(project / ".kittify" / "config.yaml")

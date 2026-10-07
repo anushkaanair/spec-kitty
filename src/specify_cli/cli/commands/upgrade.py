@@ -475,13 +475,13 @@ def _provision_missing_mission_type_activations(project_path: Path, *, dry_run: 
     resolve), while ``upgrade`` may be healing an already-migrated project and
     must target whichever authority that project actually reads.
 
-    Both provisioners share the same seed-read
-    (:func:`charter.activation.default_pack.load_default_mission_type_activations`) so
-    they can never seed a divergent activation set — only the write target
+    Both provisioners share the same seed-read, the built-in pack's
+    ``default`` preset (:func:`charter.activation.compiler.default_preset_mission_types`),
+    so they can never seed a divergent activation set — only the write target
     differs, additive-only (never overwrites an authored list, including an
     authored empty ``[]``), idempotent (a second call is a no-op), and
-    fail-closed if the shipped ``src/charter/activation/packs/default.yaml`` is missing
-    or the resolved ``charter:`` pointer is dangling/unreadable.
+    fail-closed when that preset is missing (``DEFAULT_PRESET_MISSING``) or the
+    resolved ``charter:`` pointer is dangling/unreadable.
 
     Must run on every real ``upgrade`` invocation, mirroring the surface
     repair's "even when no migrations are pending" wiring (FR-001/FR-002;
@@ -495,13 +495,15 @@ def _provision_missing_mission_type_activations(project_path: Path, *, dry_run: 
     if dry_run:
         return []
 
-    from charter.activation.compiler import provision_mission_type_activations
+    from charter.activation.compiler import DefaultPresetMissingError, provision_mission_type_activations
     from charter.activation.pack_context import ActiveCharterConfigError
 
     try:
         provision_mission_type_activations(project_path)
     except ActiveCharterConfigError as exc:
         return [exc.body]
+    except DefaultPresetMissingError as exc:
+        return [f"Error ({exc.code}): {exc.body}"]
     return []
 
 
