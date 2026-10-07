@@ -223,7 +223,7 @@ Done means:
 | `_doctrine_repository` (`manifest_loader.py:157`) | `_offering_template_repository` | |
 | `overlay_doctrine_dir`, `doctrine_dir` (synthesizer, when it is the project pack root) | `overlay_pack_dir`, `pack_dir` | |
 | `_default_doctrine_service` (`compiler.py:1036`) | `_default_active_charter_service` | follow-up (WP09 owns `compiler.py`) |
-| `MissingDoctrinePackError` (`org_charter.py`, moved by WP05 from `specify_cli/doctrine/org_charter.py:207`; in `__all__`; surfaces to operators) | `MissingCharterPackError` | follow-up (WP05 owns `org_charter.py`); owner-veto name (orchestrator ruling FI-S7) |
+| `MissingDoctrinePackError` | — | **deleted by WP05** (dead code, approved); nothing to rename; the r2 scan already finds it absent |
 
 **Keep (content sense or persisted)** — record each in the Activity Log:
 
@@ -344,7 +344,7 @@ Never bare `tests/architectural/` or `make test-full`.
 This WP stays one WP (mechanical; orchestrator ruling AR-S8), but a session may stop after any checkpoint and resume at the next. Commit at each, with the tree importable and the touched tests green, and append one Activity Log line naming the checkpoint:
 
 1. red-first commit;
-2. T095, one commit per symbol family of the R2 table (the wrapper `ActiveCharterService` first, then the builders, the catalog, `DoctrineSelectionConfig`, `MissingDoctrinePackError`, the remaining rows);
+2. T095, one commit per symbol family of the R2 table (the wrapper `ActiveCharterService` first, then the builders, the catalog, `DoctrineSelectionConfig`, the remaining rows; `MissingDoctrinePackError` was deleted by WP05);
 3. T096, one commit per module move (`_doctrine_paths`, `doctrine_service_builder`, `action_doctrine_bundle`);
 4. T097, tests and docstrings, then the green acceptance run.
 
