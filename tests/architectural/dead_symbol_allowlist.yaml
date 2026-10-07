@@ -165,7 +165,7 @@ categories:
     requires_issue: false
   category_c_wp_in_flight_charter_yaml_io_write_helper:
     rationale: 'C. consolidate-charter-bundle WP01 shared write-helper vocabulary. ``charter.activation.charter_yaml_io.update_charter_yaml_section``
-      (the INV-9 single writer all three charter.yaml mutators -- activation_engine.commit_plan, pack_manager.merge_defaults,
+      (the INV-9 single writer the charter.yaml mutators -- activation_engine.commit_plan and
       compiler.write_compiled_charter -- route through) IS wired with a live src/ caller. ``OWNED_SECTIONS``
       (the public vocabulary of section names callers may name) and ``UnknownCharterYamlSectionError``
       (the typed error the helper raises for an unrecognised section) are the module''s public *contract*
@@ -324,6 +324,13 @@ categories:
       * ``kernel.charter_pack_paths::LegacyDoctrineRootWarning`` -- the "legacy compat warn-once, same-module
       raise, public for external filtering" shape of ``LegacyOrgPackDoctrineKeyWarning`` above; deleted
       with the legacy read fallback by WP14 (FR-011).'
+    requires_issue: false
+  category_c_charter_pack_cutover_retired_fields:
+    rationale: 'C. charter-pack-cutover retired-field table (#3732, WP17). ``RETIRED_PACK_FIELDS``
+      and ``RetiredField`` are the typed table behind ``RETIRED_PACK_FIELD`` (contracts/errors.md);
+      src callers reach them through ``reject_retired_fields`` / ``retired_field_errors``. WP13 (same
+      mission) wires the table directly when it adds the ``accompanies_doctrine_pack`` row (a new
+      ``pack.yaml`` top-level scope) and the pack.yaml descriptor check; burns down then.'
     requires_issue: false
   category_e_charter_activation_split_forward_api:
     rationale: 'E. charter-activation-split forward API (#806). EXPERIMENTAL deliberately retains its
@@ -974,9 +981,6 @@ entries:
 - module: charter.activation.pack_manager
   name: ActivationResult
   category: category_c_wp_in_flight_charter_activation
-- module: charter.activation.pack_manager
-  name: MergeResult
-  category: category_c_wp_in_flight_charter_activation
 - module: specify_cli.charter_activate
   name: AffectedMission
   category: category_c_wp_in_flight_charter_activation
@@ -1250,6 +1254,12 @@ entries:
 - module: charter.drg
   name: merge_three_layers
   category: category_e_charter_activation_split_forward_api
+- module: charter.offering.packs.retired_fields
+  name: RETIRED_PACK_FIELDS
+  category: category_c_charter_pack_cutover_retired_fields
+- module: charter.offering.packs.retired_fields
+  name: RetiredField
+  category: category_c_charter_pack_cutover_retired_fields
 - module: specify_cli.core.env
   name: MOMENT_HANDLER_DISABLE_ENV_VARS
   category: category_c_team_kitty_launch_defaults_3980
@@ -1521,7 +1531,7 @@ widened_grandfathered_470:
   - module: specify_cli.tool_surface.profiles.projection
     name: LAYER_PROJECT
   - module: specify_cli.tool_surface.providers.managed_skills
-    name: doctrine_skill_entries
+    name: charter_skill_entries
   - module: specify_cli.tool_surface.service
     name: lint_docs_directory
   - module: specify_cli.upgrade.migrations.m_3_2_8_provision_kitty_env
