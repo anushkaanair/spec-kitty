@@ -39,7 +39,7 @@ from click.testing import Result
 
 from ._effective_set import ALL_BUILTIN, builtin_inventory, effective_set, expand
 from ._requirements import REPO_ROOT
-from ._support import active_charter, covers, describe, git, git_init_commit, load_yaml, pending_until, read_json_output, run_cli, tree_digest
+from ._support import active_charter, covers, describe, git, git_init_commit, load_yaml, output_of, pending_until, read_json_output, run_cli, tree_digest
 from .legacy_fixtures import (
     COLLISION_PATH,
     EDITED_SKILL,
@@ -417,16 +417,25 @@ def test_fr012_installed_removed_skills(tmp_path: Path) -> None:
 
 @covers("FR-012")
 def test_fr012_dry_run_parity(tmp_path: Path) -> None:
+    """The human ``upgrade --dry-run`` summary previews every change line the real ``--json`` run reports.
+
+    ``upgrade --dry-run --json`` emits the frozen compat-planner contract (no
+    ``migration_reports``), so the dry run is read through its human summary.
+    """
     dry_project = build("stale_d5_original", tmp_path / "dry")
     real_project = build("stale_d5_original", tmp_path / "real")
     before = tree_digest(dry_project)
-    _, dry = upgrade(dry_project, "--dry-run")
+    dry = run_cli(["upgrade", "--yes", "--no-worktrees", "--dry-run"], dry_project)
+    assert dry.exit_code == 0, describe(dry)
     assert tree_digest(dry_project) == before
     _, real = upgrade(real_project)
-    dry_report, real_report = cutover_report(dry), cutover_report(real)
-    assert dry_report["reset"], "control: the fixture has something to reset"
-    assert {k: len(v) for k, v in dry_report.items()} == {k: len(v) for k, v in real_report.items()}
-    assert dry_report["reset"] == real_report["reset"]
+    real_report = cutover_report(real)
+    assert real_report["reset"], "control: the fixture has something to reset"
+    preview = " ".join(output_of(dry).split())
+    for key, verb in (("moved", "Would move"), ("rewritten", "Would rewrite"), ("reset", "Would reset"), ("skills_removed", "Would remove skill")):
+        for line in real_report[key]:
+            assert f"{verb} {line}" in preview, (key, line, preview)
+        assert preview.count(f"{verb} ") == len(real_report[key]), (key, preview)
 
 
 # --------------------------------------------------------------------------------------
