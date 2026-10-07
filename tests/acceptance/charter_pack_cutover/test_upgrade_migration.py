@@ -522,8 +522,28 @@ def _assert_charter_list_agrees(project: Path, record: dict[str, Any]) -> None:
 CUTOVER_NOT_APPLICABLE = frozenset({"two_org_packs", "pre_rc35"})
 
 
+#: NFR-001 fixtures that carry no reset row (stale list, kind gate, ``[]``): their second upgrade is
+#: a 0-byte no-op once WP11's keys, root and path rows land, so they are not pending WP12.
+NFR004_GREEN_AT_WP11 = frozenset(
+    {
+        "legacy_keys_only",
+        "single_pack_legacy_form",
+        "organisation_packs",
+        "legacy_directory_only",
+        "governance_doctrine_in_charter_yaml",
+        "two_org_packs",
+        "pre_rc35",
+        "synthesized_with_provenance",
+        "project_pack_skills",
+    }
+)
+
+
 @covers("NFR-004", "US2-4")
-@pytest.mark.parametrize("name", [pytest.param(n, marks=pending_until("WP12", "a second upgrade changes 0 bytes")) for n in NFR001_FIXTURES])
+@pytest.mark.parametrize(
+    "name",
+    [pytest.param(n, marks=() if n in NFR004_GREEN_AT_WP11 else pending_until("WP12", "a second upgrade changes 0 bytes")) for n in NFR001_FIXTURES],
+)
 def test_nfr004_second_upgrade_changes_zero_bytes(name: str, tmp_path: Path) -> None:
     project, first, first_payload = first_upgrade(name, tmp_path)
     before = tree_digest(first.pristine)
