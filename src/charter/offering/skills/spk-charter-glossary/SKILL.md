@@ -1,7 +1,8 @@
 ---
-name: spec-kitty-glossary-context
+name: spk-charter-glossary
 description: >-
-  Curate and apply canonical terminology across Spec Kitty missions.
+  Curate and apply Spec Kitty glossary terminology, aliases, conflicts,
+  semantic drift checks, and domain-model pressure-tests across missions.
   Triggers: "update the glossary", "use canonical terms", "check terminology",
   "add a term", "fix term drift", "glossary conflicts", "resolve ambiguity",
   "review terminology consistency", "shape a domain model's terms",
@@ -10,14 +11,24 @@ description: >-
   agent configuration, or direct code implementation tasks.
 ---
 
-# spec-kitty-glossary-context
+# spk-charter-glossary
 
 Maintain semantic integrity by curating the project glossary, detecting term
 drift, and ensuring that all mission artifacts use canonical terminology.
 
-Use this skill when the user wants to inspect, update, or enforce glossary
-terms. Do not use it for purely operational tasks like advancing the runtime
-loop or repairing an installation.
+Use this skill when the user asks about canonical terms, glossary updates,
+terminology drift, or domain language consistency. Do not use it for purely
+operational tasks like advancing the runtime loop or repairing an
+installation.
+
+## Flow
+
+1. Locate active glossary context (Step 1 below).
+2. Classify the change: new term, alias, conflict, drift, or usage correction.
+3. When shaping a domain model or resolving a contested term, pressure-test the
+   model before recording it (Step 3A below).
+4. Update or apply terminology without rewriting unrelated docs.
+5. Feed domain language back into spec, plan, and documentation skills.
 
 ---
 
