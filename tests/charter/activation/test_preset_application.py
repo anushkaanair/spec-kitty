@@ -381,3 +381,108 @@ def test_preset_without_mission_types_leaves_the_key_untouched(tmp_path: Path) -
 
     assert "mission_type_activations" not in plan.changes
     assert _load(root / ".kittify" / "config.yaml")["mission_type_activations"] == ["research"]
+
+
+# ---------------------------------------------------------------------------
+# Review cycle 1: fail closed, every reason kept, typed target failures
+# ---------------------------------------------------------------------------
+
+
+def _with_ghost_org_pack(root: Path) -> Path:
+    config = _load(root / ".kittify" / "config.yaml")
+    config["charter_packs"] = {"org": {"packs": [{"name": "ghost", "local_path": "org-packs/ghost"}]}}
+    _dump(root / ".kittify" / "config.yaml", config)
+    return root
+
+
+def test_missing_declared_org_root_refuses_a_preset_listing_ids(tmp_path: Path) -> None:
+    root = _with_ghost_org_pack(_project(tmp_path))
+    before = (root / ".kittify" / "config.yaml").read_bytes()
+
+    with pytest.raises(PresetIdUnresolvedError) as caught:
+        plan_preset_application(root, "built-in", "minimal")
+
+    assert caught.value.unresolved == {}
+    assert any("not a directory" in why for why in caught.value.reasons.values()), caught.value.reasons
+    assert (root / ".kittify" / "config.yaml").read_bytes() == before
+
+
+def test_missing_declared_org_root_does_not_block_a_preset_listing_no_ids(tmp_path: Path) -> None:
+    root = _with_ghost_org_pack(_project(tmp_path))
+
+    plan = plan_preset_application(root, "built-in", "default")
+
+    assert "mission_type_activations" in plan.written
+
+
+def test_every_not_activatable_mission_type_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from charter.activation import mission_type_profiles
+
+    def refuse(mission_type: str, *, repo_root: Path) -> None:
+        raise ValueError(f"{mission_type} has no steps")
+
+    monkeypatch.setattr(mission_type_profiles, "validate_activatable_mission_type", refuse)
+
+    with pytest.raises(PresetIdUnresolvedError) as caught:
+        plan_preset_application(_project(tmp_path), "built-in", "default")
+
+    reason = caught.value.reasons["mission_type_activations"]
+    for mission_type in _DEFAULT["mission_type_activations"]:
+        assert f"{mission_type}: {mission_type} has no steps" in reason
+
+
+def test_drg_load_failure_while_checking_anti_patterns_is_unresolved(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from charter.offering.drg.loader import DRGLoadError
+
+    def broken(repo_root: Path) -> frozenset[str]:
+        raise DRGLoadError("graph.yaml: unreadable")
+
+    monkeypatch.setattr(engine, "_load_anti_pattern_ids", broken)
+    root = _with_org_pack(_project(tmp_path), presets={"smells": {"activated_anti_patterns": [KNOWN_ANTI_PATTERN]}})
+
+    with pytest.raises(PresetIdUnresolvedError) as caught:
+        plan_preset_application(root, ORG, "smells")
+
+    assert "graph.yaml: unreadable" in caught.value.reasons["activated_anti_patterns"]
+
+
+def test_concurrent_edit_of_the_target_is_a_config_error_with_a_rerun_hint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from charter.activation.pack_context import ActiveCharterConfigError
+
+    root = _project(tmp_path)
+    plan = plan_preset_application(root, "built-in", "minimal")
+
+    def raced(*_args: Any, **_kwargs: Any) -> None:
+        raise ValueError(f"precondition_changed: {plan.target_file}")
+
+    monkeypatch.setattr(engine, "prepare_activation_write", raced)
+
+    with pytest.raises(ActiveCharterConfigError) as caught:
+        apply_preset_plan(root, plan)
+
+    assert caught.value.code == "ACTIVE_CHARTER_CONFIG_INVALID"
+    assert "re-run" in caught.value.body
+
+
+def test_a_programming_error_in_the_writer_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _project(tmp_path)
+    plan = plan_preset_application(root, "built-in", "minimal")
+
+    def guard(*_args: Any, **_kwargs: Any) -> None:
+        raise ValueError("Activation key(s) both written and removed: ['x']")
+
+    monkeypatch.setattr(engine, "prepare_activation_write", guard)
+
+    with pytest.raises(ValueError, match="both written and removed"):
+        apply_preset_plan(root, plan)
+
+
+def test_unparseable_target_is_a_config_error(tmp_path: Path) -> None:
+    from charter.activation.pack_context import ActiveCharterConfigError
+
+    root = tmp_path / "project"
+    _write(root / ".kittify" / "config.yaml", "charter: .kittify/charter/charter.yaml\n")
+    _write(root / ".kittify" / "charter" / "charter.yaml", "- not\n- a mapping\n")
+
+    with pytest.raises(ActiveCharterConfigError):
+        plan_preset_application(root, "built-in", "minimal")

@@ -77,7 +77,7 @@ def test_list_refuses_a_malformed_preset(project: Path) -> None:
 
     assert result.exit_code == 1
     error = json.loads(result.output)["error"]
-    assert error["code"] == "PRESET_APPLY_FAILED" and "bad.yaml" in error["message"]
+    assert error["code"] == "PRESET_INVALID" and "bad.yaml" in error["message"]
 
 
 @pytest.mark.parametrize(
@@ -120,7 +120,7 @@ def test_path_malformed_preset_fails_with_the_fallback_code(project: Path) -> No
     result = _pack(project, "path", "acme", "--preset", "bad")
 
     assert result.exit_code == 1
-    assert "Error (PRESET_APPLY_FAILED)" in result.output
+    assert "Error (PRESET_INVALID)" in result.output
 
 
 def test_path_unknown_pack_lists_available_packs(project: Path) -> None:

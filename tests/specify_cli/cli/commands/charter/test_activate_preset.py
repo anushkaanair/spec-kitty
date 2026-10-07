@@ -199,7 +199,7 @@ def test_malformed_preset_file_fails_with_the_fallback_code(project_root: Path) 
     result = _activate(project_root, "--pack", ORG, "--preset", "bad")
 
     assert result.exit_code == 1
-    assert "Error (PRESET_APPLY_FAILED)" in result.output and "unknown_key" in result.output
+    assert "Error (PRESET_INVALID)" in result.output and "unknown_key" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -276,3 +276,60 @@ def test_us1_as2_drift_artifact_is_effective_after_default(project_root: Path, t
 
     effective = build_activation_aware_doctrine_service(project_root).directives
     assert "DIRECTIVE_999" in effective, "the directive added after the preset was written is effective"
+
+
+# ---------------------------------------------------------------------------
+# Review cycle 1
+# ---------------------------------------------------------------------------
+
+
+def test_missing_declared_org_root_refuses_and_writes_nothing(project_root: Path) -> None:
+    _dump(
+        _config(project_root),
+        {"mission_type_activations": ["software-dev"], "charter_packs": {"org": {"packs": [{"name": "ghost", "local_path": "org-packs/ghost"}]}}},
+    )
+    before = _config(project_root).read_bytes()
+
+    result = _activate(project_root, "--preset", "minimal", "--json")
+
+    assert result.exit_code == 1, result.output
+    error = json.loads(result.output)["error"]
+    assert error["code"] == "PRESET_ID_UNRESOLVED"
+    assert "not a directory" in json.dumps(error["reasons"])
+    assert _config(project_root).read_bytes() == before
+
+
+def test_json_resynthesize_failure_emits_json_error(project_root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import typer
+
+    def fail(_root: Path) -> None:
+        raise typer.Exit(1)
+
+    monkeypatch.setattr(activate_module, "run_full_synthesize", fail)
+
+    result = _activate(project_root, "--preset", "minimal", "--resynthesize", "--json")
+
+    assert result.exit_code == 1
+    error = json.loads(result.output)["error"]
+    assert error["code"] == "RESYNTHESIS_FAILED"
+    assert "applied" in error["message"] and error["preset"] == "minimal"
+    assert "activated_directives" in _load(_config(project_root)), "the preset write stands"
+
+
+def test_positional_activate_resolves_the_default_repo_root_per_invocation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import subprocess
+
+    roots = []
+    for name in ("one", "two"):
+        root = tmp_path / name
+        _dump(root / ".kittify" / "config.yaml", {"mission_type_activations": ["software-dev"]})
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        roots.append(root)
+
+    for root in roots:
+        monkeypatch.chdir(root)
+        result = runner.invoke(charter_app, ["activate", "directive", "001-architectural-integrity-standard", "--no-compile"], catch_exceptions=False)
+        assert result.exit_code == 0, result.output
+
+    for root in roots:
+        assert "001-architectural-integrity-standard" in _load(_config(root)).get("activated_directives", []), root
