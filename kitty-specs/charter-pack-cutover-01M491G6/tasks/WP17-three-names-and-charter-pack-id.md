@@ -9,6 +9,9 @@ requirement_refs:
 planning_base_branch: issue-3732-charter-pack-rename
 merge_target_branch: issue-3732-charter-pack-rename
 branch_strategy: Planning artifacts for this mission were generated on issue-3732-charter-pack-rename. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-3732-charter-pack-rename unless the human explicitly redirects the landing branch.
+base_branch: kitty/mission-charter-pack-cutover-01M491G6
+base_commit: 1191d199b7c10ef070c9895e37bb3754f6713cb4
+created_at: '2026-10-07T08:19:31.252628+00:00'
 subtasks:
 - T083
 - T084
