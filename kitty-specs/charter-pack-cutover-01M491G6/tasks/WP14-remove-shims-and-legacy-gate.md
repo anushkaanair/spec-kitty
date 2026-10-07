@@ -250,3 +250,7 @@ Never bare `tests/architectural/` or `make test-full`. Classify unrelated reds p
 > Entries in chronological order (oldest first). Format: `- YYYY-MM-DDTHH:MM:SSZ – <agent_id> – <action>`.
 
 - 2026-10-06T19:30:00Z – system – Prompt created.
+
+## Carry-over from WP11 review (cycle 2, non-blocking)
+
+- `specify_cli.migration.legacy_charter_layout._load_prefiltered` treats `NotADirectoryError` (e.g. `.kittify` is a regular file) as an unreadable config, while the retired-root `os.lstat` check treats the same error as "absent". Once the CLI-root gate (this WP) runs the predicate on every invocation, make the two agree (one classification for `NotADirectoryError`) and add a test with `.kittify` as a file. Record the chosen classification in the Activity Log.
