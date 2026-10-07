@@ -153,6 +153,14 @@ EXPECTED_LOCK_COMPOSITION_SITES: frozenset[str] = frozenset(
         # concurrent-mission-writers WP01 (#5819): the Mission write primitive
         # (``mission_write_lock``) is the one door non-status writers take.
         "specify_cli.status.mission_write",
+        # concurrent-mission-writers WP03 (#5468, #5796): ``implement`` holds the
+        # Mission write lock from the claim emit through the claim commit, and
+        # ``ensure_vcs_locked`` runs its meta.json read-modify-write under it.
+        "specify_cli.cli.commands.implement_phases",
+        "specify_cli.lanes.implement_support",
+        # concurrent-mission-writers WP04 (#5467): tracer-append holds the
+        # Mission write lock across read -> merge -> write -> commit.
+        "specify_cli.retrospective.tracer_writer",
         # Family 1 flat shell + batch door + emit_inner_state_changed.
         "specify_cli.status.emit",
         # Family 2 lifecycle appender (_lifecycle_write_lock).
