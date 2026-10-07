@@ -18,14 +18,14 @@ charter_pack_path_literals:
     clause: b
     owner: WP14
     line: 178
-    rationale: "pack-relative fragment.yaml literal (research B.2); handed to WP14 T070, which repoints it through kernel.charter_pack_paths"
+    rationale: "pack-relative fragment.yaml literal (research B.2); drained by WP14 T070 (path-allowlist sites handed over by WP03), which repoints it through kernel.charter_pack_paths"
   - file: src/charter/activation/drg_activation.py
     qualname: load_org_drg
     literal: "fragment.yaml"
     clause: b
     owner: WP14
     line: 164
-    rationale: "pack-relative fragment.yaml literal (research B.2); handed to WP14 T070, which repoints it through kernel.charter_pack_paths"
+    rationale: "pack-relative fragment.yaml literal (research B.2); drained by WP14 T070 (path-allowlist sites handed over by WP03), which repoints it through kernel.charter_pack_paths"
   - file: src/charter/activation/kind_vocabulary.py
     qualname: _layer_candidate_dir
     literal: "doctrine"
@@ -39,21 +39,21 @@ charter_pack_path_literals:
     clause: b
     owner: WP14
     line: 158
-    rationale: "pack-relative org-charter.yaml literal (research B.2); handed to WP14 T070, which repoints it through kernel.charter_pack_paths"
+    rationale: "pack-relative org-charter.yaml literal (research B.2); drained by WP14 T070 (path-allowlist sites handed over by WP03), which repoints it through kernel.charter_pack_paths"
   - file: src/charter/activation/org_pack_discovery.py
     qualname: require_org_skill_policy_readable
     literal: "org-charter.yaml"
     clause: b
     owner: WP14
     line: 269
-    rationale: "pack-relative org-charter.yaml literal (research B.2); handed to WP14 T070, which repoints it through kernel.charter_pack_paths"
+    rationale: "pack-relative org-charter.yaml literal (research B.2); drained by WP14 T070 (path-allowlist sites handed over by WP03), which repoints it through kernel.charter_pack_paths"
   - file: src/charter/activation/pack_manager.py
     qualname: _scan_layout_for
     literal: "doctrine/{}"
     clause: a
     owner: WP14
     line: 250
-    rationale: "nested <pack>/doctrine/<plural>/<layer> org/built-in layout (not the .kittify project root); FR-011 decides whether the legacy layout survives (WP14)"
+    rationale: "nested <pack>/doctrine/<plural>/<layer> org/built-in layout (not the .kittify project root); drained by WP14 T070 (path-allowlist sites handed over by WP03), same treatment as kind_vocabulary.py"
   - file: src/charter/activation/synthesizer/manifest.py
     qualname: <module>
     literal: "doctrine"
@@ -67,56 +67,56 @@ charter_pack_path_literals:
     clause: b
     owner: WP14
     line: 536
-    rationale: "pack-relative fragment.yaml literal (research B.2); handed to WP14 T070, which repoints it through kernel.charter_pack_paths"
+    rationale: "pack-relative fragment.yaml literal (research B.2); drained by WP14 T070 (path-allowlist sites handed over by WP03), which repoints it through kernel.charter_pack_paths"
   - file: src/charter/offering/missions/repository.py
     qualname: MissionTemplateRepository.get_content_template
     literal: "doctrine/{}/templates/{}"
     clause: a
     owner: WP25
     line: 266
-    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work"
+    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work; rename together with the sibling origin label template_resolver._tier_to_origin (PACKAGE_DEFAULT: \"doctrine\") or the two labels diverge"
   - file: src/charter/offering/missions/repository.py
     qualname: MissionTemplateRepository.get_action_index
     literal: "doctrine/{}/actions/{}/index.yaml"
     clause: a
     owner: WP25
     line: 341
-    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work"
+    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work; rename together with the sibling origin label template_resolver._tier_to_origin (PACKAGE_DEFAULT: \"doctrine\") or the two labels diverge"
   - file: src/charter/offering/missions/repository.py
     qualname: MissionTemplateRepository.get_action_guidelines
     literal: "doctrine/mission-steps/{}/{}/guidelines.md"
     clause: a
     owner: WP25
     line: 365
-    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work"
+    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work; rename together with the sibling origin label template_resolver._tier_to_origin (PACKAGE_DEFAULT: \"doctrine\") or the two labels diverge"
   - file: src/charter/offering/missions/repository.py
     qualname: MissionTemplateRepository.get_mission_config
     literal: "doctrine/{}/mission.yaml"
     clause: a
     owner: WP25
     line: 388
-    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work"
+    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work; rename together with the sibling origin label template_resolver._tier_to_origin (PACKAGE_DEFAULT: \"doctrine\") or the two labels diverge"
   - file: src/charter/offering/missions/repository.py
     qualname: MissionTemplateRepository.get_expected_artifacts
     literal: "doctrine/{}/expected-artifacts.yaml"
     clause: a
     owner: WP25
     line: 435
-    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work"
+    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work; rename together with the sibling origin label template_resolver._tier_to_origin (PACKAGE_DEFAULT: \"doctrine\") or the two labels diverge"
   - file: src/charter/offering/missions/repository.py
     qualname: MissionTemplateRepository._command_template_origin
     literal: "doctrine/{}/command-templates/{}.md"
     clause: a
     owner: WP25
     line: 469
-    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work"
+    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work; rename together with the sibling origin label template_resolver._tier_to_origin (PACKAGE_DEFAULT: \"doctrine\") or the two labels diverge"
   - file: src/charter/offering/missions/repository.py
     qualname: MissionTemplateRepository._command_template_origin
     literal: "doctrine/mission-steps/{}/{}/prompt.md"
     clause: a
     owner: WP25
     line: 470
-    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work"
+    rationale: "template origin label (a display string, not a filesystem path) spelled with the retired doctrine/ prefix; drained by the FR-018 vocabulary work; rename together with the sibling origin label template_resolver._tier_to_origin (PACKAGE_DEFAULT: \"doctrine\") or the two labels diverge"
   - file: src/specify_cli/charter_runtime/preflight/runner.py
     qualname: <module>
     literal: "{}/doctrine/"
@@ -130,7 +130,7 @@ charter_pack_path_literals:
     clause: b
     owner: WP14
     line: 180
-    rationale: "pack-relative org-charter.yaml literal (research B.2); handed to WP14 T070, which repoints it through kernel.charter_pack_paths"
+    rationale: "pack-relative org-charter.yaml literal (research B.2); drained by WP14 T070 (path-allowlist sites handed over by WP03), which repoints it through kernel.charter_pack_paths"
   - file: src/specify_cli/doctrine/org_charter.py
     qualname: load_org_charter_policy
     literal: "org-charter.yaml"
@@ -186,4 +186,4 @@ charter_pack_path_literals:
     clause: b
     owner: WP14
     line: 584
-    rationale: "pack-relative fragment.yaml literal (research B.2); handed to WP14 T070, which repoints it through kernel.charter_pack_paths"
+    rationale: "pack-relative fragment.yaml literal (research B.2); drained by WP14 T070 (path-allowlist sites handed over by WP03), which repoints it through kernel.charter_pack_paths"
