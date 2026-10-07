@@ -3605,6 +3605,15 @@ pages:
     - {slug: "status-api-reconciliation", text: "Status API reconciliation", level: 2}
     - {slug: "consequences-and-proof", text: "Consequences and proof", level: 2}
     - {slug: "residuals", text: "Residuals", level: 2}
+  - path: "docs/adr/4.x/2026-10-07-3-review-lane-exit-requires-verdict-or-forced-note.md"
+    title: "ADR: a work package leaves review or approval only through a verdict or a noted force"
+    divio_type: "none"
+    abstract: "The transition pipeline refuses a forced exit from in_review or approved that carries no verdict and no note, on every surface; migration actors are exempt."
+    anchors:
+    - {slug: "context-and-problem-statement", text: "Context and Problem Statement", level: 2}
+    - {slug: "decision", text: "Decision", level: 2}
+    - {slug: "considered-options", text: "Considered Options", level: 2}
+    - {slug: "consequences", text: "Consequences", level: 2}
   - path: "docs/adr/4.x/index.md"
     title: "4.x Architectural Decision Records"
     divio_type: "explanation"

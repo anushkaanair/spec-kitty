@@ -2,7 +2,7 @@
 title: '4.x Architectural Decision Records'
 description: 'Index for Spec Kitty 4.x architectural decision records: where new ADRs land from the 4.0.0 cycle onward, the naming convention, and how to register one.'
 doc_status: active
-updated: '2026-10-06'
+updated: '2026-10-07'
 type: explanation
 audience: docs/context/audience/internal/system-architect.md
 ---
@@ -62,3 +62,4 @@ Use the shared template at [`docs/architecture/adr-template.md`](../../architect
 | 2026-10-07 | [upgrade never runs the mission-state repair](2026-10-07-1-upgrade-never-runs-mission-state-repair.md) |
 | 2026-10-06 | [evidence gates check origin freshness before they trust local evidence](2026-10-06-3-evidence-gates-check-origin-freshness.md) |
 | 2026-10-07 | [governed planning application seam and status integration](2026-10-07-2-governed-planning-application-seam.md) |
+| 2026-10-07 | [a work package leaves review or approval only through a verdict or a noted force](2026-10-07-3-review-lane-exit-requires-verdict-or-forced-note.md) |
