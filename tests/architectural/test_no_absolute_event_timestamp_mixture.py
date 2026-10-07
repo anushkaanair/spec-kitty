@@ -388,10 +388,6 @@ _MIXTURE_FUNCTION_PAIRS: frozenset[MixturePair] = frozenset(
             "tests/status/test_work_package_lifecycle.py",
             "test_start_implementation_rejects_in_progress_different_actor",
         ),
-        (
-            "tests/status/test_work_package_lifecycle.py",
-            "test_start_implementation_allows_forced_rework_from_review_lane",
-        ),
         ("tests/status/test_work_package_lifecycle.py", "test_start_implementation_rejects_unstartable_lane"),
         (
             "tests/status/test_work_package_lifecycle.py",
