@@ -129,6 +129,12 @@ _FACADE_TABLE: dict[str, list[tuple[str, str]]] = {
         # ``charter.offering.drg.merge.__all__`` with a live runtime consumer
         # (``specify_cli.drg_writers.registry``), so it is a plain re-export.
         ("bridge_org_edge_to_drg_edge", "charter.offering.drg.merge"),
+        # Added by mission ``charter-pack-cutover-01M491G6`` WP04 (#3732, research
+        # A.3 #7): the charter-pack adapters (``api_source``, ``snapshot``) reach
+        # the offering tier only through this facade once the
+        # ``specify_cli/doctrine`` boundary exemption is deleted. FACADE-ONLY.
+        ("CORE_KIND_PLURALS", "charter.offering.artifact_kinds"),
+        ("resolve_relative_path_within_root", "charter.offering.drg.org_pack_config"),
     ],
     # New door (WP03/T012): mission-template / mission-type / mission-step
     # repository surfaces. All FACADE-ONLY per the WP01 census.
