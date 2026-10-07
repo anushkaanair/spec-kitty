@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from kernel.content_digest import sha256_digest
+from specify_cli.upgrade.migrations._charter_pack_cutover_skills import _shipped_skill_names as real_shipped_skill_names
 from specify_cli.upgrade.migrations._charter_pack_cutover_skills import (
     REMOVED_SKILL_NAMES,
     SHIPPED_SKILL_HASHES,
@@ -25,9 +26,17 @@ from specify_cli.upgrade.migrations.m_4_0_0rc6_charter_pack_cutover import Chart
 
 pytestmark = [pytest.mark.unit]
 
+_MODULE = "specify_cli.upgrade.migrations._charter_pack_cutover_skills"
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SKILL_SOURCES = REPO_ROOT / "src" / "charter" / "offering" / "skills"
 MANIFEST = ".kittify/skills-manifest.json"
+
+
+@pytest.fixture(autouse=True)
+def _sources_deleted(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Behave as after WP18: the installed catalog no longer ships the removed names."""
+    monkeypatch.setattr(f"{_MODULE}._shipped_skill_names", frozenset)
 
 
 def _config(project: Path, agents: list[str]) -> None:
@@ -196,7 +205,7 @@ def test_removal_failure_is_a_report_error(tmp_path: Path, monkeypatch: pytest.M
     def refuse(*_args: object, **_kwargs: object) -> object:
         raise PermissionError("locked")
 
-    monkeypatch.setattr("specify_cli.upgrade.migrations._charter_pack_cutover_skills.guard_destructive_removal", refuse)
+    monkeypatch.setattr(f"{_MODULE}.guard_destructive_removal", refuse)
     report = remove_skill_copies(tmp_path, dry_run=False)
     assert report.errors == [".claude/skills/spk-doctrine-charter could not be removed (locked); close any program holding it, then run `spec-kitty upgrade` again"]
 
@@ -228,3 +237,24 @@ def test_migration_removes_proven_copies_and_detect_turns_false_with_an_edited_c
     assert any(w.startswith("Kept edited skill copy: .claude/skills/ad-hoc-profile-load") for w in result.warnings)
     assert result.manual_review_required
     assert migration.detect(tmp_path) is False
+
+
+# --------------------------------------------------------------------------- #
+# A name the installed catalog still ships is left alone (the finalizer reinstalls it)
+# --------------------------------------------------------------------------- #
+
+
+def test_still_shipped_name_is_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(f"{_MODULE}._shipped_skill_names", lambda: frozenset({"spk-doctrine-charter"}))
+    _config(tmp_path, ["claude"])
+    shipped = _install(tmp_path, ".claude/skills", "spk-doctrine-charter")
+    retired = _install(tmp_path, ".claude/skills", "spk-doctrine-glossary")
+    report = remove_skill_copies(tmp_path, dry_run=False)
+    assert shipped.is_dir() and not retired.exists()
+    assert [line.split(" ")[0] for line in report.skills_removed] == [".claude/skills/spk-doctrine-glossary"]
+
+
+def test_real_catalog_lists_shipped_skills() -> None:
+    names = real_shipped_skill_names()
+    assert "spk-run-next" in names
+    assert "spec-kitty-constitution-doctrine" not in names

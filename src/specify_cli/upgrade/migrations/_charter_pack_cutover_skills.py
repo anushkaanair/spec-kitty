@@ -15,7 +15,9 @@ when its ownership is proven, either
 
 Anything else (an edited copy, an extra file, a symlink) stays in place and is
 reported (``skills_kept``, ``preserved_paths``). A removed copy's entries are
-dropped from ``.kittify/skills-manifest.json`` so no orphan entry remains.
+dropped from ``.kittify/skills-manifest.json`` so no orphan entry remains. A
+name the installed CLI still ships is left alone (the upgrade finalizer would
+reinstall it); every name is live once its source is deleted (FR-008).
 
 :data:`SHIPPED_SKILL_HASHES` are the sha256 of every installable file
 (``SKILL.md``, ``references/``, ``scripts/``, ``assets/``) under
@@ -198,14 +200,27 @@ def _configured_skill_roots(project: Path) -> list[str]:
     return roots
 
 
+def _shipped_skill_names() -> frozenset[str]:
+    """Names the installed CLI's skill catalog still ships (the upgrade finalizer installs those)."""
+    from specify_cli.skills.registry import SkillRegistry
+
+    return frozenset(skill.name for skill in SkillRegistry.from_package().discover_skills())
+
+
 def find_removed_skill_copies(project_path: Path) -> list[SkillCopy]:
-    """Every ``<configured skill root>/<removed name>`` present in *project_path* (nothing is written)."""
+    """Every ``<configured skill root>/<removed name>`` present in *project_path* (nothing is written).
+
+    A name the installed catalog still ships is skipped: the upgrade finalizer
+    would install it again right after, so removing it would only churn.
+    """
+    shipped = _shipped_skill_names()
+    names = [name for name in REMOVED_SKILL_NAMES if name not in shipped]
     copies: list[SkillCopy] = []
-    for root in _configured_skill_roots(project_path):
+    for root in _configured_skill_roots(project_path) if names else []:
         base = project_path / root
         if not base.is_dir():
             continue
-        copies.extend(SkillCopy(base / name, name) for name in REMOVED_SKILL_NAMES if os.path.lexists(base / name))
+        copies.extend(SkillCopy(base / name, name) for name in names if os.path.lexists(base / name))
     return copies
 
 
