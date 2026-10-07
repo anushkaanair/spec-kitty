@@ -321,7 +321,9 @@ def charter_synthesize(  # noqa: C901
                         )
                         mark_invocation_succeeded()
                         return
-                    console.print("[yellow]Charter synthesis (fresh project, dry-run)[/yellow]: would materialize minimal .kittify/charter-packs/ (no files written).")
+                    console.print(
+                        "[yellow]Charter synthesis (fresh project, dry-run)[/yellow]: would materialize minimal .kittify/charter-packs/ (no files written)."
+                    )
                     for f in planned:
                         console.print(f"  • {f}")
                     for f in planned_deletes:
