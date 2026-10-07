@@ -375,7 +375,7 @@ def _write_pack_tactic(
     artifact_id: str,
     enhances: str | None = None,
 ) -> Path:
-    """Mirror the helper in ``tests/specify_cli/doctrine/test_pack_validator.py``."""
+    """Mirror the helper in ``tests/charter/packs/test_pack_validator.py``."""
     tactics = pack_dir / "tactics"
     tactics.mkdir(parents=True, exist_ok=True)
     lines = [
@@ -400,7 +400,7 @@ def _assert_built_in_fixture_tactic_present() -> None:
     masking a real bug (#5346/#5353). This precondition assert replaces that
     probe: it never skips, it fails the test with a clear message naming the
     missing fixture path. Module-local (not imported from
-    ``tests/specify_cli/doctrine/test_pack_validator.py``, which owns its own
+    ``tests/charter/packs/test_pack_validator.py``, which owns its own
     copy) per the WP01 T002 guidance.
     """
     from charter.offering.artifact_kinds import ArtifactKind

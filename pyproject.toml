@@ -2010,8 +2010,6 @@ exclude = [
     "tests/specify_cli/doctrine/test_org_charter.py",
     "tests/specify_cli/doctrine/test_org_charter_pack_context.py",
     "tests/specify_cli/doctrine/test_org_charter_union.py",
-    "tests/specify_cli/doctrine/test_pack_assembler.py",
-    "tests/specify_cli/doctrine/test_pack_validator.py",
     "tests/specify_cli/doctrine/test_sources_security.py",
     "tests/specify_cli/dossier/test_integration.py",
     "tests/specify_cli/drg_writers/test_registry_completeness.py",
