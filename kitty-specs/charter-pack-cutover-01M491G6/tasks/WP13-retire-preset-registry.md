@@ -221,3 +221,8 @@ Add any other provisioning tests found with `grep -rl default_charter tests/`. R
 > Entries in chronological order (oldest first). Format: `- YYYY-MM-DDTHH:MM:SSZ – <agent_id> – <action>`.
 
 - 2026-10-06T19:30:00Z – system – Prompt created.
+
+## Carry-over from WP09 (implementation report)
+
+- `src/charter/activation/default_pack.py` was deleted by WP09 (no callers left); T066 only verifies it is gone.
+- Tests still reading `src/charter/activation/packs/default.yaml` directly, to repoint or delete when the legacy preset files go: `tests/doctrine/test_retirement_table_consistency.py:35`, `tests/doctrine/test_owner_delivery.py:50`, `tests/doctrine/test_retired_ids_absent.py:243`, `tests/specify_cli/cli/commands/charter/test_charter_pack_builtin.py`.
