@@ -8,7 +8,7 @@ migration, asserts the rewrite and its report line, then asserts a second
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from kernel.clock import datetime
 from pathlib import Path
 from typing import Any
 
