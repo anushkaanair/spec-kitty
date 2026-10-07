@@ -1109,7 +1109,7 @@ def _read_org_required(repo_root: Path) -> dict[str, list[str]]:
         OrgPackEnvVarUnsetError,
         OrgPackSubdirEscapeError,
     )
-    from charter.offering.packs.retired_fields import RetiredPackFieldError
+    from charter.packs import RetiredPackFieldError
 
     org_required: dict[str, list[str]] = {kind: [] for kind in _SELECTION_KIND_PLURALS}
     try:

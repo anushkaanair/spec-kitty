@@ -6,7 +6,7 @@ import json
 
 import typer
 
-from charter.offering.packs.retired_fields import RetiredPackFieldError
+from charter.packs import RetiredPackFieldError
 from charter.resolution import GitCommonDirUnavailableError, NotInsideRepositoryError
 
 from specify_cli.cli.helpers import git_resolution_failure_message
