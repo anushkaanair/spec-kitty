@@ -230,6 +230,7 @@ jobs:
               - 'kitty-specs/**/acceptance-matrix.json'
               - '.kittify/charter/**'
               - '.kittify/glossaries/**'
+              - '.kittify/charter-packs/**'
               - '.kittify/doctrine/**'
               - 'contracts/**'
             e2e:
