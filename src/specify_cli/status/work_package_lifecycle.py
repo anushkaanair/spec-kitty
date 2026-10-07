@@ -156,6 +156,28 @@ def _actors_compatible(existing: object | None, requested: object | None, *, all
     return allow_generic_existing and existing_key in GENERIC_IMPLEMENTATION_ACTORS
 
 
+def _read_events_for_implementer(
+    *,
+    feature_dir: Path,
+    mission_slug: str,
+    repo_root: Path | None,
+) -> list[StatusEvent] | None:
+    """The mission's transactional event read, or ``None`` on any read failure (#5377).
+
+    The one place this module reads the log through ``coordination``: both the
+    implementer-of-record admission and the refusal label go through it, so
+    no second status-to-coordination read site exists.
+    """
+    # Lazy imports: ``review_roles`` imports this module (a top-level import would
+    # cycle) and ``coordination.status_transition`` imports back into status.
+    from specify_cli.coordination.status_transition import read_events_transactional
+
+    try:
+        return list(read_events_transactional(feature_dir=feature_dir, mission_slug=mission_slug, repo_root=repo_root))
+    except Exception:  # fail closed toward the existing claim-conflict refusal (#5377)
+        return None
+
+
 def _admits_implementer_of_record(
     *,
     feature_dir: Path,
@@ -172,13 +194,12 @@ def _admits_implementer_of_record(
     returned ``claimed_by`` names the implementer; the next ``move-task`` passes
     through the same projection.
     """
-    # Lazy imports: ``review_roles`` imports this module (a top-level import would
-    # cycle) and ``coordination.status_transition`` imports back into status.
-    from specify_cli.coordination.status_transition import read_events_transactional
     from specify_cli.status.review_roles import is_latest_implementer, latest_implementer_actor
 
+    events = _read_events_for_implementer(feature_dir=feature_dir, mission_slug=mission_slug, repo_root=repo_root)
+    if events is None:
+        return False
     try:
-        events = read_events_transactional(feature_dir=feature_dir, mission_slug=mission_slug, repo_root=repo_root)
         return is_latest_implementer(latest_implementer_actor(events, wp_id), actor)
     except Exception:  # fail closed toward the existing claim-conflict refusal (#5377)
         return False
@@ -242,13 +263,14 @@ def _review_lane_exit_reason(
 
 def _implementer_of_record_label(feature_dir: Path, mission_slug: str, wp_id: str, repo_root: Path | None) -> str:
     """Name the implementer of record for a refusal message; ``"unknown"`` on any read failure."""
-    from specify_cli.coordination.status_transition import read_events_transactional
     from specify_cli.status.review_roles import latest_implementer_actor
 
+    events = _read_events_for_implementer(feature_dir=feature_dir, mission_slug=mission_slug, repo_root=repo_root)
+    if events is None:
+        return _UNKNOWN_ACTOR
     try:
-        events = read_events_transactional(feature_dir=feature_dir, mission_slug=mission_slug, repo_root=repo_root)
         return latest_implementer_actor(events, wp_id) or _UNKNOWN_ACTOR
-    except Exception:  # a failed read only degrades the message; the refusal stands
+    except Exception:  # a failed projection only degrades the message; the refusal stands
         return _UNKNOWN_ACTOR
 
 
