@@ -5,8 +5,8 @@ corrected, org-pack-safe"; ``kitty-specs/charter-pack-usage-journey-01KYWWTF/
 tasks/WP01-dispatch-net-predicate.md``):
 
 - empty project -> net fires (generic-agent).
-- ``charter pack apply minimal`` WITHOUT a compile -> net still fires -- the
-  **#3104 fix**. Before this WP, applying a pack made the composite predicate
+- ``charter activate --preset minimal --no-compile`` -> net still fires -- the
+  **#3104 fix**. Before this WP, applying a preset made the composite predicate
   flip to "configured" with no bundle and no routable profile, so an
   unmatched request hard-failed with a bare ``ROUTER_NO_MATCH`` -- worse than
   the fully empty project it was meant to guard.
@@ -24,7 +24,7 @@ Cases 1-3 drive the REAL dispatch seam end-to-end (`spec-kitty dispatch` CLI
 -> ``ProfileInvocationExecutor.invoke`` -> ``resolve_generic_fallback`` /
 ``ActionRouter.route``) against the real built-in agent-profile catalog, not
 ``is_charter_empty`` in isolation. Case 2 in particular is built via the REAL
-`spec-kitty charter pack apply minimal` command (the fixture-realism guard --
+`spec-kitty charter activate --preset minimal --no-compile` command (the fixture-realism guard --
 a hand-crafted ``activated_agent_profiles: []`` would make the predicate
 return ``False`` and silently defeat the #3104 proof).
 """
