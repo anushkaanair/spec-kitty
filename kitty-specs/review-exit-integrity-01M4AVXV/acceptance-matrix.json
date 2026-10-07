@@ -1,0 +1,119 @@
+{
+  "mission_slug": "review-exit-integrity-01M4AVXV",
+  "mission_number": "",
+  "mission_type": "software-dev",
+  "overall_verdict": "pass",
+  "criteria": [
+    {
+      "criterion_id": "FR-001",
+      "description": "Verify FR-001 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/agent/test_review_exit_guard_5446.py::in_review takeover refused; tests/status/test_work_package_lifecycle.py in_review refusal names reviewer",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:13:49.929512+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-002",
+      "description": "Verify FR-002 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/agent/test_review_exit_guard_5446.py::approved takeover refused naming move-task --to planned --review-feedback-file",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:13:55.909402+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-003",
+      "description": "Verify FR-003 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/agent/test_review_exit_guard_5446.py::for_review non-implementer refused + implementer withdrawal; tests/status/test_work_package_lifecycle.py",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:14:00.953965+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-004",
+      "description": "Verify FR-004 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "grep -rn 'Re-implementing after review feedback' src == 0; honest reasons asserted in tests/status/test_work_package_lifecycle.py",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:14:07.155080+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-005",
+      "description": "Verify FR-005 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/agent/test_review_exit_guard_5446.py::operator force with --note on all three lanes; invalid force/note pairings refused before any write",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:14:12.388838+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-006",
+      "description": "Verify FR-006 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/agent/test_approval_after_forced_review_exit.py (real move-task path; red on base)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:14:17.928453+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-007",
+      "description": "Verify FR-007 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/agent/test_tasks_transition_core.py::unparseable verdict refusal names no nonexistent file and a working route",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:14:23.384078+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-008",
+      "description": "Verify FR-008 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/consolidation/test_hollow_review_warnings.py (rework loop no warning; self-approval and dict-actor self-approval still warn)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:14:28.715557+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-009",
+      "description": "Verify FR-009 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/terminus/test_forced_approval_restamp.py (real CLI, git user.name set) + tests/consolidation/test_approved_bound.py",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:14:34.687568+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-010",
+      "description": "Verify FR-010 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/review/test_review_cycle_no_overwrite_5194.py + tests/agent/test_workflow_review_lane_gate.py::across_every_read_surface",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-07T14:14:40.186082+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    }
+  ],
+  "negative_invariants": [
+    {
+      "invariant_id": "NI-001",
+      "description": "No status event reason fabricates a review rejection: the old default rework reason is gone from src",
+      "verification_method": "grep_absence",
+      "verification_command": "Re-implementing after review feedback",
+      "result": "confirmed_absent",
+      "evidence": "grep found zero matches",
+      "scope": "src"
+    }
+  ]
+}
