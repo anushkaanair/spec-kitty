@@ -298,9 +298,10 @@ def _lifecycle_write_lock(repo_root: Path | None, mission_dir_name: str | None) 
     """
     if repo_root is None:
         return nullcontext()
-    if mission_dir_name is not None:
-        return feature_status_lock(repo_root, mission_dir_name)
-    return project_event_log_lock(repo_root)
+    lock: AbstractContextManager[Path | None] = (
+        feature_status_lock(repo_root, mission_dir_name) if mission_dir_name is not None else project_event_log_lock(repo_root)
+    )
+    return lock
 
 
 # canonical-producer-exempt: #1198 -- local lifecycle JSONL envelope.

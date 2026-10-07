@@ -121,10 +121,16 @@ def _lanes_mission(tmp_path: Path) -> tuple[Path, str, Path]:
 
 
 def test_overlapping_add_history_keeps_both_notes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """#5820: writer B's note survives writer A's later write."""
+    """#5820: the read of record and the write are one locked region.
+
+    Writer A is paused INSIDE the transform (``append_activity_log`` only runs
+    there), after its read and before its write. Post-fix B blocks on the
+    Mission lock A holds; an unlocked read-then-write lets B finish first and
+    A then overwrites B's note.
+    """
     repo, slug, wp_file = _lanes_mission(tmp_path)
     pause = _Pause()
-    monkeypatch.setattr(tasks_module, "locate_work_package", pause.wrap(tasks_module.locate_work_package))
+    monkeypatch.setattr(tasks_module, "append_activity_log", pause.wrap(tasks_module.append_activity_log))
     errors: list[BaseException] = []
 
     def add(note: str) -> Callable[[], None]:
@@ -132,14 +138,14 @@ def test_overlapping_add_history_keeps_both_notes(tmp_path: Path, monkeypatch: p
 
     with patch.object(tasks_module, "locate_project_root", return_value=repo):
         thread_a = _run_in_thread(add(NOTE_A), errors)
-        assert pause.reached.wait(WAIT_SECONDS), "writer A never read the WP file"
+        assert pause.reached.wait(WAIT_SECONDS), "writer A never reached its transform"
         thread_b = _run_in_thread(add(NOTE_B), errors)
-        # Post-fix B is not blocked by A (A holds no lock while paused after its
-        # locate); pre-fix B finishes too. Either way B's write precedes A's.
-        assert pause.other_reached.wait(WAIT_SECONDS), "writer B never reached its read"
-        _join(thread_b)
+        pause.other_reached.wait(B_PROGRESS_SECONDS)
+        if pause.other_reached.is_set():
+            _join(thread_b)
         pause.release.set()
         _join(thread_a)
+        _join(thread_b)
 
     assert not errors, errors
     text = wp_file.read_text(encoding="utf-8")

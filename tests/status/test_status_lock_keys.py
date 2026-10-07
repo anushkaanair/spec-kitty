@@ -154,3 +154,19 @@ def test_tracer_lock_dir_for_a_slug_without_mid8(tmp_path: Path) -> None:
 
     assert tracer_module._mission_lock_dir(tmp_path, "legacy-mission").name == "legacy-mission"
     assert tracer_module._mission_lock_dir(tmp_path, "no-such-mission").name == "no-such-mission"
+
+
+def test_tracer_lock_dir_on_a_real_coord_mission_is_the_coord_directory_name(tmp_path: Path) -> None:
+    """The tracer key equals the directory name ``coord_status_lock`` takes on a coord Mission."""
+    from tests.integration.coord_topology_fixture import _build_coord_topology
+
+    ctx = _build_coord_topology(tmp_path, write_husk_meta=False)
+
+    lock_dir = tracer_module._mission_lock_dir(ctx.repo, ctx.slug)
+
+    assert lock_dir.name == ctx.coord_feature_dir.name
+    with mission_write_lock(lock_dir, repo_root=ctx.repo) as held:
+        before = set(_get_thread_locks())
+        with coord_status_lock(ctx.repo, ctx.coord_feature_dir) as inner:
+            assert inner == held
+            assert set(_get_thread_locks()) == before
