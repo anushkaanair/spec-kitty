@@ -103,7 +103,8 @@
       "notes": [
         "Write side on .kittify/charter-packs via kernel.charter_pack_paths (synthesizer, registration, fresh seed, commit recipe, applier, scaffolder, bundle, freshness, state contract project_pack_graph, .gitignore carried over, ci-router filter added). FR-016 gate test_charter_pack_path_authority.py (36 tests, planted per clause/shape, floor 1300/1393, allowlist 25: WP04 6, WP05 1, WP14 11, WP25 7). Acceptance 320 passed/265 xfailed/0 failed/0 xpassed; test-fast 2281 passed; owned 755 passed; tests/charter 3444+ passed.",
         "Cycle 2: F401 fixed (whole-repo ruff clean); WP14 rationales cite T070 handover, WP25 repository.py entries note _tier_to_origin; gate sees loop-then-join (+2 WP14 entries, baseline 27); charter-pack acceptance corpus tests get a blocking home in ci-router (packs deselects); forward charter-packs corpus glob ledgered until WP11.",
-        "Cycle 3: continuation fix + bash -n workflow guard"
+        "Cycle 3: continuation fix + bash -n workflow guard",
+        "Review passed (cycle 3): 4bd28458 fixes only the seven doubled continuations in ci-router.yml tests-corpus-blocking; extracted run text under bash -eo pipefail with uv stubbed passes all 13 selections to pytest (exit 0). New guard tests/ci/test_workflow_run_shell_syntax.py fails on a planted doubled continuation, 5/5 green on current workflows, pwsh/Windows steps skipped. tests/ci 1919 passed; test_workflow_coherence 17 passed; ruff check clean; guard file format+mypy clean; acceptance -n 4: 196 passed, 1 skipped, 265 xfailed, 0 failed, 0 xpassed."
       ],
       "provider": "__resolved_provider_absent__",
       "review": null,
