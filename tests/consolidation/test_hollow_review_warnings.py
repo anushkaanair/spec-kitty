@@ -324,3 +324,26 @@ def test_the_same_tool_model_and_profile_is_a_self_review_whatever_the_role(tmp_
     _write_dict_loop(feature_dir, implementer, reviewer)
 
     assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {"WP01": ["force_count=3"]}
+
+
+@pytest.mark.regression
+def test_the_approving_reviewer_is_the_latest_appended_approval_whatever_the_clock_says(tmp_path: Path) -> None:
+    """A skewed wall clock must not let an earlier-appended approval outrank a later one.
+
+    ADR 2026-02-09-3 orders events causally, not by timestamp: the second approval is
+    appended after the first, so its reviewer is the approving one even though its ``at`` is earlier.
+    """
+    feature_dir = tmp_path / "kitty-specs" / "034-test"
+    feature_dir.mkdir(parents=True)
+    (feature_dir / "status.json").write_text(json.dumps({"work_packages": {"WP01": {"force_count": 3}}}), encoding="utf-8")
+    steps = [
+        ("e0", "claude", "planned", "claimed", "2026-10-07T10:00:00+00:00"),
+        ("e1", "claude", "claimed", "in_progress", "2026-10-07T10:01:00+00:00"),
+        ("e2", "claude", "in_progress", "for_review", "2026-10-07T10:02:00+00:00"),
+        ("e3", "claude", "in_review", "approved", "2026-10-07T12:00:00+00:00"),  # self-approval, clock ahead
+        ("e4", "codex", "in_review", "approved", "2026-10-07T11:00:00+00:00"),  # appended later, clock behind
+    ]
+    events = [{"event_id": i, "wp_id": "WP01", "actor": a, "from_lane": f, "to_lane": t, "at": at} for i, a, f, t, at in steps]
+    (feature_dir / "status.events.jsonl").write_text("\n".join(json.dumps(e) for e in events) + "\n", encoding="utf-8")
+
+    assert _collect_hollow_review_warnings(feature_dir, ["WP01"]) == {}

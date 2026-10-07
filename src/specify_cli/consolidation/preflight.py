@@ -511,7 +511,15 @@ def _enforce_review_artifact_consistency(
 
 
 def _latest_actor_for_transition(feature_dir: Path, wp_id: str, to_lane: str) -> str | None:
-    """Return the full identity of the actor on WP's latest transition into *to_lane*, in append order.
+    """Return the full identity of the actor on WP's latest transition into *to_lane*.
+
+    "Latest" is **append order** of the log, not the wall-clock ``(at, event_id)`` maximum.
+    ADR ``2026-02-09-3`` (event-log merge semantics) orders events causally (Lamport-primary)
+    and rejects last-writer-wins by timestamp, because a skewed clock would let an earlier
+    approval outrank a later one. A lane ``StatusEvent`` carries no logical clock to sort on,
+    so the append-only log's own order is the causal order available here; it is also the
+    order ``review_roles.latest_implementer_event`` reads, so the implementer and the
+    approving reviewer of one WP are projected from the same sequence.
 
     Reads the event log rather than the reduced snapshot, because the
     snapshot's ``actor`` slot is overwritten on every transition -- it can
