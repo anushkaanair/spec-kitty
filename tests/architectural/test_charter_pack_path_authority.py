@@ -26,12 +26,21 @@ construction; the FR-018 vocabulary gate owns ``.kittify/doctrine`` in prose):
    a tuple/list/set right-hand side;
 4. an f-string whose literal text is path-shaped (the CR-07 split-literal
    shape ``f"{_X}/doctrine/{kind}"``), its constant parts split on ``/``;
-5. any string constant that starts with ``.kittify/`` and has no whitespace.
+5. any string constant that starts with ``.kittify/`` and has no whitespace;
+6. loop-then-join: the elements of a tuple/list literal, or of a module-level
+   tuple/list name, iterated by a ``for`` statement or a comprehension whose
+   loop variable is a ``/`` operand or a ``Path()`` / ``joinpath()`` argument
+   inside that loop (``repo_root / c for c in ("src", "doctrine")``).
 
 Module-level ``str`` constant aliases are resolved, so ``X = ".kittify"`` /
 ``Y = "doctrine"`` ... ``root / X / Y`` and ``f"{X}/{Y}"`` cannot hide a site.
-A tuple of bare words that is never splatted into a path (``("doctrine",
-"glossary")``) is not a path and is not flagged.
+A tuple of bare words that is never splatted or loop-joined into a path
+(``("doctrine", "glossary")``) is not a path and is not flagged.
+
+Known limits (no live ``src`` site uses them; WP03 review cycle 1 probe): a
+function-local alias (``seg = "doctrine"; root / seg``), ``os.path.join``,
+attribute access to the authority's legacy name (``p.LEGACY_PROJECT_PACK_DIRNAME``),
+string concatenation, a parameter default and a class attribute.
 
 Authority and exemptions
 ------------------------
@@ -302,9 +311,57 @@ def _assigned_nodes(value: ast.expr, aliases: _Aliases) -> Iterator[tuple[ast.AS
                 yield element, text
 
 
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.GeneratorExp, ast.DictComp)
+
+
+def _iterable_strings(iterable: ast.expr, aliases: _Aliases) -> list[tuple[ast.AST, str]]:
+    """The strings a loop iterates: a tuple/list literal's elements, or a module-level sequence alias."""
+    if isinstance(iterable, (ast.Tuple, ast.List)):
+        rendered = [(element, _render(element, aliases)) for element in iterable.elts]
+        return [(element, text) for element, text in rendered if text is not None]
+    if isinstance(iterable, ast.Name) and iterable.id in aliases.sequences:
+        return [(iterable, text) for text in aliases.sequences[iterable.id]]
+    return []
+
+
+def _is_name(node: ast.AST, name: str) -> bool:
+    return isinstance(node, ast.Name) and node.id == name
+
+
+def _joins_name(scope: Iterable[ast.AST], name: str) -> bool:
+    """Whether *name* is a ``/`` operand or a ``Path()`` / ``joinpath()`` argument anywhere in *scope*."""
+    for root in scope:
+        for node in ast.walk(root):
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+                if _is_name(node.left, name) or _is_name(node.right, name):
+                    return True
+            elif isinstance(node, ast.Call) and _is_path_call(node) and any(_is_name(arg, name) for arg in node.args):
+                return True
+    return False
+
+
+def _loops(node: ast.AST) -> Iterator[tuple[ast.expr, ast.expr, list[ast.AST]]]:
+    """Yield ``(target, iterable, scope)`` for a ``for`` statement or each generator of a comprehension."""
+    if isinstance(node, (ast.For, ast.AsyncFor)):
+        yield node.target, node.iter, list(node.body)
+    elif isinstance(node, _COMPREHENSIONS):
+        body: list[ast.AST] = [node.key, node.value] if isinstance(node, ast.DictComp) else [node.elt]
+        for generator in node.generators:
+            yield generator.target, generator.iter, [*body, *generator.ifs]
+
+
+def _loop_joined_strings(node: ast.AST, aliases: _Aliases) -> Iterator[tuple[ast.AST, str]]:
+    """Loop-then-join: the strings a loop iterates are path parts when its variable is joined into a path."""
+    for target, iterable, scope in _loops(node):
+        if isinstance(target, ast.Name) and _joins_name(scope, target.id):
+            yield from _iterable_strings(iterable, aliases)
+
+
 def _path_context_strings(node: ast.AST, aliases: _Aliases) -> Iterator[tuple[ast.AST, str]]:
     """Yield ``(site node, rendered string)`` for each string *node* puts in a path context."""
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+    if isinstance(node, (ast.For, ast.AsyncFor, *_COMPREHENSIONS)):
+        yield from _loop_joined_strings(node, aliases)
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
         for operand in (node.left, node.right):
             text = _render(operand, aliases)
             if text is not None:
@@ -553,6 +610,17 @@ def test_state_contract_pattern_is_kernel_built() -> None:
             "doctrine",
             id="tuple-alias-splat",
         ),
+        pytest.param(
+            'def f(root):\n    return tuple(root / c for c in ("src/charter/offering", "doctrine"))\n',
+            "doctrine",
+            id="loop-join-inline-iterable",
+        ),
+        pytest.param(
+            'CANDIDATES = ("src/charter/offering", "doctrine")\n'
+            "def f(root):\n    out = []\n    for c in CANDIDATES:\n        out.append(root.joinpath(c))\n    return out\n",
+            "doctrine",
+            id="loop-join-module-alias",
+        ),
         pytest.param('SEG = "doctrine"\ndef f(root):\n    return root / ".kittify" / SEG\n', "doctrine", id="alias-constant"),
         pytest.param(
             'K = ".kittify"\nS = "doctrine"\ndef f(kind):\n    return f"{K}/{S}/{kind}"\n',
@@ -594,6 +662,7 @@ def test_planted_clause_b_literals_are_flagged(tmp_path: Path, source: str, lite
     [
         pytest.param('CATEGORIES = ("doctrine", "glossary")\nKIND = "doctrine"\n', id="non-path-tuple"),
         pytest.param('def f(x):\n    return x in ("doctrine", "presets")\n', id="membership-tuple"),
+        pytest.param('def f(root):\n    return [k.upper() for k in ("doctrine", "glossary")]\n', id="loop-without-join"),
         pytest.param('def f():\n    """Writes .kittify/doctrine/ and org-charter.yaml."""\n', id="docstring"),
         pytest.param('def f(p):\n    raise ValueError(f"remove {p} from .kittify/doctrine/ and retry")\n', id="message"),
         pytest.param('from typing import Literal\nCategory = Literal["doctrine", "glossary"]\n', id="literal-type"),
