@@ -83,7 +83,7 @@ def _promote_interview_selections(repo_root: Path, interview_data: Any) -> list[
         ArtifactKind.PARADIGM: list(interview_data.selected_paradigms),
     }
 
-    from specify_cli.cli.commands.charter._layer_roots import (
+    from charter.activation.layer_roots import (
         resolve_layer_roots,
         resolve_org_root_chain,
     )
@@ -202,7 +202,7 @@ def interview(  # noqa: C901
         org_prefill_messages: list[str] = []
         org_prefill_warning: str | None = None
         try:
-            from specify_cli.doctrine.org_charter import apply_org_charter_to_interview
+            from charter.activation.org_charter import apply_org_charter_to_interview
 
             org_prefill_messages = apply_org_charter_to_interview(interview_data, repo_root)
             if not json_output:
