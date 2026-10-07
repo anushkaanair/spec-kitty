@@ -570,3 +570,66 @@ def test_ast_scan_ignores_type_checking_imports(tmp_path: pathlib.Path) -> None:
     assert not violations, (
         f"TYPE_CHECKING imports should not be flagged as violations, got: {violations}"
     )
+
+
+# ---------------------------------------------------------------------------
+# read_events_lenient is advisory-only (#5340)
+# ---------------------------------------------------------------------------
+
+_LENIENT_READER = "read_events_lenient"
+#: The only places outside ``status/`` that may name the lenient reader: the consolidation
+#: hollow-review projections (advisory warnings). No gate or reconciliation path may use it,
+#: because it skips damaged lines instead of failing closed.
+_LENIENT_READER_ADVISORY_SITES: frozenset[tuple[str, str]] = frozenset(
+    {
+        ("specify_cli/consolidation/preflight.py", "<module>"),  # the facade import
+        ("specify_cli/consolidation/preflight.py", "_latest_actor_for_transition"),
+        ("specify_cli/consolidation/preflight.py", "_latest_implementer_identity"),
+    }
+)
+
+
+def _lenient_reader_sites(tree: ast.AST, rel: str) -> set[tuple[str, str]]:
+    """``(file, enclosing function)`` for every name, attribute or import of the lenient reader."""
+    sites: set[tuple[str, str]] = set()
+
+    def visit(node: ast.AST, scope: str) -> None:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            scope = node.name
+        hit = (
+            (isinstance(node, ast.Name) and node.id == _LENIENT_READER)
+            or (isinstance(node, ast.Attribute) and node.attr == _LENIENT_READER)
+            or (isinstance(node, ast.ImportFrom) and any(alias.name == _LENIENT_READER for alias in node.names))
+        )
+        if hit:
+            sites.add((rel, scope))
+        for child in ast.iter_child_nodes(node):
+            visit(child, scope)
+
+    visit(tree, "<module>")
+    return sites
+
+
+def test_the_lenient_event_reader_is_advisory_only() -> None:
+    """No gate or reconciliation path reads the log leniently: only the hollow-review projections do."""
+    found: set[tuple[str, str]] = set()
+    for py_file in _collect_all_src_files():
+        found |= _lenient_reader_sites(parse_file(py_file), py_file.relative_to(_SRC).as_posix())
+
+    assert found == _LENIENT_READER_ADVISORY_SITES, (
+        f"read_events_lenient (advisory: skips damaged lines) is named outside its advisory sites: {sorted(found - _LENIENT_READER_ADVISORY_SITES)}; "
+        f"allow-listed sites gone: {sorted(_LENIENT_READER_ADVISORY_SITES - found)}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "expected"),
+    [
+        pytest.param("from specify_cli.status import read_events_lenient\n", {("gate.py", "<module>")}, id="import"),
+        pytest.param("def gate(d):\n    return read_events_lenient(d)\n", {("gate.py", "gate")}, id="bare-call"),
+        pytest.param("def gate(d):\n    return store.read_events_lenient(d)\n", {("gate.py", "gate")}, id="attribute-call"),
+        pytest.param("def gate(d):\n    return read_events(d)\n", set(), id="strict-reader-is-not-flagged"),
+    ],
+)
+def test_the_lenient_reader_scan_has_teeth(source: str, expected: set[tuple[str, str]]) -> None:
+    assert _lenient_reader_sites(ast.parse(source), "gate.py") == expected
