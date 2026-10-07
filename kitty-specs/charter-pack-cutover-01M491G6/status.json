@@ -1,20 +1,20 @@
 {
-  "event_count": 99,
-  "last_event_id": "01M4B6T0288GEZGX9Z7SAAS8PW",
-  "materialized_at": "2026-10-07T12:53:24.603322+00:00",
+  "event_count": 104,
+  "last_event_id": "01M4B9WS8GHX6PBHJGJ60D4T5Q",
+  "materialized_at": "2026-10-07T13:47:21.744497+00:00",
   "mission_number": "",
   "mission_slug": "charter-pack-cutover-01M491G6",
   "mission_type": "software-dev",
   "schema_version": 2,
   "summary": {
-    "approved": 8,
+    "approved": 9,
     "blocked": 0,
     "canceled": 0,
     "claimed": 0,
     "done": 0,
     "for_review": 0,
-    "in_progress": 2,
-    "in_review": 0,
+    "in_progress": 0,
+    "in_review": 1,
     "planned": 15
   },
   "work_packages": {
@@ -224,18 +224,29 @@
     "WP07": {
       "actor": "claude",
       "agent": "claude",
-      "agent_profile": "python-pedro",
+      "agent_profile": "reviewer-renata",
       "agent_profile_version": "1.0",
       "force_count": 0,
       "implementer_of_record": "claude",
-      "lane": "in_progress",
-      "last_event_id": "01M4B6T0288GEZGX9Z7SAAS8PW",
-      "last_transition_at": "2026-10-07T12:53:24.603322+00:00",
+      "lane": "in_review",
+      "last_event_id": "01M4B9WS8GHX6PBHJGJ60D4T5Q",
+      "last_transition_at": "2026-10-07T13:47:21.744497+00:00",
       "model": "__resolved_model_absent__",
+      "notes": [
+        "Preset format (schema + strict loader in charter.offering.packs.presets, kinds derived from ArtifactKind incl. anti_patterns), discovery + list_offering_packs, built-in default (mission types only) and minimal (no activated_kinds) presets, validate_pack preset checks (format/unresolved id/kind gate) reaching charter org validate, manifest presets hashing (built-in regenerated, fetched packs too), org init scaffolds presets/starter.yaml. Step-0 gate repair commit a07b9cdb. Acceptance 112 passed/0 failed/0 xpassed (4 WP07 markers flipped; pre_rc35 NFR-001 marker removed, see history). charter+doctrine+cli blast radius 4780 passed; test-fast 2281 passed."
+      ],
       "provider": "__resolved_provider_absent__",
-      "role": "implementer",
-      "shell_pid": 10916,
-      "shell_pid_created_at": "1791377588.56"
+      "role": "reviewer",
+      "shell_pid": 3918,
+      "shell_pid_created_at": "1791380836.49",
+      "subtasks": {
+        "T035": "done",
+        "T036": "done",
+        "T037": "done",
+        "T038": "done",
+        "T039": "done",
+        "T040": "done"
+      }
     },
     "WP08": {
       "actor": "finalize-tasks",
@@ -285,36 +296,37 @@
     },
     "WP11": {
       "actor": "claude",
-      "agent": null,
-      "agent_profile": "python-pedro",
-      "agent_profile_version": "1.0",
+      "agent": "claude",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
       "force_count": 1,
       "implementer_of_record": "claude",
-      "lane": "in_progress",
-      "last_event_id": "01M4B4SW8461NKTY5T1VG79NJK",
-      "last_transition_at": "2026-10-07T12:18:23.514440+00:00",
+      "lane": "approved",
+      "last_event_id": "01M4B7V5SDB2SZ808DJ8FQ10QV",
+      "last_transition_at": "2026-10-07T13:11:31.885602+00:00",
       "model": "__resolved_model_absent__",
       "notes": [
-        "Cutover migration I: predicate, report, every key/root/path FR-012 row, runs_first, total detect/structural_detect, collision preflight, guarded move; repo .kittify/doctrine -> .kittify/charter-packs (14 renames). Acceptance 124 passed/1 skipped/229 xfailed/0 failed/0 xpassed; new unit tests 87 passed; upgrade+migration+asset_preservation+dry-run parity 1105 passed (1 env red); tests/upgrade 1080 passed (9 env reds: shallow history); make test-fast 2281 passed; gates green except pre-existing retired_fields FR-016 hit; ruff clean; mypy no new errors. Out-of-ownership edits logged in history (runner.py failed runs_first not recorded)."
+        "Cutover migration I: predicate, report, every key/root/path FR-012 row, runs_first, total detect/structural_detect, collision preflight, guarded move; repo .kittify/doctrine -> .kittify/charter-packs (14 renames). Acceptance 124 passed/1 skipped/229 xfailed/0 failed/0 xpassed; new unit tests 87 passed; upgrade+migration+asset_preservation+dry-run parity 1105 passed (1 env red); tests/upgrade 1080 passed (9 env reds: shallow history); make test-fast 2281 passed; gates green except pre-existing retired_fields FR-016 hit; ruff clean; mypy no new errors. Out-of-ownership edits logged in history (runner.py failed runs_first not recorded).",
+        "Cycle 2: callerless names private (no allowlist); tests use kernel.clock; unreadable .gitignore kept_for_review, never selects/crashes; predicate total under EACCES (unreadable_project_root); kept non-mapping charter_packs key no longer re-selects a recorded cutover",
+        "Cycle 2: all 5 cycle-1 findings fixed for real (private callerless names, kernel.clock imports, unreadable .gitignore -> kept_for_review with write failure as named error, lstat-based total predicate + unreadable_project_root named by apply(), structural_detect confirms config-key findings by dry run). New tests are red against pre-fix src (13 failed + 1 collection error). Unit 124 passed; acceptance 124 passed/1 skipped(win32)/229 xfailed/0 failed/0 xpassed; dead-symbol, allowlist-contract, clock-ban gates green; ruff/format/C901 clean; mypy only the repo-wide BaseMigration Any pattern. path_authority (retired_fields.py:65) and ruff-format exclude reds identical on WP11 base 5644b1d7."
       ],
       "provider": "__resolved_provider_absent__",
       "review": null,
       "review_result": {
-        "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP11-cutover-migration-keys-and-paths/review-cycle-1.md",
-        "reference": "review-cycle://charter-pack-cutover-01M491G6/WP11-cutover-migration-keys-and-paths/review-cycle-1.md",
-        "reviewer": "claude",
-        "verdict": "changes_requested"
+        "reference": "auto-approval:WP11:20261007",
+        "reviewer": "Claude",
+        "verdict": "approved"
       },
-      "role": "implementer",
-      "shell_pid": null,
-      "shell_pid_created_at": null,
+      "role": "reviewer",
+      "shell_pid": 17537,
+      "shell_pid_created_at": "1791377875.26",
       "subtasks": {
-        "T055": "planned",
-        "T056": "planned",
-        "T057": "planned",
-        "T058": "planned",
-        "T059": "planned",
-        "T060": "planned"
+        "T055": "done",
+        "T056": "done",
+        "T057": "done",
+        "T058": "done",
+        "T059": "done",
+        "T060": "done"
       }
     },
     "WP12": {
