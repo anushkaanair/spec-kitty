@@ -52,7 +52,7 @@ def test_doctrine_org_init_scaffolds_minimal_pack(tmp_path: Path) -> None:
 
     data = YAML(typ="safe").load(org_charter.read_text(encoding="utf-8"))
     assert data is not None
-    from specify_cli.doctrine.org_charter import OrgCharterPolicy
+    from charter.activation.org_charter import OrgCharterPolicy
 
     OrgCharterPolicy.model_validate(data)  # must not raise
 

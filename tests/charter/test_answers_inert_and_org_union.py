@@ -36,7 +36,7 @@ from charter.activation.compiler import compile_charter
 from charter.activation.interview import CharterInterview, default_interview
 from charter.activation.pack_context import PackContext
 from charter.offering.service import DoctrineService
-from specify_cli.doctrine.org_charter import (
+from charter.activation.org_charter import (
     REQUIRED_KIND_FIELDS,
     apply_org_charter_to_interview,
 )

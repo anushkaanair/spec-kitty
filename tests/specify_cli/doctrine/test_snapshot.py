@@ -325,7 +325,7 @@ class TestWriteSnapshot:
         assert not local_path.exists()
 
     def test_fetch_pack_passes_subdir_to_write_snapshot(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        from specify_cli.doctrine.config import OrgPackConfig
+        from charter.offering.drg.org_pack_config import OrgPackConfig
 
         pack = OrgPackConfig(
             name="doctrine-rnd",

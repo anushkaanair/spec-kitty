@@ -20,15 +20,12 @@ import hmac
 import shutil
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 from uuid import uuid4
-
-if TYPE_CHECKING:
-    from .config import OrgPackConfig
 
 import yaml
 
-from charter.drg import resolve_relative_path_within_root
+from charter.drg import OrgPackConfig, resolve_relative_path_within_root
 from charter.packs import (
     RECOGNISED_ARTIFACT_DIRS,
     count_snapshot_artifacts,
@@ -40,9 +37,6 @@ from charter.packs import (
 )
 
 from .sources.protocol import FetchResult, OrgDoctrineSource
-
-# ``OrgPackConfig`` is imported lazily inside helpers to avoid a circular import
-# at module load time (config.py lives in the same package).
 
 
 # Suffix → artifact-count bucket name for ``pack-manifest.yaml``.
