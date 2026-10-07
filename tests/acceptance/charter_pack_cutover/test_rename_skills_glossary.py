@@ -110,7 +110,6 @@ def _src_bindings(names: tuple[str, ...], root: Path) -> list[str]:
 
 
 @covers("FR-009")
-@pending_until("WP17", "ActiveCharterManager / ActiveCharterConfigError, no alias")
 def test_fr009_three_names_no_alias(tmp_path: Path) -> None:
     (tmp_path / "planted.py").write_text("CharterPackManager = object\n", encoding="utf-8")
     assert _src_bindings(OLD_CLASS_NAMES, tmp_path), "self-test: a planted alias is found"
@@ -125,7 +124,6 @@ def test_fr009_three_names_no_alias(tmp_path: Path) -> None:
 @covers("FR-009")
 @pytest.mark.integration
 @pytest.mark.git_repo
-@pending_until("WP17", "ACTIVE_CHARTER_CONFIG_INVALID on the --json surface")
 def test_fr009_json_error_code(tmp_path: Path) -> None:
     project = project_from_template("two_org_packs", tmp_path / "p")
     (project / ".kittify" / "config.yaml").write_text("charter_packs: [unclosed\n", encoding="utf-8")
@@ -138,7 +136,6 @@ def test_fr009_json_error_code(tmp_path: Path) -> None:
 
 @covers("FR-009")
 @pytest.mark.integration
-@pending_until("WP17", "ToolSurfaceKind.CHARTER_SKILL and `--kind charter-skill`")
 def test_fr009_tool_surface_kind(tmp_path: Path) -> None:
     enums = importlib.import_module("specify_cli.tool_surface.enums")
     assert enums.ToolSurfaceKind.CHARTER_SKILL.value == "charter_skill"
@@ -154,7 +151,6 @@ def test_fr009_tool_surface_kind(tmp_path: Path) -> None:
 
 @covers("US3-4", "OD-1")
 @pytest.mark.integration
-@pending_until("WP17", "`charter org validate` rejects doctrine_pack_id naming charter_pack_id")
 def test_us3_4_doctrine_pack_id_rejected_in_org_charter(tmp_path: Path) -> None:
     entry = {"activation_context": {"mission_type": "software-dev"}, "artifact_id": "acceptance-test-first", "artifact_kind": "tactics"}
     base = load_yaml(write_doctrine_pack(tmp_path / "scaffold") / "org-charter.yaml")
