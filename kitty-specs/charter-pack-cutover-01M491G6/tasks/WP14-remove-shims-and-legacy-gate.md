@@ -269,3 +269,4 @@ Red at WP13's base, introduced by approved WPs; fix first, red → green per gat
 - Operator wording (no new code): on a project that declares an org pack it has not fetched, `charter activate --preset minimal` refuses with `PRESET_ID_UNRESOLVED` saying ids "resolve nowhere". Make the reason name the declared-but-unfetched org pack and the remedy (fetch/sync the org pack), keeping the code.
 
 Also from WP13: delete the legacy `doctrine.org.packs` warning in `org_pack_config.py` entirely (WP13 only changed its remedy text).
+- `tests/architectural/test_skill_catalog_seam.py::test_nothing_outside_the_seam_builds_a_skill_registry`: `src/specify_cli/upgrade/migrations/_charter_pack_cutover_skills.py:~201` calls `SkillRegistry.from_package` directly (WP12). Route it through `resolve_project_skill_catalog` (or the seam's sanctioned entry) and keep WP12's skills tests green.
