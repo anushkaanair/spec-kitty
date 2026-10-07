@@ -8,7 +8,6 @@ finalizer reinstalls these skills from the catalog.
 from __future__ import annotations
 
 import json
-import shutil
 from pathlib import Path
 
 import pytest
@@ -33,10 +32,23 @@ SKILL_SOURCES = REPO_ROOT / "src" / "charter" / "offering" / "skills"
 MANIFEST = ".kittify/skills-manifest.json"
 
 
+#: A synthetic shipped skill tree (relative path -> bytes), the same for every removed
+#: name, so the removal and keep tests do not read the live sources WP18 deletes.
+SYNTHETIC_TREE: dict[str, bytes] = {
+    "SKILL.md": b"---\nname: synthetic\n---\n# A shipped skill\n",
+    "references/guide.md": b"# Reference\n",
+    "assets/template.md": b"# Asset\n",
+}
+
+
 @pytest.fixture(autouse=True)
 def _sources_deleted(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Behave as after WP18: the installed catalog no longer ships the removed names."""
+    """Behave as after WP18: the catalog no longer ships the removed names; the frozen
+    hashes describe :data:`SYNTHETIC_TREE` (the constitution name keeps no hashes)."""
     monkeypatch.setattr(f"{_MODULE}._shipped_skill_names", frozenset)
+    synthetic = {rel: sha256_digest(body).removeprefix("sha256:") for rel, body in SYNTHETIC_TREE.items()}
+    hashes = {name: synthetic for name in REMOVED_SKILL_NAMES if name != "spec-kitty-constitution-doctrine"}
+    monkeypatch.setattr(f"{_MODULE}.SHIPPED_SKILL_HASHES", hashes)
 
 
 def _config(project: Path, agents: list[str]) -> None:
@@ -46,9 +58,11 @@ def _config(project: Path, agents: list[str]) -> None:
 
 
 def _install(project: Path, root: str, name: str) -> Path:
-    """A byte copy of the shipped source, as the installer makes it."""
+    """A byte copy of the (synthetic) shipped source, as the installer makes it."""
     target = project / root / name
-    shutil.copytree(SKILL_SOURCES / name, target)
+    for rel, body in SYNTHETIC_TREE.items():
+        (target / rel).parent.mkdir(parents=True, exist_ok=True)
+        (target / rel).write_bytes(body)
     return target
 
 
@@ -139,7 +153,7 @@ def test_edited_copy_is_kept_in_place_and_reported(tmp_path: Path, change: str) 
     elif change == "extra_file":
         (copy / "notes.md").write_text("mine\n", encoding="utf-8")
     else:
-        (copy / "assets" / "MERMAID_DIAGRAMMING.md").unlink()
+        (copy / "assets" / "template.md").unlink()
     before = {p.relative_to(copy).as_posix(): p.read_bytes() for p in copy.rglob("*") if p.is_file()}
     report = remove_skill_copies(tmp_path, dry_run=False)
     assert {p.relative_to(copy).as_posix(): p.read_bytes() for p in copy.rglob("*") if p.is_file()} == before
@@ -183,7 +197,7 @@ def test_shared_root_is_visited_once_and_unconfigured_roots_are_ignored(tmp_path
 def test_dry_run_reports_and_writes_nothing(tmp_path: Path) -> None:
     _config(tmp_path, ["claude"])
     copy = _install(tmp_path, ".claude/skills", "spk-doctrine-glossary")
-    _manifest(tmp_path, [("spk-doctrine-glossary", "claude", copy / "SKILL.md")])
+    _manifest(tmp_path, [("spk-doctrine-glossary", "claude", copy / rel) for rel in SYNTHETIC_TREE])
     manifest_before = (tmp_path / MANIFEST).read_bytes()
     report = remove_skill_copies(tmp_path, dry_run=True)
     assert copy.is_dir() and (tmp_path / MANIFEST).read_bytes() == manifest_before

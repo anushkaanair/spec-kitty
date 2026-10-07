@@ -436,6 +436,8 @@ def test_fr012_dry_run_parity(tmp_path: Path) -> None:
         for line in real_report[key]:
             assert f"{verb} {line}" in preview, (key, line, preview)
         assert preview.count(f"{verb} ") == len(real_report[key]), (key, preview)
+    kept = sum(len(real_report[key]) for key in ("kept_for_review", "matches_minimal", "skills_kept"))
+    assert preview.count("Would keep") == kept, preview
 
 
 # --------------------------------------------------------------------------------------

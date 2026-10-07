@@ -25,14 +25,7 @@ import re
 from collections.abc import Mapping
 from types import MappingProxyType
 
-__all__ = [
-    "DEFAULT_KIND_GATE",
-    "DEFAULT_SNAPSHOTS",
-    "DIRECTIVE_ID_TO_STEM",
-    "MINIMAL_KIND_GATE",
-    "MINIMAL_SNAPSHOTS",
-    "normalise_id",
-]
+__all__ = ["DEFAULT_KIND_GATE", "DEFAULT_SNAPSHOTS", "MINIMAL_KIND_GATE", "MINIMAL_SNAPSHOTS", "normalise_id"]
 
 #: Every distinct released ``default`` list per per-artifact key (original and post-rewrite forms).
 DEFAULT_SNAPSHOTS: Mapping[str, tuple[frozenset[str], ...]] = MappingProxyType(

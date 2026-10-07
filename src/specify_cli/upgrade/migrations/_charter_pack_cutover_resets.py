@@ -55,7 +55,7 @@ from .base import MigrationStateUnreadableError
 if TYPE_CHECKING:
     from charter.activation.charter_yaml_io import PreparedYamlWrite
 
-__all__ = ["ResetAction", "ResetOutcome", "apply_resets", "plan_resets"]
+__all__ = ["apply_resets", "plan_resets"]
 
 _CONFIG_RELPATH = Path(KITTIFY_DIRNAME, "config.yaml")
 _KINDS_KEY = "activated_kinds"
@@ -151,11 +151,7 @@ def _absent_meaning(key: str) -> str:
 
     plural = key.removeprefix(_KEY_PREFIX)
     noun = plural.replace("_", " ")
-    try:
-        kind = ArtifactKind.from_plural(plural)
-    except KeyError:
-        return f"all {noun} available"
-    if kind.effective_when_absent == "required":
+    if ArtifactKind.from_plural(plural).effective_when_absent == "required":
         return f"only the {noun} your org packs require are in force"
     return f"all {noun} available"
 
