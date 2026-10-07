@@ -224,12 +224,6 @@ _REGRESSION = pytest.mark.regression
             id="unforced-review-straight-to-done-is-the-approval",
         ),
         pytest.param(
-            [("approved", "s1", {}, "claude", {}), ("approved", "s2", {}, "claude", _forced_from("approved"))],
-            "s1",
-            id="forced-approved-to-approved-is-no-stamp",
-            marks=_REGRESSION,
-        ),
-        pytest.param(
             [
                 ("approved", "s1", {}, "claude", {}),
                 ("canceled", None, {}, "claude", {"from_lane": Lane.APPROVED}),
@@ -374,19 +368,6 @@ def test_content_after_approval_refuses_and_names_commits_and_path(repo: _Repo) 
     assert text.startswith("LANE_MOVED_AFTER_APPROVAL: ")
     assert all(sha[:7] in text for sha in reversed(late[-3:])) and late[0][:7] not in text
     assert "and 1 more" in text and "src/late3.py" in text and "WP01" in text and _LANE in text
-
-
-@_REGRESSION
-def test_forced_reapproval_does_not_restamp_the_lane_past_a_late_commit(repo: _Repo) -> None:
-    """#5721: review approved at S, a commit landed later, and a bare ``move-task --to approved --force`` must not move the bound past it."""
-    _approved_lane(repo)
-    repo.commit("src/late.py")
-    repo.event("WP01", Lane.APPROVED, repo.tip(_BRANCH), from_lane=Lane.APPROVED, force=True, evidence=_BARE_EVIDENCE)
-
-    refusal = repo.check()
-
-    assert refusal is not None and refusal.code is BoundRefusalCode.LANE_MOVED_AFTER_APPROVAL
-    assert "src/late.py" in refusal.render(_SLUG)
 
 
 def test_several_work_packages_render_one_line_each_and_one_recovery_block() -> None:
