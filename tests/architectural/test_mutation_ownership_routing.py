@@ -111,7 +111,7 @@ pytestmark = pytest.mark.architectural
 # any differing/unprovable file), so it JOINS ``_ROUTED_MODULES`` — its one raw
 # literal is an empty-only ``Path.rmdir`` (allowlisted below).
 #
-# doctrine/sources/git_source.py (#4960/#4989) preserves hand-authored packs
+# charter_packs/sources/git_source.py (#4960/#4989) preserves hand-authored packs
 # via a temp-clone + move-aside pattern and a dirty/ahead-guarded reset — NOT
 # the removal guard — so it is scanned for raw literals but deliberately NEVER
 # joins ``_ROUTED_MODULES``. Its only raw removals are ephemeral-temp cleanups
@@ -291,7 +291,7 @@ _ALLOWLIST: dict[CensusKey, str] = {
         "removed the proven byte-identical files and preserved every differing one (#4961) — "
         "cannot lose content."
     ),
-    # --- doctrine/sources/git_source.py (4): ephemeral temp-clone teardown -
+    # --- charter_packs/sources/git_source.py (4): ephemeral temp-clone teardown -
     CensusKey(
         rel="src/specify_cli/charter_packs/sources/git_source.py",
         qualname="GitSource._first_install",
