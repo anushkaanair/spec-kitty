@@ -127,7 +127,7 @@ branch_strategy:
   main_branch: main
   dev_branch: null
   rules: []
-doctrine:
+charter:
   selected_paradigms: []
   selected_directives: []
   available_tools:
