@@ -39,7 +39,7 @@ from click.testing import Result
 
 from ._effective_set import ALL_BUILTIN, builtin_inventory, effective_set, expand
 from ._requirements import REPO_ROOT
-from ._support import active_charter, covers, describe, git, git_init_commit, load_yaml, output_of, pending_until, read_json_output, run_cli, tree_digest
+from ._support import active_charter, covers, describe, git, git_init_commit, load_yaml, output_of, read_json_output, run_cli, tree_digest
 from .legacy_fixtures import (
     COLLISION_PATH,
     EDITED_SKILL,
