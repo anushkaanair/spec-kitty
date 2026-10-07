@@ -27,7 +27,8 @@ def pr_bound_checkouts(checkouts, monkeypatch: pytest.MonkeyPatch):
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     meta.update(target_branch="main", mission_branch=PLANNING, pr_bound=True)
     meta_path.write_text(json.dumps(meta), encoding="utf-8")
-    git(owned, "add", str(meta_path))
+    (owned / ".gitignore").write_text(".kittify/derived/\n", encoding="utf-8")
+    git(owned, "add", str(meta_path), ".gitignore")
     git(owned, "commit", "-qm", "fixture: PR-bound protected-target mint")
     monkeypatch.delenv("SPEC_KITTY_ALLOW_PROTECTED_BRANCH_COMMITS", raising=False)
     monkeypatch.delenv("SPECIFY_REPO_ROOT", raising=False)
@@ -90,7 +91,12 @@ def test_invalid_owned_claim_refuses_before_writes(pr_bound_checkouts, monkeypat
         extra += ["--target-branch", PLANNING if bad_claim == "override_planning" else "codex/foreign"]
     result = invoke("finalize-tasks", owned, *extra, opt_in=explicit)
     assert result.exit_code == 1, result.output
-    assert json.loads(result.output)["error_code"].startswith(("OWNED_", "OWNERSHIP_"))
+    code = json.loads(result.output)["error_code"]
+    if not explicit and bad_claim in {"wrong_branch", "detached"}:
+        # Flagless adoption declines an invalid checkout; primary has no mission.
+        assert code == "FEATURE_CONTEXT_UNRESOLVED"
+    else:
+        assert code == "OWNED_BRANCH_REFUSED"
     assert tuple(snapshot(root) for root in (primary, owned, sibling)) == before
 
 
@@ -130,3 +136,50 @@ def test_owned_planning_pin_refresh_preserves_landing(pr_bound_checkouts, monkey
     assert lanes["target_branch"] == "main"
     assert (mission / "meta.json").read_bytes() == meta_before
     assert (snapshot(primary), snapshot(sibling)) == before
+
+
+@pytest.mark.parametrize("protected", [False, True])
+@pytest.mark.parametrize("validate_only", [False, True])
+def test_owned_non_pr_and_commit_to_target_controls(checkouts, monkeypatch, protected, validate_only):
+    primary, owned, sibling = checkouts
+    mission = owned / "kitty-specs" / SLUG
+    if protected:
+        meta_path = mission / "meta.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta["commit_to_target"] = True
+        meta_path.write_text(json.dumps(meta), encoding="utf-8")
+        (owned / ".kittify/config.yaml").write_text(
+            "agents:\n  available: [codex]\nprotection:\n  protected_branches: [codex/owned]\n", encoding="utf-8",
+        )
+        git(owned, "add", str(meta_path), ".kittify/config.yaml")
+        git(owned, "commit", "-qm", "fixture: protected commit-to-target")
+    monkeypatch.chdir(sibling)
+    monkeypatch.delenv("SPECIFY_REPO_ROOT", raising=False)
+    monkeypatch.delenv("SPEC_KITTY_ALLOW_PROTECTED_BRANCH_COMMITS", raising=False)
+    before = tuple(snapshot(root) for root in (primary, owned, sibling))
+    meta_before = (mission / "meta.json").read_bytes()
+    extra = ["--validate-only"] if validate_only else []
+    result = invoke("finalize-tasks", owned, *extra)
+    assert result.exit_code == 0, result.output
+    assert (snapshot(primary), snapshot(sibling)) == (before[0], before[2])
+    assert (mission / "meta.json").read_bytes() == meta_before
+    if validate_only:
+        assert snapshot(owned) == before[1]
+    else:
+        assert git(owned, "rev-parse", "HEAD") != before[1][0]
+        assert json.loads((mission / "lanes.json").read_text(encoding="utf-8"))["target_branch"] == "codex/owned"
+
+
+def test_validated_owned_path_never_calls_legacy_recovery(pr_bound_checkouts, monkeypatch):
+    from specify_cli.cli.commands.agent import mission_finalize
+
+    _primary, owned, _sibling = pr_bound_checkouts
+
+    def legacy_is_forbidden(*args, **kwargs):
+        raise AssertionError("validated owned finalization must bypass legacy branch recovery")
+
+    for name in ("_resolve_target_branch", "_preflight_recovered_pr_bound_contract", "_persist_branch_contract_for_finalize"):
+        monkeypatch.setattr(mission_finalize, name, legacy_is_forbidden)
+    for extra in (["--validate-only"], []):
+        result = invoke("finalize-tasks", owned, *extra)
+        assert result.exit_code == 0, result.output
