@@ -7,10 +7,13 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from charter.offering.packs.presets import EXAMPLE_PRESET_NAME, load_preset, render_example_preset, write_example_preset
+from charter.offering.packs.presets import load_preset, render_example_preset, write_example_preset
 from kernel.charter_pack_paths import pack_presets_dir
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
+
+#: The scaffolded preset name (contracts: ``presets/starter.yaml``).
+EXAMPLE_PRESET_NAME = "starter"
 
 
 def test_example_preset_lists_no_ids(tmp_path: Path) -> None:

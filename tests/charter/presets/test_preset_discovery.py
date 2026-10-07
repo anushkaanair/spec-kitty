@@ -9,7 +9,6 @@ from ruamel.yaml import YAML
 
 from charter.offering.pack_paths import built_in_root
 from charter.offering.packs.presets import (
-    BUILT_IN_PACK_NAME,
     OfferingPack,
     PresetNotFoundError,
     discover_presets,
@@ -89,7 +88,7 @@ def test_list_offering_packs_orders_tiers(tmp_path: Path) -> None:
     packs = list_offering_packs(repo)
 
     assert [(pack.name, pack.tier) for pack in packs] == [
-        (BUILT_IN_PACK_NAME, "built-in"),
+        ("built-in", "built-in"),
         ("first", "org"),
         ("second", "org"),
         ("project", "project"),

@@ -7,7 +7,7 @@ An **activation preset** is pack data (FR-019): a named file
 hashed by the pack manifest (:func:`enumerate_presets`).
 
 A preset file carries ``name`` (equal to the file stem), ``description``, any
-of the per-kind ``activated_<plural>`` keys of :data:`PRESET_GOVERNED_KINDS`,
+of the per-kind ``activated_<plural>`` keys of the governed kinds,
 ``activated_kinds`` and ``mission_type_activations``. A key that is absent
 leaves its kind unrestricted; an empty list activates nothing of that kind.
 The documented contract is ``charter/offering/schemas/activation-preset.schema.yaml``;
@@ -42,13 +42,7 @@ from kernel.charter_pack_paths import pack_presets_dir, project_pack_root
 
 __all__ = [
     "ACTIVATED_KINDS_KEY",
-    "BUILT_IN_PACK_NAME",
-    "EXAMPLE_PRESET_NAME",
-    "KIND_GATE_PLURALS",
     "MISSION_TYPE_ACTIVATIONS_KEY",
-    "PRESET_GOVERNED_KINDS",
-    "PRESET_NAME_MAX_LENGTH",
-    "PRESET_NAME_PATTERN",
     "ActivationPreset",
     "OfferingPack",
     "PresetEntry",
@@ -74,11 +68,11 @@ _OWN_ABSENCE_CONTRACT_KINDS: frozenset[ArtifactKind] = frozenset({ArtifactKind.S
 
 #: The kinds a preset governs with a per-kind ``activated_<plural>`` key, in
 #: ``ArtifactKind`` declaration order.
-PRESET_GOVERNED_KINDS: tuple[ArtifactKind, ...] = tuple(kind for kind in ArtifactKind if kind.activatable and kind not in _OWN_ABSENCE_CONTRACT_KINDS)
+_GOVERNED_KINDS: tuple[ArtifactKind, ...] = tuple(kind for kind in ArtifactKind if kind.activatable and kind not in _OWN_ABSENCE_CONTRACT_KINDS)
 
 #: Every value ``activated_kinds`` may hold: the plural of every ``ArtifactKind``
 #: (the universe the kind gate is read over).
-KIND_GATE_PLURALS: tuple[str, ...] = tuple(kind.plural for kind in ArtifactKind)
+_KIND_GATE_PLURALS: tuple[str, ...] = tuple(kind.plural for kind in ArtifactKind)
 
 _ACTIVATED_PREFIX = "activated_"
 _NAME_KEY = "name"
@@ -91,15 +85,15 @@ MISSION_TYPE_ACTIVATIONS_KEY = "mission_type_activations"
 _CONTEXT_SCOPED_KEY = "activations"
 
 #: Grammar of a preset name (and therefore of its file stem).
-PRESET_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
+_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9]*(-[a-z0-9]+)*$")
 #: Longest preset name accepted.
-PRESET_NAME_MAX_LENGTH = 64
+_NAME_MAX_LENGTH = 64
 
 #: The ``name`` of the built-in pack (``packs/built-in/pack.yaml``).
-BUILT_IN_PACK_NAME = "built-in"
+_BUILT_IN_PACK_NAME = "built-in"
 
 #: The preset ``charter org init`` scaffolds into a new org pack.
-EXAMPLE_PRESET_NAME = "starter"
+_EXAMPLE_PRESET_NAME = "starter"
 
 _PRESET_GLOB = "*.yaml"
 
@@ -111,7 +105,7 @@ def preset_activation_key(kind: ArtifactKind) -> str:
 
 def preset_activation_keys() -> tuple[str, ...]:
     """Return the per-kind activation keys a preset may carry (derived)."""
-    return tuple(preset_activation_key(kind) for kind in PRESET_GOVERNED_KINDS)
+    return tuple(preset_activation_key(kind) for kind in _GOVERNED_KINDS)
 
 
 def _ungoverned_activation_keys() -> frozenset[str]:
@@ -166,7 +160,7 @@ class ActivationPreset:
 
     def listed_kinds(self) -> tuple[ArtifactKind, ...]:
         """Return the kinds the preset lists ids for (a key is present)."""
-        return tuple(kind for kind in PRESET_GOVERNED_KINDS if preset_activation_key(kind) in self.activations)
+        return tuple(kind for kind in _GOVERNED_KINDS if preset_activation_key(kind) in self.activations)
 
 
 def kind_gate_omissions(preset: ActivationPreset) -> tuple[str, ...]:
@@ -213,10 +207,10 @@ def _check_keys(path: Path, data: Mapping[str, Any]) -> None:
 def _check_name(path: Path, value: Any) -> str:
     if not isinstance(value, str):
         raise PresetFormatError(path, _NAME_KEY, "must be a string")
-    if len(value) > PRESET_NAME_MAX_LENGTH:
-        raise PresetFormatError(path, _NAME_KEY, f"is longer than {PRESET_NAME_MAX_LENGTH} characters")
-    if not PRESET_NAME_PATTERN.match(value):
-        raise PresetFormatError(path, _NAME_KEY, f"{value!r} does not match {PRESET_NAME_PATTERN.pattern}")
+    if len(value) > _NAME_MAX_LENGTH:
+        raise PresetFormatError(path, _NAME_KEY, f"is longer than {_NAME_MAX_LENGTH} characters")
+    if not _NAME_PATTERN.match(value):
+        raise PresetFormatError(path, _NAME_KEY, f"{value!r} does not match {_NAME_PATTERN.pattern}")
     if value != path.stem:
         raise PresetFormatError(path, _NAME_KEY, f"{value!r} must equal the file stem {path.stem!r}")
     return value
@@ -243,7 +237,7 @@ def _check_id_list(path: Path, key: str, value: Any) -> tuple[str, ...]:
 
 def _check_kind_gate(path: Path, value: Any) -> tuple[str, ...]:
     plurals = _check_id_list(path, ACTIVATED_KINDS_KEY, value)
-    unknown = [plural for plural in plurals if plural not in KIND_GATE_PLURALS]
+    unknown = [plural for plural in plurals if plural not in _KIND_GATE_PLURALS]
     if unknown:
         raise PresetFormatError(path, ACTIVATED_KINDS_KEY, f"unknown kind(s): {', '.join(unknown)}")
     return plurals
@@ -313,7 +307,7 @@ def load_preset(pack_root: Path, name: str) -> ActivationPreset:
     """
     files = preset_files(pack_root)
     for path in files:
-        if path.stem == name and PRESET_NAME_PATTERN.match(name):
+        if path.stem == name and _NAME_PATTERN.match(name):
             return load_preset_file(path)
     raise PresetNotFoundError(name, pack_root, tuple(path.stem for path in files))
 
@@ -352,7 +346,7 @@ def list_offering_packs(repo_root: Path) -> tuple[OfferingPack, ...]:
     :func:`discover_presets` returns ``()`` for it. No artifact id is resolved
     here.
     """
-    packs: list[OfferingPack] = [OfferingPack(BUILT_IN_PACK_NAME, "built-in", built_in_root())]
+    packs: list[OfferingPack] = [OfferingPack(_BUILT_IN_PACK_NAME, "built-in", built_in_root())]
     registry = load_pack_registry(repo_root, quiet=True)
     packs.extend(OfferingPack(entry.name, "org", entry.effective_root(repo_root)) for entry in registry.packs)
     packs.append(OfferingPack("project", "project", project_pack_root(repo_root)))
@@ -402,7 +396,7 @@ def enumerate_presets(pack_root: Path) -> list[PresetEntry]:
 
 _EXAMPLE_PRESET = f"""\
 # Example activation preset, scaffolded by `spec-kitty charter org init`.
-# Apply it with: spec-kitty charter activate --preset {EXAMPLE_PRESET_NAME}
+# Apply it with: spec-kitty charter activate --preset {_EXAMPLE_PRESET_NAME}
 #
 # A preset replaces the activation keys it carries. A key left out keeps its
 # kind unrestricted (every artifact effective); an empty list activates none.
@@ -412,7 +406,7 @@ _EXAMPLE_PRESET = f"""\
 #     - 010-specification-fidelity-requirement
 #   activated_tactics:
 #     - acceptance-test-first
-name: {EXAMPLE_PRESET_NAME}
+name: {_EXAMPLE_PRESET_NAME}
 description: Starter preset for this pack; activates the software-dev mission type.
 mission_type_activations:
   - software-dev
@@ -426,7 +420,7 @@ def render_example_preset() -> str:
 
 def write_example_preset(pack_root: Path) -> Path:
     """Write the example preset into the pack at *pack_root*; return its path."""
-    path = pack_presets_dir(pack_root) / f"{EXAMPLE_PRESET_NAME}.yaml"
+    path = pack_presets_dir(pack_root) / f"{_EXAMPLE_PRESET_NAME}.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render_example_preset(), encoding="utf-8")
     return path

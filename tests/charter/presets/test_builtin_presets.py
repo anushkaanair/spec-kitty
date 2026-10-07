@@ -14,12 +14,7 @@ from charter.offering.artifact_kinds import ArtifactKind
 from charter.offering.missions.mission_type_repository import builtin_mission_type_id_set
 from charter.offering.pack_paths import built_in_root
 from charter.offering.packs.pack_validator import validate_pack
-from charter.offering.packs.presets import (
-    KIND_GATE_PLURALS,
-    PRESET_GOVERNED_KINDS,
-    load_preset,
-    preset_activation_keys,
-)
+from charter.offering.packs.presets import load_preset, load_preset_file, preset_activation_keys
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
 
@@ -77,18 +72,27 @@ def test_schema_rejects_an_ungoverned_key(schema: dict[str, Any]) -> None:
         jsonschema.Draft202012Validator(schema).validate({"name": "x", "description": "x", "activated_skills": []})
 
 
+#: Derived from the authority here, independently of the module under test.
+_GOVERNED = [kind for kind in ArtifactKind if kind.activatable and kind not in (ArtifactKind.SKILL, ArtifactKind.GLOSSARY_PACK)]
+_ALL_PLURALS = {kind.plural for kind in ArtifactKind}
+
+
 def test_governed_kinds_are_derived_from_the_authority() -> None:
-    expected = {kind for kind in ArtifactKind if kind.activatable} - {ArtifactKind.SKILL, ArtifactKind.GLOSSARY_PACK}
-    assert set(PRESET_GOVERNED_KINDS) == expected
-    assert len(PRESET_GOVERNED_KINDS) == 9
-    assert set(preset_activation_keys()) == {f"activated_{kind.plural}" for kind in expected}
+    assert len(_GOVERNED) == 9
+    assert preset_activation_keys() == tuple(f"activated_{kind.plural}" for kind in _GOVERNED)
     assert "activated_anti_patterns" in preset_activation_keys()
-    assert tuple(kind.plural for kind in ArtifactKind) == KIND_GATE_PLURALS
+
+
+def test_kind_gate_accepts_every_artifact_kind_plural(tmp_path: Path) -> None:
+    path = tmp_path / "gate.yaml"
+    path.write_text("name: gate\ndescription: x\nactivated_kinds: [" + ", ".join(sorted(_ALL_PLURALS)) + "]\n", encoding="utf-8")
+    preset = load_preset_file(path)
+    assert preset.activated_kinds is not None and set(preset.activated_kinds) == _ALL_PLURALS
 
 
 def test_schema_kind_enums_equal_the_derived_sets(schema: dict[str, Any]) -> None:
     (pattern,) = schema["patternProperties"]
     match = re.fullmatch(r"\^activated_\((?P<alternatives>[a-z_|]+)\)\$", pattern)
     assert match, pattern
-    assert set(match["alternatives"].split("|")) == {kind.plural for kind in PRESET_GOVERNED_KINDS}
-    assert set(schema["properties"]["activated_kinds"]["items"]["enum"]) == set(KIND_GATE_PLURALS)
+    assert set(match["alternatives"].split("|")) == {kind.plural for kind in _GOVERNED}
+    assert set(schema["properties"]["activated_kinds"]["items"]["enum"]) == _ALL_PLURALS
