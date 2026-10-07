@@ -260,3 +260,7 @@ NFR-001/NFR-004 tests may carry slow markers; run them explicitly by path. Never
 > Entries in chronological order (oldest first). Format: `- YYYY-MM-DDTHH:MM:SSZ – <agent_id> – <action>`.
 
 - 2026-10-06T19:30:00Z – system – Prompt created.
+
+## Carry-over from WP09 review (non-blocking)
+
+- There are two readers of the built-in `default` preset: `charter.activation.compiler.default_preset_mission_types()` (WP09) and `charter.activation.preset_application._default_values` (WP08). When touching either, have `_default_values` reuse the compiler reader or at least share the preset-name constant, so one authority names the default preset.
