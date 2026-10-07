@@ -272,3 +272,8 @@ No Python source is owned here; if a follow-up touches `src/charter/activation/_
 ### Updating Status
 
 Status is managed via `status.events.jsonl`. Use `spec-kitty agent tasks move-task <WPID> --to <status>` to change WP status.
+
+## Carry-over from WP08/WP09 reviews
+
+- CHANGELOG Before/After must list `DefaultCharterPackMissingError` → `DefaultPresetMissingError` (`DEFAULT_PRESET_MISSING`), the deletion of `src/charter/activation/default_pack.py`, and the owner-approved codes `PRESET_INVALID` and `RESYNTHESIS_FAILED`.
+- `src/specify_cli/provisioning/__init__.py` changed in WP09 (docstring, `__all__`): covered by the Unreleased changelog entry; no version bump (mission rule).
