@@ -168,6 +168,8 @@ First commit: remove the `pending_until("WP14")` strict-xfail markers in `tests/
 
 ### Subtask T072 – CLI-root `LEGACY_CHARTER_STATE` gate
 
+- **From WP17 review**: `activation_block._load_governance_activations` and `org_pack_discovery._load_doctrine_selection` still swallow `RetiredPackFieldError` on a first-load `charter context --no-mark-loaded` (a project `charter.yaml` with `doctrine_pack_id` silently drops the "Selected activations" block). Confirm the CLI-root gate refuses such a project first (the structural predicate covers `doctrine_pack_id`); either way make both helpers re-raise `RetiredPackFieldError` and add a test.
+
 - **Purpose**: one detection seam, shared with the migration's `detect()` (research §3 decision).
 - **Steps**:
   1. Create `src/specify_cli/migration/legacy_charter_gate.py`:
