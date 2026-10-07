@@ -8,6 +8,7 @@ and its ``presets/default.yaml`` is edited or removed.
 from __future__ import annotations
 
 import contextlib
+import importlib
 import io
 import json
 import shutil
@@ -21,7 +22,9 @@ from rich.console import Console
 from ruamel.yaml import YAML
 from typer.testing import CliRunner
 
-from specify_cli.cli.commands.charter import generate as generate_module
+# The ``charter`` package re-exports the ``generate`` command function under the
+# submodule's name, so the module itself is reached through ``import_module``.
+generate_module = importlib.import_module("specify_cli.cli.commands.charter.generate")
 
 pytestmark = [pytest.mark.integration]
 
