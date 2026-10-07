@@ -90,11 +90,11 @@ def project(tmp_path: Path) -> Path:
 
 
 def _builtin_ids(token: str) -> frozenset[str]:
-    return ActiveCharterManager().list_available(ProjectContext(), token)
+    return frozenset(ActiveCharterManager().list_available(ProjectContext(), token))
 
 
 def _resolve(project: Path, keys: Iterable[str]) -> dict[str, EffectiveSet]:
-    return resolve_effective_sets(project, keys)
+    return dict(resolve_effective_sets(project, keys))
 
 
 def test_directives_union_builtin_and_both_org_packs_in_stem_spelling(project: Path) -> None:
@@ -179,7 +179,7 @@ def test_org_root_that_raises_on_scan_is_unresolved(project: Path, monkeypatch: 
     def exploding(self: ActiveCharterManager, ctx: ProjectContext, kind: str, *, layer_roots: dict[str, Path] | None = None) -> frozenset[str]:
         if layer_roots and "org" in layer_roots and layer_roots["org"].name == "acme-two":
             raise OSError("permission denied")
-        return real(self, ctx, kind, layer_roots=layer_roots)
+        return frozenset(real(self, ctx, kind, layer_roots=layer_roots))
 
     monkeypatch.setattr(ActiveCharterManager, "list_available", exploding)
 
