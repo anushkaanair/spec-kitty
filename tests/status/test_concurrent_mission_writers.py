@@ -146,7 +146,7 @@ class Interleave:
             self.b_started.set()
             try:
                 self.body_of_b()
-            except BaseException as exc:  # noqa: BLE001 -- reported to the test thread
+            except (AssertionError, RuntimeError, OSError, typer.Exit) as exc:  # re-raised on the test thread by join_b
                 self.b_error.append(exc)
             finally:
                 self.b_done.set()
@@ -241,9 +241,16 @@ def test_failed_implement_never_erases_a_committed_foreign_row(
     _git(repo, "commit", "-q", "--allow-empty", "-m", "test: settle after alice's first claim")
     baseline_ids = {row["event_id"] for row in _disk_rows(feature_dir)}
 
+    relative = f"kitty-specs/{mission}"
+
     def _writer_b() -> None:
         rc = _invoke("agent", "tasks", "move-task", "WP02", "--to", "canceled", "--agent", "system", "--note", NOTE, "--mission", mission)
         assert rc == 0, f"writer B (move-task) exited {rc}"
+        # B commits its status files, as the real lanes move-task does; under the Mission lock so the
+        # commit never captures another writer's transient rows
+        with mission_write_lock(feature_dir, repo_root=repo, timeout=-1):
+            _git(repo, "add", f"{relative}/{EVENTS}", f"{relative}/status.json")
+            _git(repo, "commit", "-q", "-m", "writer B: WP02 canceled")
 
     il = Interleave(
         repo=repo,
@@ -252,7 +259,8 @@ def test_failed_implement_never_erases_a_committed_foreign_row(
         body_of_b=_writer_b,
         pause_b_at_persist=(mode == "annotation"),
     )
-    with _installed(il, monkeypatch, fail_commit_attr="_commit_via_legacy_safe_commit", fail_when=lambda: True):
+    armed = [True]
+    with _installed(il, monkeypatch, fail_commit_attr="_commit_via_legacy_safe_commit", fail_when=lambda: armed[0]):
         if mode == "annotation":
             il.start_b()  # B commits its transition, then pauses (holding the Mission lock) before its annotation
             assert il.b_paused.wait(WAIT_SECONDS), "writer B never reached its annotation seam"
@@ -260,6 +268,7 @@ def test_failed_implement_never_erases_a_committed_foreign_row(
         if il.thread is None:  # transition mode: B was started inside A's window
             raise AssertionError("writer A never reached its claim window")
         il.join_b()
+    armed[0] = False  # the obstruction (index.lock contention) is over before the next writer
     out = capsys.readouterr().out
 
     assert a_rc == 1, out
@@ -269,12 +278,15 @@ def test_failed_implement_never_erases_a_committed_foreign_row(
     assert _notes(disk, "WP02", NOTE), "writer B's committed annotation was erased from the on-disk log (#5819)"
     assert not [row for row in disk if row["event_id"] not in baseline_ids and row.get("actor") == "alice"], "writer A's own failed rows must be rolled back"
 
-    # the next ordinary status writer must still see (and would commit) writer B's rows
-    assert _invoke("agent", "tasks", "move-task", "WP03", "--to", "canceled", "--agent", "system", "--note", "x", "--mission", mission) == 0
+    # the next committing status writer (carol's implement) must not commit the erasure into HEAD
+    assert _invoke("agent", "action", "implement", "WP03", "--mission", mission, "--agent", "carol", "--allow-sparse-checkout") == 0
     after_next = _disk_rows(feature_dir)
     assert _lane_of(after_next, "WP02") == "canceled", "writer B's committed cancel disappeared after the next writer (#5819)"
-    assert _notes(after_next, "WP02", NOTE)
     assert disk_ids <= {row["event_id"] for row in after_next}
+    head = _head_rows(repo, f"{relative}/{EVENTS}")
+    assert _lane_of(head, "WP02") == "canceled", "writer B's committed cancel is gone from HEAD after the next writer (#5819)"
+    assert _notes(head, "WP02", NOTE), "writer B's committed annotation is gone from HEAD after the next writer (#5819)"
+    assert _lane_of(head, "WP03") == "in_progress"
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +332,54 @@ def test_coord_claims_leave_a_parseable_log_and_honest_output(tmp_path: Path, mo
     assert _lane_of(rows, "WP02") == "in_progress"
     assert "rolled back" not in out.lower(), f"output claims a rollback although the claim is committed on the coordination branch:\n{out}"
     assert "was committed" in out, out
+
+
+def test_coord_review_claim_with_a_failing_follow_up_reports_the_committed_claim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A15: the review window measures the coord log; a committed in_review claim is reported as committed, never cut."""
+    from specify_cli.status import Lane
+    from specify_cli.task_utils import locate_work_package
+    from tests.utils import _seed_canonical_wp_state
+
+    repo, mission, _coord_branch = _build_two_lane_coord_mission(tmp_path, monkeypatch, mission_slug="coord-review-claim")
+    mid8 = mission.rsplit("-", 1)[1]
+    coord_worktree = CoordinationWorkspace.worktree_path(repo, mission, mid8)
+    coord_dir = coord_worktree / "kitty-specs" / mission
+    _seed_canonical_wp_state(coord_worktree, mission, "WP01", "for_review", actor="alice", assignee="Owner", shell_pid="1234", timestamp="2025-01-02T00:00:00Z")
+    _git(coord_worktree, "add", "-A")
+    _git(coord_worktree, "commit", "-q", "-m", "coord: WP01 for_review")
+    original_commit = workflow._commit_via_coordination_transaction
+
+    def _commit_then_fail(**kwargs: Any) -> Any:
+        original_commit(**kwargs)  # the transaction commits the claim, then the follow-up fails
+        raise RuntimeError(STAGING_FAILURE)
+
+    monkeypatch.setattr(workflow, "_commit_via_coordination_transaction", _commit_then_fail)
+    workflow._reset_workflow_receipts()
+
+    with pytest.raises(typer.Exit):
+        workflow_executor.review_claim_transition(
+            wp=locate_work_package(repo, mission, "WP01"),
+            feature_dir=coord_dir,
+            current_lane=Lane.FOR_REVIEW,
+            agent="rae",
+            main_repo_root=repo,
+            mission_slug=mission,
+            normalized_wp_id="WP01",
+            target_branch="mission-target",
+            status_execution_mode="worktree",
+            repo_root=repo,
+        )
+
+    out = capsys.readouterr().out
+    assert "claim was committed" in out, out
+    assert "rolled back" not in out.lower()
+    raw = (coord_dir / EVENTS).read_text(encoding="utf-8")
+    assert "\x00" not in raw
+    assert _lane_of(_rows(raw), "WP01") == "in_review", "the committed review claim was cut from the coordination log"
+    assert _lane_of(_head_rows(coord_dir, f"kitty-specs/{mission}/{EVENTS}"), "WP01") == "in_review"
+    assert [r["outcome"] for r in workflow._WORKFLOW_COMMIT_RECEIPTS][-1] == "committed"
 
 
 # ---------------------------------------------------------------------------
@@ -449,7 +509,10 @@ def test_other_refusals_print_the_error_code_and_the_remedy_and_leave_the_log(
     assert [r["outcome"] for r in workflow._WORKFLOW_COMMIT_RECEIPTS] == ["refused"]
 
 
-def test_lane_sync_refusal_arm_reports_a_rollback_that_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize("revert", ["real", "silent_noop"])
+def test_lane_sync_refusal_arm_keeps_receipt_and_message_consistent(
+    revert: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     from kernel.clock import now_utc
     from specify_cli.coordination.types import CommitReceipt
     from specify_cli.lanes.lifecycle_sync import LaneAutoRebaseSyncError
@@ -463,21 +526,54 @@ def test_lane_sync_refusal_arm_reports_a_rollback_that_refused(tmp_path: Path, m
         event_ids=("claim",),
     )
 
+    def _commit(**kwargs: Any) -> CommitReceipt:
+        workflow._record_receipt(COORD_META[0], str(kwargs["message"]), "committed", sha=receipt.commit_sha, wp_id="WP01")
+        return receipt
+
     def _sync_refuses(**_kwargs: Any) -> None:
         raise LaneAutoRebaseSyncError(lane_id="lane-a", lane_branch="kitty/mission-demo-lane-a", lane_worktree_path=claimed.repo / "lane-a")
 
+    def _revert(_receipt: CommitReceipt) -> None:
+        if revert == "real":
+            _git(claimed.repo, "revert", "--no-edit", "HEAD")  # the real revert removes the claim row from the committed log
+
     monkeypatch.setattr(workflow, "_load_coord_branch_meta", lambda _fd: COORD_META)
-    monkeypatch.setattr(workflow, "_commit_via_coordination_transaction", lambda **_kwargs: receipt)
+    monkeypatch.setattr(workflow, "_commit_via_coordination_transaction", _commit)
     monkeypatch.setattr(workflow, "_sync_lane_after_coordination_commit", _sync_refuses)
-    monkeypatch.setattr(workflow, "_revert_coordination_commit", lambda _receipt: None)
+    monkeypatch.setattr(workflow, "_revert_coordination_commit", _revert)
     workflow._reset_workflow_receipts()
 
     with pytest.raises(typer.Exit):
         _commit_change(claimed)
 
     out = capsys.readouterr().out
-    assert "claim was committed; the follow-up planned -> claimed for WP01 commit failed" in out
-    assert "rolled back to pre-emit state" not in out
+    outcome = workflow._WORKFLOW_COMMIT_RECEIPTS[-1]["outcome"]
+    if revert == "real":
+        assert "claim was committed" not in out
+        assert outcome == "refused"
+        assert claimed.events.read_text(encoding="utf-8") == _claim_row("before")
+    else:  # the revert changed nothing: the claim is still committed, in the message and the receipt alike
+        assert "claim was committed; the follow-up planned -> claimed for WP01 commit failed" in out
+        assert outcome == "committed"
+
+
+def test_exit_arm_records_a_committed_receipt_when_the_claim_is_committed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    claimed = _claim_repo(tmp_path, commit_claim=True)
+
+    def _exit(**_kwargs: Any) -> None:
+        raise typer.Exit(1)
+
+    monkeypatch.setattr(workflow, "_load_coord_branch_meta", lambda _fd: COORD_META)
+    monkeypatch.setattr(workflow, "_commit_via_coordination_transaction", _exit)
+    workflow._reset_workflow_receipts()
+
+    with pytest.raises(typer.Exit):
+        _commit_change(claimed)
+
+    assert "claim was committed" in capsys.readouterr().out
+    assert [r["outcome"] for r in workflow._WORKFLOW_COMMIT_RECEIPTS] == ["committed"]
 
 
 # ---------------------------------------------------------------------------
