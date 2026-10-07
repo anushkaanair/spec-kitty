@@ -276,3 +276,7 @@ Also run `spec-kitty charter pack regenerate-graph --check` and `make test-quali
 > Entries in chronological order (oldest first). Format: `- YYYY-MM-DDTHH:MM:SSZ – <agent_id> – <action>`.
 
 - 2026-10-06T19:30:00Z – system – Prompt created.
+
+## Carry-over from WP13
+
+`validate_pack` already emits the `RETIRED_PACK_FIELD` finding for `accompanies_doctrine_pack` (scope `pack.yaml`); hook `charter pack validate` into it so `test_us3_4_accompanies_field_rejected` flips. WP13's hunks in `charter/pack.py` were deletions only.

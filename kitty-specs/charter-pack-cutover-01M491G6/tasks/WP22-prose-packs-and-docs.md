@@ -435,3 +435,7 @@ A resuming session reads the Activity Log, checks `git log --oneline` against th
 ### Updating Status
 
 Status is managed via `status.events.jsonl`. Use `spec-kitty agent tasks move-task <WPID> --to <status>` to change WP status.
+
+## Carry-over from WP13
+
+Docs prose still describing the deleted `charter pack apply` (rewrite to `charter activate --preset`): `docs/architecture/charter-pack-usage-journey.md`, `setup-governance.md`, `troubleshoot-charter.md`, `charter-overview.md`, `profile-load-reliability.md`, `06_unified_charter_bundle.md`, `docs-retrieval-index.yaml` (locate exact paths with grep).

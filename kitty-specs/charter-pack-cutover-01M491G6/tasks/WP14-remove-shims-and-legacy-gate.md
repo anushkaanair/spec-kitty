@@ -259,3 +259,13 @@ Never bare `tests/architectural/` or `make test-full`. Classify unrelated reds p
 
 - `test_context_noop_stability` setup errors: its fixture expects a tracked `.kittify/doctrine`, which WP11 moved to `.kittify/charter-packs`. Repoint it when you remove the legacy-root read paths (red at base since WP11; record it).
 - The shared YAML writer (`render_yaml_document`, used by `prepare_activation_write`/`prepare_charter_yaml_section`) cannot render a mapping emptied of its last key; WP12 works around it by writing `{}` in `_charter_pack_cutover_resets.py`. If cheap, fix it at the writer and drop the workaround (logged out-of-ownership edit); otherwise record it as a follow-up.
+
+## Carry-over from WP13 (step 0 — campsite repairs, separate commits, logged)
+
+Red at WP13's base, introduced by approved WPs; fix first, red → green per gate file:
+- `tests/architectural/test_doctrine_census.py` (3 tests): `charter.offering.packs.retired_fields` (WP17) has no DISPOSITION entry.
+- `tests/architectural/test_charter_kind_vocabulary_single_authority.py::test_no_hand_authored_kind_vocabulary_literal_under_src`: hand-written `DEFAULT_KIND_GATE` literal in `src/specify_cli/upgrade/migrations/_charter_pack_cutover_snapshots.py` (WP12). It is frozen release data; derive it or exempt it only through the gate's existing frozen-snapshot mechanism if one exists — otherwise derive from `ArtifactKind` and assert equality with the frozen value in a test. Record the choice.
+- `dead_symbol_allowlist.yaml` entries `category_c_charter_pack_cutover_retired_fields` (`RETIRED_PACK_FIELDS`, `RetiredField`): their rationale says they burn down at WP13, but the table is reached only through `reject_retired_fields`/`retired_field_errors` by design. Drain them (make the names private / drop from `__all__`) rather than re-word, as part of your dead-symbol drain.
+- Operator wording (no new code): on a project that declares an org pack it has not fetched, `charter activate --preset minimal` refuses with `PRESET_ID_UNRESOLVED` saying ids "resolve nowhere". Make the reason name the declared-but-unfetched org pack and the remedy (fetch/sync the org pack), keeping the code.
+
+Also from WP13: delete the legacy `doctrine.org.packs` warning in `org_pack_config.py` entirely (WP13 only changed its remedy text).
