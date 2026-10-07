@@ -403,7 +403,8 @@
       "notes": [
         "FR-012 resets/skills/summary done; acceptance 207 passed 0 failed 0 xpassed; repo charter.yaml reset ([] x2 + default paradigms list); dry-run parity re-pointed per orchestrator ruling (a)",
         "Changes requested: test_no_dead_symbols red (7 WP12 symbols); skills tests depend on sources WP18 deletes",
-        "Review cycle 1 fixed in e102a632: dead-symbols gate green (__all__ trimmed, no allowlist), skills tests source-independent (synthetic tree + patched hashes), unreachable fallback removed, dry-run parity also counts Would-keep warnings. Acceptance 207 passed / 0 failed / 0 xpassed."
+        "Review cycle 1 fixed in e102a632: dead-symbols gate green (__all__ trimmed, no allowlist), skills tests source-independent (synthetic tree + patched hashes), unreachable fallback removed, dry-run parity also counts Would-keep warnings. Acceptance 207 passed / 0 failed / 0 xpassed.",
+        "Cycle 2 approved (reviewer-renata): all cycle-1 findings fixed in e102a632. no_dead_symbols green (37 passed, was red); synthetic skill tree non-vacuous (mutant dropping the hash comparison fails 4 tests); WP18 simulation (12 sources deleted) 16 passed/12 skipped; cutover unit 184 passed; acceptance 207 passed/1 skipped/146 xfailed/0 failed/0 xpassed; ruff/format/mypy clean on touched files."
       ],
       "provider": "__resolved_provider_absent__",
       "review": null,
