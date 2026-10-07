@@ -78,6 +78,7 @@ from specify_cli.migration.legacy_charter_layout import (
     ORGANISATION_PACKS_KEYWORD,
     UNREADABLE_CONFIG,
     UNREADABLE_GOVERNANCE_FILE,
+    UNREADABLE_PROJECT_ROOT,
     detect_legacy_charter_layout,
     governance_file_path,
     is_convertible_organisation_pack,
@@ -793,6 +794,9 @@ _STEPS: tuple[Callable[[_Run], None], ...] = (
 def _require_readable_layout(project_path: Path) -> None:
     """Fail before writing anything when a file the predicate reads cannot be parsed."""
     findings = detect_legacy_charter_layout(project_path)
+    if UNREADABLE_PROJECT_ROOT in findings:
+        reason = "could not be inspected (permission or I/O error); check its permissions, then run `spec-kitty upgrade` again"
+        raise MigrationStateUnreadableError(f"{LEGACY_PROJECT_ROOT_POSIX} {reason}")
     if UNREADABLE_CONFIG in findings:
         raise MigrationStateUnreadableError(f"{_CONFIG_RELPATH.as_posix()} is not readable YAML; {_UPGRADE_REMEDY}")
     if UNREADABLE_GOVERNANCE_FILE in findings:
@@ -822,18 +826,18 @@ class CharterPackCutoverMigration(BaseMigration):
 
     def detect(self, project_path: Path) -> bool:
         """True when any FR-012 inventory item is present. Total: an unreadable file selects."""
-        if detect_legacy_charter_layout(project_path):
-            return True
         try:
+            if detect_legacy_charter_layout(project_path):
+                return True
             return bool(_run_steps(project_path, dry_run=True).is_actionable())
         except Exception:  # total by contract: any failure selects the migration; apply() names it
             return True
 
     def structural_detect(self, project_path: Path) -> bool:
         """True for the structural legacy state only: retired root, retired keys, ``doctrine_pack_id``."""
-        if detect_legacy_charter_layout(project_path):
-            return True
         try:
+            if detect_legacy_charter_layout(project_path):
+                return True
             return bool(_run_steps(project_path, dry_run=True, steps=(_rewrite_activation_pack_ids,)).is_actionable())
         except Exception:  # total by contract: any failure selects the migration; apply() names it
             return True

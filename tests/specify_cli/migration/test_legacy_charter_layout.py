@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import ast
+import os
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -11,6 +13,7 @@ from specify_cli.migration import legacy_charter_layout as layout
 from specify_cli.migration.legacy_charter_layout import (
     UNREADABLE_CONFIG,
     UNREADABLE_GOVERNANCE_FILE,
+    UNREADABLE_PROJECT_ROOT,
     detect_legacy_charter_layout,
     is_convertible_organisation_pack,
 )
@@ -187,3 +190,71 @@ def test_predicate_module_imports_nothing_from_charter() -> None:
 )
 def test_is_convertible_organisation_pack(entry: object, convertible: bool) -> None:
     assert is_convertible_organisation_pack(entry) is convertible
+
+
+# --------------------------------------------------------------------------- #
+# Totality under EACCES (review cycle 1, finding 4): on Python 3.11
+# Path.is_dir()/is_symlink() re-raise PermissionError, so every probe is guarded.
+# --------------------------------------------------------------------------- #
+
+
+def test_unreadable_project_root_is_a_finding_not_a_raise(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _project(tmp_path, "vcs:\n  type: git\n")
+    real_lstat = os.lstat
+    legacy = project / ".kittify" / "doctrine"
+
+    def lstat(path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+        if Path(str(path)) == legacy:
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(layout.os, "lstat", lstat)
+    assert detect_legacy_charter_layout(project) == (UNREADABLE_PROJECT_ROOT,)
+
+
+@pytest.mark.parametrize(
+    ("filename", "finding"),
+    [("config.yaml", UNREADABLE_CONFIG), ("charter/governance.yaml", UNREADABLE_GOVERNANCE_FILE)],
+)
+def test_permission_denied_read_is_a_finding(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, filename: str, finding: str) -> None:
+    project = _project(tmp_path, "vcs:\n  type: git\n")
+    denied = project / ".kittify" / filename
+    real_read_bytes = Path.read_bytes
+
+    def read_bytes(self: Path) -> bytes:
+        if self == denied:
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+    assert detect_legacy_charter_layout(project) == (finding,)
+
+
+def test_every_probe_denied_never_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """EACCES on every stat and read under ``.kittify`` (the reviewer's reproduction, widened)."""
+    project = _project(tmp_path, "doctrine:\n  org:\n    packs: []\n")
+    kittify = project / ".kittify"
+    real_lstat, real_stat, real_read_bytes = os.lstat, Path.stat, Path.read_bytes
+
+    def under_kittify(path: Any) -> bool:
+        return isinstance(path, (str, os.PathLike)) and Path(path).is_relative_to(kittify)
+
+    def lstat(path: Any, *args: Any, **kwargs: Any) -> os.stat_result:
+        if under_kittify(path):
+            raise PermissionError(13, "Permission denied", str(path))
+        return real_lstat(path, *args, **kwargs)
+
+    def path_stat(self: Path, *args: Any, **kwargs: Any) -> os.stat_result:
+        if under_kittify(self):
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_stat(self, *args, **kwargs)
+
+    def read_bytes(self: Path) -> bytes:
+        if under_kittify(self):
+            raise PermissionError(13, "Permission denied", str(self))
+        return real_read_bytes(self)
+
+    monkeypatch.setattr(layout.os, "lstat", lstat)
+    monkeypatch.setattr(Path, "stat", path_stat)
+    monkeypatch.setattr(Path, "read_bytes", read_bytes)
+    assert detect_legacy_charter_layout(project) == (UNREADABLE_PROJECT_ROOT, UNREADABLE_GOVERNANCE_FILE, UNREADABLE_CONFIG)

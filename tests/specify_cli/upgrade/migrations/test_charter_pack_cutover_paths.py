@@ -7,6 +7,7 @@ import os
 import sys
 from kernel.clock import datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 from ruamel.yaml import YAML
@@ -523,3 +524,51 @@ def test_gitignore_write_failure_is_a_named_error(tmp_path: Path, monkeypatch: p
     assert result.errors == [f".gitignore could not be written ({denied}); make it writable, then run `spec-kitty upgrade` again"]
     assert _report(result)["rewritten"] == []
     assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == f"{LEGACY}/**\n"
+
+
+# --------------------------------------------------------------------------- #
+# Totality under EACCES (review cycle 1, finding 4)
+# --------------------------------------------------------------------------- #
+
+
+def _deny_kittify(project: Path, monkeypatch: pytest.MonkeyPatch, probe: str) -> None:
+    """Make one filesystem probe raise ``PermissionError`` for every path under ``.kittify``."""
+    from specify_cli.migration import legacy_charter_layout as layout
+
+    kittify = project / ".kittify"
+
+    def under_kittify(path: Any) -> bool:
+        return isinstance(path, (str, os.PathLike)) and Path(path).is_relative_to(kittify)
+
+    def wrap(real: Any) -> Any:
+        def denied(target: Any, *args: Any, **kwargs: Any) -> Any:
+            if under_kittify(target):
+                raise PermissionError(13, "Permission denied", str(target))
+            return real(target, *args, **kwargs)
+
+        return denied
+
+    if probe == "os.lstat":
+        monkeypatch.setattr(layout.os, "lstat", wrap(os.lstat))
+    else:
+        monkeypatch.setattr(Path, probe, wrap(getattr(Path, probe)))
+
+
+_PROBES = ("os.lstat", "stat", "lstat", "is_dir", "is_symlink", "exists", "is_file", "read_bytes", "read_text")
+
+
+@pytest.mark.parametrize("probe", _PROBES)
+def test_detect_is_total_when_a_probe_raises_eacces(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, probe: str) -> None:
+    _legacy_tree(tmp_path)
+    _write(tmp_path, ".kittify/config.yaml", "doctrine:\n  org:\n    packs: []\n")
+    _deny_kittify(tmp_path, monkeypatch, probe)
+    migration = CharterPackCutoverMigration()
+    assert migration.detect(tmp_path) is True
+    assert migration.structural_detect(tmp_path) is True
+
+
+def test_apply_names_an_uninspectable_legacy_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _legacy_tree(tmp_path)
+    _deny_kittify(tmp_path, monkeypatch, "os.lstat")
+    with pytest.raises(cutover.MigrationStateUnreadableError, match=r"\.kittify/doctrine could not be inspected"):
+        _apply(tmp_path)

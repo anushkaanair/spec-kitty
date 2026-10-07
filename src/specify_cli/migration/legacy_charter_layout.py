@@ -17,9 +17,11 @@ Layering (C-007): this module runs on every CLI invocation once WP14 wires the
 gate, so it imports nothing from ``charter.*`` and loads PyYAML lazily.
 
 Totality: the predicate never raises. An unreadable or unparseable file is
-reported as a finding (:data:`UNREADABLE_CONFIG`,
+reported as a finding (:data:`UNREADABLE_PROJECT_ROOT`, :data:`UNREADABLE_CONFIG`,
 :data:`UNREADABLE_GOVERNANCE_FILE`) so the gate can name it and the migration
-is selected, where ``apply()`` fails with a named error.
+is selected, where ``apply()`` fails with a named error. Every filesystem probe
+is an ``os.lstat`` or a read inside ``try/except OSError``: on Python 3.11
+``Path.is_dir()`` / ``Path.is_symlink()`` re-raise ``EACCES``.
 
 This module is one of the few places allowed to spell the retired names (with
 the cutover migration modules); it is exempt by file from the FR-016 and FR-018
@@ -28,6 +30,8 @@ gates.
 
 from __future__ import annotations
 
+import os
+import stat
 from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -41,6 +45,7 @@ __all__ = [
     "ORGANISATION_PACKS_KEYWORD",
     "UNREADABLE_CONFIG",
     "UNREADABLE_GOVERNANCE_FILE",
+    "UNREADABLE_PROJECT_ROOT",
     "detect_legacy_charter_layout",
     "governance_file_path",
     "is_convertible_organisation_pack",
@@ -76,6 +81,7 @@ _PREFILTER_KEYWORDS = (LEGACY_SELECTION_KEYWORD.encode(), ORGANISATION_PACKS_KEY
 # --------------------------------------------------------------------------- #
 
 _LEGACY_PROJECT_ROOT = "legacy_project_root"
+UNREADABLE_PROJECT_ROOT = "unreadable_project_root"
 _LEGACY_GOVERNANCE_FILE = "legacy_governance_file"
 UNREADABLE_GOVERNANCE_FILE = "unreadable_governance_file"
 UNREADABLE_CONFIG = "unreadable_config"
@@ -87,6 +93,7 @@ _LEGACY_TRACKER_OWNERSHIP_KEY = "legacy_tracker_ownership_key"
 #: Every finding name, in the order :func:`detect_legacy_charter_layout` reports them.
 _STRUCTURAL_FINDINGS: tuple[str, ...] = (
     _LEGACY_PROJECT_ROOT,
+    UNREADABLE_PROJECT_ROOT,
     _LEGACY_GOVERNANCE_FILE,
     UNREADABLE_GOVERNANCE_FILE,
     UNREADABLE_CONFIG,
@@ -163,8 +170,26 @@ def _load_prefiltered(path: Path) -> tuple[bool, Any]:
 
     try:
         return True, yaml.safe_load(raw)
-    except (yaml.YAMLError, UnicodeDecodeError, ValueError):
+    except (yaml.YAMLError, UnicodeDecodeError, ValueError, RecursionError):
         return False, None
+
+
+def _legacy_root_finding(root: Path) -> str | None:
+    """The finding for the retired project layer: a directory or any symlink there.
+
+    ``os.lstat`` inside ``try``: absent (``ENOENT``/``ENOTDIR``) is no finding,
+    any other ``OSError`` (``EACCES``, ``EIO``) is :data:`UNREADABLE_PROJECT_ROOT`.
+    """
+    legacy_root = root.joinpath(*LEGACY_PROJECT_ROOT_RELPATH.parts)
+    try:
+        mode = os.lstat(legacy_root).st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return None
+    except (OSError, ValueError):
+        return UNREADABLE_PROJECT_ROOT
+    if stat.S_ISLNK(mode) or stat.S_ISDIR(mode):
+        return _LEGACY_PROJECT_ROOT
+    return None
 
 
 def detect_legacy_charter_layout(root: Path) -> tuple[str, ...]:
@@ -174,9 +199,9 @@ def detect_legacy_charter_layout(root: Path) -> tuple[str, ...]:
     raises.
     """
     findings: list[str] = []
-    legacy_root = root / LEGACY_PROJECT_ROOT_RELPATH
-    if legacy_root.is_dir() or legacy_root.is_symlink():
-        findings.append(_LEGACY_PROJECT_ROOT)
+    root_finding = _legacy_root_finding(root)
+    if root_finding is not None:
+        findings.append(root_finding)
 
     readable, governance = _load_prefiltered(governance_file_path(root))
     if not readable:
