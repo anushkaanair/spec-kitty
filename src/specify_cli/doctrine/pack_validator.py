@@ -36,9 +36,10 @@ Validation performs (in order):
    cannot crash the runtime loader later. Faults are attributed to the file
    they actually live in (``source_file``), and an unreadable fragment is an
    I/O finding, not a masked YAML parse error.
-9. **Optional org-charter.yaml schema validation** (gracefully skipped when
-   the ``specify_cli.doctrine.org_charter`` module is not yet shipped —
-   WP09 owns that file).
+9. **Optional org-charter.yaml validation** through the caller-supplied
+   :data:`OrgCharterCheck` hook (org charter composition is an activation
+   concern); a pack that ships ``org-charter.yaml`` with no hook supplied gets
+   an ``org_charter_unchecked`` error, never a silent skip.
 
 Issue ``category`` values surfaced via ``ValidationIssue.category``:
 ``schema_invalid``, ``duplicate_id``, ``drg_dangling_edge``, ``drg_kind_drift``,
@@ -60,7 +61,8 @@ return, and render findings. Their types and direct module access are unchanged.
 from __future__ import annotations
 
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -70,6 +72,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
 __all__ = [
+    "OrgCharterCheck",
     "validate_pack",
     "render_validation_result",
 ]
@@ -106,6 +109,7 @@ from charter.offering.drg.org_pack_loader import (
     load_org_pack,
 )
 from charter.offering.pack_paths import BuiltInContentDirNotAvailable, PackRootNotFound, built_in_dir
+from kernel.charter_pack_paths import pack_drg_fragment, pack_org_charter
 
 _AUGMENTATION_PLURAL_KINDS: frozenset[str] = augmentation_plural_kinds()
 FragmentIntent = dict[str, dict[str, tuple[dict[str, str], Path]]]
@@ -381,7 +385,12 @@ def _scan_artifact_directory(  # noqa: PLR0913 — small helper kept private to 
 # ---------------------------------------------------------------------------
 
 
-def validate_pack(pack_dir: Path, *, check_drg_root: bool = True) -> ValidationResult:
+def validate_pack(
+    pack_dir: Path,
+    *,
+    check_drg_root: bool = True,
+    org_charter_check: OrgCharterCheck | None = None,
+) -> ValidationResult:
     """Validate a doctrine pack directory.
 
     Returns a :class:`ValidationResult` with ``ok=False`` if any error was
@@ -396,6 +405,10 @@ def validate_pack(pack_dir: Path, *, check_drg_root: bool = True) -> ValidationR
     Callers that know their own output can never produce that mismatch shape
     (e.g. ``pack_assembler.assemble_pack``'s internal round-trip check) pass
     ``check_drg_root=False``.
+
+    ``org_charter_check``: the org-charter leg (see :data:`OrgCharterCheck`).
+    When the pack ships ``org-charter.yaml`` and no check is supplied, an
+    ``org_charter_unchecked`` error is recorded instead of skipping the leg.
     """
     errors: list[ValidationIssue] = []
     advisories: list[ValidationIssue] = []
@@ -520,10 +533,10 @@ def validate_pack(pack_dir: Path, *, check_drg_root: bool = True) -> ValidationR
         errors.extend(sanction_errors)
         advisories.extend(sanction_advisories)
 
-    # T044: validate optional org-charter.yaml (best-effort — module may be
-    # absent in early-mission states before WP09 ships).
-    advisories_or_errors = _validate_org_charter(
-        pack_dir, pack_artifact_ids_per_type.get("directives", set())
+    # T044: the optional org-charter.yaml leg runs through the caller's hook;
+    # without one, an org-charter.yaml is an explicit error, never skipped.
+    advisories_or_errors = _check_org_charter(
+        pack_dir, pack_artifact_ids_per_type.get("directives", set()), org_charter_check
     )
     for issue in advisories_or_errors:
         if issue.severity == "error":
@@ -581,7 +594,7 @@ def _validate_org_fragment(pack_dir: Path) -> list[ValidationIssue]:
     through the same collector the loader calls — one authority, no second
     schema table.
     """
-    fragment = pack_dir / "drg" / "fragment.yaml"
+    fragment = pack_drg_fragment(pack_dir)
     if fragment.exists():
         try:
             load_org_pack(pack_name=pack_dir.name, pack_root=pack_dir, layer_index=1)
@@ -1419,7 +1432,7 @@ def _collect_fragment_yaml_edges(
     valid spelling the runtime resolver accepts — folds like the qualified
     form instead of being dropped by :func:`_urn_to_plural` (#5494).
     """
-    fragment_yaml = drg_dir / "fragment.yaml"
+    fragment_yaml = pack_drg_fragment(drg_dir.parent)
     if not fragment_yaml.exists():
         return None
     try:
@@ -1543,7 +1556,7 @@ def _collect_fragment_edge_intent(
     if org_fragment_edges is not None:
         _fold_augmentation_edges(
             org_fragment_edges,
-            drg_dir / "fragment.yaml",
+            pack_drg_fragment(drg_dir.parent),
             intent,
             augmentation_relations,
         )
@@ -1661,112 +1674,45 @@ _SINGULAR_TO_PLURAL_AUGMENTATION: dict[str, str] = _build_singular_to_plural()
 
 
 # ---------------------------------------------------------------------------
-# org-charter.yaml validation (T044)
+# org-charter.yaml validation hook (T044, research A.3 #4)
 # ---------------------------------------------------------------------------
 
+#: The org-charter leg of :func:`validate_pack`: given the pack's
+#: ``org-charter.yaml`` path and the directive ids the pack ships, return the
+#: findings. Org charter composition is an activation concern, so the check is
+#: supplied by the caller (the org-charter composing entry) rather than
+#: imported here.
+OrgCharterCheck = Callable[[Path, AbstractSet[str]], list[ValidationIssue]]
 
-def _validate_org_charter(
+#: Category of the finding recorded when a pack ships ``org-charter.yaml`` but
+#: the caller supplied no :data:`OrgCharterCheck`: never skipped silently.
+ORG_CHARTER_UNCHECKED_CATEGORY = "org_charter_unchecked"
+
+
+def _check_org_charter(
     pack_dir: Path,
-    pack_directive_ids: set[str],
+    pack_directive_ids: AbstractSet[str],
+    org_charter_check: OrgCharterCheck | None,
 ) -> list[ValidationIssue]:
-    """Validate optional ``pack_dir/org-charter.yaml``.
-
-    Gracefully degrades when ``specify_cli.doctrine.org_charter`` is not
-    available (WP09 ships that module).
-    """
-    issues: list[ValidationIssue] = []
-    charter_path = pack_dir / "org-charter.yaml"
+    """Run the org-charter leg, or record that it could not run."""
+    charter_path = pack_org_charter(pack_dir)
     if not charter_path.exists():
-        return issues
-
-    # Lazy import — WP09 has not necessarily shipped yet.
-    try:
-        from specify_cli.doctrine.org_charter import (
-            OrgCharterPolicy,
-        )
-    except ModuleNotFoundError:
-        # The model is not yet available; surface a single advisory so the
-        # operator knows validation was partial but the file is recognised.
-        issues.append(
+        return []
+    if org_charter_check is None:
+        return [
             ValidationIssue(
-                severity="advisory",
+                severity="error",
                 artifact_type="org-charter",
                 artifact_id=None,
                 file=str(charter_path),
                 message=(
-                    "org-charter.yaml present but OrgCharterPolicy model "
-                    "is not installed; skipping schema validation"
+                    "org charter not validated: no checker supplied "
+                    "(validate the pack through the org-charter composing entry)"
                 ),
+                category=ORG_CHARTER_UNCHECKED_CATEGORY,
             )
-        )
-        return issues
-    except ImportError:  # pragma: no cover - identical to ModuleNotFoundError
-        return issues
-
-    data, parse_err = _safe_load(charter_path)
-    if parse_err is not None:
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                artifact_type="org-charter",
-                artifact_id=None,
-                file=str(charter_path),
-                message=parse_err,
-            )
-        )
-        return issues
-    assert data is not None
-    try:
-        policy = OrgCharterPolicy.model_validate(data)
-    except ValidationError as exc:
-        issues.append(
-            ValidationIssue(
-                severity="error",
-                artifact_type="org-charter",
-                artifact_id=None,
-                file=str(charter_path),
-                message=f"org-charter schema validation failed: {exc.errors()[0].get('msg', exc)}",
-            )
-        )
-        return issues
-
-    # Advisory: unknown enforcement values on governance policies.
-    for gp in getattr(policy, "governance_policies", []) or []:
-        enforcement = getattr(gp, "enforcement", None)
-        if enforcement is not None and str(enforcement) != "advisory":
-            issues.append(
-                ValidationIssue(
-                    severity="advisory",
-                    artifact_type="org-charter",
-                    artifact_id=getattr(gp, "field", None),
-                    file=str(charter_path),
-                    message=(
-                        f"governance policy uses non-advisory enforcement "
-                        f"{enforcement!r}; only 'advisory' is recognised today"
-                    ),
-                )
-            )
-
-    # Advisory: required_directives referencing IDs not in this pack
-    # (could exist in another pack or in built-in — still worth surfacing).
-    required = getattr(policy, "required_directives", []) or []
-    for required_id in required:
-        if required_id not in pack_directive_ids:
-            issues.append(
-                ValidationIssue(
-                    severity="advisory",
-                    artifact_type="org-charter",
-                    artifact_id=required_id,
-                    file=str(charter_path),
-                    message=(
-                        f"required_directive {required_id!r} not found in "
-                        f"this pack's directives/ (may exist in another pack "
-                        f"or in built-in doctrine)"
-                    ),
-                )
-            )
-
-    return issues
+        ]
+    return org_charter_check(charter_path, pack_directive_ids)
 
 
 # ---------------------------------------------------------------------------

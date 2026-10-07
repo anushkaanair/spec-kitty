@@ -417,12 +417,10 @@ def pack_validate(
     Exits 0 when the pack passes validation (advisories do not affect the
     exit code) and 1 when at least one error is reported.
     """
-    from specify_cli.doctrine.pack_validator import (
-        render_validation_result,
-        validate_pack,
-    )
+    from specify_cli.doctrine.org_charter import validate_pack_with_org_charter
+    from specify_cli.doctrine.pack_validator import render_validation_result
 
-    result = validate_pack(pack_path)
+    result = validate_pack_with_org_charter(pack_path)
     render_validation_result(result, json_output=json_output)
     raise typer.Exit(0 if result.ok else 1)
 
@@ -464,12 +462,10 @@ def pack_assemble(
     Exits 0 on success and 1 when conflicts block the merge or when the
     assembled output fails validation.
     """
-    from specify_cli.doctrine.pack_assembler import (
-        assemble_pack,
-        render_assembly_result,
-    )
+    from specify_cli.doctrine.org_charter import assemble_pack_with_org_charter
+    from specify_cli.doctrine.pack_assembler import render_assembly_result
 
-    result = assemble_pack(
+    result = assemble_pack_with_org_charter(
         input_packs=list(input_packs),
         output_dir=output_path,
         force=force,
@@ -1112,10 +1108,8 @@ def org_validate(
     Org fragments use id and plural kind (for example, directives) for nodes.
     Validation uses the runtime loader, which supplies pack provenance fields.
     """
-    from specify_cli.doctrine.pack_validator import (
-        render_validation_result,
-        validate_pack,
-    )
+    from specify_cli.doctrine.org_charter import validate_pack_with_org_charter
+    from specify_cli.doctrine.pack_validator import render_validation_result
 
     # Written explicitly (not relying on validate_pack's own default) so a
     # future default change cannot silently alter org_validate's behaviour
@@ -1123,7 +1117,7 @@ def org_validate(
     # produces the drg-root-graph-missing shape, so this call was never
     # protected by a carve-out in the first place (operator ruling #2,
     # reviews/plan.ruling.md).
-    result = validate_pack(pack_path, check_drg_root=True)
+    result = validate_pack_with_org_charter(pack_path, check_drg_root=True)
 
     render_validation_result(result, json_output=False)
     raise typer.Exit(0 if result.ok else 1)

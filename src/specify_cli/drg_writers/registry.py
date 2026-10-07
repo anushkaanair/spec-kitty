@@ -193,8 +193,8 @@ DOCUMENT_WRITERS: Final[tuple[DocumentWriter, ...]] = (
         document_fn=_rewrite_opposed_by._document_dict,
     ),
     _FunctionDocumentWriter(
-        name="specify_cli.doctrine.pack_assembler._document_dict",
-        document_fn=_pack_assembler._document_dict,
+        name="specify_cli.doctrine.pack_assembler.pack_document_dict",
+        document_fn=_pack_assembler.pack_document_dict,
     ),
 )
 

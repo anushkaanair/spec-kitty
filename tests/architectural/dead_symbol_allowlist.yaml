@@ -725,9 +725,6 @@ entries:
   name: apply_org_charter_pre_fill
   category: category_b_grandfathered_legacy
 - module: specify_cli.doctrine.pack_assembler
-  name: AssemblyResult
-  category: category_b_grandfathered_legacy
-- module: specify_cli.doctrine.pack_assembler
   name: ConflictItem
   category: category_b_grandfathered_legacy
 - module: specify_cli.frontmatter

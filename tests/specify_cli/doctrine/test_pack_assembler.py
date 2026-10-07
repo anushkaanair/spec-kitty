@@ -367,7 +367,7 @@ class TestAssemblePack:
             result = assemble_pack([pack], output)
 
         assert result.ok is True, result.errors
-        mock_validate.assert_called_once_with(output, check_drg_root=False)
+        mock_validate.assert_called_once_with(output, check_drg_root=False, org_charter_check=None)
 
 
 # ---------------------------------------------------------------------------

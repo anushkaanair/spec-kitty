@@ -30,7 +30,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -48,7 +48,9 @@ from charter.offering.drg.override_policy import (
 )
 from charter.packs import write_pack_manifest
 
-from .pack_validator import validate_pack
+from kernel.charter_pack_paths import pack_org_charter
+
+from .pack_validator import OrgCharterCheck, validate_pack
 
 if TYPE_CHECKING:
     # Type-checking-only: this module has no static top-level runtime
@@ -63,6 +65,7 @@ __all__ = [
     "ConflictItem",
     "AssemblyResult",
     "assemble_pack",
+    "pack_document_dict",
     "render_assembly_result",
 ]
 
@@ -306,12 +309,38 @@ def _write_pack_sanctions(output_dir: Path, merged: dict[str, str] | None) -> No
 # ---------------------------------------------------------------------------
 
 
+#: The org-charter leg of :func:`assemble_pack`: merge the given input
+#: ``org-charter.yaml`` files into ``output_dir``. Org charter composition is
+#: an activation concern, so the merge is supplied by the caller (the
+#: org-charter composing entry) rather than imported here.
+OrgCharterMerge = Callable[[Sequence[Path], Path], None]
+
+
+def _org_charter_inputs(input_packs: list[Path]) -> list[Path]:
+    """The ``org-charter.yaml`` files the input packs ship, in pack order."""
+    return [charter for charter in (pack_org_charter(p) for p in input_packs) if charter.exists()]
+
+
+def _org_charter_unmerged(org_charters: list[Path]) -> AssemblyResult:
+    """The refusal for input ``org-charter.yaml`` files with no merge leg supplied."""
+    return AssemblyResult(
+        ok=False,
+        errors=[
+            "org charter not merged: no merger supplied for "
+            + ", ".join(str(p) for p in org_charters)
+            + " (assemble through the org-charter composing entry)"
+        ],
+    )
+
+
 def assemble_pack(
     input_packs: list[Path],
     output_dir: Path,
     *,
     force: bool = False,
     conflicts_out: Path | None = None,
+    org_charter_merge: OrgCharterMerge | None = None,
+    org_charter_check: OrgCharterCheck | None = None,
 ) -> AssemblyResult:
     """Merge *input_packs* into *output_dir*.
 
@@ -324,6 +353,11 @@ def assemble_pack(
         conflicts_out: When given, write the conflict list as JSON to this
             path *before* returning (even on success — the list is just
             empty in that case).
+        org_charter_merge: The org-charter merge leg. When an input pack ships
+            ``org-charter.yaml`` and no merge is supplied, assembly is refused
+            before anything is written (never a silent skip).
+        org_charter_check: The org-charter leg of the output's validation,
+            passed to :func:`validate_pack`.
 
     Returns:
         An :class:`AssemblyResult` summarising the operation.
@@ -342,6 +376,12 @@ def assemble_pack(
             ok=False,
             errors=[f"input pack not found: {m}" for m in missing],
         )
+        _maybe_write_conflicts(conflicts_out, result)
+        return result
+
+    org_charters = _org_charter_inputs(input_packs)
+    if org_charters and org_charter_merge is None:
+        result = _org_charter_unmerged(org_charters)
         _maybe_write_conflicts(conflicts_out, result)
         return result
 
@@ -399,8 +439,9 @@ def assemble_pack(
     drg_written = _copy_drg_fragments(fragments_by_pack, output_dir, force=force)
     artifacts_written += drg_written
 
-    # Merge org-charter.yaml (T045 — best-effort).
-    _merge_org_charters_to_output(input_packs, output_dir)
+    # Merge org-charter.yaml (T045) through the caller's merge leg.
+    if org_charters and org_charter_merge is not None:
+        org_charter_merge(org_charters, output_dir)
 
     # FR-015: carry the union of the inputs' sanctions (before validation).
     _write_pack_sanctions(output_dir, merged_sanctions)
@@ -409,7 +450,7 @@ def assemble_pack(
     # The assembler never writes a pack-root *.graph.yaml (_copy_drg_fragments
     # only writes output_dir/drg/*.graph.yaml) — this carve-out is structural,
     # unconditional, and does not depend on any caller's output shape.
-    validation = validate_pack(output_dir, check_drg_root=False)
+    validation = validate_pack(output_dir, check_drg_root=False, org_charter_check=org_charter_check)
     if not validation.ok:
         # Roll back partial output.
         shutil.rmtree(output_dir, ignore_errors=True)
@@ -560,7 +601,7 @@ def _copy_artifacts(
     return count
 
 
-def _document_dict(graph: DRGGraph) -> dict[str, Any]:
+def pack_document_dict(graph: DRGGraph) -> dict[str, Any]:
     """Serialise a whole ``DRGGraph`` document via the canonical derived writer.
 
     T020/T021 (#3075): standalone/addressable wrapper around
@@ -639,7 +680,7 @@ def _copy_drg_fragments(
                 # serialiser (T020, #2977/#3075) instead of the raw
                 # .model_dump() this used to call directly on each node/edge.
                 pruned_graph = graph.model_copy(update={"edges": kept_edges})
-                pruned = _document_dict(pruned_graph)
+                pruned = pack_document_dict(pruned_graph)
                 import yaml as pyyaml
 
                 dest.write_text(
@@ -649,97 +690,6 @@ def _copy_drg_fragments(
                 shutil.copy2(fragment, dest)
             count += 1
     return count
-
-
-def _merge_org_charters_to_output(
-    input_packs: list[Path], output_dir: Path
-) -> None:
-    """Merge ``org-charter.yaml`` from input packs into ``output_dir``.
-
-    Skipped silently if no input pack provides one or if the OrgCharterPolicy
-    model is not yet shipped (WP09).  Merge semantics:
-
-    * ``interview_defaults``: dict update (last pack wins on key collision).
-    * ``required_directives``: union, deduplicated, order preserved.
-    * ``governance_policies``: concatenated, deduplicated by
-      ``(field, value)``.
-    """
-    charter_files = [p / "org-charter.yaml" for p in input_packs]
-    charter_files = [f for f in charter_files if f.exists()]
-    if not charter_files:
-        return
-
-    # Lazy import — model may not exist yet.
-    try:
-        from specify_cli.doctrine.org_charter import (
-            OrgCharterPolicy,
-        )
-    except ModuleNotFoundError:
-        # Concatenate raw YAMLs naively: copy the *last* pack's file as a
-        # best-effort placeholder.  WP09's full merge will replace this.
-        shutil.copy2(charter_files[-1], output_dir / "org-charter.yaml")
-        return
-    except ImportError:  # pragma: no cover
-        return
-
-    merged = _merge_org_charters(charter_files, OrgCharterPolicy)
-    if merged is None:
-        return
-    import yaml as pyyaml
-
-    out_path = output_dir / "org-charter.yaml"
-    out_path.write_text(
-        pyyaml.safe_dump(merged.model_dump(mode="json"), sort_keys=False),
-        encoding="utf-8",
-    )
-
-
-def _merge_org_charters(
-    charter_files: list[Path],
-    policy_cls: type[Any],
-) -> Any | None:
-    """Apply the merge semantics described above; returns a policy instance."""
-    interview_defaults: dict[str, Any] = {}
-    required_directives: list[str] = []
-    governance_policies: list[dict[str, Any]] = []
-    schema_version: str | None = None
-
-    for path in charter_files:
-        try:
-            data = _yaml().load(path)
-        except (YAMLError, OSError):
-            continue
-        if not isinstance(data, dict):
-            continue
-        schema_version = data.get("schema_version", schema_version)
-        interview_defaults.update(data.get("interview_defaults") or {})
-        for rd in data.get("required_directives") or []:
-            if rd not in required_directives:
-                required_directives.append(rd)
-        for gp in data.get("governance_policies") or []:
-            if isinstance(gp, dict):
-                governance_policies.append(gp)
-
-    # Dedupe governance_policies by (field, value).
-    seen: set[tuple[Any, Any]] = set()
-    deduped: list[dict[str, Any]] = []
-    for gp in governance_policies:
-        key = (gp.get("field"), gp.get("value"))
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(gp)
-
-    payload: dict[str, Any] = {
-        "schema_version": schema_version or "1.0",
-        "interview_defaults": interview_defaults,
-        "required_directives": required_directives,
-        "governance_policies": deduped,
-    }
-    try:
-        return policy_cls.model_validate(payload)
-    except Exception:  # pragma: no cover - validation error returns None
-        return None
 
 
 def _maybe_write_conflicts(
