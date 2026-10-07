@@ -1240,34 +1240,13 @@ entries:
   name: DRG_DIRNAME
   category: category_d_charter_code_topology_relocation_forward_api
 - module: kernel.charter_pack_paths
-  name: DRG_FRAGMENT
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
   name: LegacyDoctrineRootWarning
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: ORG_CHARTER_FILENAME
   category: category_d_charter_code_topology_relocation_forward_api
 - module: kernel.charter_pack_paths
   name: PRESETS_DIRNAME
   category: category_d_charter_code_topology_relocation_forward_api
 - module: kernel.charter_pack_paths
-  name: PROJECT_GRAPH_FILENAME
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: pack_drg_fragment
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: pack_org_charter
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
   name: pack_presets_dir
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: project_pack_path
-  category: category_d_charter_code_topology_relocation_forward_api
-- module: kernel.charter_pack_paths
-  name: project_pack_root
   category: category_d_charter_code_topology_relocation_forward_api
 - module: charter.drg
   name: merge_three_layers
