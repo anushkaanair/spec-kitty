@@ -86,13 +86,8 @@ from charter.offering.packs.presets import (
 )
 
 __all__ = [
-    "GOVERNED_KEYS",
-    "PackNotFoundError",
-    "PackPresetNotFoundError",
     "PresetApplicationError",
-    "PresetIdUnresolvedError",
     "PresetPlan",
-    "PresetWouldOverwriteError",
     "apply_preset_plan",
     "find_offering_pack",
     "load_pack_preset",
@@ -466,7 +461,8 @@ def plan_preset_application(repo_root: Path, pack_name: str, preset_name: str) -
     removed: list[str] = []
     changes: dict[str, tuple[object, object]] = {}
     customised: list[str] = []
-    for key, after in target.items():
+    for key in (key for key in GOVERNED_KEYS if key in target):
+        after = target[key]
         before = _current_value(document, key)
         if before == after:
             continue
