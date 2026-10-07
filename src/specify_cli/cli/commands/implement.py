@@ -5,6 +5,7 @@ from __future__ import annotations
 import functools
 import json
 from collections.abc import Callable
+from contextlib import ExitStack
 from io import StringIO
 from pathlib import Path
 from typing import Annotated, Any
@@ -412,26 +413,32 @@ def implement(
     # landed) -- so the printed message never contradicts a WP that is
     # already `in_progress`/committed.
     workspace_created = False
-    try:
-        allocation = implement_phases.allocate(ctx, wp_id, selection, base)
-        result = allocation.result
-        workspace_path = result.workspace_path
-        branch_name = result.branch_name
-        workspace_created = True
+    # #5796 / #5468 (plan A6, A9): the checkout claim lock (single_branch repo-root lane only)
+    # is held from before the occupancy scan, the Mission write lock from the claim emit,
+    # both through the claim commit. Lock order: checkout lock outermost.
+    with ExitStack() as claim_stack:
+        try:
+            implement_phases.enter_checkout_claim_lock(claim_stack, ctx, selection)
+            allocation = implement_phases.allocate(ctx, wp_id, selection, base)
+            result = allocation.result
+            workspace_path = result.workspace_path
+            branch_name = result.branch_name
+            workspace_created = True
 
-        status_result = implement_phases.record_claim(ctx, wp_id, effective_actor, allocation, status_execution_mode)
+            implement_phases.hold_mission_write_lock(claim_stack, ctx)
+            status_result = implement_phases.record_claim(ctx, wp_id, effective_actor, allocation, status_execution_mode)
 
-        _report_workspace_created(tracker, result, workspace_path, ctx.repo_root)
+            _report_workspace_created(tracker, result, workspace_path, ctx.repo_root)
 
-        _print_explicit_base_ref(allocation.effective_base, selection.resolved_workspace)
-    except typer.Exit:
-        console.print(tracker.render())
-        raise
-    except Exception as exc:
-        _render_create_failure(tracker, exc, workspace_created)
-        raise typer.Exit(1) from exc
+            _print_explicit_base_ref(allocation.effective_base, selection.resolved_workspace)
+        except typer.Exit:
+            console.print(tracker.render())
+            raise
+        except Exception as exc:
+            _render_create_failure(tracker, exc, workspace_created)
+            raise typer.Exit(1) from exc
 
-    implement_phases.commit_claim(ctx, wp_id, status_result)
+        implement_phases.commit_claim(ctx, wp_id, status_result)
 
     if json_output:
         print(json.dumps(_build_implement_json_payload(ctx.repo_root, ctx.mission_slug, wp_id, workspace_path, branch_name, result, selection.resolved_workspace)))
