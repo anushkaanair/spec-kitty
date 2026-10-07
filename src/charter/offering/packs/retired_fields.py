@@ -24,21 +24,19 @@ from typing import Any
 from pydantic import ValidationError
 
 __all__ = [
-    "MIGRATION_RUNBOOK",
     "RETIRED_PACK_FIELD",
     "RETIRED_PACK_FIELDS",
     "RetiredField",
     "RetiredPackFieldError",
     "reject_retired_fields",
     "retired_field_errors",
-    "retired_field_message",
 ]
 
 #: The error code a retired pack field is rejected with (``contracts/errors.md``).
 RETIRED_PACK_FIELD = "RETIRED_PACK_FIELD"
 
 #: The runbook every rejection points at.
-MIGRATION_RUNBOOK = "docs/migrations/charter-pack-cutover.md"
+_MIGRATION_RUNBOOK = "docs/migrations/charter-pack-cutover.md"
 
 
 @dataclass(frozen=True)
@@ -54,9 +52,9 @@ class RetiredField:
 RETIRED_PACK_FIELDS: tuple[RetiredField, ...] = (RetiredField(file="org-charter.yaml", field="doctrine_pack_id", replacement="charter_pack_id"),)
 
 
-def retired_field_message(location: str, field: str, replacement: str) -> str:
+def _retired_field_message(location: str, field: str, replacement: str) -> str:
     """Return the operator message for a retired *field* found at *location*."""
-    return f"{location}: field '{field}' was removed. Replacement: {replacement}. See {MIGRATION_RUNBOOK}."
+    return f"{location}: field '{field}' was removed. Replacement: {replacement}. See {_MIGRATION_RUNBOOK}."
 
 
 class RetiredPackFieldError(ValueError):
@@ -70,7 +68,7 @@ class RetiredPackFieldError(ValueError):
         self.replacement = retired.replacement
         self.path = path
         location = str(path) if path is not None else retired.file
-        super().__init__(retired_field_message(location, retired.field, retired.replacement))
+        super().__init__(_retired_field_message(location, retired.field, retired.replacement))
 
     @property
     def retired(self) -> RetiredField:

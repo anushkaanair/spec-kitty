@@ -16,14 +16,14 @@ from charter.activation.org_charter import (
 from charter.activation.schemas import GovernanceConfig
 from charter.offering.packs import retired_fields
 from charter.offering.packs.retired_fields import (
-    MIGRATION_RUNBOOK,
+    _MIGRATION_RUNBOOK,
     RETIRED_PACK_FIELD,
     RETIRED_PACK_FIELDS,
     RetiredField,
     RetiredPackFieldError,
     reject_retired_fields,
     retired_field_errors,
-    retired_field_message,
+    _retired_field_message,
 )
 
 pytestmark = pytest.mark.fast
@@ -54,8 +54,8 @@ def test_table_holds_the_charter_pack_id_rename() -> None:
 
 
 def test_message_names_location_field_replacement_and_runbook() -> None:
-    message = retired_field_message("org-charter.yaml", OLD, NEW)
-    assert message == f"org-charter.yaml: field '{OLD}' was removed. Replacement: {NEW}. See {MIGRATION_RUNBOOK}."
+    message = _retired_field_message("org-charter.yaml", OLD, NEW)
+    assert message == f"org-charter.yaml: field '{OLD}' was removed. Replacement: {NEW}. See {_MIGRATION_RUNBOOK}."
 
 
 def test_reject_raises_typed_error_with_code_file_field_replacement(tmp_path: Path) -> None:
@@ -95,7 +95,7 @@ def test_planted_second_entry_is_rejected_the_same_way(monkeypatch: pytest.Monke
     with pytest.raises(RetiredPackFieldError) as info:
         reject_retired_fields({"planted_field": 1}, file="pack.yaml", path=None)
     assert info.value.retired == planted
-    assert str(info.value) == retired_field_message("pack.yaml", "planted_field", "delete it")
+    assert str(info.value) == _retired_field_message("pack.yaml", "planted_field", "delete it")
 
 
 def test_retired_field_errors_recovers_errors_wrapped_by_pydantic() -> None:
@@ -195,7 +195,7 @@ def test_validator_names_retired_field_and_replacement(tmp_path: Path) -> None:
     assert len(issues) == 1
     issue = issues[0]
     assert (issue.severity, issue.category, issue.artifact_id, issue.file) == ("error", RETIRED_PACK_FIELD, OLD, str(path))
-    assert issue.message == f"{RETIRED_PACK_FIELD}: {retired_field_message(str(path), OLD, NEW)}"
+    assert issue.message == f"{RETIRED_PACK_FIELD}: {_retired_field_message(str(path), OLD, NEW)}"
 
 
 def test_validator_keeps_generic_message_for_other_schema_failures(tmp_path: Path) -> None:
