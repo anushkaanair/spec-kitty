@@ -16,7 +16,7 @@ from ruamel.yaml.error import YAMLError
 
 from charter.activation._catalog_miss import CatalogMissCause, CatalogMissDiagnosis
 from charter.activation._io import load_charter_file
-from kernel.charter_pack_paths import resolve_project_pack_read_root
+from kernel.charter_pack_paths import project_pack_root
 from charter.activation.catalog import DoctrineCatalog, load_doctrine_catalog, resolve_doctrine_root
 from charter.activation.context_renderers.catalog_diagnosis import _diagnose_catalog_miss
 from charter.activation.charter_yaml_io import (
@@ -222,7 +222,7 @@ def _resolve_config_activated_roots(
     # (no behavior change) -- see #2529.
     org_roots: list[Path] | None = list(pack_context.pack_roots[1:]) if pack_context is not None else None
 
-    layer_roots = {"project": resolve_project_pack_read_root(pack_context.repo_root, quiet=True)} if pack_context is not None else None
+    layer_roots = {"project": project_pack_root(pack_context.repo_root)} if pack_context is not None else None
 
     try:
         return ConfigActivatedRoots(
@@ -1417,7 +1417,7 @@ _TRACKED_KINDS: dict[str, _TrackedKind] = {
 
 def _model_reference(kind: str, model: Any, fields: _ReferenceFields) -> CharterReference:
     """Build the :class:`CharterReference` for a repository *model* of *kind*."""
-    return _doctrine_model_reference(
+    return _model_doctrine_reference(
         kind=kind,
         raw_id=fields.id_of(model),
         title=fields.title_of(model),
@@ -1953,7 +1953,7 @@ def _load_yaml_asset(path: Path, *, unsafe: bool = False) -> dict[str, object]:
     return data
 
 
-def _doctrine_model_reference(
+def _model_doctrine_reference(
     *,
     kind: str,
     raw_id: str,
