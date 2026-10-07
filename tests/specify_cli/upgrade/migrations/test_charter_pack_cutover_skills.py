@@ -272,3 +272,9 @@ def test_real_catalog_lists_shipped_skills() -> None:
     names = real_shipped_skill_names()
     assert "spk-run-next" in names
     assert "spec-kitty-constitution-doctrine" not in names
+
+
+def test_no_builtin_catalog_means_nothing_is_shipped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shipped names come from the skill-catalog seam; no catalog ships nothing."""
+    monkeypatch.setattr("specify_cli.skills.catalog.resolve_builtin_skill_catalog", lambda: None)
+    assert real_shipped_skill_names() == frozenset()

@@ -196,9 +196,10 @@ def _configured_skill_roots(project: Path) -> list[str]:
 
 def _shipped_skill_names() -> frozenset[str]:
     """Names the installed CLI's skill catalog still ships (the upgrade finalizer installs those)."""
-    from specify_cli.skills.registry import SkillRegistry
+    from specify_cli.skills.catalog import resolve_builtin_skill_catalog
 
-    return frozenset(skill.name for skill in SkillRegistry.from_package().discover_skills())
+    registry = resolve_builtin_skill_catalog()
+    return frozenset(skill.name for skill in registry.discover_skills()) if registry is not None else frozenset()
 
 
 def find_removed_skill_copies(project_path: Path) -> list[SkillCopy]:
