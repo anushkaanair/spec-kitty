@@ -315,7 +315,6 @@ def _init(parent: Path, name: str) -> Path:
 
 @covers("FR-003", "SC-001")
 @pytest.mark.integration
-@pending_until("WP09", "init leaves the project as --preset default would")
 def test_fr003_init_without_activation_equals_default_preset(tmp_path: Path) -> None:
     initialised = _init(tmp_path, "plain")
     second = _init(tmp_path, "preset")
