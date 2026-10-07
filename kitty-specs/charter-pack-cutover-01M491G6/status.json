@@ -506,7 +506,7 @@
     },
     "WP18": {
       "actor": "claude",
-      "agent": "claude",
+      "agent": null,
       "agent_profile": "reviewer-renata",
       "agent_profile_version": "1.0",
       "force_count": 1,
@@ -516,9 +516,11 @@
       "last_transition_at": "2026-10-07T21:20:26.065241+00:00",
       "model": "__resolved_model_absent__",
       "notes": [
-        "WP18 done: 7 spk-charter-*/spk-practice-* skills (concise SKILL.md + folded detail in references/), 12 old dirs deleted, 13 names in RETIRED_CANONICAL_SKILL_NAMES (= WP12 REMOVED_SKILL_NAMES), all living refs repointed, generated files regenerated. WP18 acceptance tests red->green; acceptance suite 0 failed/0 xpassed (NFR-003 timing flake under load, passes alone). Pre-existing reds not from WP18: test_skill_catalog_seam (WP12 _charter_pack_cutover_skills.py:201 SkillRegistry.from_package), tests/charter/test_context_noop_stability (3 setup errors, .kittify/doctrine not tracked). WP01 acceptance fix logged: precedence bug + realistic global-copy seeding."
+        "WP18 done: 7 spk-charter-*/spk-practice-* skills (concise SKILL.md + folded detail in references/), 12 old dirs deleted, 13 names in RETIRED_CANONICAL_SKILL_NAMES (= WP12 REMOVED_SKILL_NAMES), all living refs repointed, generated files regenerated. WP18 acceptance tests red->green; acceptance suite 0 failed/0 xpassed (NFR-003 timing flake under load, passes alone). Pre-existing reds not from WP18: test_skill_catalog_seam (WP12 _charter_pack_cutover_skills.py:201 SkillRegistry.from_package), tests/charter/test_context_noop_stability (3 setup errors, .kittify/doctrine not tracked). WP01 acceptance fix logged: precedence bug + realistic global-copy seeding.",
+        "Cycle 1: one blocking item. The red-first commit left pending_until unused in test_upgrade_migration.py (ruff F401). Everything else is verified."
       ],
       "provider": "__resolved_provider_absent__",
+      "review": null,
       "review_result": {
         "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP18-skill-families/review-cycle-1.md",
         "reference": "review-cycle://charter-pack-cutover-01M491G6/WP18-skill-families/review-cycle-1.md",
@@ -526,13 +528,13 @@
         "verdict": "changes_requested"
       },
       "role": "reviewer",
-      "shell_pid": 28804,
-      "shell_pid_created_at": "1791406599.97",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
       "subtasks": {
-        "T088": "done",
-        "T089": "done",
-        "T090": "done",
-        "T091": "done"
+        "T088": "planned",
+        "T089": "planned",
+        "T090": "planned",
+        "T091": "planned"
       }
     },
     "WP19": {
