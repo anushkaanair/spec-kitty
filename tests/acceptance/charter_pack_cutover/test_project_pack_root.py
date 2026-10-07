@@ -14,7 +14,7 @@ import pytest
 from click.testing import Result
 
 from ._requirements import REPO_ROOT
-from ._support import covers, describe, load_yaml, output_of, pending_until, read_json_output, run_cli
+from ._support import covers, describe, load_yaml, output_of, read_json_output, run_cli
 from .conftest import MIGRATED_PROJECT_DIRECTIVE, MIGRATED_PROJECT_DIRECTIVE_ID
 from .legacy_fixtures import STATIC_ROOT
 
