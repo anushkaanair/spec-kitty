@@ -39,6 +39,7 @@ from typing import Any
 from kernel.charter_pack_paths import KITTIFY_DIRNAME
 
 __all__ = [
+    "CONFIG_KEY_FINDINGS",
     "LEGACY_PROJECT_ROOT_POSIX",
     "LEGACY_PROJECT_ROOT_RELPATH",
     "LEGACY_SELECTION_KEYWORD",
@@ -101,6 +102,14 @@ _STRUCTURAL_FINDINGS: tuple[str, ...] = (
     _LEGACY_ORGANISATION_PACKS_KEY,
     _LEGACY_GOVERNANCE_SELECTION_KEY,
     _LEGACY_TRACKER_OWNERSHIP_KEY,
+)
+
+#: The findings that name a retired key in ``config.yaml``. The cutover
+#: migration confirms them with a dry run before re-selecting itself after a
+#: recorded application: a key it cannot rewrite (``charter_packs`` is not a
+#: mapping) is kept for review and must not re-select it on every upgrade.
+CONFIG_KEY_FINDINGS: frozenset[str] = frozenset(
+    {_LEGACY_ORG_PACKS_KEY, _LEGACY_ORGANISATION_PACKS_KEY, _LEGACY_GOVERNANCE_SELECTION_KEY, _LEGACY_TRACKER_OWNERSHIP_KEY}
 )
 
 #: An org block names packs either as a ``packs`` list or in the single-pack form (``local_path``).

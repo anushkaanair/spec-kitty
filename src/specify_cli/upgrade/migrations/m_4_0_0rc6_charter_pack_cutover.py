@@ -72,6 +72,7 @@ from specify_cli.asset_preservation import guard_destructive_removal
 from specify_cli.asset_preservation.backup import write_file_verbatim
 from specify_cli.gitignore_manager import GitignorePathError, read_gitignore_text, write_gitignore_text
 from specify_cli.migration.legacy_charter_layout import (
+    CONFIG_KEY_FINDINGS,
     LEGACY_PROJECT_ROOT_POSIX,
     LEGACY_PROJECT_ROOT_RELPATH,
     LEGACY_SELECTION_KEYWORD,
@@ -132,6 +133,8 @@ _TOP_LEVEL_LEGACY_KEY_LINE = re.compile(rf"^['\"]?{LEGACY_SELECTION_KEYWORD}['\"
 _PACK_NAME_INVALID = re.compile(r"[^a-z0-9]+")
 
 _UPGRADE_REMEDY = "fix the file, then run `spec-kitty upgrade` again"
+#: Why a retired org key stays: the canonical home it would move into is not a mapping.
+_NOT_A_MAPPING = f"{_CHARTER_PACKS_KEY} is not a mapping; make it one by hand, then run `spec-kitty upgrade` again"
 
 
 # --------------------------------------------------------------------------- #
@@ -640,14 +643,14 @@ def _rewrite_legacy_org(run: _Run, config: CommentedMap, rel: str) -> bool:
         run.report.rewritten.append(f"{rel}: dropped {legacy_label} ({_CHARTER_PACKS_KEY}.{_ORG_KEY} is already present; the canonical value wins)")
     elif _PACKS_KEY in org:
         if not _place_canonical_org(config, org, LEGACY_SELECTION_KEYWORD):
-            run.report.kept_for_review.append(f"{rel}: {legacy_label} kept ({_CHARTER_PACKS_KEY} is not a mapping)")
+            run.report.kept_for_review.append(f"{rel}: {legacy_label} kept ({_NOT_A_MAPPING})")
             return False
         del section[_ORG_KEY]
         run.report.rewritten.append(f"{rel}: {legacy_label} -> {_CHARTER_PACKS_KEY}.{_ORG_KEY}.{_PACKS_KEY}")
     else:
         canonical, name = _single_pack_org(org)
         if not _place_canonical_org(config, canonical, LEGACY_SELECTION_KEYWORD):
-            run.report.kept_for_review.append(f"{rel}: {legacy_label} kept ({_CHARTER_PACKS_KEY} is not a mapping)")
+            run.report.kept_for_review.append(f"{rel}: {legacy_label} kept ({_NOT_A_MAPPING})")
             return False
         for key in _SINGLE_PACK_FIELDS:
             org.pop(key, None)
@@ -671,7 +674,7 @@ def _rewrite_organisation_packs(run: _Run, config: CommentedMap, rel: str) -> bo
     converted = [CommentedMap({"name": e["name"], _LOCAL_PATH_KEY: e["path"]}) for e in flat if is_convertible_organisation_pack(e)]
     kept = [e for e in flat if not is_convertible_organisation_pack(e)]
     if not _place_canonical_org(config, CommentedMap({_PACKS_KEY: converted}), ORGANISATION_PACKS_KEYWORD):
-        run.report.kept_for_review.append(f"{rel}: {ORGANISATION_PACKS_KEYWORD} kept ({_CHARTER_PACKS_KEY} is not a mapping)")
+        run.report.kept_for_review.append(f"{rel}: {ORGANISATION_PACKS_KEYWORD} kept ({_NOT_A_MAPPING})")
         return False
     names = ", ".join(str(entry["name"]) for entry in converted)
     run.report.rewritten.append(f"{rel}: {ORGANISATION_PACKS_KEYWORD} -> {_CHARTER_PACKS_KEY}.{_ORG_KEY}.{_PACKS_KEY} ({names})")
@@ -790,6 +793,9 @@ _STEPS: tuple[Callable[[_Run], None], ...] = (
     _rewrite_activation_pack_ids,
 )
 
+#: The dry run :meth:`CharterPackCutoverMigration.structural_detect` uses to confirm a retired config key.
+_STRUCTURAL_KEY_STEPS: tuple[Callable[[_Run], None], ...] = (_rewrite_config_keys, _rewrite_activation_pack_ids)
+
 
 def _require_readable_layout(project_path: Path) -> None:
     """Fail before writing anything when a file the predicate reads cannot be parsed."""
@@ -834,11 +840,18 @@ class CharterPackCutoverMigration(BaseMigration):
             return True
 
     def structural_detect(self, project_path: Path) -> bool:
-        """True for the structural legacy state only: retired root, retired keys, ``doctrine_pack_id``."""
+        """True for the structural legacy state only: retired root, retired keys, ``doctrine_pack_id``.
+
+        A retired ``config.yaml`` key re-selects the migration only when a dry
+        run can act on it: one kept for review (``charter_packs`` is not a
+        mapping) would otherwise re-select a recorded cutover on every upgrade.
+        """
         try:
-            if detect_legacy_charter_layout(project_path):
+            findings = set(detect_legacy_charter_layout(project_path))
+            if findings - CONFIG_KEY_FINDINGS:
                 return True
-            return bool(_run_steps(project_path, dry_run=True, steps=(_rewrite_activation_pack_ids,)).is_actionable())
+            steps = _STRUCTURAL_KEY_STEPS if findings else (_rewrite_activation_pack_ids,)
+            return bool(_run_steps(project_path, dry_run=True, steps=steps).is_actionable())
         except Exception:  # total by contract: any failure selects the migration; apply() names it
             return True
 

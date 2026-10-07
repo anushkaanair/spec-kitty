@@ -572,3 +572,44 @@ def test_apply_names_an_uninspectable_legacy_root(tmp_path: Path, monkeypatch: p
     _deny_kittify(tmp_path, monkeypatch, "os.lstat")
     with pytest.raises(cutover.MigrationStateUnreadableError, match=r"\.kittify/doctrine could not be inspected"):
         _apply(tmp_path)
+
+
+# --------------------------------------------------------------------------- #
+# A retired key kept for review does not re-select a recorded cutover (finding 5)
+# --------------------------------------------------------------------------- #
+
+
+@pytest.mark.usefixtures("registry")
+def test_kept_legacy_org_does_not_reselect_a_recorded_cutover(tmp_path: Path) -> None:
+    config = _write(tmp_path, ".kittify/config.yaml", "charter_packs: oops\ndoctrine:\n  org:\n    packs: []\n")
+    _stamp(tmp_path, "4.0.0rc6")
+    migration = CharterPackCutoverMigration()
+    assert migration.detect(tmp_path) is True  # first application: selected
+    first = MigrationRunner(tmp_path).upgrade("4.0.0rc6", include_worktrees=False)
+    assert first.success, first.errors
+    assert CUTOVER_ID in first.migrations_applied
+    assert "charter_packs is not a mapping" in _report(first.migration_results[CUTOVER_ID])["kept_for_review"][0]
+    # Recorded, and the kept key is not actionable: not re-selected on the next upgrade.
+    assert detect_legacy_charter_layout(tmp_path) == ("legacy_org_packs_key",)
+    assert migration.structural_detect(tmp_path) is False
+    assert migration.reselect_when_recorded(tmp_path) is False
+    kept = config.read_bytes()
+    second = MigrationRunner(tmp_path).upgrade("4.0.0rc6", include_worktrees=False)
+    assert second.success, second.errors
+    assert CUTOVER_ID not in second.migrations_applied
+    assert config.read_bytes() == kept
+    # Once the operator fixes charter_packs, the key is actionable and the cutover is selected again.
+    config.write_text("charter_packs: {}\ndoctrine:\n  org:\n    packs: []\n", encoding="utf-8")
+    assert migration.structural_detect(tmp_path) is True
+    again = MigrationRunner(tmp_path).upgrade("4.0.0rc6", include_worktrees=False)
+    assert again.success, again.errors
+    assert CUTOVER_ID in again.migrations_applied
+    assert detect_legacy_charter_layout(tmp_path) == ()
+
+
+@pytest.mark.usefixtures("registry")
+def test_recorded_cutover_with_a_replanted_config_key_runs_again(tmp_path: Path) -> None:
+    _stamp(tmp_path, "4.0.0rc6", recorded="success")
+    _write(tmp_path, ".kittify/config.yaml", "tracker:\n  doctrine:\n    mode: external_authoritative\n")
+    assert CharterPackCutoverMigration().structural_detect(tmp_path) is True
+    assert [m.migration_id for m in MigrationRegistry.get_applicable("4.0.0rc6", "4.0.0rc6", tmp_path)][:1] == [CUTOVER_ID]

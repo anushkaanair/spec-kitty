@@ -142,7 +142,9 @@ def test_charter_packs_not_a_mapping_keeps_the_legacy_block_for_review(tmp_path:
     result = CharterPackCutoverMigration().apply(tmp_path)
     assert result.success
     assert config.read_bytes() == before
-    assert _report(result)["kept_for_review"] == [".kittify/config.yaml: doctrine.org.packs kept (charter_packs is not a mapping)"]
+    assert _report(result)["kept_for_review"] == [
+        ".kittify/config.yaml: doctrine.org.packs kept (charter_packs is not a mapping; make it one by hand, then run `spec-kitty upgrade` again)"
+    ]
 
 
 @pytest.mark.parametrize(
