@@ -1,7 +1,7 @@
 {
-  "event_count": 137,
-  "last_event_id": "01M4BYHT0WVVHMW7NKJDXY5SQP",
-  "materialized_at": "2026-10-07T19:48:22.088006+00:00",
+  "event_count": 139,
+  "last_event_id": "01M4BYK6CKSQ3NZBW7WMBXZXHK",
+  "materialized_at": "2026-10-07T19:49:07.525572+00:00",
   "mission_number": "",
   "mission_slug": "charter-pack-cutover-01M491G6",
   "mission_type": "",
@@ -13,9 +13,9 @@
     "claimed": 0,
     "done": 0,
     "for_review": 0,
-    "in_progress": 1,
+    "in_progress": 2,
     "in_review": 0,
-    "planned": 11
+    "planned": 10
   },
   "work_packages": {
     "WP01": {
@@ -496,11 +496,15 @@
       }
     },
     "WP18": {
-      "actor": "finalize-tasks",
+      "actor": "claude",
+      "agent": "claude",
       "force_count": 0,
-      "lane": "planned",
-      "last_event_id": "01M49BRXQJQ3PYCS79KZ6YXAZV",
-      "last_transition_at": "2026-10-06T19:41:43.538142+00:00"
+      "implementer_of_record": "claude",
+      "lane": "in_progress",
+      "last_event_id": "01M4BYK6CKSQ3NZBW7WMBXZXHK",
+      "last_transition_at": "2026-10-07T19:49:07.525572+00:00",
+      "shell_pid": 23398,
+      "shell_pid_created_at": "1791402479.3"
     },
     "WP19": {
       "actor": "finalize-tasks",
