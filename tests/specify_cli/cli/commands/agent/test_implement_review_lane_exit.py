@@ -113,17 +113,13 @@ def test_operator_force_with_note_takes_over_a_review_lane(lane: str, tmp_path: 
     assert "gemini" in str(last["actor"])
 
 
-@pytest.mark.parametrize(
-    "extra",
-    [("--force",), ("--force", "--note", "  "), ("--note", "why")],
-    ids=["force-without-note", "force-blank-note", "note-without-force"],
-)
-def test_invalid_force_note_pairing_is_refused_before_any_write(extra: tuple[str, ...], tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_force_without_note_is_refused_before_any_write(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Wiring proof only: every pairing case is unit-tested on ``validate_force_note`` (tests/characterization/test_trio_pure_cores.py)."""
     m = h.build_mission(tmp_path, monkeypatch)
     h.drive_to_for_review(m)
     before = h.events(m)
 
-    result = _implement_with(m, h.THIRD, monkeypatch, *extra)
+    result = _implement_with(m, h.THIRD, monkeypatch, "--force")
 
     assert result.exit_code == 1, result.output
     assert "--note" in result.output
@@ -153,21 +149,3 @@ def test_force_without_agent_is_refused_before_any_write(tmp_path: Path, monkeyp
     assert result.exit_code == 1, result.output
     assert "--force requires --agent" in result.output
     assert h.events(m) == before
-
-
-@pytest.mark.parametrize(
-    ("lane", "expected"),
-    [
-        pytest.param("in_review", "WP01 is under review: wait for the reviewer's verdict", id="in-review"),
-        pytest.param("for_review", None, id="for-review-says-it-in-the-conflict"),
-        pytest.param("in_progress", None, id="other-lane"),
-    ],
-)
-def test_review_lane_hint_names_the_route(lane: str, expected: str | None, capsys: pytest.CaptureFixture[str]) -> None:
-    from specify_cli.cli.commands.agent.workflow_executor import _print_review_lane_hint
-    from specify_cli.status import Lane
-
-    _print_review_lane_hint(Lane(lane), "WP01")
-
-    out = capsys.readouterr().out
-    assert (expected in out) if expected else out == ""

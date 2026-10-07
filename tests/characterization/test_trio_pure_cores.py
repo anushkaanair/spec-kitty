@@ -42,6 +42,7 @@ from specify_cli.cli.commands.agent.workflow import _resolve_review_context
 from specify_cli.cli.commands.agent.workflow_cores import (
     has_prior_rejection as _has_prior_rejection,
     resolve_review_feedback_context as _resolve_review_feedback_context,
+    validate_force_note,
 )
 from specify_cli.review.cycle import create_rejected_review_cycle
 from specify_cli.status import Lane, StatusEvent
@@ -1202,3 +1203,22 @@ class TestIsReviewRejectionEdge:
         second = is_review_rejection_edge("in_review", "in_progress")
 
         assert first is second is True
+
+
+@pytest.mark.parametrize(
+    ("force", "note", "expected"),
+    [
+        pytest.param(True, "  reviewer away  ", "reviewer away", id="force-with-note-is-trimmed"),
+        pytest.param(False, None, None, id="neither"),
+        pytest.param(True, None, ValueError, id="force-without-note"),
+        pytest.param(True, "  ", ValueError, id="force-with-blank-note"),
+        pytest.param(False, "why", ValueError, id="note-without-force"),
+    ],
+)
+def test_validate_force_note_pairing(force: bool, note: str | None, expected: object) -> None:
+    """#5446: ``--force`` and ``--note`` come together; a bad pairing is refused before any status read or write."""
+    if expected is ValueError:
+        with pytest.raises(ValueError, match="--note"):
+            validate_force_note(force, note)
+    else:
+        assert validate_force_note(force, note) == expected

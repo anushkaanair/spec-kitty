@@ -100,6 +100,19 @@ def test_write_and_from_file_round_trip(tmp_path: Path) -> None:
     assert restored.affected_files == artifact.affected_files
 
 
+@pytest.mark.regression
+def test_write_never_replaces_an_existing_cycle_file(tmp_path: Path) -> None:
+    """A review-cycle file is created exclusively: a second write to the same path raises and keeps the first bytes."""
+    path = tmp_path / "tasks" / "WP01" / "review-cycle-1.md"
+    _sample_artifact(body="first rejection").write(path)
+    before = path.read_bytes()
+
+    with pytest.raises(FileExistsError):
+        _sample_artifact(body="second rejection").write(path)
+
+    assert path.read_bytes() == before
+
+
 def test_write_and_from_file_preserves_complete_override(tmp_path: Path) -> None:
     """A write()→from_file() cycle must not drop the approval override (#1924).
 

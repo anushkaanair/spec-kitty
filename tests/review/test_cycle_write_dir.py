@@ -37,6 +37,12 @@ from specify_cli.agent_tasks_ports import MissionHandle, RealCoordCommitRouter, 
 from specify_cli.cli.commands.agent import app as agent_app
 from specify_cli.coordination.coord_seed import CoordSeedForkRefused
 from specify_cli.core.commit_guard import GuardCapability
+from specify_cli.review.artifacts import ReviewCycleArtifact
+from specify_cli.review.cycle import (
+    _review_cycle_read_candidate_dirs,
+    create_rejected_review_cycle,
+    next_review_feedback_source_path,
+)
 from specify_cli.coordination.workspace import CoordinationWorkspace
 from specify_cli.status import TransitionRequest
 from tests._factories import make_mission
@@ -207,6 +213,63 @@ def test_rejection_writes_review_cycle_in_place_on_coordination_worktree_with_no
 
     status = _git(repo, "status", "--porcelain", "--", f"kitty-specs/{mission_slug}").stdout
     assert status.strip() == "", f"dirty root checkout after a coordination rejection: {status!r}"
+
+
+def _primary_only_cycle_one(repo: Path, mission_slug: str) -> Path:
+    """Record review-cycle-1 on the PRIMARY checkout only (a ``--no-auto-commit`` / ``local_only`` rejection)."""
+    primary_wp_dir = repo / "kitty-specs" / mission_slug / "tasks" / _WP_SLUG
+    ReviewCycleArtifact(
+        cycle_number=1,
+        wp_id=_WP_ID,
+        mission_slug=mission_slug,
+        reviewer_agent="reviewer-renata",
+        reviewed_at="2026-10-07T00:00:00Z",
+        affected_files=[],
+        reproduction_command=None,
+        body="**Issue**: first rejection, recorded on PRIMARY only.\n",
+    ).write(primary_wp_dir / "review-cycle-1.md")
+    return primary_wp_dir
+
+
+def _coord_wp_dir(repo: Path, mission_slug: str) -> Path:
+    return placement_seam(repo, mission_slug).write_dir(MissionArtifactKind.REVIEW_CYCLE).path / "tasks" / _WP_SLUG
+
+
+@pytest.mark.regression
+def test_second_rejection_on_the_coordination_surface_does_not_reuse_a_primary_cycle_number(tmp_path: Path) -> None:
+    """Cycle numbers are allocated across every surface the review readers consult, never per written directory."""
+    repo, mission_slug = _build_coord_fixture(tmp_path)
+    primary_wp_dir = _primary_only_cycle_one(repo, mission_slug)
+    cycle_one = primary_wp_dir / "review-cycle-1.md"
+    before = cycle_one.read_bytes()
+
+    created = create_rejected_review_cycle(
+        main_repo_root=repo,
+        mission_slug=mission_slug,
+        wp_id=_WP_ID,
+        wp_slug=_WP_SLUG,
+        body="**Issue**: second rejection, written to COORD.\n",
+        reviewer_agent="reviewer-renata",
+        commit_router=None,
+    )
+
+    coord_wp_dir = _coord_wp_dir(repo, mission_slug)
+    assert coord_wp_dir != primary_wp_dir, "fixture must route the write to the COORD surface"
+    assert created.artifact_path.name == "review-cycle-2.md"
+    assert (coord_wp_dir / "review-cycle-2.md").is_file()
+    assert not (coord_wp_dir / "review-cycle-1.md").exists()
+    assert cycle_one.read_bytes() == before
+
+
+@pytest.mark.regression
+def test_advertised_feedback_path_matches_the_allocator_across_surfaces(tmp_path: Path) -> None:
+    repo, mission_slug = _build_coord_fixture(tmp_path)
+    _primary_only_cycle_one(repo, mission_slug)
+    coord_wp_dir = _coord_wp_dir(repo, mission_slug)
+
+    siblings = _review_cycle_read_candidate_dirs(repo, mission_slug, _WP_SLUG)
+
+    assert next_review_feedback_source_path(coord_wp_dir, siblings) == coord_wp_dir / "review-feedback-2.md"
 
 
 def test_second_rejection_continues_cycle_numbering_on_the_coordination_surface(

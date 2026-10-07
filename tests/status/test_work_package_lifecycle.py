@@ -1025,3 +1025,21 @@ def test_for_review_refusal_with_no_implementer_on_record_says_so() -> None:
 
     assert "implementer of record (none on record)" in message
     assert "'unknown'" not in message
+
+
+@pytest.mark.parametrize(
+    ("lane", "expected"),
+    [
+        pytest.param("in_review", "WP01 is under review: wait for the reviewer's verdict", id="in-review"),
+        pytest.param("for_review", None, id="for-review-says-it-in-the-conflict"),
+        pytest.param("in_progress", None, id="other-lane"),
+    ],
+)
+def test_review_lane_hint_names_the_route(lane: str, expected: str | None, capsys: pytest.CaptureFixture[str]) -> None:
+    from specify_cli.cli.commands.agent.workflow_executor import _print_review_lane_hint
+    from specify_cli.status import Lane
+
+    _print_review_lane_hint(Lane(lane), "WP01")
+
+    out = capsys.readouterr().out
+    assert (expected in out) if expected else out == ""

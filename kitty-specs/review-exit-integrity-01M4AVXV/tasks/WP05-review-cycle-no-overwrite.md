@@ -15,14 +15,16 @@ history: []
 agent_profile: implementer-ivan
 authoritative_surface: src/specify_cli/review/
 create_intent:
-- tests/review/test_review_cycle_no_overwrite_5194.py
+- tests/review/test_artifacts.py
+- tests/review/test_cycle_write_dir.py
 execution_mode: code_change
 owned_files:
 - src/specify_cli/review/artifacts.py
 - src/specify_cli/review/cycle.py
 - src/specify_cli/cli/commands/agent/workflow.py
 - tests/agent/test_workflow_review_lane_gate.py
-- tests/review/test_review_cycle_no_overwrite_5194.py
+- tests/review/test_artifacts.py
+- tests/review/test_cycle_write_dir.py
 role: implementer
 tags: []
 task_type: implement
