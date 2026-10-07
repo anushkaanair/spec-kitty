@@ -287,9 +287,7 @@ def test_protected_mint_prerequisites_use_validated_write_branch(
 
 
 @pytest.mark.parametrize("paths_only", [False, True])
-def test_commit_to_target_prerequisites_keep_target_contract(
-    commit_to_target: OwnedCheckouts, monkeypatch: pytest.MonkeyPatch, paths_only: bool
-) -> None:
+def test_commit_to_target_prerequisites_keep_target_contract(commit_to_target: OwnedCheckouts, monkeypatch: pytest.MonkeyPatch, paths_only: bool) -> None:
     """#5877 control: an explicitly authorized target checkout still matches that target."""
     from specify_cli.cli.commands.agent.mission import app as mission_app
 
@@ -305,9 +303,7 @@ def test_commit_to_target_prerequisites_keep_target_contract(
     assert payload["branch_context"]["expected_checkout_branch"] == _TARGET
 
 
-def test_protected_mint_prerequisites_refuse_wrong_checkout_branch(
-    protected_mint: OwnedCheckouts, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_protected_mint_prerequisites_refuse_wrong_checkout_branch(protected_mint: OwnedCheckouts, monkeypatch: pytest.MonkeyPatch) -> None:
     """#5877 must not turn an invalid owned checkout into a successful branch capsule."""
     from specify_cli.cli.commands.agent.mission import app as mission_app
 
@@ -315,8 +311,7 @@ def test_protected_mint_prerequisites_refuse_wrong_checkout_branch(
     monkeypatch.chdir(protected_mint.sibling)
     result = CliRunner().invoke(
         mission_app,
-        ["check-prerequisites", "--mission", protected_mint.mission_slug, "--json",
-         "--owned-checkout", str(protected_mint.owned_root)],
+        ["check-prerequisites", "--mission", protected_mint.mission_slug, "--json", "--owned-checkout", str(protected_mint.owned_root)],
     )
     assert result.exit_code != 0
     assert json.loads(result.output)["error_code"] == "OWNED_BRANCH_REFUSED"
