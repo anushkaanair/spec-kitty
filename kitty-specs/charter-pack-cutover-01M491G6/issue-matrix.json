@@ -24,6 +24,18 @@
       "verdict": "not-applicable",
       "wp": null
     },
+    "#4399": {
+      "evidence_ref": "Cited for context in planning artifacts (prior work or related seam); no work owed by this mission",
+      "fr": null,
+      "nfr": null,
+      "repo": null,
+      "sc": null,
+      "scope": null,
+      "source_file": null,
+      "title": null,
+      "verdict": "not-applicable",
+      "wp": null
+    },
     "#4400": {
       "evidence_ref": "FR-015 effective-set seam",
       "fr": null,
