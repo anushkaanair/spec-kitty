@@ -21,7 +21,7 @@ from click.testing import Result
 
 from ._requirements import REPO_ROOT
 from ._support import covers, describe, output_of, pending_until, read_json_output, run_cli
-from .legacy_fixtures import build_doctrine_command_fixture, project_from_template, upgraded_copy, write_doctrine_pack
+from .legacy_fixtures import MISSION_TYPES, build_doctrine_command_fixture, finish, project_from_template, upgraded_copy, write_doctrine_pack
 
 FIXTURES_ROOT = REPO_ROOT / "tests" / "fixtures" / "charter_pack_cutover"
 CLI_BEFORE = FIXTURES_ROOT / "cli_before.json"
@@ -204,6 +204,9 @@ class Removed:
     old: tuple[str, ...]
     new: tuple[str, ...]
     pending: str
+    #: Run the replacement on a project with no org pack: the doctrine-command fixture declares an
+    #: org pack it never fetches, and a preset's id check reads the whole offering (PRESET_ID_UNRESOLVED).
+    plain_control: bool = False
 
 
 def _removed_rows() -> list[Removed]:
@@ -213,7 +216,7 @@ def _removed_rows() -> list[Removed]:
             rows.append(Removed(leaf.key, leaf.old, leaf.new, "WP15"))
         else:
             rows.append(Removed(leaf.key, leaf.old, leaf.new, "WP16"))
-    rows.append(Removed("charter_pack_apply", ("charter", "pack", "apply", "minimal"), ("charter", "activate", "--preset", "minimal", "--force"), "WP13"))
+    rows.append(Removed("charter_pack_apply", ("charter", "pack", "apply", "minimal"), ("charter", "activate", "--preset", "minimal", "--force"), "WP13", plain_control=True))
     return rows
 
 
@@ -242,7 +245,8 @@ def test_fr007_old_spelling_exits_2(row: Removed, tmp_path: Path) -> None:
     # Control: the replacement runs on the same fixture (a hidden alias would exit 0 above). A
     # former leaf must exit with the code recorded for it at base (SC-004; `doctor doctrine` exits 1
     # on this fixture because its org pack is not fetched); the other rows exit 0.
-    new = run_cli(list(row.new), project)
+    control = finish(tmp_path / "plain", {"mission_type_activations": MISSION_TYPES}) if row.plain_control else project
+    new = run_cli(list(row.new), control)
     assert UNKNOWN_COMMAND not in output_of(new), describe(new)
     assert new.exit_code == _expected_replacement_exit(row), describe(new)
 
