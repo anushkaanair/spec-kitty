@@ -96,7 +96,7 @@ Use language identifiers in code blocks: ````python`,````bash`
 
 - `spec-kitty charter activate [--pack <pack>] --preset <preset> [--force] [--compile|--no-compile] [--resynthesize] [--json]` applies a pack's preset with **replace semantics** (FR-001): every governed key is written as listed or removed when the preset leaves it unrestricted, the org's `required_<kind>` is unioned in, a change to a customised key is refused without `--force` (OD-6, with a per-key diff), and the whole change is **one atomic write** to the resolved activation target. `--pack` defaults to `built-in`.
 - `spec-kitty charter pack list [--json]` lists one row per pack (built-in, each org pack, `project`) with the presets it ships (FR-004; US3 AS-3). `spec-kitty charter pack path <pack> [--preset <preset>]` prints the pack root or the preset file.
-- New stable error codes `PRESET_NOT_FOUND`, `PACK_NOT_FOUND`, `PRESET_ID_UNRESOLVED`, `PRESET_WOULD_OVERWRITE` (contracts/errors.md).
+- New stable error codes `PRESET_NOT_FOUND`, `PACK_NOT_FOUND`, `PRESET_ID_UNRESOLVED`, `PRESET_WOULD_OVERWRITE`, plus `PRESET_INVALID` for a malformed preset file (owner-approved 2026-10-07) (contracts/errors.md).
 - NFR-003: `charter activate --preset <name>` and `charter pack list` take ≤ 1.5× `charter list` on the same fixture (built-in + two org packs), median of 5 in-process runs, under the `timing` marker.
 - SC-001: switching `minimal` ↔ `default` is one command each; `charter list --json` matches the preset in 100% of fixture runs; after `--preset default` every per-kind key and `activated_kinds` is absent.
 

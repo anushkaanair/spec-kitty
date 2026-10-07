@@ -154,7 +154,7 @@ Never push to `main`. Commit per subtask, conventional subjects referencing #373
      - Config keys: `doctrine.org.packs` and the single-pack `doctrine.org.{local_path,…}` form, `organisation_packs` → `charter_packs.org.packs`; `governance.doctrine.*` → `governance.charter.*`; tracker `doctrine` → `ownership`; `doctrine_pack_id` → `charter_pack_id`; interview answers `doctrine:` key.
      - Directories: `.kittify/doctrine/` → `.kittify/charter-packs/`; `src/charter/activation/packs/` presets → `packs/built-in/presets/`.
      - Descriptor field: `accompanies_doctrine_pack` rejected (`RETIRED_PACK_FIELD`); `org-charter.yaml` `schema_version` bump.
-     - JSON codes and output: `CHARTER_PACK_CONFIG_INVALID` → `ACTIVE_CHARTER_CONFIG_INVALID`; new `LEGACY_CHARTER_STATE`, `DEFAULT_PRESET_MISSING`, `PRESET_NOT_FOUND`, `PACK_NOT_FOUND`, `PRESET_ID_UNRESOLVED`, `PRESET_WOULD_OVERWRITE`, `RETIRED_PACK_FIELD`; `doctrine_mode` output key removed.
+     - JSON codes and output: `CHARTER_PACK_CONFIG_INVALID` → `ACTIVE_CHARTER_CONFIG_INVALID`; new `LEGACY_CHARTER_STATE`, `DEFAULT_PRESET_MISSING`, `PRESET_NOT_FOUND`, `PACK_NOT_FOUND`, `PRESET_ID_UNRESOLVED`, `PRESET_WOULD_OVERWRITE`, `PRESET_INVALID`, `RETIRED_PACK_FIELD`; `doctrine_mode` output key removed.
      - Tool surfaces: `spec-kitty doctor tool-surfaces --kind doctrine-skill` → `--kind charter-skill`; the `ToolSurfaceKind` value and surface-id segment `doctrine_skill` → `charter_skill`.
      - `charter pack list --json` shape (breaking): preset rows → one row per pack, `{"packs": [{"name", "tier", "root", "presets": [...]}]}` (`contracts/cli.md` "`--json` shapes").
      - State surface name `project_doctrine_graph` → `project_pack_graph` (printed by `doctor`).
