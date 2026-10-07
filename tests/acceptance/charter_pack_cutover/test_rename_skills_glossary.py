@@ -63,7 +63,7 @@ def test_fr008_removed_names_are_retired() -> None:
     assert missing == [], missing
 
 
-def _install_old_global_skill(catalog: Path, name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def install_old_global_skill(catalog: Path, name: str, monkeypatch: pytest.MonkeyPatch) -> None:
     """Install *name* into the user-global roots the way an older CLI did (its shipped bytes, recorded in the global inventory).
 
     The global retirement removes only inventory-owned, unchanged copies; a hand-written
@@ -84,7 +84,7 @@ def test_fr008_upgrade_installs_new_and_removes_old(tmp_path: Path, monkeypatch:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
     global_copy = home / ".claude" / "skills" / "spk-doctrine-charter" / "SKILL.md"
-    _install_old_global_skill(tmp_path / "old-catalog", "spk-doctrine-charter", monkeypatch)
+    install_old_global_skill(tmp_path / "old-catalog", "spk-doctrine-charter", monkeypatch)
     assert global_copy.is_file(), "control: the old skill is installed in the user-global root"
     project = project_from_template("installed_removed_skills", tmp_path / "p")
     upgraded = run_cli(["upgrade", "--yes", "--no-worktrees"], project)
