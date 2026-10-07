@@ -34,10 +34,10 @@ from dataclasses import dataclass, field
 
 from .base import MigrationResult
 
-__all__ = ["REPORT_KEYS", "CutoverReport"]
+__all__ = ["CutoverReport"]
 
 #: The report keys, in contract order.
-REPORT_KEYS: tuple[str, ...] = (
+_REPORT_KEYS: tuple[str, ...] = (
     "moved",
     "rewritten",
     "reset",
@@ -84,8 +84,8 @@ class CutoverReport:
     preserved_paths: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, list[str]]:
-        """The contract report: every :data:`REPORT_KEYS` key, each an ordered list."""
-        return {key: list(getattr(self, key)) for key in REPORT_KEYS}
+        """The contract report: every :data:`_REPORT_KEYS` key, each an ordered list."""
+        return {key: list(getattr(self, key)) for key in _REPORT_KEYS}
 
     def is_actionable(self) -> bool:
         """True when the run would change the project or refuses (kept lines alone are not)."""

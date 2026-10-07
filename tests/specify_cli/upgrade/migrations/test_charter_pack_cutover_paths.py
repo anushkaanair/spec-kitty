@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime
+from kernel.clock import datetime
 from pathlib import Path
 
 import pytest
@@ -15,7 +15,7 @@ from specify_cli.migration.legacy_charter_layout import detect_legacy_charter_la
 from specify_cli.upgrade.metadata import ProjectMetadata
 from specify_cli.upgrade.migrations import auto_discover_migrations
 from specify_cli.upgrade.migrations import m_4_0_0rc6_charter_pack_cutover as cutover
-from specify_cli.upgrade.migrations._charter_pack_cutover_report import REPORT_KEYS, CutoverReport
+from specify_cli.upgrade.migrations._charter_pack_cutover_report import CutoverReport
 from specify_cli.upgrade.migrations.base import MigrationResult
 from specify_cli.upgrade.migrations.m_4_0_0rc6_charter_pack_cutover import CharterPackCutoverMigration
 from specify_cli.upgrade.registry import MigrationRegistry
@@ -26,6 +26,8 @@ pytestmark = [pytest.mark.unit]
 LEGACY = ".kittify/doctrine"
 NEW = ".kittify/charter-packs"
 CUTOVER_ID = "charter_pack_cutover"
+#: The contract report keys (contracts/upgrade-migration.md), in contract order.
+REPORT_KEYS = ("moved", "rewritten", "reset", "kept_for_review", "matches_minimal", "skills_removed", "skills_kept", "errors")
 
 
 def _write(project: Path, rel: str, text: str) -> Path:
@@ -359,6 +361,7 @@ def test_report_maps_onto_migration_result() -> None:
     result = report.to_migration_result(dry_run=False)
     assert result.success and not result.errors
     assert json.loads(result.changes_made[0]) == {**dict.fromkeys(REPORT_KEYS, []), **report.as_dict()}
+    assert tuple(report.as_dict()) == REPORT_KEYS
     assert result.changes_made[1:] == ["Moved a -> b", "Rewrote f: k"]
     assert result.warnings == ["Kept for review: f: kept", "Matches preset minimal, kept: m", "Kept edited skill copy: s", "set it back"]
     assert result.manual_review_required and result.preserved_paths == ["p"]

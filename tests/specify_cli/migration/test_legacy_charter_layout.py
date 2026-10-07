@@ -9,18 +9,20 @@ import pytest
 
 from specify_cli.migration import legacy_charter_layout as layout
 from specify_cli.migration.legacy_charter_layout import (
-    LEGACY_GOVERNANCE_FILE,
-    LEGACY_GOVERNANCE_SELECTION_KEY,
-    LEGACY_ORG_PACKS_KEY,
-    LEGACY_ORGANISATION_PACKS_KEY,
-    LEGACY_PROJECT_ROOT,
-    LEGACY_TRACKER_OWNERSHIP_KEY,
-    STRUCTURAL_FINDINGS,
     UNREADABLE_CONFIG,
     UNREADABLE_GOVERNANCE_FILE,
     detect_legacy_charter_layout,
     is_convertible_organisation_pack,
 )
+
+# The finding names are a stable contract (the CLI gate names them); spelled
+# here as literals so a rename in the module reds this file.
+LEGACY_PROJECT_ROOT = "legacy_project_root"
+LEGACY_GOVERNANCE_FILE = "legacy_governance_file"
+LEGACY_ORG_PACKS_KEY = "legacy_org_packs_key"
+LEGACY_ORGANISATION_PACKS_KEY = "legacy_organisation_packs_key"
+LEGACY_GOVERNANCE_SELECTION_KEY = "legacy_governance_selection_key"
+LEGACY_TRACKER_OWNERSHIP_KEY = "legacy_tracker_ownership_key"
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
 
@@ -120,7 +122,7 @@ def test_config_findings_are_reported_cheapest_first(tmp_path: Path) -> None:
         LEGACY_GOVERNANCE_SELECTION_KEY,
         LEGACY_TRACKER_OWNERSHIP_KEY,
     )
-    assert list(findings) == [f for f in STRUCTURAL_FINDINGS if f in findings]
+    assert list(findings) == [f for f in layout._STRUCTURAL_FINDINGS if f in findings]
 
 
 def test_doctrine_section_without_an_org_pack_form_is_not_a_finding(tmp_path: Path) -> None:

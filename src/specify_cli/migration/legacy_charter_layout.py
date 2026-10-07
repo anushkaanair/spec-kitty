@@ -35,18 +35,10 @@ from typing import Any
 from kernel.charter_pack_paths import KITTIFY_DIRNAME
 
 __all__ = [
-    "LEGACY_GOVERNANCE_FILE",
-    "LEGACY_GOVERNANCE_SELECTION_KEY",
-    "LEGACY_ORGANISATION_PACKS_KEY",
-    "LEGACY_ORG_PACKS_KEY",
-    "LEGACY_PROJECT_DIRNAME",
-    "LEGACY_PROJECT_ROOT",
     "LEGACY_PROJECT_ROOT_POSIX",
     "LEGACY_PROJECT_ROOT_RELPATH",
     "LEGACY_SELECTION_KEYWORD",
-    "LEGACY_TRACKER_OWNERSHIP_KEY",
     "ORGANISATION_PACKS_KEYWORD",
-    "STRUCTURAL_FINDINGS",
     "UNREADABLE_CONFIG",
     "UNREADABLE_GOVERNANCE_FILE",
     "detect_legacy_charter_layout",
@@ -60,14 +52,14 @@ __all__ = [
 # --------------------------------------------------------------------------- #
 
 #: The retired project layer directory under ``.kittify/``.
-LEGACY_PROJECT_DIRNAME = "doctrine"
+_LEGACY_PROJECT_DIRNAME = "doctrine"
 #: The retired project layer, relative to the repository root.
-LEGACY_PROJECT_ROOT_RELPATH = PurePosixPath(KITTIFY_DIRNAME, LEGACY_PROJECT_DIRNAME)
+LEGACY_PROJECT_ROOT_RELPATH = PurePosixPath(KITTIFY_DIRNAME, _LEGACY_PROJECT_DIRNAME)
 #: :data:`LEGACY_PROJECT_ROOT_RELPATH` as a string, for prefix checks.
 LEGACY_PROJECT_ROOT_POSIX = LEGACY_PROJECT_ROOT_RELPATH.as_posix()
 #: The retired key spelling shared by ``doctrine.org``, ``governance.doctrine``,
 #: ``tracker.doctrine``, the standalone ``governance.yaml`` and ``answers.yaml``.
-LEGACY_SELECTION_KEYWORD = LEGACY_PROJECT_DIRNAME
+LEGACY_SELECTION_KEYWORD = _LEGACY_PROJECT_DIRNAME
 #: The retired flat org list key (OD-4).
 ORGANISATION_PACKS_KEYWORD = "organisation_packs"
 
@@ -83,25 +75,25 @@ _PREFILTER_KEYWORDS = (LEGACY_SELECTION_KEYWORD.encode(), ORGANISATION_PACKS_KEY
 # Finding names (stable; cheapest check first)
 # --------------------------------------------------------------------------- #
 
-LEGACY_PROJECT_ROOT = "legacy_project_root"
-LEGACY_GOVERNANCE_FILE = "legacy_governance_file"
+_LEGACY_PROJECT_ROOT = "legacy_project_root"
+_LEGACY_GOVERNANCE_FILE = "legacy_governance_file"
 UNREADABLE_GOVERNANCE_FILE = "unreadable_governance_file"
 UNREADABLE_CONFIG = "unreadable_config"
-LEGACY_ORG_PACKS_KEY = "legacy_org_packs_key"
-LEGACY_ORGANISATION_PACKS_KEY = "legacy_organisation_packs_key"
-LEGACY_GOVERNANCE_SELECTION_KEY = "legacy_governance_selection_key"
-LEGACY_TRACKER_OWNERSHIP_KEY = "legacy_tracker_ownership_key"
+_LEGACY_ORG_PACKS_KEY = "legacy_org_packs_key"
+_LEGACY_ORGANISATION_PACKS_KEY = "legacy_organisation_packs_key"
+_LEGACY_GOVERNANCE_SELECTION_KEY = "legacy_governance_selection_key"
+_LEGACY_TRACKER_OWNERSHIP_KEY = "legacy_tracker_ownership_key"
 
 #: Every finding name, in the order :func:`detect_legacy_charter_layout` reports them.
-STRUCTURAL_FINDINGS: tuple[str, ...] = (
-    LEGACY_PROJECT_ROOT,
-    LEGACY_GOVERNANCE_FILE,
+_STRUCTURAL_FINDINGS: tuple[str, ...] = (
+    _LEGACY_PROJECT_ROOT,
+    _LEGACY_GOVERNANCE_FILE,
     UNREADABLE_GOVERNANCE_FILE,
     UNREADABLE_CONFIG,
-    LEGACY_ORG_PACKS_KEY,
-    LEGACY_ORGANISATION_PACKS_KEY,
-    LEGACY_GOVERNANCE_SELECTION_KEY,
-    LEGACY_TRACKER_OWNERSHIP_KEY,
+    _LEGACY_ORG_PACKS_KEY,
+    _LEGACY_ORGANISATION_PACKS_KEY,
+    _LEGACY_GOVERNANCE_SELECTION_KEY,
+    _LEGACY_TRACKER_OWNERSHIP_KEY,
 )
 
 #: An org block names packs either as a ``packs`` list or in the single-pack form (``local_path``).
@@ -142,14 +134,14 @@ def _has_mapping_key(data: Mapping[str, Any], section: str, key: str) -> bool:
 def _config_findings(data: Mapping[str, Any]) -> list[str]:
     findings: list[str] = []
     if legacy_org_block(data) is not None:
-        findings.append(LEGACY_ORG_PACKS_KEY)
+        findings.append(_LEGACY_ORG_PACKS_KEY)
     flat = data.get(ORGANISATION_PACKS_KEYWORD)
     if isinstance(flat, list) and any(is_convertible_organisation_pack(entry) for entry in flat):
-        findings.append(LEGACY_ORGANISATION_PACKS_KEY)
+        findings.append(_LEGACY_ORGANISATION_PACKS_KEY)
     if _has_mapping_key(data, _GOVERNANCE_KEY, LEGACY_SELECTION_KEYWORD):
-        findings.append(LEGACY_GOVERNANCE_SELECTION_KEY)
+        findings.append(_LEGACY_GOVERNANCE_SELECTION_KEY)
     if _has_mapping_key(data, _TRACKER_KEY, LEGACY_SELECTION_KEYWORD):
-        findings.append(LEGACY_TRACKER_OWNERSHIP_KEY)
+        findings.append(_LEGACY_TRACKER_OWNERSHIP_KEY)
     return findings
 
 
@@ -184,13 +176,13 @@ def detect_legacy_charter_layout(root: Path) -> tuple[str, ...]:
     findings: list[str] = []
     legacy_root = root / LEGACY_PROJECT_ROOT_RELPATH
     if legacy_root.is_dir() or legacy_root.is_symlink():
-        findings.append(LEGACY_PROJECT_ROOT)
+        findings.append(_LEGACY_PROJECT_ROOT)
 
     readable, governance = _load_prefiltered(governance_file_path(root))
     if not readable:
         findings.append(UNREADABLE_GOVERNANCE_FILE)
     elif isinstance(governance, Mapping) and LEGACY_SELECTION_KEYWORD in governance:
-        findings.append(LEGACY_GOVERNANCE_FILE)
+        findings.append(_LEGACY_GOVERNANCE_FILE)
 
     readable, config = _load_prefiltered(root / KITTIFY_DIRNAME / _CONFIG_FILENAME)
     if not readable:
