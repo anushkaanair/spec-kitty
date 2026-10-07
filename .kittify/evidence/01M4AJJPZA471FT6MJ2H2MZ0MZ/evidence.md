@@ -1,0 +1,3 @@
+# Slicing #5443 / #5446 (squad Op 01M4AJJPZA471FT6MJ2H2MZ0MZ)
+#5443 (parent #4915): S0 red-first p0_repro; S1 runner.py drop add -A + --no-verify, route via commit_touched_checkout, fix m_3_0_0 false success; fold #5673 (+#5229 opportunistic). Follow-ups: bake.py:389/555 pathspec; arch gate banning add -A / pathspec-less commit; GitVCS.commit(paths=None).
+#5446 (parent #3044): S1 lifecycle rework guard (IN_REVIEW->claim conflict, APPROVED->refuse, FOR_REVIEW only implementer of record via latest_implementer_actor) + invert test_work_package_lifecycle.py:476 + #5377 regression; S2 honest reason / gate allow_rework at workflow_executor.py:818; S3 review_result:null approval deadlock recovery; later: --force --note escape hatch.
