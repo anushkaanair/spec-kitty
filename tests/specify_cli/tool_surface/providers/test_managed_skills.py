@@ -705,7 +705,7 @@ def test_real_provider_partial_failure_reports_paths_not_count_prefix(
     assert not (project / ".kittify/skills-manifest.json").exists()
 
 
-def test_managed_skills_provider_can_handle_doctrine_skill() -> None:
+def test_managed_skills_provider_can_handle_charter_skill() -> None:
     provider = ManagedSkillsProvider()
     definition = managed_skill_definition()
     assert definition.kind == ToolSurfaceKind.CHARTER_SKILL
@@ -766,7 +766,7 @@ def test_managed_skills_expand_returns_per_tool_skills(tmp_path: Path) -> None:
     assert all(i.definition.kind == ToolSurfaceKind.CHARTER_SKILL for i in instances)
 
 
-def test_doctrine_skill_entries_helper(tmp_path: Path) -> None:
+def test_charter_skill_entries_helper(tmp_path: Path) -> None:
     h1 = _write_skill_file(tmp_path, ".agents/skills/a/SKILL.md")
     _write_manifest(
         tmp_path,
