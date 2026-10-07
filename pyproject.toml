@@ -458,7 +458,6 @@ exclude = [
     "src/specify_cli/bulk_edit/occurrence_map.py",
     "src/specify_cli/calibration/walker.py",
     "src/specify_cli/charter_activate.py",
-    "src/specify_cli/charter_pack_registry.py",
     "src/specify_cli/charter_runtime/freshness/computer.py",
     "src/specify_cli/charter_runtime/lint/checks/contradiction.py",
     "src/specify_cli/charter_runtime/lint/checks/org_layer.py",
