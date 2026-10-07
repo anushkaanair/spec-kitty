@@ -342,9 +342,7 @@ def test_retired_doctrine_key_is_not_read_as_ownership() -> None:
     because the CLI-root ``LEGACY_CHARTER_STATE`` gate refuses such a project
     before any tracker command runs (``tests/specify_cli/migration/test_legacy_charter_gate.py``).
     """
-    config = TrackerProjectConfig.from_dict(
-        {"provider": "beads", "doctrine": {"mode": "split_ownership", "field_owners": {"title": "spec_kitty"}}}
-    )
+    config = TrackerProjectConfig.from_dict({"provider": "beads", "doctrine": {"mode": "split_ownership", "field_owners": {"title": "spec_kitty"}}})
 
     assert config.ownership_mode == "external_authoritative"
     assert config.ownership_field_owners == {}
