@@ -33,7 +33,6 @@ from click.core import ParameterSource
 from rich.console import Console
 from rich.markup import escape
 from specify_cli.cli.console import console
-from specify_cli.cli.json_contract import json_error
 
 from charter.activation.cascade import (
     CascadeScope,
@@ -69,6 +68,7 @@ from specify_cli.cli.commands.charter._cascade_shared import (
     drg_urn_to_config_id,
     render_kind_filtered_line,
 )
+from specify_cli.cli.commands.charter._coded_errors import render_coded_error, render_preset_format_error
 from specify_cli.cli.commands.charter._charter_write_root import (
     CharterWriteRootError,
     resolve_charter_write_root,
@@ -78,7 +78,7 @@ from charter.activation.layer_roots import (
     resolve_org_root_chain,
 )
 
-__all__ = ["activate_cmd", "render_coded_error", "run_full_synthesize"]
+__all__ = ["activate_cmd", "run_full_synthesize"]
 
 RESYNTHESIZE_HELP = (
     "Eagerly refresh the FULL derived bundle/DRG (bundle content hash + "
@@ -811,29 +811,11 @@ def reproject_pack_skills(repo_root: Path, kind: str) -> None:
 #: The pack ``--preset`` reads when ``--pack`` is not given.
 DEFAULT_PRESET_PACK = "built-in"
 
-#: Code of a ``--preset`` failure outside the four contract codes: a malformed
-#: preset file, an unreadable activation target, a DRG that cannot be loaded.
-PRESET_APPLY_FAILED = "PRESET_APPLY_FAILED"
+#: Code of a ``--preset --json`` run whose preset was written but whose
+#: post-write resynthesis failed. Provisional name pending the owner's ruling.
+_RESYNTHESIS_FAILED = "RESYNTHESIS_FAILED"
 
 _PRESET_ONLY_OPTIONS: tuple[tuple[str, str], ...] = (("pack", "--pack"), ("force", "--force"), ("json_output", "--json"))
-
-
-def render_coded_error(code: str, message: str, *, details: list[str] | None = None, payload: dict[str, object] | None = None, json_output: bool) -> None:
-    """Render a coded error: ``Error (<CODE>): <message>`` plus detail lines, or ``json_error`` under ``--json``.
-
-    The one rendering seam for the preset and pack error codes
-    (contracts/cli.md "Error text format"); ``charter pack path`` reuses it.
-    """
-    if json_output:
-        body = json_error(code, message)
-        error = body["error"]
-        if isinstance(error, dict) and payload:
-            error.update(payload)
-        console.emit_json(body)
-        return
-    console.print(f"[red]Error[/red] ({code}): {escape(message)}")
-    for line in details or ():
-        console.print(escape(line))
 
 
 def _check_preset_flags(ctx: typer.Context, *, preset: str | None, positional: bool, cascade: str | None) -> None:
@@ -877,8 +859,8 @@ def _plan_and_apply_preset(repo_root: Path, pack: str, preset: str, *, force: bo
     except ActiveCharterConfigError as exc:
         render_coded_error(exc.code, exc.body, json_output=json_output)
         raise typer.Exit(1) from exc
-    except (PresetFormatError, ValueError, DRGLoadError) as exc:
-        render_coded_error(PRESET_APPLY_FAILED, str(exc), json_output=json_output)
+    except PresetFormatError as exc:
+        render_preset_format_error(exc, json_output=json_output)
         raise typer.Exit(1) from exc
     return plan
 
@@ -900,8 +882,18 @@ def _activate_preset(repo_root: Path, pack: str, preset: str, *, force: bool, js
         _render_preset_plan(plan)
         recompile_or_notify(repo_root, resynthesize=resynthesize, compile_catalog=compile_catalog)
         return
-    with console.capture():
-        recompile_or_notify(repo_root, resynthesize=resynthesize, compile_catalog=compile_catalog)
+    try:
+        with console.capture():
+            recompile_or_notify(repo_root, resynthesize=resynthesize, compile_catalog=compile_catalog)
+    except typer.Exit as exc:
+        if exc.exit_code == 0:
+            raise
+        message = (
+            f"preset {plan.preset!r} of pack {plan.pack!r} was applied to {plan.target_file}, "
+            f"but the resynthesis failed (exit {exc.exit_code}); re-run `spec-kitty charter synthesize`."
+        )
+        render_coded_error(_RESYNTHESIS_FAILED, message, payload=_preset_payload(plan), json_output=True)
+        raise typer.Exit(1) from exc
     console.emit_json(_preset_payload(plan))
 
 

@@ -62,16 +62,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
+from ruamel.yaml.error import YAMLError
+
 from charter.activation.charter_yaml_io import apply_yaml_write
 from charter.activation.catalog import resolve_doctrine_root
+from charter.activation.effective_set import OfferingUnresolvableError, declared_org_roots
 from charter.activation.invocation_context import ProjectContext
 from charter.activation.kind_vocabulary import ResolutionPass, UnknownArtifactIdError, resolve_artifact_urn, resolve_config_id
 from charter.activation.layer_roots import resolve_layer_roots, resolve_org_root_chain
 from charter.activation.org_charter import REQUIRED_KIND_FIELDS, load_org_charter_policies
+from charter.activation.pack_context import ActiveCharterConfigError
 from charter.activation.pack_manager import ActiveCharterManager, prepare_activation_write, resolve_activation_write_target
 from charter.offering.artifact_kinds import MISSION_TYPE_TOKEN, ArtifactKind
 from charter.offering.drg.migration.id_normalizer import normalize_directive_id
-from charter.offering.drg.models import NodeKind
+from charter.offering.drg.loader import DRGLoadError
+from charter.offering.drg.models import DRGGraphSchemaError, NodeKind
+from charter.offering.drg.validator import DRGValidationError
 from charter.offering.pack_paths import built_in_root
 from charter.offering.packs.presets import (
     ACTIVATED_KINDS_KEY,
@@ -100,6 +106,12 @@ __all__ = [
 GOVERNED_KEYS: tuple[str, ...] = (*preset_activation_keys(), ACTIVATED_KINDS_KEY, MISSION_TYPE_ACTIVATIONS_KEY)
 
 _DEFAULT_PRESET_NAME = "default"
+#: ``reasons`` key naming the org pack registry when it cannot be read.
+_ORG_PACKS_KEY = "charter_packs.org.packs"
+_RACE_PREFIX = "precondition_changed"
+#: Single-writer / target-read refusals that describe the target file itself.
+_TARGET_FAILURE_PREFIXES: tuple[str, ...] = ("Cannot preserve", "YAML root must be a mapping", "Unsafe YAML input", ".kittify/config.yaml root must be a mapping")
+_DRG_LOAD_ERRORS: tuple[type[Exception], ...] = (DRGLoadError, DRGValidationError, DRGGraphSchemaError)
 _DIRECTIVES_KEY = preset_activation_key(ArtifactKind.DIRECTIVE)
 _ABSENT = "absent"
 
@@ -280,7 +292,7 @@ def _missing(yaml_key: str, listed: Iterable[str], available: Iterable[str]) -> 
     return [item for item in listed if _id_key(yaml_key, item) not in known]
 
 
-def _anti_pattern_ids(repo_root: Path) -> frozenset[str]:
+def _load_anti_pattern_ids(repo_root: Path) -> frozenset[str]:
     """Anti-pattern node ids of the merged DRG (anti-patterns have no artifact file)."""
     from charter.activation._drg_helpers import load_validated_graph  # noqa: PLC0415 -- the DRG load is only paid when a preset lists anti-patterns
     from charter.activation.drg_activation import load_org_drg  # noqa: PLC0415 -- same
@@ -289,13 +301,13 @@ def _anti_pattern_ids(repo_root: Path) -> frozenset[str]:
     return frozenset(node.urn.split(":", 1)[1] for node in graph.nodes if node.kind == NodeKind.ANTI_PATTERN)
 
 
-def _available_mission_types(repo_root: Path) -> frozenset[str]:
+def _available_mission_types(repo_root: Path, org_roots: Sequence[Path]) -> frozenset[str]:
     """Mission types available in the built-in, project and every org layer."""
     manager = ActiveCharterManager()
     ctx = ProjectContext(repo_root=repo_root)
     base = {layer: root for layer, root in resolve_layer_roots(repo_root).items() if layer != "org"}
     found = set(manager.list_available(ctx, MISSION_TYPE_TOKEN, layer_roots=base))
-    for org_root in resolve_org_root_chain(repo_root):
+    for org_root in org_roots:
         found.update(manager.list_available(ctx, MISSION_TYPE_TOKEN, layer_roots={**base, "org": org_root}))
     return frozenset(found)
 
@@ -310,9 +322,9 @@ class _Roots:
     resolution_pass: ResolutionPass
 
     @classmethod
-    def of(cls, repo_root: Path) -> _Roots:
+    def of(cls, repo_root: Path, org_roots: Sequence[Path]) -> _Roots:
         layer_roots = {layer: root for layer, root in resolve_layer_roots(repo_root).items() if layer != "org"}
-        return cls(resolve_doctrine_root(), resolve_org_root_chain(repo_root), layer_roots, ResolutionPass())
+        return cls(resolve_doctrine_root(), list(org_roots), layer_roots, ResolutionPass())
 
 
 def _artifact_id_resolves(kind: ArtifactKind, raw_id: str, roots: _Roots) -> bool:
@@ -335,42 +347,84 @@ def _artifact_id_resolves(kind: ArtifactKind, raw_id: str, roots: _Roots) -> boo
         return False
 
 
-def _check_artifact_ids(repo_root: Path, preset: ActivationPreset, unresolved: dict[str, list[str]]) -> None:
+def _check_anti_patterns(repo_root: Path, ids: Sequence[str], unresolved: dict[str, list[str]], reasons: dict[str, str]) -> None:
+    key = preset_activation_key(ArtifactKind.ANTI_PATTERN)
+    if not ids:
+        return
+    try:
+        known = _load_anti_pattern_ids(repo_root)
+    except _DRG_LOAD_ERRORS as exc:
+        reasons[key] = f"the DRG cannot be loaded to check anti-pattern ids: {exc}"
+        return
+    unresolved[key] = _missing(key, ids, known)
+
+
+def _check_artifact_ids(repo_root: Path, preset: ActivationPreset, org_roots: Sequence[Path], unresolved: dict[str, list[str]], reasons: dict[str, str]) -> None:
     """Resolve every listed per-kind id, one targeted lookup per id (only listed kinds are read)."""
-    listed = [(kind, preset.activations[preset_activation_key(kind)]) for kind in preset.listed_kinds()]
     roots: _Roots | None = None
-    for kind, ids in listed:
+    for kind in preset.listed_kinds():
         key = preset_activation_key(kind)
+        ids = preset.activations[key]
         if kind is ArtifactKind.ANTI_PATTERN:
-            unresolved[key] = _missing(key, ids, _anti_pattern_ids(repo_root)) if ids else []
+            _check_anti_patterns(repo_root, ids, unresolved, reasons)
             continue
-        roots = roots or _Roots.of(repo_root)
+        roots = roots or _Roots.of(repo_root, org_roots)
         unresolved[key] = [item for item in ids if not _artifact_id_resolves(kind, item, roots)]
 
 
-def _check_mission_types(repo_root: Path, preset: ActivationPreset, unresolved: dict[str, list[str]], reasons: dict[str, str]) -> None:
+def _check_mission_types(repo_root: Path, preset: ActivationPreset, org_roots: Sequence[Path], unresolved: dict[str, list[str]], reasons: dict[str, str]) -> None:
     listed = preset.mission_type_activations or ()
     if not listed:
         return
     from charter.activation.mission_type_profiles import validate_activatable_mission_type  # noqa: PLC0415 -- heavy resolver, only for presets listing mission types
 
-    missing = _missing(MISSION_TYPE_ACTIVATIONS_KEY, listed, _available_mission_types(repo_root))
+    try:
+        available = _available_mission_types(repo_root, org_roots)
+    except ValueError as exc:  # the layered roster loud-fails on a malformed mission-type file
+        reasons[MISSION_TYPE_ACTIVATIONS_KEY] = f"the mission-type roster cannot be read: {exc}"
+        return
+    missing = _missing(MISSION_TYPE_ACTIVATIONS_KEY, listed, available)
     unresolved[MISSION_TYPE_ACTIVATIONS_KEY] = missing
+    refusals: list[str] = []
     for mission_type in listed:
         if mission_type in missing:
             continue
         try:
             validate_activatable_mission_type(mission_type, repo_root=repo_root)
         except ValueError as exc:
-            reasons[MISSION_TYPE_ACTIVATIONS_KEY] = f"{mission_type}: {exc}"
+            refusals.append(f"{mission_type}: {exc}")
+    if refusals:
+        reasons[MISSION_TYPE_ACTIVATIONS_KEY] = "; ".join(refusals)
+
+
+def _lists_ids(preset: ActivationPreset) -> bool:
+    """Whether the preset lists per-kind ids or a kind gate (the org union then applies)."""
+    return bool(preset.activations) or preset.activated_kinds is not None
+
+
+def _org_roots_or_refuse(repo_root: Path, preset: ActivationPreset) -> list[Path]:
+    """The declared org roots, failing closed like the effective-set seam.
+
+    When the preset lists ids or a kind gate, every declared org pack must be
+    readable: a missing one would drop out of the id check and out of the
+    ``required_<kind>`` union, freezing a key without that org's requirements.
+    A preset that lists neither reads only the existing roots (mission types).
+    """
+    if not _lists_ids(preset):
+        return list(resolve_org_root_chain(repo_root))
+    try:
+        return list(declared_org_roots(repo_root))
+    except OfferingUnresolvableError as exc:
+        raise PresetIdUnresolvedError(preset.source, {}, {_ORG_PACKS_KEY: str(exc)}) from exc
 
 
 def _resolve_preset_ids(repo_root: Path, preset: ActivationPreset) -> None:
     """Raise :class:`PresetIdUnresolvedError` unless every listed id resolves."""
+    org_roots = _org_roots_or_refuse(repo_root, preset)
     unresolved: dict[str, list[str]] = {}
     reasons: dict[str, str] = {}
-    _check_artifact_ids(repo_root, preset, unresolved)
-    _check_mission_types(repo_root, preset, unresolved, reasons)
+    _check_artifact_ids(repo_root, preset, org_roots, unresolved, reasons)
+    _check_mission_types(repo_root, preset, org_roots, unresolved, reasons)
     unresolved = {key: ids for key, ids in unresolved.items() if ids}
     if unresolved or reasons:
         raise PresetIdUnresolvedError(preset.source, unresolved, reasons)
@@ -381,9 +435,14 @@ def _resolve_preset_ids(repo_root: Path, preset: ActivationPreset) -> None:
 # ---------------------------------------------------------------------------
 
 
-def _org_required(repo_root: Path) -> dict[str, list[str]]:
-    """``required_<plural>`` ids per plural (non-empty lists only)."""
-    policy = load_org_charter_policies(repo_root)
+def _org_required(repo_root: Path, preset: ActivationPreset) -> dict[str, list[str]]:
+    """``required_<plural>`` ids per plural (non-empty lists only); none when the preset lists no ids."""
+    if not _lists_ids(preset):
+        return {}
+    try:
+        policy = load_org_charter_policies(repo_root)
+    except ValueError as exc:  # unset env var, symlink escape or retired field in an org charter (all ValueError)
+        raise PresetIdUnresolvedError(preset.source, {}, {_ORG_PACKS_KEY: f"the org charter cannot be read: {exc}"}) from exc
     required: dict[str, list[str]] = {}
     for plural in REQUIRED_KIND_FIELDS:
         ids = [str(item) for item in getattr(policy, f"required_{plural}", None) or ()]
@@ -444,6 +503,36 @@ def _customised(key: str, before: object, after: object, defaults: Mapping[str, 
     return before is not None and not _same(before, after) and not _same(before, defaults.get(key))
 
 
+def _target_error(target: Path, exc: ValueError) -> ActiveCharterConfigError | None:
+    """Map a single-writer refusal about the target file to ``ACTIVE_CHARTER_CONFIG_INVALID``.
+
+    A concurrent edit (``precondition_changed``) is a race, not bad config; it
+    keeps the code the target's own validation uses, with a re-run hint, since
+    the writer has no code of its own for it. Any other ``ValueError`` (the
+    writer's key guards) is a programming error and is not mapped.
+    """
+    message = str(exc)
+    if message.startswith(_RACE_PREFIX):
+        return ActiveCharterConfigError(f"{target} changed while the preset was being applied ({message}); re-run the command.")
+    if message.startswith(_TARGET_FAILURE_PREFIXES):
+        return ActiveCharterConfigError(f"{target} cannot take the preset: {message}")
+    return None
+
+
+def _read_target(repo_root: Path) -> tuple[Path, Mapping[str, Any]]:
+    """The activation write target and its document; an unreadable target is a config error."""
+    try:
+        target_file, document, _save = resolve_activation_write_target(repo_root)
+    except YAMLError as exc:
+        raise ActiveCharterConfigError(f"the activation target cannot be parsed: {exc}") from exc
+    except ValueError as exc:
+        error = _target_error(repo_root / ".kittify" / "config.yaml", exc)
+        if error is None:
+            raise
+        raise error from exc
+    return target_file, document
+
+
 def plan_preset_application(repo_root: Path, pack_name: str, preset_name: str) -> PresetPlan:
     """Compute the change applying *preset_name* of *pack_name* makes (pure read).
 
@@ -454,8 +543,8 @@ def plan_preset_application(repo_root: Path, pack_name: str, preset_name: str) -
     pack = find_offering_pack(repo_root, pack_name)
     preset = load_pack_preset(pack, preset_name)
     _resolve_preset_ids(repo_root, preset)
-    target = _target_state(preset, _org_required(repo_root))
-    target_file, document, _save = resolve_activation_write_target(repo_root)
+    target = _target_state(preset, _org_required(repo_root, preset))
+    target_file, document = _read_target(repo_root)
     defaults = _default_values()
     written: dict[str, list[str]] = {}
     removed: list[str] = []
@@ -494,4 +583,7 @@ def apply_preset_plan(repo_root: Path, plan: PresetPlan, *, force: bool = False)
         raise PresetWouldOverwriteError(plan)
     if plan.is_noop:
         return
-    apply_yaml_write(prepare_activation_write(repo_root, plan.written, remove=plan.removed))
+    try:
+        apply_yaml_write(prepare_activation_write(repo_root, plan.written, remove=plan.removed))
+    except ValueError as exc:
+        raise _target_error(plan.target_file, exc) or exc from exc

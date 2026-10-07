@@ -30,7 +30,7 @@ from specify_cli.charter_pack_registry import (
     merge_pack_into_config,
     resolve_builtin_pack_path,
 )
-from specify_cli.cli.commands.charter.activate import PRESET_APPLY_FAILED, render_coded_error
+from specify_cli.cli.commands.charter._coded_errors import render_coded_error, render_preset_format_error
 
 __all__ = ["charter_pack_app"]
 
@@ -107,8 +107,8 @@ def list_cmd(
     """List the packs of the project's offering and the presets each ships (FR-004)."""
     try:
         rows = _pack_rows(repo_root.resolve())
-    except (PresetFormatError, ValueError) as exc:
-        render_coded_error(PRESET_APPLY_FAILED, str(exc), json_output=json_output)
+    except PresetFormatError as exc:
+        render_preset_format_error(exc, json_output=json_output)
         raise typer.Exit(1) from exc
     if json_output:
         console.emit_json({"packs": rows})
@@ -297,7 +297,7 @@ def path_cmd(
         render_coded_error(exc.code, str(exc), details=exc.detail_lines(), payload=exc.payload(), json_output=json_output)
         raise typer.Exit(1) from exc
     except PresetFormatError as exc:
-        render_coded_error(PRESET_APPLY_FAILED, str(exc), json_output=json_output)
+        render_preset_format_error(exc, json_output=json_output)
         raise typer.Exit(1) from exc
     if json_output:
         payload: dict[str, str] = {"pack": offering_pack.name, "path": str(path)}
