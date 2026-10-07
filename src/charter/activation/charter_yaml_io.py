@@ -386,6 +386,22 @@ def _bound_entry_comment(token: Any, start: int, end: int) -> bool:
     return True
 
 
+def _deleted_entry_end(text: str, start: int, end: int) -> int:
+    """Extend a deleted entry's span over its own line break.
+
+    A block entry's span already ends at the next line; a flow-style value
+    (``key: [a, b]``) or a scalar ends before its line break, which would leave
+    a blank line behind. Only a break that closes the entry's own line(s) is
+    taken: the entry must start a line and nothing but blanks may follow it.
+    """
+    if end == 0 or text[end - 1] in "\r\n" or (start and text[start - 1] != "\n"):
+        return end
+    newline = text.find("\n", end)
+    if newline < 0 or text[end:newline].strip():
+        return end
+    return newline + 1
+
+
 def _render_mapping_document(text: str, original: Any, document: Any, yaml: YAML) -> str:
     node = _yaml_loader().compose(text)
     if not isinstance(original, dict) or not isinstance(node, MappingNode):
@@ -405,6 +421,8 @@ def _render_mapping_document(text: str, original: Any, document: Any, yaml: YAML
             continue
         if key not in desired_keys and node.flow_style:
             raise ValueError("Cannot preserve deletion from flow-style YAML root")
+        if key not in desired_keys:
+            end = _deleted_entry_end(text, start, end)
         replacement = rendered[slice(*replacements[key])] if key in desired_keys else ""
         if replacement and end and text[end - 1] in "\r\n":
             replacement = replacement.rstrip("\r\n") + ("\r\n" if text[:end].endswith("\r\n") else "\n")
