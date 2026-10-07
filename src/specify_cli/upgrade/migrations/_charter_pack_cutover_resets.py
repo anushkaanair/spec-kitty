@@ -154,10 +154,10 @@ def _absent_meaning(key: str) -> str:
     try:
         kind = ArtifactKind.from_plural(plural)
     except KeyError:
-        return f"every {noun} available"
+        return f"all {noun} available"
     if kind.effective_when_absent == "required":
         return f"only the {noun} your org packs require are in force"
-    return f"every {noun} available"
+    return f"all {noun} available"
 
 
 def _classify_kind_gate(path: Path, rel: str, value: frozenset[str]) -> ResetAction:

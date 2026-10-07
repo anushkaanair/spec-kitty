@@ -211,7 +211,7 @@ def test_empty_skills_hint_names_the_required_set(tmp_path: Path) -> None:
     _write(tmp_path, CONFIG, "activated_skills: []\nactivated_paradigms: []\n")
     reset = _report(_apply_twice(tmp_path))["reset"]
     assert reset == [
-        f"{CONFIG}: activated_paradigms was [] (nothing active); now absent (every paradigms available)",
+        f"{CONFIG}: activated_paradigms was [] (nothing active); now absent (all paradigms available)",
         f"{CONFIG}: activated_skills was [] (nothing active); now absent (only the skills your org packs require are in force)",
     ]
 
