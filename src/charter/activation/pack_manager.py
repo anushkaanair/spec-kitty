@@ -443,13 +443,11 @@ def _preservation_set(
     resolve it, activation stays tolerant but never narrower than the whole
     readable chain: it seeds from the seam's ``fallback_ids`` (built-in, every
     readable declared org root, project). ``mission-type`` is an activation
-    ledger, not a corpus: its available ids are kept.
+    ledger whose absent key puts nothing in force; it is seeded from the same
+    chain-wide ``fallback_ids``, so every org pack is treated alike.
     """
     if data.get(yaml_key) is not None:
         return [], [], True
-    if kind == MISSION_TYPE_TOKEN:
-        # An activation ledger, not a corpus: the seam has no effective set for it.
-        return sorted(available), [], True
     if when_absent != "all":
         in_force = getattr(PackContext.from_config(repo_root), yaml_key, None)
         return sorted(str(item) for item in in_force or ()), [], True
@@ -459,6 +457,12 @@ def _preservation_set(
     if effective.resolved:
         return sorted(effective.ids), [], True
     seeded = sorted(effective.fallback_ids | available)
+    if kind == MISSION_TYPE_TOKEN:
+        note = (
+            f"Kind {kind!r} had no explicit activation set, so no mission type was in force; "
+            f"initialized from the {len(seeded)} mission types available across all readable layers."
+        )
+        return seeded, [note], False
     logger.debug("effective set for %r unresolved: %s", yaml_key, effective.reason)
     warning = (
         f"The effective {kind} set could not be resolved because {effective.reason}; initialized from the {len(seeded)} ids available across all readable layers."

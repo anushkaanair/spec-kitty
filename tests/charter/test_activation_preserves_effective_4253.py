@@ -356,3 +356,23 @@ def test_resolved_set_still_reports_nothing_deactivated(tmp_path: Path) -> None:
 
     assert any(ALREADY_EFFECTIVE in w for w in warnings), warnings
     assert not any("could not be resolved" in w for w in warnings)
+
+
+def _fb_mission_type(directory: Path, mission_type_id: str) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / f"{mission_type_id}.yaml").write_text(f"schema_version: 1\nid: {mission_type_id}\ndisplay_name: {mission_type_id}\n", encoding="utf-8")
+
+
+def test_mission_type_seeding_spans_both_org_packs(tmp_path: Path) -> None:
+    """An absent ``mission_type_activations`` puts nothing in force; seeding is symmetric across org packs."""
+    root = _fb_project(tmp_path, ["one", "two"])
+    _fb_mission_type(root / "org-packs" / "one" / "mission_types", "mt-one")
+    _fb_mission_type(root / "org-packs" / "two" / "mission_types", "mt-two")
+
+    warnings = _fb_activate(root, "mission-type", "mt-one")
+
+    written = _fb_config(root)["mission_type_activations"]
+    assert isinstance(written, list)
+    assert {"software-dev", "mt-one", "mt-two"} <= set(written), written
+    assert any("no mission type was in force" in w and "mission types available across all readable layers" in w for w in warnings), warnings
+    assert not any(ALREADY_EFFECTIVE in w for w in warnings)

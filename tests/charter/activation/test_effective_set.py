@@ -147,9 +147,18 @@ def test_skill_is_never_resolvable(project: Path) -> None:
     assert result.reason is not None and "required-only" in result.reason
 
 
-def test_mission_type_and_unknown_keys_are_refused(project: Path) -> None:
-    with pytest.raises(ValueError, match="activation ledger"):
-        _resolve(project, ["mission_type_activations"])
+def test_mission_type_is_never_resolvable_but_carries_the_chain_fallback(project: Path) -> None:
+    for name in ("acme", "acme-two"):
+        _write(project / "org-packs" / name / "mission_types" / f"{name}-mt.yaml", f"schema_version: 1\nid: {name}-mt\ndisplay_name: {name}\n")
+
+    result = _resolve(project, ["mission_type_activations"])["mission_type_activations"]
+
+    assert not result.resolved and result.ids == frozenset()
+    assert result.reason is not None and "activation ledger" in result.reason
+    assert {"software-dev", "acme-mt", "acme-two-mt"} <= result.fallback_ids
+
+
+def test_unknown_key_is_refused(project: Path) -> None:
     with pytest.raises(ValueError, match="Unknown activation key"):
         _resolve(project, ["activated_nonsense"])
 

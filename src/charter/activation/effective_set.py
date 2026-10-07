@@ -27,8 +27,8 @@ result is ``resolved=False`` with the reason, never a partial set. The same
 holds for an empty set while built-in artifacts of the kind ship. Callers leave
 such a key absent and report it. ``skill`` (absent key means "org-required
 only") is never resolvable here, so a careless caller cannot seed the whole
-skill catalogue; ``mission-type`` is an activation ledger, not a corpus, and is
-refused with :class:`ValueError`.
+skill catalogue; ``mission_type_activations`` is an activation ledger, not a
+corpus (its absent key puts *nothing* in force), so it is never resolved either.
 
 Every unresolved set (except the required-only ``skill``) also carries
 :attr:`~charter.activation.activation_engine.EffectiveSet.fallback_ids`: the
@@ -70,6 +70,7 @@ logger = logging.getLogger(__name__)
 
 _DIRECTIVE = ArtifactKind.DIRECTIVE.operator_token
 _REQUIRED_ONLY = "kind is required-only: an absent key puts only org-required entries in force"
+_LEDGER = "mission_type_activations is an activation ledger, not a corpus: an absent key puts no mission type in force"
 
 
 class _UnresolvableError(Exception):
@@ -86,11 +87,9 @@ class _Offering:
 
 
 def _token_for(yaml_key: str) -> str:
-    """Return the kind operator token for *yaml_key*; refuse unknown keys and ``mission-type``."""
+    """Return the kind operator token for *yaml_key*; refuse unknown keys."""
     for token, key in YAML_KEY_MAP.items():
         if key == yaml_key:
-            if token == MISSION_TYPE_TOKEN:
-                raise ValueError(f"{yaml_key!r} is an activation ledger, not a corpus; it has no effective set.")
             return token
     raise ValueError(f"Unknown activation key {yaml_key!r}. Valid keys: {sorted(YAML_KEY_MAP.values())}")
 
@@ -246,18 +245,21 @@ def resolve_effective_sets(repo_root: Path, yaml_keys: Iterable[str]) -> dict[st
         One entry per key. ``resolved=False`` (with ``reason``) means the caller
         must leave the key absent and report it; never write a bare list. Such
         an entry carries ``fallback_ids`` (see the module docstring) for the
-        tolerant single activation only.
+        tolerant single activation only. ``mission_type_activations`` is always
+        unresolved (an activation ledger, not a corpus).
 
     Raises
     ------
     ValueError
-        For an unknown key or ``mission_type_activations`` (not a corpus).
+        For an unknown key.
     """
     tokens = {key: _token_for(key) for key in dict.fromkeys(yaml_keys)}
     results: dict[str, EffectiveSet] = {}
     pending: dict[str, str] = {}
     for key, token in tokens.items():
-        if ArtifactKind.from_operator_token(token).effective_when_absent == "required":
+        if token == MISSION_TYPE_TOKEN:
+            results[key] = EffectiveSet(kind=token, yaml_key=key, resolved=False, reason=_LEDGER)
+        elif ArtifactKind.from_operator_token(token).effective_when_absent == "required":
             results[key] = EffectiveSet(kind=token, yaml_key=key, resolved=False, reason=_REQUIRED_ONLY)
         else:
             pending[key] = token
