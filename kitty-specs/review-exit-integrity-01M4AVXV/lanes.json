@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "mission_slug": "review-exit-integrity-01M4AVXV",
+  "mission_id": "01M4AVXVE1P6SMX7W7E5B8QG3B",
+  "mission_branch": "issue-5446-review-exit-guard",
+  "target_branch": "issue-5446-review-exit-guard",
+  "lanes": [
+    {
+      "lane_id": "lane-planning",
+      "wp_ids": [
+        "WP01",
+        "WP02",
+        "WP03",
+        "WP04",
+        "WP05"
+      ],
+      "write_scope": [
+        "CLAUDE.md",
+        "docs/adr/4.x/2026-10-04-5-approval-stamp-bounds-the-approved-claim.md",
+        "docs/api/agent-subcommands.md",
+        "src/specify_cli/agent_utils/status.py",
+        "src/specify_cli/cli/commands/agent/status.py",
+        "src/specify_cli/cli/commands/agent/tasks_move_task_executor.py",
+        "src/specify_cli/cli/commands/agent/tasks_transition_core.py",
+        "src/specify_cli/cli/commands/agent/tasks_verdict_persistence.py",
+        "src/specify_cli/cli/commands/agent/workflow.py",
+        "src/specify_cli/cli/commands/agent/workflow_cores.py",
+        "src/specify_cli/cli/commands/agent/workflow_executor.py",
+        "src/specify_cli/consolidation/approved_bound.py",
+        "src/specify_cli/consolidation/preflight.py",
+        "src/specify_cli/review/artifacts.py",
+        "src/specify_cli/review/cycle.py",
+        "src/specify_cli/status/reducer.py",
+        "src/specify_cli/status/review_roles.py",
+        "src/specify_cli/status/work_package_lifecycle.py",
+        "tests/consolidation/test_approved_bound.py",
+        "tests/consolidation/test_approved_bound_residuals.py",
+        "tests/consolidation/test_hollow_review_warnings.py",
+        "tests/consolidation/test_preflight_seam.py",
+        "tests/review/test_review_cycle_no_overwrite_5194.py",
+        "tests/specify_cli/cli/commands/agent/test_approval_after_forced_review_exit.py",
+        "tests/specify_cli/cli/commands/agent/test_review_exit_guard_5446.py",
+        "tests/specify_cli/cli/commands/agent/test_tasks_transition_core.py",
+        "tests/status/test_actor_identity_reconciliation_4665.py",
+        "tests/status/test_reducer.py",
+        "tests/status/test_work_package_lifecycle.py",
+        "tests/unit/status/test_review_roles.py"
+      ],
+      "predicted_surfaces": [],
+      "depends_on_lanes": [],
+      "parallel_group": 0
+    }
+  ],
+  "computed_at": "2026-10-07T09:59:55.707794+00:00",
+  "computed_from": "dependency_graph+ownership",
+  "planning_artifact_wps": [],
+  "planning_commit_sha": "6aa7e66eb29b6062973dc23755ac843a2954b193"
+}
