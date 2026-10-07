@@ -120,7 +120,6 @@ def json_key_set(payload: object) -> list[str]:
 #: Literal markers (test_traceability requires a literal WP id at every call site).
 _FR006_PENDING = {"WP15": pending_until("WP15", "charter home of a former doctrine leaf (FR-006)")}
 _FR007_PENDING = {
-    "WP13": pending_until("WP13", "`charter pack apply` removed (FR-005)"),
     "WP15": pending_until("WP15", "old spelling removed with its charter home (FR-006)"),
     "WP16": pending_until("WP16", "`spec-kitty doctrine` group removed (FR-007)"),
 }
@@ -233,7 +232,7 @@ def _expected_replacement_exit(row: Removed) -> int:
 @pytest.mark.git_repo
 @pytest.mark.parametrize(
     "row",
-    [pytest.param(r, id=r.key, marks=_FR007_PENDING[r.pending]) for r in _removed_rows()],
+    [pytest.param(r, id=r.key, marks=_FR007_PENDING.get(r.pending, ())) for r in _removed_rows()],
 )
 def test_fr007_old_spelling_exits_2(row: Removed, tmp_path: Path) -> None:
     project = build_doctrine_command_fixture(tmp_path / "doctrine-commands")
@@ -281,7 +280,6 @@ def _scan_src(names: Sequence[str], modules: Sequence[str], root: Path) -> list[
 
 
 @covers("FR-005")
-@pending_until("WP13", "preset registry modules retired")
 def test_fr005_registry_modules_not_importable(tmp_path: Path) -> None:
     # Positive control for the scan: a planted definition is found.
     planted = tmp_path / "planted"
@@ -304,7 +302,6 @@ def _retired_reader_findings(root: Path) -> list[str]:
 
 
 @covers("FR-005")
-@pending_until("WP13", "no reader of the retired default.yaml surfaces")
 def test_fr005_no_default_yaml_reader_outside_migration_data(tmp_path: Path) -> None:
     planted = tmp_path / "planted"
     planted.mkdir()
