@@ -45,8 +45,6 @@ from charter.offering.packs.pack_manifest import (
     write_pack_manifest,
 )
 from charter.offering.packs.presets import (
-    EXAMPLE_PRESET_NAME,
-    PRESET_GOVERNED_KINDS,
     ActivationPreset,
     OfferingPack,
     PresetFormatError,
@@ -57,6 +55,7 @@ from charter.offering.packs.presets import (
     load_preset_file,
     preset_activation_keys,
     render_example_preset,
+    write_example_preset,
 )
 from charter.offering.packs.pack_validator import (
     ValidationIssue,
@@ -66,8 +65,6 @@ from charter.offering.packs.pack_validator import (
 )
 
 __all__ = [
-    "EXAMPLE_PRESET_NAME",
-    "PRESET_GOVERNED_KINDS",
     "RECOGNISED_ARTIFACT_DIRS",
     "ActivationPreset",
     "AssemblyResult",
@@ -89,6 +86,7 @@ __all__ = [
     "preset_activation_keys",
     "render_assembly_result",
     "render_example_preset",
+    "write_example_preset",
     "render_validation_result",
     "safe_urlsplit",
     "snapshot_sha256",

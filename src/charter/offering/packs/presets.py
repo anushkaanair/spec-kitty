@@ -64,6 +64,7 @@ __all__ = [
     "preset_activation_keys",
     "preset_files",
     "render_example_preset",
+    "write_example_preset",
 ]
 
 #: Kinds whose activation key a preset may not carry: each has its own absence
@@ -421,3 +422,11 @@ mission_type_activations:
 def render_example_preset() -> str:
     """Return the example preset ``charter org init`` writes (lists no artifact ids)."""
     return _EXAMPLE_PRESET
+
+
+def write_example_preset(pack_root: Path) -> Path:
+    """Write the example preset into the pack at *pack_root*; return its path."""
+    path = pack_presets_dir(pack_root) / f"{EXAMPLE_PRESET_NAME}.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_example_preset(), encoding="utf-8")
+    return path

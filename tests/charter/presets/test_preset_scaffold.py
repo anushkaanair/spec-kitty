@@ -7,16 +7,16 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from charter.offering.packs.presets import EXAMPLE_PRESET_NAME, load_preset, render_example_preset
+from charter.offering.packs.presets import EXAMPLE_PRESET_NAME, load_preset, render_example_preset, write_example_preset
 from kernel.charter_pack_paths import pack_presets_dir
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
 
 
 def test_example_preset_lists_no_ids(tmp_path: Path) -> None:
-    path = pack_presets_dir(tmp_path) / f"{EXAMPLE_PRESET_NAME}.yaml"
-    path.parent.mkdir(parents=True)
-    path.write_text(render_example_preset(), encoding="utf-8")
+    path = write_example_preset(tmp_path)
+    assert path == pack_presets_dir(tmp_path) / f"{EXAMPLE_PRESET_NAME}.yaml"
+    assert path.read_text(encoding="utf-8") == render_example_preset()
     preset = load_preset(tmp_path, EXAMPLE_PRESET_NAME)
     assert preset.activations == {}
     assert preset.activated_kinds is None

@@ -51,7 +51,6 @@ from kernel.charter_pack_paths import (
     PROJECT_PACK_ROOT_POSIX,
     pack_drg_fragment,
     pack_org_charter,
-    pack_presets_dir,
     project_pack_root,
 )
 from charter.drg import ArtifactKind, slug_for
@@ -1019,7 +1018,7 @@ def org_init(
 
 def _run_minimal_scaffold(pack_path: Path, *, force: bool) -> None:
     """Write the minimal org pack skeleton (charter, fragment, example preset, README)."""
-    from charter.packs import EXAMPLE_PRESET_NAME, render_example_preset
+    from charter.packs import write_example_preset
 
     if pack_path.exists() and not force:
         console.print(
@@ -1034,9 +1033,7 @@ def _run_minimal_scaffold(pack_path: Path, *, force: bool) -> None:
 
     pack_org_charter(pack_path).write_text(_ORG_CHARTER_STUB, encoding="utf-8")
     fragment_path.write_text(_DRG_FRAGMENT_STUB, encoding="utf-8")
-    preset_path = pack_presets_dir(pack_path) / f"{EXAMPLE_PRESET_NAME}.yaml"
-    preset_path.parent.mkdir(parents=True, exist_ok=True)
-    preset_path.write_text(render_example_preset(), encoding="utf-8")
+    preset_path = write_example_preset(pack_path)
     (pack_path / "README.md").write_text(_ORG_PACK_README_STUB, encoding="utf-8")
 
     console.print(f"[green]Org pack scaffolded at:[/green] {pack_path}")
