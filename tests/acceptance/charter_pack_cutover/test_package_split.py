@@ -27,7 +27,6 @@ PACK_TOOLING_MODULES = ("pack_descriptor", "pack_lineage", "pack_manifest", "bui
 
 
 @covers("FR-010", "OD-9")
-@pending_until("WP04", "pack model and tooling live in charter.offering.packs")
 def test_fr010_pack_tooling_lives_in_charter_offering_packs() -> None:
     assert importlib.import_module("charter.offering").__name__ == "charter.offering"  # control
     for name in PACK_TOOLING_MODULES:
@@ -35,7 +34,6 @@ def test_fr010_pack_tooling_lives_in_charter_offering_packs() -> None:
 
 
 @covers("FR-010", "OD-9")
-@pending_until("WP04", "the charter.packs facade re-exports by identity")
 def test_fr010_charter_packs_facade_exports() -> None:
     facade = importlib.import_module("charter.packs")
     exported = [name for name in getattr(facade, "__all__", ()) if not name.startswith("_")]
@@ -49,7 +47,6 @@ def test_fr010_charter_packs_facade_exports() -> None:
 
 
 @covers("FR-010", "OD-9")
-@pending_until("WP05", "src/specify_cli/doctrine/ deleted")
 def test_fr010_specify_cli_doctrine_package_deleted() -> None:
     assert importlib.import_module("specify_cli.cli").__name__ == "specify_cli.cli"  # control
     with pytest.raises(ModuleNotFoundError):
@@ -58,7 +55,6 @@ def test_fr010_specify_cli_doctrine_package_deleted() -> None:
 
 
 @covers("FR-010", "OD-9")
-@pending_until("WP05", "org charter composition and adapters at their ruled homes")
 def test_fr010_org_charter_and_adapters_at_ruled_homes() -> None:
     for name in (
         "charter.activation.org_charter",
