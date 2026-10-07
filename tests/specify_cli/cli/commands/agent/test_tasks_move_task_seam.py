@@ -328,12 +328,14 @@ def test_patched_feature_status_lock_intercepts_execute(tmp_path: Path) -> None:
     st = _make_state()
     st.main_repo_root = tmp_path
     st.mission_slug = "034-feature"
+    st.feature_dir = tmp_path / "kitty-specs" / "034-feature-01ABCDEF"
     with (
         patch(f"{_TASKS}.feature_status_lock", side_effect=_SentinelHit) as lock_mock,
         pytest.raises(_SentinelHit),
     ):
         tasks_move_task._mt_execute(st, ports=MagicMock())
-    lock_mock.assert_called_once_with(tmp_path, "034-feature")
+    # The lock is keyed on the Mission directory name, never the slug (#5819 A8).
+    lock_mock.assert_called_once_with(tmp_path, "034-feature-01ABCDEF")
 
 
 # (WP10 closeout) ``test_patched_console_intercepts_tracker_ref_warning`` removed:
