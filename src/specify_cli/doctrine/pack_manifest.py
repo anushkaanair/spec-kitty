@@ -18,7 +18,7 @@ Design references:
 * ``kitty-specs/pack-metadata-manifest-unification-01M052PT/data-model.md``
 
 Hashing is delegated to the **single** canonical manifest hasher
-(:func:`charter.activation.synthesizer.manifest.hash_manifest_payload`) — this module
+(:func:`charter.offering.packs.hashing.hash_manifest_payload`) — this module
 never introduces a second SHA-256 implementation (RR-SF2 / T005). The
 ``generated_at`` / ``generated_by`` provenance fields are excluded from both
 the ``manifest_hash`` and the byte-diff assertion so re-generating an unchanged
@@ -41,9 +41,10 @@ from pydantic import (
 )
 from ruamel.yaml import YAML
 
-from charter.activation.synthesizer.manifest import SynthesisManifest, hash_manifest_payload
-from charter.activation.synthesizer.synthesize_pipeline import canonical_yaml
+from charter.activation.synthesizer.manifest import SynthesisManifest
 from charter.offering.artifact_kinds import ArtifactKind
+from charter.offering.packs.hashing import hash_manifest_payload
+from charter.offering.yaml_utils import canonical_yaml
 
 #: Current unified pack-manifest schema version (DIR-018 shape gate).
 SCHEMA_VERSION = "1"
@@ -194,15 +195,14 @@ def sort_constituents(constituents: Sequence[Constituent]) -> list[Constituent]:
 def compute_pack_manifest_hash(manifest: PackManifest) -> str:
     """Compute ``manifest_hash`` via the single canonical hasher.
 
-    Delegates to :func:`charter.activation.synthesizer.manifest.hash_manifest_payload`
+    Delegates to :func:`charter.offering.packs.hashing.hash_manifest_payload`
     (the one SHA-256 + ``canonical_yaml`` primitive) over every field except
     :data:`HASH_EXCLUDED_FIELDS`. ``mode="json"`` normalizes the
     :class:`ArtifactKind` enum members to their string values so the payload is
     plain data.
     """
     data = _manifest_payload(manifest)
-    # hash_manifest_payload is untyped (Any) upstream; narrow to the str it returns.
-    return str(hash_manifest_payload(data, exclude_keys=HASH_EXCLUDED_FIELDS))
+    return hash_manifest_payload(data, exclude_keys=HASH_EXCLUDED_FIELDS)
 
 
 def finalize_pack_manifest(manifest: PackManifest) -> PackManifest:
