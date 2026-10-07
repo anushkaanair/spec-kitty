@@ -357,3 +357,9 @@ Never bare `tests/architectural/` or `make test-full`.
 ### Updating Status
 
 Status is managed via `status.events.jsonl`. Use `spec-kitty agent tasks move-task <WPID> --to <status>` to change WP status.
+
+## Carry-over from WP12 (approved)
+
+- WP12's cutover skills step (`src/specify_cli/upgrade/migrations/_charter_pack_cutover_skills.py`) deliberately skips any removed-skill name the installed catalog still ships; each name starts being removed once you delete its source. `test_fr012_installed_removed_skills` (acceptance) should turn green when the sources are gone — flip it as part of your red-first.
+- `test_frozen_hashes_match_the_shipped_sources` skips itself once the sources are gone (expected).
+- Edited installed copies keep their skills-manifest entries; confirm the finalizer's reconciliation does not then archive/remove them in a way that contradicts US4 (edited copies are kept and reported). Record the outcome.

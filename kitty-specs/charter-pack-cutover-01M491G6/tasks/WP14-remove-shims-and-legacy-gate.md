@@ -254,3 +254,8 @@ Never bare `tests/architectural/` or `make test-full`. Classify unrelated reds p
 ## Carry-over from WP11 review (cycle 2, non-blocking)
 
 - `specify_cli.migration.legacy_charter_layout._load_prefiltered` treats `NotADirectoryError` (e.g. `.kittify` is a regular file) as an unreadable config, while the retired-root `os.lstat` check treats the same error as "absent". Once the CLI-root gate (this WP) runs the predicate on every invocation, make the two agree (one classification for `NotADirectoryError`) and add a test with `.kittify` as a file. Record the chosen classification in the Activity Log.
+
+## Carry-over from WP12 (approved)
+
+- `test_context_noop_stability` setup errors: its fixture expects a tracked `.kittify/doctrine`, which WP11 moved to `.kittify/charter-packs`. Repoint it when you remove the legacy-root read paths (red at base since WP11; record it).
+- The shared YAML writer (`render_yaml_document`, used by `prepare_activation_write`/`prepare_charter_yaml_section`) cannot render a mapping emptied of its last key; WP12 works around it by writing `{}` in `_charter_pack_cutover_resets.py`. If cheap, fix it at the writer and drop the workaround (logged out-of-ownership edit); otherwise record it as a follow-up.
