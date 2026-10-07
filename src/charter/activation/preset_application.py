@@ -177,7 +177,8 @@ class PresetIdUnresolvedError(PresetApplicationError):
         self.unresolved = {key: list(ids) for key, ids in unresolved.items()}
         self.reasons = dict(reasons or {})
         named = sorted({*(f"{key}: {', '.join(ids)}" for key, ids in self.unresolved.items() if ids), *(f"{key}: {why}" for key, why in self.reasons.items())})
-        super().__init__(f"{preset_file} lists ids that resolve nowhere in the offering ({'; '.join(named)})")
+        headline = "lists ids that resolve nowhere in the offering" if self.unresolved else "lists ids that cannot be checked against the offering"
+        super().__init__(f"{preset_file} {headline} ({'; '.join(named)})")
 
     def detail_lines(self) -> list[str]:
         lines = [f"  {key}: {item}" for key, ids in self.unresolved.items() for item in ids]

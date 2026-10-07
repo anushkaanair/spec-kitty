@@ -607,13 +607,15 @@ def require_declared_org_roots(repo_root: Path) -> list[Path]:
     """
     try:
         packs = load_pack_registry(repo_root, quiet=True, strict=True).packs
-        roots = [pack.effective_root(repo_root) for pack in packs]
+        named_roots = [(pack.name, pack.effective_root(repo_root)) for pack in packs]
     except ValueError as exc:
         raise ValueError(f"the org pack registry cannot be read: {exc}") from exc
-    for root in roots:
+    for name, root in named_roots:
         if not root.is_dir():
-            raise ValueError(f"declared org pack root {root} is not a directory")
-    return roots
+            raise ValueError(
+                f"declared org pack {name!r} is not fetched: its root {root} is not a directory; run `spec-kitty charter fetch` to fetch it"
+            )
+    return [root for _, root in named_roots]
 
 
 def resolve_existing_org_roots(repo_root: Path) -> list[Path]:
