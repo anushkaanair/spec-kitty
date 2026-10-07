@@ -11,6 +11,7 @@ is human output only; the structured entries are :class:`SharedWorkspaceWriter`.
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -157,3 +158,69 @@ def test_warn_helper_prints_nothing_without_a_concurrent_writer(tmp_path: Path, 
 
     assert workflow_executor.warn_shared_workspace_writers(repo, MISSION, "WP01", _repo_root_workspace(), "alice") == []
     assert capsys.readouterr().out == ""
+
+
+# ---------------------------------------------------------------------------
+# CLI wiring: deleting the call from implement() / review() must fail these
+# ---------------------------------------------------------------------------
+
+
+def _lane_mate_mission(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *, wp01_lane: str, mate_lane: str, mate_actor: str) -> tuple[str, str]:
+    """A flat Mission whose WP01 and WP02 share lane-a; WP02 sits in ``mate_lane`` held by ``mate_actor``."""
+    from specify_cli.lanes.models import ExecutionLane
+    from specify_cli.lanes.persistence import read_lanes_json, write_lanes_json
+    from tests.characterization.test_trio_json_envelope import _build_mission_repo
+
+    repo, mission = _build_mission_repo(tmp_path, monkeypatch, coord=False, mission_slug="warn-wiring", wp_lane=wp01_lane)
+    write_wp(repo, mission, mate_lane, "WP02", agent=mate_actor)
+    feature_dir = repo / "kitty-specs" / mission
+    manifest = read_lanes_json(feature_dir)
+    assert manifest is not None
+    lane = manifest.lanes[0]
+    manifest.lanes = [
+        ExecutionLane(
+            lane_id=lane.lane_id,
+            wp_ids=(*lane.wp_ids, "WP02"),
+            write_scope=lane.write_scope,
+            predicted_surfaces=lane.predicted_surfaces,
+            depends_on_lanes=lane.depends_on_lanes,
+            parallel_group=lane.parallel_group,
+        )
+    ]
+    write_lanes_json(feature_dir, manifest)
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-q", "-m", "add WP02"], cwd=repo, check=True, capture_output=True)
+    return mission, mate_actor
+
+
+def _run_action(verb: str, mission: str, agent: str) -> str:
+    from typer.testing import CliRunner
+
+    from specify_cli import app as root_app
+
+    extra = ["--allow-sparse-checkout"] if verb == "implement" else []
+    result = CliRunner().invoke(root_app, ["agent", "action", verb, "WP01", "--mission", mission, "--agent", agent, *extra])
+    assert result.exit_code == 0, result.output
+    return str(result.output)
+
+
+def test_implement_command_warns_about_another_actor_on_its_lane_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mission, _ = _lane_mate_mission(tmp_path, monkeypatch, wp01_lane="planned", mate_lane="in_progress", mate_actor="alice")
+
+    out = _run_action("implement", mission, "bob")
+
+    assert f"Warning: {mission}/WP02 is in_progress by alice in this workspace; one writer per checkout (#5099)." in out
+
+
+def test_implement_command_stays_quiet_for_the_same_actor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mission, _ = _lane_mate_mission(tmp_path, monkeypatch, wp01_lane="planned", mate_lane="in_progress", mate_actor="alice")
+
+    assert "one writer per checkout" not in _run_action("implement", mission, "alice")
+
+
+def test_review_command_warns_about_another_actor_on_the_lane_worktree(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mission, _ = _lane_mate_mission(tmp_path, monkeypatch, wp01_lane="for_review", mate_lane="in_progress", mate_actor="alice")
+
+    out = _run_action("review", mission, "bob")
+
+    assert f"Warning: {mission}/WP02 is in_progress by alice in this workspace; one writer per checkout (#5099)." in out

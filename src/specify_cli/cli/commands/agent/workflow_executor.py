@@ -283,8 +283,8 @@ def commit_workflow_change(
             )
         except typer.Exit:
             outcome = w._restore_status_artifacts(rollback_point=rollback_point, repo_root=repo_root)
-            if not outcome.rolled_back:
-                _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=None)
+            if not outcome.rolled_back and _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=None):
+                w._record_receipt(str(coord_branch), message, "committed", sha=_committed_receipt_sha(repo_root, str(coord_branch)), wp_id=wp_id)
             raise
         except Exception as exc:  # noqa: BLE001 — surface + exit
             _handle_commit_failure(
@@ -308,8 +308,11 @@ def commit_workflow_change(
             except Exception as exc:  # noqa: BLE001 — structured sync refusal
                 try:
                     w._revert_coordination_commit(receipt)
-                    w._mark_receipt_refused(commit_sha=receipt.commit_sha)
                     outcome = w._restore_status_artifacts(rollback_point=rollback_point, repo_root=repo_root)
+                    # A rows-still-committed tail means the revert left the claim in place: the
+                    # output says "committed", so the receipt stays committed too.
+                    if outcome.refusal is not RollbackRefusal.TAIL_ALREADY_COMMITTED:
+                        w._mark_receipt_refused(commit_sha=receipt.commit_sha)
                     if not outcome.rolled_back:
                         _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=exc)
                 except Exception as rollback_exc:  # noqa: BLE001
