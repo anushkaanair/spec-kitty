@@ -1301,18 +1301,28 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # the file. The point is built here rather than captured because
         # ``_acquire_locked`` already took the pre-emit measurements inside this
         # transaction's own lock hold.
-        outcome = rollback_events_log(
-            RollbackPoint(
-                events_path=self._events_path,
-                status_path=self._snapshot_path,
-                pre_event_size=self._pre_emit_size,
-                pre_status_bytes=None,
-                events_existed=self._pre_emit_events_existed,
-            ),
-            expected_event_ids=self._event_ids or None,
-            repo_root=self.repo_root,
-        )
-        self._rollback_refusal = outcome.message()
+        try:
+            outcome = rollback_events_log(
+                RollbackPoint(
+                    events_path=self._events_path,
+                    status_path=self._snapshot_path,
+                    pre_event_size=self._pre_emit_size,
+                    pre_status_bytes=None,
+                    events_existed=self._pre_emit_events_existed,
+                ),
+                expected_event_ids=self._event_ids or None,
+                repo_root=self.repo_root,
+            )
+            self._rollback_refusal = outcome.message()
+            log_rolled_back = outcome.rolled_back
+        except OSError as exc:
+            # Tolerant like every other step: surface the failure on the commit error, keep going.
+            logger.error("BookkeepingTransaction rollback: cut of %s failed: %s", self._events_path, exc)
+            self._rollback_refusal = (
+                f"STATUS_ROLLBACK_REFUSED: could not cut {self._events_path}: {exc}; "
+                f"{self._events_path} may be unchanged. Inspect with: git diff HEAD -- {self._events_path}"
+            )
+            log_rolled_back = False
 
         # 2. Restore status.json from the byte snapshot captured at
         # first append_event() (NOT a re-materialise — preserves SHA).
@@ -1320,7 +1330,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # None and we leave status.json alone.
         # A refused log rollback leaves the snapshot alone too: it must keep
         # matching the log it was derived from.
-        if self._pre_emit_snapshot_existed is not None and outcome.rolled_back:
+        if self._pre_emit_snapshot_existed is not None and log_rolled_back:
             try:
                 if self._pre_emit_snapshot_existed:
                     assert self._pre_emit_snapshot_bytes is not None  # noqa: S101
