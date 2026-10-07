@@ -216,7 +216,11 @@ def _removed_rows() -> list[Removed]:
             rows.append(Removed(leaf.key, leaf.old, leaf.new, "WP15"))
         else:
             rows.append(Removed(leaf.key, leaf.old, leaf.new, "WP16"))
-    rows.append(Removed("charter_pack_apply", ("charter", "pack", "apply", "minimal"), ("charter", "activate", "--preset", "minimal", "--force"), "WP13", plain_control=True))
+    rows.append(
+        Removed(
+            "charter_pack_apply", ("charter", "pack", "apply", "minimal"), ("charter", "activate", "--preset", "minimal", "--force"), "WP13", plain_control=True
+        )
+    )
     return rows
 
 
