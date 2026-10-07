@@ -724,7 +724,7 @@ entries:
 - module: specify_cli.doctrine.org_charter
   name: apply_org_charter_pre_fill
   category: category_b_grandfathered_legacy
-- module: specify_cli.doctrine.pack_assembler
+- module: charter.offering.packs.pack_assembler
   name: ConflictItem
   category: category_b_grandfathered_legacy
 - module: specify_cli.frontmatter

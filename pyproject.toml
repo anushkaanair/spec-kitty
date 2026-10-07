@@ -571,8 +571,6 @@ exclude = [
     "src/specify_cli/doc_analysis/gap_analysis.py",
     "src/specify_cli/docs/index_model.py",
     "src/specify_cli/doctrine/org_charter_loader.py",
-    "src/specify_cli/doctrine/pack_assembler.py",
-    "src/specify_cli/doctrine/pack_validator.py",
     "src/specify_cli/doctrine/snapshot.py",
     "src/specify_cli/doctrine/sources/api_source.py",
     "src/specify_cli/doctrine/sources/https_source.py",

@@ -1,4 +1,4 @@
-"""Tests for ``specify_cli.doctrine.pack_validator``.
+"""Tests for ``charter.offering.packs.pack_validator``.
 
 These tests build minimal, schema-valid artifact fixtures in ``tmp_path`` and
 exercise :func:`validate_pack` against each of the documented error categories.
@@ -15,7 +15,7 @@ from ruamel.yaml import YAML
 
 from charter.offering.artifact_kinds import ArtifactKind
 from charter.offering.pack_paths import built_in_dir
-from specify_cli.doctrine.pack_validator import (
+from charter.offering.packs.pack_validator import (
     ValidationResult,
     _check_profile_skipped_diagnostics,
     render_validation_result,
@@ -1663,7 +1663,7 @@ class TestPackSanctionSymlinkPresence:
 
 def test_built_in_node_urns_is_empty_when_the_built_in_graph_cannot_load(monkeypatch: pytest.MonkeyPatch) -> None:
     from charter.offering.drg import loader
-    from specify_cli.doctrine.pack_validator import _built_in_node_urns
+    from charter.offering.packs.pack_validator import _built_in_node_urns
 
     def failing() -> object:
         raise loader.DRGLoadError("broken built-in graph")

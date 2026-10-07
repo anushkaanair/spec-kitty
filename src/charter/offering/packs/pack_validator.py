@@ -73,6 +73,9 @@ from ruamel.yaml.error import YAMLError
 
 __all__ = [
     "OrgCharterCheck",
+    "ValidationIssue",
+    "ValidationResult",
+    "artifact_schema_registry",
     "validate_pack",
     "render_validation_result",
 ]
@@ -199,7 +202,7 @@ class ValidationResult:
 # ---------------------------------------------------------------------------
 
 
-def _artifact_schema_registry() -> dict[str, tuple[str, type[BaseModel]]]:
+def artifact_schema_registry() -> dict[str, tuple[str, type[BaseModel]]]:
     """Map plural directory name → ``(glob_pattern, pydantic_model)``.
 
     Imported lazily to avoid loading the heavy doctrine package at module
@@ -311,25 +314,14 @@ def _scan_artifact_directory(  # noqa: PLR0913 — small helper kept private to 
         # (it emits `intent_conflict`) instead of the generic
         # `schema_invalid` from the Pydantic cross-field validator.
         both_intent_fields_set = (
-            isinstance(data.get("overrides"), str)
-            and bool(data.get("overrides"))
-            and isinstance(data.get("enhances"), str)
-            and bool(data.get("enhances"))
+            isinstance(data.get("overrides"), str) and bool(data.get("overrides")) and isinstance(data.get("enhances"), str) and bool(data.get("enhances"))
         )
-        if (
-            isinstance(artifact_id, str)
-            and artifact_id
-            and plural in _AUGMENTATION_PLURAL_KINDS
-        ):
-            pack_artifacts_data.setdefault(plural, {}).setdefault(
-                artifact_id, (data, yaml_file)
-            )
+        if isinstance(artifact_id, str) and artifact_id and plural in _AUGMENTATION_PLURAL_KINDS:
+            pack_artifacts_data.setdefault(plural, {}).setdefault(artifact_id, (data, yaml_file))
             if both_intent_fields_set:
                 # The intent-aware pass owns the error. Track the ID so
                 # downstream checks still see it as a known artifact.
-                pack_artifact_ids_per_type.setdefault(plural, set()).add(
-                    artifact_id
-                )
+                pack_artifact_ids_per_type.setdefault(plural, set()).add(artifact_id)
                 seen_ids[artifact_id] = yaml_file
                 urn_kind = _plural_to_urn_kind(plural)
                 if urn_kind is not None:
@@ -344,10 +336,7 @@ def _scan_artifact_directory(  # noqa: PLR0913 — small helper kept private to 
                     artifact_type=plural,
                     artifact_id=str(artifact_id) if artifact_id else None,
                     file=str(yaml_file),
-                    message=(
-                        f"schema validation failed: "
-                        f"{exc.errors()[0].get('msg', exc)}"
-                    ),
+                    message=(f"schema validation failed: {exc.errors()[0].get('msg', exc)}"),
                     category="schema_invalid",
                 )
             )
@@ -362,19 +351,14 @@ def _scan_artifact_directory(  # noqa: PLR0913 — small helper kept private to 
                     artifact_type=plural,
                     artifact_id=artifact_id,
                     file=str(yaml_file),
-                    message=(
-                        f"duplicate id '{artifact_id}' "
-                        f"(also defined in {seen_ids[artifact_id].name})"
-                    ),
+                    message=(f"duplicate id '{artifact_id}' (also defined in {seen_ids[artifact_id].name})"),
                     category="duplicate_id",
                 )
             )
             continue
         seen_ids[artifact_id] = yaml_file
         pack_artifact_ids_per_type.setdefault(plural, set()).add(artifact_id)
-        pack_artifacts_data.setdefault(plural, {}).setdefault(
-            artifact_id, (data, yaml_file)
-        )
+        pack_artifacts_data.setdefault(plural, {}).setdefault(artifact_id, (data, yaml_file))
         urn_kind = _plural_to_urn_kind(plural)
         if urn_kind is not None:
             pack_artifact_urns.add(f"{urn_kind}:{artifact_id}")
@@ -426,7 +410,7 @@ def validate_pack(
         )
         return ValidationResult(ok=False, errors=errors, advisories=advisories)
 
-    registry = _artifact_schema_registry()
+    registry = artifact_schema_registry()
 
     # Collect all artifact IDs present in this pack (used by DRG and advisory).
     pack_artifact_urns: set[str] = set()
@@ -454,12 +438,8 @@ def validate_pack(
     # FR-002: surface AgentProfileRepository's post-merge profile-skip
     # diagnostics inline, deduplicated against files the generic scan above
     # already flagged schema_invalid.
-    already_flagged_files = {
-        issue.file for issue in errors if issue.artifact_type == "agent_profiles"
-    }
-    errors.extend(
-        _check_profile_skipped_diagnostics(pack_dir, already_flagged_files)
-    )
+    already_flagged_files = {issue.file for issue in errors if issue.artifact_type == "agent_profiles"}
+    errors.extend(_check_profile_skipped_diagnostics(pack_dir, already_flagged_files))
 
     errors.extend(_validate_org_fragment(pack_dir))
 
@@ -482,9 +462,7 @@ def validate_pack(
     # in pack_artifacts_data) are checked here — malformed manifests were
     # already flagged as schema_invalid by that scan. Does NOT enforce
     # global id-uniqueness across packs (WP03's merge scan owns that).
-    asset_errors, asset_advisories = _validate_asset_manifests(
-        pack_dir, pack_artifacts_data.get("assets", {})
-    )
+    asset_errors, asset_advisories = _validate_asset_manifests(pack_dir, pack_artifacts_data.get("assets", {}))
     errors.extend(asset_errors)
     advisories.extend(asset_advisories)
 
@@ -527,17 +505,13 @@ def validate_pack(
     # FR-014 (#5767): a pack-root replaceable-builtins.yaml is parsed by the
     # single sanction parser so a broken file never ships.
     if pack_sanction_present(pack_dir):
-        sanction_errors, sanction_advisories = _validate_pack_sanction(
-            pack_dir, _built_in_node_urns()
-        )
+        sanction_errors, sanction_advisories = _validate_pack_sanction(pack_dir, _built_in_node_urns())
         errors.extend(sanction_errors)
         advisories.extend(sanction_advisories)
 
     # T044: the optional org-charter.yaml leg runs through the caller's hook;
     # without one, an org-charter.yaml is an explicit error, never skipped.
-    advisories_or_errors = _check_org_charter(
-        pack_dir, pack_artifact_ids_per_type.get("directives", set()), org_charter_check
-    )
+    advisories_or_errors = _check_org_charter(pack_dir, pack_artifact_ids_per_type.get("directives", set()), org_charter_check)
     for issue in advisories_or_errors:
         if issue.severity == "error":
             errors.append(issue)
@@ -643,20 +617,13 @@ def _pack_node_urns(pack_dir: Path) -> frozenset[str] | None:
     A load failure is already reported by :func:`_validate_org_fragment`.
     """
     try:
-        fragment = load_org_pack(
-            pack_name=pack_dir.name, pack_root=pack_dir, layer_index=1
-        )
+        fragment = load_org_pack(pack_name=pack_dir.name, pack_root=pack_dir, layer_index=1)
     except (OrgPackMissingError, OrgPackParseError, OrgPackSchemaError, OSError):
         return None
-    return frozenset(
-        f"{ORG_PLURAL_TO_SINGULAR_KIND.get(node.kind, node.kind)}:{node.id}"
-        for node in fragment.nodes
-    )
+    return frozenset(f"{ORG_PLURAL_TO_SINGULAR_KIND.get(node.kind, node.kind)}:{node.id}" for node in fragment.nodes)
 
 
-def _sanction_issue(
-    severity: str, file: Path, urn: str | None, message: str
-) -> ValidationIssue:
+def _sanction_issue(severity: str, file: Path, urn: str | None, message: str) -> ValidationIssue:
     return ValidationIssue(
         severity=severity,
         artifact_type="pack",
@@ -667,9 +634,7 @@ def _sanction_issue(
     )
 
 
-def _validate_pack_sanction(
-    pack_dir: Path, built_in_urns: frozenset[str]
-) -> tuple[list[ValidationIssue], list[ValidationIssue]]:
+def _validate_pack_sanction(pack_dir: Path, built_in_urns: frozenset[str]) -> tuple[list[ValidationIssue], list[ValidationIssue]]:
     """Validate ``<pack>/replaceable-builtins.yaml`` (FR-014).
 
     Errors: any parse/shape failure reported by the single sanction parser, and a
@@ -695,20 +660,16 @@ def _validate_pack_sanction(
                     "error",
                     sanction_file,
                     entry.urn,
-                    f"{PACK_POLICY_FILENAME}: directive override '{entry.urn}' "
-                    "requires a non-empty reason",
+                    f"{PACK_POLICY_FILENAME}: directive override '{entry.urn}' requires a non-empty reason",
                 )
             )
-        elif pack_urns is not None and built_in_urns and not (
-            entry.urn in built_in_urns and entry.urn in pack_urns
-        ):
+        elif pack_urns is not None and built_in_urns and not (entry.urn in built_in_urns and entry.urn in pack_urns):
             advisories.append(
                 _sanction_issue(
                     "advisory",
                     sanction_file,
                     entry.urn,
-                    f"{PACK_POLICY_FILENAME}: '{entry.urn}' is not a built-in "
-                    "this pack overrides; the entry is inert",
+                    f"{PACK_POLICY_FILENAME}: '{entry.urn}' is not a built-in this pack overrides; the entry is inert",
                 )
             )
     return errors, advisories
@@ -836,10 +797,7 @@ def _validate_drg(
                         artifact_type="drg",
                         artifact_id=node.urn,
                         file=str(fragment),
-                        message=(
-                            f"node {node.urn} attempts to change built-in kind "
-                            f"{built_in_kind!r} → {node.kind.value!r}"
-                        ),
+                        message=(f"node {node.urn} attempts to change built-in kind {built_in_kind!r} → {node.kind.value!r}"),
                         category="drg_kind_drift",
                     )
                 )
@@ -856,10 +814,7 @@ def _validate_drg(
                             artifact_type="drg",
                             artifact_id=urn,
                             file=str(fragment),
-                            message=(
-                                f"dangling DRG edge — {role} URN {urn!r} "
-                                f"not in built-in or pack artifact set"
-                            ),
+                            message=(f"dangling DRG edge — {role} URN {urn!r} not in built-in or pack artifact set"),
                             category="drg_dangling_edge",
                         )
                     )
@@ -871,11 +826,7 @@ def _validate_drg(
                         artifact_type="drg",
                         artifact_id=None,
                         file=str(fragment),
-                        message=(
-                            f"duplicate edge "
-                            f"({edge.source} -[{edge.relation.value}]-> {edge.target}) "
-                            f"already present in {seen_edges[key].name}"
-                        ),
+                        message=(f"duplicate edge ({edge.source} -[{edge.relation.value}]-> {edge.target}) already present in {seen_edges[key].name}"),
                         category="duplicate_drg_edge",
                     )
                 )
@@ -1033,9 +984,7 @@ def _check_asset_path_containment(
             artifact_type="assets",
             artifact_id=artifact_id,
             file=str(source_file),
-            message=(
-                f"asset path {raw_path!r} escapes the pack's assets/ root: {exc}"
-            ),
+            message=(f"asset path {raw_path!r} escapes the pack's assets/ root: {exc}"),
             category="asset_path_escape",
         )
     return None
@@ -1066,9 +1015,7 @@ def _check_asset_mime(
             artifact_type="assets",
             artifact_id=artifact_id,
             file=str(source_file),
-            message=(
-                f"asset mime {raw_mime!r} is not a well-formed 'type/subtype' value"
-            ),
+            message=(f"asset mime {raw_mime!r} is not a well-formed 'type/subtype' value"),
             category="asset_mime_invalid",
         )
 
@@ -1079,10 +1026,7 @@ def _check_asset_mime(
             artifact_type="assets",
             artifact_id=artifact_id,
             file=str(source_file),
-            message=(
-                f"asset mime {raw_mime!r} is inconsistent with path "
-                f"{raw_path!r} (guessed {guessed_mime!r} from its extension)"
-            ),
+            message=(f"asset mime {raw_mime!r} is inconsistent with path {raw_path!r} (guessed {guessed_mime!r} from its extension)"),
             category="asset_mime_invalid",
         )
     return None
@@ -1151,10 +1095,7 @@ def _check_profile_skipped_diagnostics(
                 artifact_type="agent_profiles",
                 artifact_id=None,
                 file=str(pack_dir / "agent_profiles"),
-                message=(
-                    "unable to resolve agent-profile diagnostics: "
-                    f"{exc}"
-                ),
+                message=(f"unable to resolve agent-profile diagnostics: {exc}"),
                 category="profile_skipped",
             )
         ]
@@ -1209,7 +1150,7 @@ def _load_built_in_ids_per_kind() -> dict[str, set[str]]:
     # resolve via the shared built_in_dir(kind) seam rather than a locally
     # bound "built-in" root joined per-plural (the variable-indirected drift
     # class this seam exists to close).
-    registry = _artifact_schema_registry()
+    registry = artifact_schema_registry()
     parser = _yaml_parser()
     for plural, (glob, _schema) in registry.items():
         try:
@@ -1286,10 +1227,7 @@ def _intent_aware_collision_messages(
                         artifact_type=plural,
                         artifact_id=art_id,
                         file=str(source_file),
-                        message=(
-                            f"overrides and enhances are mutually exclusive on "
-                            f"{singular} {art_id}"
-                        ),
+                        message=(f"overrides and enhances are mutually exclusive on {singular} {art_id}"),
                         category="intent_conflict",
                     )
                 )
@@ -1303,11 +1241,7 @@ def _intent_aware_collision_messages(
                         artifact_type=plural,
                         artifact_id=art_id,
                         file=str(source_file),
-                        message=(
-                            f"{singular} {art_id} declares overrides: "
-                            f"{overrides_field}, but no built-in {singular} "
-                            f"with that id exists"
-                        ),
+                        message=(f"{singular} {art_id} declares overrides: {overrides_field}, but no built-in {singular} with that id exists"),
                         category="unknown_target",
                     )
                 )
@@ -1321,11 +1255,7 @@ def _intent_aware_collision_messages(
                         artifact_type=plural,
                         artifact_id=art_id,
                         file=str(source_file),
-                        message=(
-                            f"{singular} {art_id} declares enhances: "
-                            f"{enhances_field}, but no built-in {singular} "
-                            f"with that id exists"
-                        ),
+                        message=(f"{singular} {art_id} declares enhances: {enhances_field}, but no built-in {singular} with that id exists"),
                         category="unknown_target",
                     )
                 )
@@ -1436,22 +1366,13 @@ def _collect_fragment_yaml_edges(
     if not fragment_yaml.exists():
         return None
     try:
-        fragment = load_org_pack(
-            pack_name=drg_dir.parent.name, pack_root=drg_dir.parent, layer_index=1
-        )
+        fragment = load_org_pack(pack_name=drg_dir.parent.name, pack_root=drg_dir.parent, layer_index=1)
     except (OrgPackMissingError, OrgPackParseError, OrgPackSchemaError, OSError):
         return None
     # Mint fragment-local URNs exactly as the runtime bridge does
     # (``merge._bridge_org_node_to_drg_node``: ``<singular_kind>:<id>``).
-    node_id_to_urn = {
-        node.id: f"{ORG_PLURAL_TO_SINGULAR_KIND[node.kind]}:{node.id}"
-        for node in fragment.nodes
-        if node.kind in ORG_PLURAL_TO_SINGULAR_KIND
-    }
-    qualified = (
-        _qualify_fragment_edge(edge.source, edge.target, edge.relation, node_id_to_urn)
-        for edge in fragment.edges
-    )
+    node_id_to_urn = {node.id: f"{ORG_PLURAL_TO_SINGULAR_KIND[node.kind]}:{node.id}" for node in fragment.nodes if node.kind in ORG_PLURAL_TO_SINGULAR_KIND}
+    qualified = (_qualify_fragment_edge(edge.source, edge.target, edge.relation, node_id_to_urn) for edge in fragment.edges)
     return [edge for edge in qualified if edge is not None]
 
 
@@ -1501,9 +1422,7 @@ def _qualify_fragment_edge(
     source_urn = _qualify_fragment_endpoint(source, node_id_to_urn, None)
     if source_urn is None:
         return None
-    target_urn = _qualify_fragment_endpoint(
-        target, node_id_to_urn, source_urn.partition(":")[0]
-    )
+    target_urn = _qualify_fragment_endpoint(target, node_id_to_urn, source_urn.partition(":")[0])
     if target_urn is None:
         return None
     return source_urn, target_urn, relation
@@ -1609,9 +1528,7 @@ def _intent_aware_collision_messages_from_edges(
                 has_field_intent = False
                 if field_data is not None:
                     raw_data = field_data[0]
-                    has_field_intent = bool(
-                        raw_data.get("enhances") or raw_data.get("overrides")
-                    )
+                    has_field_intent = bool(raw_data.get("enhances") or raw_data.get("overrides"))
                 has_builtin_collision = art_id in built_ins
                 if has_field_intent or not has_builtin_collision:
                     continue  # field-based path handles it, or no collision exists
@@ -1628,10 +1545,7 @@ def _intent_aware_collision_messages_from_edges(
                         artifact_type=plural,
                         artifact_id=art_id,
                         file=str(fragment),
-                        message=(
-                            f"overrides and enhances are mutually exclusive on "
-                            f"{singular} {art_id} (declared via DRG fragment edges)"
-                        ),
+                        message=(f"overrides and enhances are mutually exclusive on {singular} {art_id} (declared via DRG fragment edges)"),
                         category="intent_conflict",
                     )
                 )
@@ -1648,11 +1562,7 @@ def _intent_aware_collision_messages_from_edges(
                             artifact_type=plural,
                             artifact_id=art_id,
                             file=str(fragment),
-                            message=(
-                                f"{singular} {art_id} declares {relation}: "
-                                f"{target} (via DRG fragment edge), but no "
-                                f"built-in {singular} with that id exists"
-                            ),
+                            message=(f"{singular} {art_id} declares {relation}: {target} (via DRG fragment edge), but no built-in {singular} with that id exists"),
                             category="unknown_target",
                         )
                     )
@@ -1705,10 +1615,7 @@ def _check_org_charter(
                 artifact_type="org-charter",
                 artifact_id=None,
                 file=str(charter_path),
-                message=(
-                    "org charter not validated: no checker supplied "
-                    "(validate the pack through the org-charter composing entry)"
-                ),
+                message=("org charter not validated: no checker supplied (validate the pack through the org-charter composing entry)"),
                 category=ORG_CHARTER_UNCHECKED_CATEGORY,
             )
         ]

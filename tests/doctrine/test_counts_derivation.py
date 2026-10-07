@@ -74,7 +74,7 @@ class TestPinPackAssemblerReader:
     def test_recognises_manifest_with_derived_counts(self, tmp_path) -> None:
         import yaml
 
-        from specify_cli.doctrine.pack_assembler import _has_recognisable_pack_manifest
+        from charter.offering.packs.pack_assembler import _has_recognisable_pack_manifest
 
         payload = {
             "pack_version": "1.0.0",
@@ -112,7 +112,7 @@ class TestSnapshotWriteStaysRecognisable:
     recognisable to the pinned pack_assembler reader (NFR-002)."""
 
     def test_write_pack_manifest_is_recognisable(self, tmp_path) -> None:
-        from specify_cli.doctrine.pack_assembler import _has_recognisable_pack_manifest
+        from charter.offering.packs.pack_assembler import _has_recognisable_pack_manifest
         from charter.offering.packs.pack_manifest import write_pack_manifest
 
         local = tmp_path / "snap"

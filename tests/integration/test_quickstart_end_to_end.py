@@ -420,7 +420,7 @@ class TestStep4_PackValidatorVocabulary:
         """Step 4 setup: same-ID with NO intent -> reworded advisory."""
         _assert_built_in_fixture_tactic_present()
 
-        from specify_cli.doctrine.pack_validator import validate_pack
+        from charter.offering.packs.pack_validator import validate_pack
 
         _write_pack_tactic(tmp_path, artifact_id=_BUILT_IN_TACTIC_ID)
         result = validate_pack(tmp_path)
@@ -447,7 +447,7 @@ class TestStep4_PackValidatorVocabulary:
         """Inline ``enhances`` is retired; DRG fragment edges own relationships."""
         _assert_built_in_fixture_tactic_present()
 
-        from specify_cli.doctrine.pack_validator import validate_pack
+        from charter.offering.packs.pack_validator import validate_pack
 
         _write_pack_tactic(
             tmp_path,
@@ -470,7 +470,7 @@ class TestStep4_PackValidatorVocabulary:
         """``enhances: <bogus-id>`` -> hard ``unknown_target`` ERROR (FR-012)."""
         _assert_built_in_fixture_tactic_present()
 
-        from specify_cli.doctrine.pack_validator import validate_pack
+        from charter.offering.packs.pack_validator import validate_pack
 
         _write_pack_tactic(
             tmp_path,
@@ -564,7 +564,7 @@ class TestStep5_NoShippedLayerLabel:
         """``pack validate --json`` must not surface ``"shipped"``."""
         _assert_built_in_fixture_tactic_present()
 
-        from specify_cli.doctrine.pack_validator import (
+        from charter.offering.packs.pack_validator import (
             render_validation_result,
             validate_pack,
         )
