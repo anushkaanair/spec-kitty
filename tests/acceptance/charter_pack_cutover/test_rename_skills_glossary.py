@@ -44,7 +44,6 @@ CUTOVER_ADR = REPO_ROOT / "docs" / "adr" / "4.x" / "2026-10-06-1-charter-offerin
 
 @covers("FR-008", "OD-7", "C-004")
 @pytest.mark.corpus
-@pending_until("WP18", "spk-charter-* and spk-practice-* replace the retired skills")
 def test_fr008_skill_families_present() -> None:
     assert (REPO_ROOT / "packs" / "built-in" / "agent_profiles" / "doctrine-daphne.agent.yaml").is_file(), "doctrine-daphne is unchanged (C-004)"
     missing = [name for name in NEW_SKILLS if not (SKILLS_ROOT / name / "SKILL.md").is_file()]
@@ -54,7 +53,6 @@ def test_fr008_skill_families_present() -> None:
 
 
 @covers("FR-008")
-@pending_until("WP18", "every removed skill name is retired")
 def test_fr008_removed_names_are_retired() -> None:
     retired = importlib.import_module("specify_cli.skills.retired").RETIRED_CANONICAL_SKILL_NAMES
     assert retired, "control: the retired set is the real one"
@@ -65,7 +63,6 @@ def test_fr008_removed_names_are_retired() -> None:
 @covers("FR-008", "US4-1")
 @pytest.mark.integration
 @pytest.mark.git_repo
-@pending_until("WP18", "upgrade installs the new skills and removes the old in project and user-global roots")
 def test_fr008_upgrade_installs_new_and_removes_old(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))

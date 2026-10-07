@@ -402,7 +402,6 @@ def test_fr012_normalizer_empty_lists_reset_and_reported(tmp_path: Path) -> None
 
 
 @covers("FR-012", "FR-008", "INV:Installed skills", "US4-1")
-@pending_until("WP18", "installed copies of removed skills retired through spec-kitty upgrade")
 def test_fr012_installed_removed_skills(tmp_path: Path) -> None:
     project = build("installed_removed_skills", tmp_path)
     _, payload = upgrade(project)
