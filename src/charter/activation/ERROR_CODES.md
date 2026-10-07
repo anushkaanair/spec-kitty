@@ -89,8 +89,8 @@ key with the wrong type. Raised by `mission create`, the `charter` commands
 and the runtime prompt builders; with `--json` the code is the payload's
 error code.
 
-**Replaces**: `CHARTER_PACK_CONFIG_INVALID` (renamed by #3732, ADR
-2026-10-06-1 section 1; no alias is accepted).
+**Replaces**: the code this error carried before #3732 (ADR 2026-10-06-1
+section 1; the changelog Before/After names it). No alias is accepted.
 
 **JSON stability**: this code string is stable across minor releases; consumers
 may match it as an opaque identifier. The payload shape is unchanged from the
