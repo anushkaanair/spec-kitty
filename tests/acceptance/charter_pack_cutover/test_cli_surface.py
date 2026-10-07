@@ -391,7 +391,7 @@ def _gated_commands() -> list[tuple[str, ...]]:
 def _legacy_invocations() -> list[object]:
     covered = {*_gated_groups(), *_gated_commands()}
     rows = [*_gated_groups(), *_gated_commands(), *(p for p in HOT_PATHS if p not in covered)]
-    return [pytest.param(argv, id="-".join(argv), marks=pending_until("WP14", "CLI-root legacy gate")) for argv in rows]
+    return [pytest.param(argv, id="-".join(argv)) for argv in rows]
 
 
 def _assert_names_upgrade(result: Result) -> None:
@@ -432,7 +432,6 @@ def test_fr011_exempt_invocations(argv: tuple[str, ...], tmp_path: Path) -> None
 @covers("FR-011", "EC:Lane worktrees created before the upgrade")
 @pytest.mark.integration
 @pytest.mark.git_repo
-@pending_until("WP14", "the gate also checks the current checkout root")
 def test_fr011_stale_worktree_checkout_detected(tmp_path: Path) -> None:
     project = project_from_template("two_org_packs", tmp_path / "root")
     from ._support import git
@@ -456,7 +455,6 @@ RETIRED_SHIM_NAMES = ("LegacyDoctrineRootWarning", "LegacyTrackerOwnershipKeyWar
 
 @covers("FR-011")
 @pytest.mark.integration
-@pending_until("WP14", "read-side shims removed")
 def test_fr011_shims_removed(tmp_path: Path) -> None:
     src_text = "\n".join(p.read_text(encoding="utf-8") for p in sorted((REPO_ROOT / "src").rglob("*.py")))
     # Control: the scan reads real source (a definition no work package of this mission touches).
@@ -470,7 +468,6 @@ def test_fr011_shims_removed(tmp_path: Path) -> None:
 
 
 @covers("FR-011")
-@pending_until("WP14", "load_governance_config fails closed on governance.doctrine")
 def test_fr011_load_governance_config_fails_closed(tmp_path: Path) -> None:
     project = project_from_template("governance_doctrine_in_charter_yaml", tmp_path / "p")
     sync = importlib.import_module("charter.activation.sync")
@@ -482,7 +479,6 @@ def test_fr011_load_governance_config_fails_closed(tmp_path: Path) -> None:
 
 
 @covers("FR-011")
-@pending_until("WP14", "PackContext.from_config stays total on a legacy project")
 def test_fr011_pack_context_from_config_total(tmp_path: Path) -> None:
     pack_context = importlib.import_module("charter.activation.pack_context")
     legacy = project_from_template("legacy_keys_only", tmp_path / "legacy")
