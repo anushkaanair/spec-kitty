@@ -312,7 +312,6 @@ exclude = [
     "src/charter/activation/_activation_render.py",
     "src/charter/activation/_catalog_miss.py",
     "src/charter/activation/_diagnostics.py",
-    "src/charter/activation/_doctrine_paths.py",
     "src/charter/activation/_drg_helpers.py",
     "src/charter/activation/action_doctrine_bundle.py",
     "src/charter/activation/action_grain.py",
