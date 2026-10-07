@@ -164,12 +164,14 @@ def _config_findings(data: Mapping[str, Any]) -> list[str]:
 def _load_prefiltered(path: Path) -> tuple[bool, Any]:
     """Return ``(readable, data)`` for *path*; ``data`` is ``None`` when the prefilter misses.
 
-    An absent file is readable with no data. Any read or parse error is
-    ``(False, None)``.
+    An absent file is readable with no data; so is a path under a parent that
+    is not a directory (``NotADirectoryError``, e.g. ``.kittify`` is a regular
+    file), the same classification as :func:`_legacy_root_finding`. Any other
+    read or parse error is ``(False, None)``.
     """
     try:
         raw = path.read_bytes()
-    except FileNotFoundError:
+    except (FileNotFoundError, NotADirectoryError):
         return True, None
     except OSError:
         return False, None

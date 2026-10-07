@@ -258,3 +258,14 @@ def test_every_probe_denied_never_raises(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setattr(Path, "stat", path_stat)
     monkeypatch.setattr(Path, "read_bytes", read_bytes)
     assert detect_legacy_charter_layout(project) == (UNREADABLE_PROJECT_ROOT, UNREADABLE_GOVERNANCE_FILE, UNREADABLE_CONFIG)
+
+
+def test_kittify_as_a_regular_file_is_absent_not_unreadable(tmp_path: Path) -> None:
+    """``NotADirectoryError`` is one classification everywhere: absent (WP11 carry-over, #3732).
+
+    The retired-root ``lstat`` and the config/governance reads agree, so the
+    CLI-root gate never refuses a project merely because ``.kittify`` is a file.
+    """
+    (tmp_path / ".kittify").write_text("not a directory\n", encoding="utf-8")
+
+    assert detect_legacy_charter_layout(tmp_path) == ()
