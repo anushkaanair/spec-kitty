@@ -426,7 +426,7 @@
     },
     "WP13": {
       "actor": "claude",
-      "agent": "claude",
+      "agent": null,
       "agent_profile": "architect-alphonso",
       "agent_profile_version": "1.0",
       "force_count": 1,
@@ -439,6 +439,7 @@
         "Registry (charter_pack_registry, BUILTIN_PACKS), src/charter/activation/packs/ and charter pack apply deleted with no alias; accompanies_doctrine_pack retired (RETIRED_PACK_FIELD via pack.yaml scope, load_pack_descriptor, validate_pack finding). Red-first c970fd90 (3 failed); acceptance 210 passed/143 xfailed/0 xpassed; make test-fast 2281 passed. Out-of-ownership edits logged in report."
       ],
       "provider": "__resolved_provider_absent__",
+      "review": null,
       "review_result": {
         "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP13-retire-preset-registry/review-cycle-1.md",
         "reference": "review-cycle://charter-pack-cutover-01M491G6/WP13-retire-preset-registry/review-cycle-1.md",
@@ -446,13 +447,13 @@
         "verdict": "changes_requested"
       },
       "role": "reviewer",
-      "shell_pid": 23673,
-      "shell_pid_created_at": "1791406384.31",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
       "subtasks": {
-        "T066": "done",
-        "T067": "done",
-        "T068": "done",
-        "T069": "done"
+        "T066": "planned",
+        "T067": "planned",
+        "T068": "planned",
+        "T069": "planned"
       }
     },
     "WP14": {
