@@ -224,7 +224,10 @@ _Mission action commands that display prompts and instructions for agents_
 ╭─ Options ────────────────────────────────────────────────────────────────────╮
 │ --mission                            TEXT  Mission slug                      │
 │ --agent                              TEXT  Agent name (required for          │
-│                                            auto-move to in_progress)         │
+│                                            auto-move to in_progress). With   │
+│                                            --force, name the agent that will │
+│                                            implement: it is recorded as the  │
+│                                            implementer of record.            │
 │ --model                              TEXT  Dispatch-resolved model asserted  │
 │                                            against the correlated Op record  │
 │                                            (requires --invocation-id; never  │
@@ -239,6 +242,14 @@ _Mission action commands that display prompts and instructions for agents_
 │ --invocation-id                      TEXT  Correlated Op record ULID whose   │
 │                                            mission, WP, action, profile, and │
 │                                            model are authoritative           │
+│ --force                                    Operator override: take a WP out  │
+│                                            of for_review, in_review or       │
+│                                            approved. Requires --note.        │
+│                                            Refused for a WP in any other     │
+│                                            lane.                             │
+│ --note                               TEXT  Why the review lane is being      │
+│                                            left; recorded in the status      │
+│                                            event. Only valid with --force.   │
 │ --allow-sparse-checkout                    Proceed even if legacy            │
 │                                            sparse-checkout state is          │
 │                                            detected. Use of this override is │
