@@ -210,7 +210,8 @@ the runtime reads it without any parse/extract step in between.
      them except a deliberate hand edit.
    - Flat-root activation keys (`activated_kinds`, `activated_directives`,
      `mission_type_activations`, …) — **hand-authored**, mirrors
-     `src/charter/activation/packs/default.yaml`.
+     the activation presets (`packs/built-in/presets/default.yaml`, applied
+     with `spec-kitty charter activate --preset <name>`).
    - `catalog` / `metadata` — **generator-refreshed**. `charter generate`
      rewrites these two sections deterministically on every run (doctrine
      reference manifest, generation timestamp); everything else in the file
