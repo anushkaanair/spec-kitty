@@ -265,6 +265,8 @@ Confirm the FR-016 gate's real filename before running it (WP03 created it). Nev
 
 ## Definition of Done
 
+- [ ] `detect()` and `structural_detect()` are total: they never raise. They run on every `spec-kitty upgrade` of every project (WP10 review), so an unreadable or malformed file makes them return True (select) and `apply()` reports the problem with its remedy; a test plants a malformed `config.yaml` and asserts `detect()` returns True and `apply()` fails with a named error instead of the selector raising.
+
 - [ ] First commit removed only the WP11 `pending_until` markers and showed them red (output in the Activity Log).
 - [ ] Every WP11 inventory row is rewritten with a report line; second `apply()` changes 0 bytes; `detect()` False after.
 - [ ] Collision preflight refuses with every path named and writes nothing.

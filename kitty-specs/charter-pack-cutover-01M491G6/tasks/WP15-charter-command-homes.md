@@ -125,7 +125,7 @@ Every `spec-kitty doctrine` leaf gets a named `charter` home (FR-006 table), `do
 | `charter pack consistency-check` | `charter consistency-check` | `charter/pack.py:37` → `charter/consistency_check.py` |
 | `doctor doctrine [--json]` | `doctor charter-packs [--json]` (JSON keys unchanged) | `doctor.py:1077` |
 
-Done means: each replacement exits 0 on the same fixture as the old spelling with the same key output (SC-004's first half); `doctor doctrine` and `charter pack consistency-check` exit 2 (renamed here, no alias); the `doctrine` group's old spellings exit 2 with WP16; `.github/workflows/packs.yml`, `Makefile`, the pack-manifest `generated_by` line, `AGENTS.md` (CLAUDE.md is a symlink to it), `packs/internal/**` and remediation strings name the new spellings; the #4836 guidance gate stays green; every WP01 test marked `pending_until("WP15")` (FR-006) is green.
+Done means: each replacement exits with the old spelling's recorded exit code (`cli_before.json`; `doctor` exits 1 on the fixture because its org pack is not fetched) on the same fixture as the old spelling with the same key output (SC-004's first half); `doctor doctrine` and `charter pack consistency-check` exit 2 (renamed here, no alias); the `doctrine` group's old spellings exit 2 with WP16; `.github/workflows/packs.yml`, `Makefile`, the pack-manifest `generated_by` line, `AGENTS.md` (CLAUDE.md is a symlink to it), `packs/internal/**` and remediation strings name the new spellings; the #4836 guidance gate stays green; every WP01 test marked `pending_until("WP15")` (FR-006) is green.
 
 ## Context & Constraints
 

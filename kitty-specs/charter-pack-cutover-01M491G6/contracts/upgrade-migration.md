@@ -9,7 +9,7 @@
 
 ## `detect(project_path) -> bool`
 
-True when any item of the FR-012 inventory is present: legacy keys in `config.yaml` / `charter.yaml` / `governance.yaml` / `answers.yaml` / tracker block; `.kittify/doctrine/` exists; a path reference carries the old prefix; an activation entry carries `doctrine_pack_id`; an `activated_*` key matches a snapshot or is `[]`; `activated_kinds` matches the snapshot 8-kind list or `[directives, tactics]`; a removed skill is installed. Shares the cheap legacy predicate with the CLI-root gate; the expensive checks run only in `detect()`.
+True when any item of the FR-012 inventory is present: legacy keys in `config.yaml` / `charter.yaml` / `governance.yaml` / `answers.yaml` / tracker block; `.kittify/doctrine/` exists; a path reference carries the old prefix; an activation entry carries `doctrine_pack_id`; while the migration is not yet recorded as applied: an `activated_*` key matches a snapshot or is `[]`, or `activated_kinds` matches the snapshot 8-kind list or `[directives, tactics]` (after the first application these reset predicates are never consulted again); a removed skill is installed. Shares the cheap legacy predicate with the CLI-root gate; the expensive checks run only in `detect()`.
 
 ## `apply(project_path, dry_run) -> MigrationResult`
 
