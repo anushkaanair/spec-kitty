@@ -12,7 +12,7 @@ import pytest
 
 from ._requirements import REMOVED_SKILL_IDS, REPO_ROOT, RETIRED_EXTRA_SKILL_IDS, is_living_path
 from ._support import covers, describe, git_init_commit, load_yaml, output_of, pending_until, read_json_output, run_cli
-from .legacy_fixtures import EDITED_SKILL, project_from_template, write_doctrine_pack, write_text, write_yaml
+from .legacy_fixtures import MISSION_TYPES, EDITED_SKILL, finish, project_from_template, write_doctrine_pack, write_text, write_yaml
 from .test_package_split import _python_names
 
 SKILLS_ROOT = REPO_ROOT / "src" / "charter" / "offering" / "skills"
@@ -163,6 +163,38 @@ def test_us3_4_doctrine_pack_id_rejected_in_org_charter(tmp_path: Path) -> None:
     refused = run_cli(["charter", "org", "validate", str(bad)], tmp_path)
     assert refused.exit_code != 0, describe(refused)
     assert "doctrine_pack_id" in output_of(refused) and "charter_pack_id" in output_of(refused), describe(refused)
+
+
+def _project_with_org_activation(project: Path, pack_field: str) -> Path:
+    entry = {"activation_context": {"mission_type": "software-dev"}, "artifact_id": "acceptance-test-first", "artifact_kind": "tactics"}
+    pack = write_doctrine_pack(project / "orgpack")
+    base = load_yaml(pack / "org-charter.yaml")
+    write_yaml(pack / "org-charter.yaml", {**base, "schema_version": "2", "activations": [{**entry, pack_field: "built-in"}]})
+    return finish(project, {"charter_packs": {"org": {"packs": [{"name": "acme", "local_path": "orgpack"}]}}, "mission_type_activations": MISSION_TYPES})
+
+
+@covers("US3-4", "OD-1")
+@pytest.mark.integration
+def test_us3_4_doctrine_pack_id_rejected_on_load(tmp_path: Path) -> None:
+    """Loading an org pack that carries the retired field exits 1 naming code, file, field and replacement."""
+    good = _project_with_org_activation(tmp_path / "good", "charter_pack_id")
+    ok = run_cli(["charter", "context", "--action", "implement", "--json"], good)
+    assert ok.exit_code == 0, describe(ok)
+    assert read_json_output(ok)["org_charter"]["present"] is True, describe(ok)
+    bad = _project_with_org_activation(tmp_path / "bad", "doctrine_pack_id")
+    org_charter = str(bad / "orgpack" / "org-charter.yaml")
+    refused = run_cli(["charter", "context", "--action", "implement", "--json"], bad)
+    assert refused.exit_code == 1, describe(refused)
+    payload = read_json_output(refused)
+    assert payload["code"] == "RETIRED_PACK_FIELD", describe(refused)
+    assert org_charter in payload["error"] and "doctrine_pack_id" in payload["error"] and "charter_pack_id" in payload["error"], describe(refused)
+    text = run_cli(["charter", "generate", "--no-from-interview"], bad)
+    assert text.exit_code == 1, describe(text)
+    flat = " ".join(output_of(text).split())
+    assert "Error (RETIRED_PACK_FIELD):" in flat and "docs/migrations/charter-pack-cutover.md" in flat, describe(text)
+    assert "doctrine_pack_id" in flat and "charter_pack_id" in flat and "org-charter.yaml" in flat, describe(text)
+    lint = run_cli(["charter", "lint"], bad)
+    assert "retired_pack_field" in output_of(lint) and "RETIRED_PACK_FIELD" in output_of(lint), describe(lint)
 
 
 @covers("OD-5", "C-005")

@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml as pyyaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from ruamel.yaml import YAML
 from ruamel.yaml.error import YAMLError
 
@@ -52,7 +52,14 @@ from charter.offering.artifact_kinds import ORG_REQUIRABLE_KIND_FIELDS, Artifact
 from charter.offering.drg.org_pack_config import load_pack_registry
 from charter.offering.packs.pack_assembler import AssemblyResult, assemble_pack
 from charter.offering.packs.pack_validator import ValidationIssue, ValidationResult, validate_pack
-from charter.offering.packs.retired_fields import RETIRED_PACK_FIELD, retired_field_errors
+from charter.offering.packs.retired_fields import (
+    RETIRED_PACK_FIELD,
+    SCOPE_ORG_CHARTER,
+    RetiredPackFieldError,
+    raise_retired_field_at,
+    reject_retired_fields,
+    retired_field_errors,
+)
 from kernel.charter_pack_paths import pack_org_charter
 
 
@@ -199,6 +206,13 @@ class OrgCharterPolicy(BaseModel):
     them and deduplicates on the 4-tuple identity
     ``(activation_context, charter_pack_id, artifact_id, artifact_kind)``
     keeping the *last* occurrence (declaration-order precedence)."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_retired_fields(cls, data: object) -> object:
+        """Reject a retired top-level field (scope ``SCOPE_ORG_CHARTER``) by name."""
+        reject_retired_fields(data, scope=SCOPE_ORG_CHARTER, path=None)
+        return data
 
     @field_validator("schema_version", mode="before")
     @classmethod
@@ -416,6 +430,13 @@ def load_org_charter_policy(pack_path: Path) -> OrgCharterPolicy | None:
     Returns ``None`` when the file is absent or unreadable.  Raises
     :class:`pydantic.ValidationError` (re-raised) when the file exists but
     fails schema validation — callers that want resilience should catch.
+
+    A retired field (#3732) raises
+    :class:`~charter.offering.packs.retired_fields.RetiredPackFieldError`
+    located at the ``org-charter.yaml`` path instead (code
+    ``RETIRED_PACK_FIELD``, the field and its replacement). Callers that skip a
+    malformed pack must re-raise it: dropping the pack would silently lose its
+    required directives, policies and activations (fail closed, FR-003).
     """
     charter_path = pack_org_charter(pack_path)
     if not charter_path.exists():
@@ -432,7 +453,11 @@ def load_org_charter_policy(pack_path: Path) -> OrgCharterPolicy | None:
         return None
     if not isinstance(data, dict):
         return None
-    return OrgCharterPolicy.model_validate(data)
+    try:
+        return OrgCharterPolicy.model_validate(data)
+    except ValidationError as exc:
+        raise_retired_field_at(exc, charter_path)
+        raise
 
 
 def _build_pack_set(
@@ -454,6 +479,10 @@ def _build_pack_set(
     for pack_root in pack_context.pack_roots:
         try:
             policy = load_org_charter_policy(pack_root)
+        except RetiredPackFieldError:
+            # Fail closed (FR-003, #3732): a retired field is operator-actionable;
+            # skipping the pack would silently drop its whole policy.
+            raise
         except Exception:  # noqa: BLE001, S112 — malformed pack policy is skipped
             continue
         if policy is None:
@@ -702,11 +731,12 @@ def load_org_charter_policies(
     for pack in registry.packs:
         try:
             policy = load_org_charter_policy(pack.effective_root(repo_root))
-        except (OrgPackEnvVarUnsetError, OrgPackSubdirEscapeError):
-            # Fail closed (FR-003): an unset env var or a symlink-escape is
-            # an operator-actionable config error, not a malformed policy
-            # file — swallowing it here would silently drop this pack's
-            # required directives/tactics/activations with no signal.
+        except (OrgPackEnvVarUnsetError, OrgPackSubdirEscapeError, RetiredPackFieldError):
+            # Fail closed (FR-003): an unset env var, a symlink-escape or a
+            # retired field (#3732) is an operator-actionable config error,
+            # not a malformed policy file — swallowing it here would silently
+            # drop this pack's required directives/tactics/activations with
+            # no signal.
             raise
         except Exception:  # noqa: BLE001, S112 — malformed pack policy is skipped
             continue

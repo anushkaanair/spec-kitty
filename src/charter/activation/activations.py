@@ -59,7 +59,7 @@ from charter.offering.artifact_kinds import (
     ArtifactKind,
 )
 from charter.offering.missions.mission_type_repository import builtin_mission_type_id_set
-from charter.offering.packs.retired_fields import reject_retired_fields
+from charter.offering.packs.retired_fields import SCOPE_ACTIVATION_ENTRY, reject_retired_fields
 
 __all__ = [
     "ActivationEntry",
@@ -191,14 +191,6 @@ def normalize_artifact_kind(kind: str | None) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-#: The retired-field table row for activation entries is keyed on
-#: ``org-charter.yaml``; the project ``charter.yaml`` uses the same entry shape.
-_RETIRED_FIELDS_TABLE_FILE = "org-charter.yaml"
-#: Where a retired activation field is reported; a caller that knows the file
-#: relocates the error with ``RetiredPackFieldError.at``.
-_ACTIVATION_ENTRY_LOCATION = "activation entry"
-
-
 class ActivationEntry(BaseModel):
     """One entry in the charter-level activation registry.
 
@@ -224,7 +216,8 @@ class ActivationEntry(BaseModel):
     ``charter_pack_id`` replaced an earlier field name (#3732, OD-1). An entry
     that still carries the retired name is rejected with ``RETIRED_PACK_FIELD``
     naming the replacement (the table lives in
-    ``charter.offering.packs.retired_fields``), for both the project
+    ``charter.offering.packs.retired_fields``, scope
+    ``SCOPE_ACTIVATION_ENTRY``), for both the project
     ``charter.yaml`` and an ``org-charter.yaml``; there is no alias (C-001).
     """
 
@@ -238,7 +231,9 @@ class ActivationEntry(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _reject_retired_fields(cls, data: object) -> object:
-        reject_retired_fields(data, file=_RETIRED_FIELDS_TABLE_FILE, path=_ACTIVATION_ENTRY_LOCATION)
+        # Located by scope only: the loader that read the file relocates the
+        # error to its path (``raise_retired_field_at``).
+        reject_retired_fields(data, scope=SCOPE_ACTIVATION_ENTRY, path=None)
         return data
 
     @field_validator("activation_context")
