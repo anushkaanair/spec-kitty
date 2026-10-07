@@ -13,13 +13,14 @@ import json
 import subprocess
 import threading
 from pathlib import Path
+from typing import Any, BinaryIO
 
 import pytest
 
 import specify_cli.coordination.status_transition as st
 import specify_cli.coordination.transaction as transaction_module
 import specify_cli.status.mission_write as mw
-from kernel.git import GitCommandError
+from kernel.git import GitCommandError, run_git
 from specify_cli.coordination.transaction import BookkeepingCommitFailed, BookkeepingTransaction
 from specify_cli.status.emit import build_status_event
 from specify_cli.status.models import StatusEvent
@@ -370,7 +371,7 @@ def test_rollback_never_truncates_above_the_descriptor_size(mission: Path, root:
             sizes.append((os.fstat(fd).st_size, length))
         real(fd, length)
 
-    monkeypatch.setattr(mw.os, "ftruncate", _spy)
+    monkeypatch.setattr(os, "ftruncate", _spy)
     _append(mission / EVENTS, _row("01B"))
     assert rollback_events_log(point, repo_root=root).rolled_back
     (only,) = sizes
@@ -384,7 +385,7 @@ def test_rollback_runs_inside_the_lock(mission: Path, root: Path, monkeypatch: p
     seen: list[bool] = []
     real = mw._cut_tail
 
-    def _spy(p: RollbackPoint, fh: object) -> None:
+    def _spy(p: RollbackPoint, fh: BinaryIO) -> None:
         seen.append(key in _get_thread_locks())
         real(p, fh)
 
@@ -546,5 +547,58 @@ def test_transaction_rollback_refuses_rows_already_committed_and_says_so(txn_rep
     assert doomed.event_id in events_path.read_text(encoding="utf-8")
 
 
+def test_transaction_rollback_survives_an_oserror_in_the_log_cut(txn_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(transaction_module, "safe_commit", _failing_commit)
+
+    def _eio(*_args: object) -> None:
+        raise OSError(5, "EIO")
+
+    monkeypatch.setattr(mw, "_cut_tail", _eio)
+    doomed = _event("WP01")
+    events_path, failure = _run_doomed_transaction(txn_repo, doomed, committed_by_another_writer=False)
+    assert "forced commit failure" in failure
+    assert STATUS_ROLLBACK_REFUSED in failure and "EIO" in failure
+    # The cut failed, so the log keeps its row and status.json was not restored over it.
+    assert doomed.event_id in events_path.read_text(encoding="utf-8")
+
+
 def _failing_commit(**_kwargs: object) -> None:
     raise RuntimeError("forced commit failure (test)")
+
+
+# --- review cycle 1 ----------------------------------------------------------------------
+
+
+def test_capture_on_an_owned_checkout_agrees_with_the_lock_taken_on_the_owned_root(root: Path, tmp_path: Path) -> None:
+    feature_dir = _init_repo(root)
+    (feature_dir / EVENTS).write_text(_row("01A"), encoding="utf-8")
+    _commit_all(root, "seed")
+    owned_root = tmp_path / "owned"
+    _git(root, "worktree", "add", "-q", "-b", "kitty/owned", str(owned_root))
+    owned_dir = owned_root / "kitty-specs" / MISSION_DIRNAME
+    # BookkeepingTransaction.acquire locks on owned.owned_root, keyed by the Mission dir name.
+    with mission_write_lock(owned_dir, repo_root=owned_root):
+        point = capture_rollback_point(owned_dir, repo_root=owned_root)
+        _append(owned_dir / EVENTS, _row("01B"))
+        assert rollback_events_log(point, expected_event_ids=["01B"], repo_root=owned_root).rolled_back
+    with pytest.raises(RuntimeError, match="requires the Mission write lock"):
+        capture_rollback_point(owned_dir, repo_root=owned_root)
+
+
+def test_the_non_repository_probe_pins_git_to_the_c_locale(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    feature_dir = tmp_path / "plain" / MISSION_DIRNAME
+    feature_dir.mkdir(parents=True)
+    (feature_dir / EVENTS).write_text(_row("01A"), encoding="utf-8")
+    point = _point(feature_dir, tmp_path / "plain")
+    _append(feature_dir / EVENTS, _row("01B"))
+    envs: list[object] = []
+    real = run_git
+
+    def _spy(cwd: Path, *args: str, **kwargs: Any) -> Any:
+        envs.append(kwargs.get("env"))
+        return real(cwd, *args, **kwargs)
+
+    monkeypatch.setattr("specify_cli.status.mission_write.run_git", _spy)
+    monkeypatch.setenv("LANG", "de_DE.UTF-8")
+    assert rollback_events_log(point, repo_root=tmp_path / "plain").rolled_back
+    assert envs and all(isinstance(env, dict) and env["LC_ALL"] == "C" for env in envs)

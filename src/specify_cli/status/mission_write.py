@@ -74,6 +74,7 @@ STATUS_ROLLBACK_REFUSED = "STATUS_ROLLBACK_REFUSED"
 
 _EVENT_ID_KEY = "event_id"
 _HEAD = "HEAD"
+_NOT_A_REPOSITORY = b"not a git repository"
 
 
 @contextmanager
@@ -235,9 +236,10 @@ def _committed_event_ids(events_path: Path) -> frozenset[str]:
         GitCommandError: git failed in a way that leaves the committed log unknown.
     """
     cwd = events_path.parent
-    top = run_git(cwd, "rev-parse", "--show-toplevel", check=False)
+    # LC_ALL=C pins git's diagnostics to English so the non-repository probe below is locale-independent.
+    top = run_git(cwd, "rev-parse", "--show-toplevel", env={**os.environ, "LC_ALL": "C"}, check=False)
     if top.returncode != 0:
-        if b"not a git repository" in top.stderr:
+        if _NOT_A_REPOSITORY in top.stderr:
             return frozenset()
         raise GitCommandError(argv=("rev-parse", "--show-toplevel"), cwd=cwd, returncode=top.returncode, stderr=top.stderr.decode("utf-8", "replace"))
     root = Path(top.stdout.decode("utf-8", "replace").strip())
