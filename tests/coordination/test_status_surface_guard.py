@@ -9,8 +9,7 @@ from pathlib import Path
 import pytest
 
 import specify_cli.status  # noqa: F401  # import-order guard (coordination -> transaction -> status)
-from kernel.git import GitCommandError
-from specify_cli.coordination import status_surface_guard
+from kernel.git import GitCommandError, listing
 from specify_cli.coordination.status_surface_guard import committed_events_missing_from_worktree
 from specify_cli.coordination.transaction_errors import (
     BookkeepingError,
@@ -144,7 +143,7 @@ def test_a_git_failure_surfaces_as_a_bookkeeping_error(repo: Path, monkeypatch: 
     def _timed_out(cwd: Path, *args: str, **_kwargs: object) -> None:
         raise GitCommandError(argv=args, cwd=cwd, returncode=-1, stderr="timed out after 30 seconds", timed_out=True)
 
-    monkeypatch.setattr(status_surface_guard, "run_git", _timed_out)
+    monkeypatch.setattr(listing, "run_git", _timed_out)
 
     with pytest.raises(BookkeepingStatusSurfaceUnreadable) as refused:
         committed_events_missing_from_worktree(repo, path)
