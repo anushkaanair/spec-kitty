@@ -1,8 +1,8 @@
 ---
-name: spec-kitty-charter-doctrine
+name: spk-charter-governance
 description: >-
-  Run charter interview, generation, context, and sync workflows for
-  project governance in Spec Kitty 3.x. Access doctrine artifacts
+  Run Spec Kitty charter interview, generation, context loading, and
+  synchronization workflows for project governance. Access charter artifacts
   programmatically via DoctrineService. Resolve agent profiles. Load
   action-scoped governance context iteratively, not all at once.
   Triggers: "interview for charter", "generate charter",
@@ -13,7 +13,20 @@ description: >-
   loop advancement, setup/repair diagnostics, or editorial glossary maintenance.
 ---
 
-# spec-kitty-charter-doctrine
+# spk-charter-governance
+
+Use this skill for project governance, charter creation, charter sync, or
+charter context questions.
+
+## Flow
+
+1. Invoke `/spec-kitty.charter` or the relevant charter command.
+2. Keep governance decisions explicit and versioned.
+3. Load charter context on demand, scoped to the active action.
+4. Use the `spk-charter-glossary` and `spk-charter-spdd-reasons` skills when
+   the charter selects those practices.
+
+The rest of this skill is the detailed reference for each step.
 
 Manage the charter lifecycle: interview, generate, context-load, sync,
 and status. Access doctrine artifacts programmatically via `DoctrineService`.
@@ -27,7 +40,7 @@ source for a project — the single git-tracked, structured file nesting
 runtime never parses or resolves policy from. A repository may also keep
 public governance docs outside `.kittify/`; those docs are human-facing
 authority unless `charter.yaml`'s `governance.charter.governance_references`
-points at them. The doctrine layer (`src/charter/offering/`) provides the
+points at them. The charter offering (`src/charter/offering/`) provides the
 reusable knowledge artifacts (directives, tactics, paradigms, styleguides,
 toolguides, procedures, agent profiles, step contracts) that the charter
 references.
@@ -133,7 +146,7 @@ styleguide = service.styleguides.get("<a-styleguide-id>")
 
 To validate your project-layer doctrine artifacts run:
 ```bash
-spec-kitty charter validate .kittify/doctrine
+spec-kitty charter validate .kittify/charter-packs
 ```
 
 ### Step 3 — Read the interview mapping to know what to generate
@@ -151,11 +164,11 @@ For each synthesis target, derive: `kind`, `slug` (kebab-case, project-specific)
 
 All five supported project kinds are `directive`, `tactic`, `styleguide`,
 `procedure`, and `agent_profile`. For direct authoring, run `charter new <kind>
-<id>`, complete the scaffold, and run `charter validate .kittify/doctrine`.
+<id>`, complete the scaffold, and run `charter validate .kittify/charter-packs`.
 `charter activate agent-profile <id> --cascade all` registers authored project
 artifacts in the DRG and provenance manifest and activates referenced guidance.
-Project procedures live in `.kittify/doctrine/procedure/`; profiles live in
-`.kittify/doctrine/agent_profiles/`. These source files remain user-owned.
+Project procedures live in `.kittify/charter-packs/procedure/`; profiles live in
+`.kittify/charter-packs/agent_profiles/`. These source files remain user-owned.
 
 For interview-generated directives, tactics and styleguides, use the generated
 input path below. Procedures and profiles use the direct-authoring path above.
@@ -195,13 +208,13 @@ spec-kitty charter synthesize
 
 By default this reads from `.kittify/charter/generated/` via the generated
 adapter and promotes the validated outputs into:
-- `.kittify/doctrine/` for artifact content and project `graph.yaml`
+- `.kittify/charter-packs/` for artifact content and project `graph.yaml`
 - `.kittify/charter/provenance/` plus `synthesis-manifest.yaml` for bookkeeping
 
 ### Step 7 — Commit the promoted charter synthesis state
 
 ```bash
-git add .kittify/doctrine/ .kittify/charter/provenance/ .kittify/charter/synthesis-manifest.yaml
+git add .kittify/charter-packs/ .kittify/charter/provenance/ .kittify/charter/synthesis-manifest.yaml
 git commit -m "feat(charter): promote project-local doctrine from generated inputs"
 ```
 
@@ -477,13 +490,13 @@ directive = service.directives.get("DIRECTIVE_034")
 tactic = service.tactics.get("tdd-red-green-refactor")
 paradigm = service.paradigms.get("<paradigm-id>")
 # Shipped artifacts: packs/built-in/<kind>/
-# Project-layer artifacts: .kittify/doctrine/<kind dir>/ (written by
+# Project-layer artifacts: .kittify/charter-packs/<kind dir>/ (written by
 # `spec-kitty charter new`; see Step 4 for the per-kind directories)
 ```
 
 To validate project-layer artifacts:
 ```bash
-spec-kitty charter validate .kittify/doctrine
+spec-kitty charter validate .kittify/charter-packs
 ```
 
 To list registered mission types (every visible type, activated or not):
