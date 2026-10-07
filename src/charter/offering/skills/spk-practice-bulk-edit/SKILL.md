@@ -1,19 +1,20 @@
 ---
-name: spec-kitty-bulk-edit-classification
+name: spk-practice-bulk-edit
 description: >-
-  Recognize when a mission is a bulk edit and drive the occurrence-classification
-  guardrail on the user's behalf. Triggers: user says any variant of "rename X
-  to Y", "change the terminology", "migrate all occurrences", "replace across
-  the codebase", "the X feature is now the Y feature", "sed everywhere", or any
-  request that touches the same identifier/path/key in many files. Also
-  triggers on gate errors mentioning "change_mode", "occurrence_map.yaml",
+  Recognize bulk-edit missions and drive the occurrence-classification
+  guardrail on the user's behalf before modifying many matching instances.
+  Triggers: user says any variant of "rename X to Y", "change the
+  terminology", "migrate all occurrences", "replace across the codebase",
+  "the X feature is now the Y feature", "sed everywhere", or any request
+  that touches the same identifier/path/key in many files. Also triggers on
+  gate errors mentioning "change_mode", "occurrence_map.yaml",
   "Bulk Edit Gate: BLOCKED", or "Bulk Edit Review: Diff Compliance".
   Does NOT handle: line-level semantic refactors inside one file, adding a new
   feature that creates new identifiers without changing existing ones, or
   reviewing finished missions for fidelity.
 ---
 
-# spec-kitty-bulk-edit-classification
+# spk-practice-bulk-edit
 
 Drive the occurrence-classification guardrail (shipped in #393, DIRECTIVE_035)
 so users never have to know it exists. A bulk edit is any change that touches
@@ -28,6 +29,16 @@ is how silent breakage happens.
 "the Blue feature is now the Red feature." Your job is to recognize that
 shape, turn on `change_mode: bulk_edit`, and drive the classification workflow
 before any code changes.
+
+## Flow
+
+1. Perform a manual pre-edit occurrence review before changing matches.
+2. Align the occurrence map to the eight standard schema categories plus
+   explicit exceptions and moves.
+3. Treat runtime enforcement as a path-based review gate, not an AST-semantic
+   classifier.
+4. Confirm edit policy when the blast radius is unclear.
+5. Execute the narrowest safe change and verify representative cases.
 
 ---
 
@@ -353,6 +364,6 @@ Consult that file when:
   produces the prerequisites it checks.
 - `spec-kitty-runtime-review` — the review workflow that invokes the diff
   compliance check this skill's artifact governs.
-- `spec-kitty-glossary-context` — closely related for terminology normalization;
+- `spk-charter-glossary` — closely related for terminology normalization;
   the glossary tells you what the canonical terms are, this skill governs how
   you migrate *to* them.
