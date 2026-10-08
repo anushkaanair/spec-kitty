@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from charter.bundle import CHARTER_YAML
 from charter.drg import ArtifactKind
-from kernel.charter_pack_paths import pack_org_charter, project_pack_root
+from kernel.charter_pack_paths import PROJECT_PACK_ROOT_POSIX, pack_org_charter, project_pack_root
 from ._profile_health_render import _SELECTION_KIND_PLURALS
 
 logger = logging.getLogger(__name__)
@@ -71,6 +71,7 @@ __all__ = [
     "_run_cross_grain_check",
     "_run_operating_procedures_check",
     "_run_retired_governance_key_check",
+    "_run_retired_layout_check",
     "_attach_pack_health",
     "_build_pack_entries",
     "_collect_doctrine_collisions",
@@ -1249,3 +1250,65 @@ def _build_selection_block(repo_root: Path) -> dict[str, list[dict[str, str]]]:
             })
         result[kind] = entries
     return result
+
+
+#: Where a retired-layout finding sends the operator.
+_CUTOVER_RUNBOOK = "docs/migrations/charter-pack-cutover.md"
+
+
+def _retired_layout_findings(repo_root: Path) -> list[dict[str, str]]:
+    from charter.drg import load_pack_registry
+
+    from specify_cli.migration.legacy_charter_layout import retired_nested_org_layout, retired_repo_root_fallback
+
+    findings: list[dict[str, str]] = []
+    try:
+        packs = list(load_pack_registry(repo_root, quiet=True).packs)
+    except Exception:  # noqa: BLE001 — an unreadable registry is reported by the org-layer collector
+        packs = []
+    for pack in packs:
+        try:
+            root = pack.effective_root(repo_root)
+        except ValueError:
+            continue
+        nested = retired_nested_org_layout(root)
+        if nested is not None:
+            findings.append({
+                "path": str(nested),
+                "message": (
+                    f"org pack {pack.name!r} uses the retired nested layout {nested}/<kind>/<layer>/, which is not read; "
+                    f"move its artifacts to the flat layout {root}/<kind>/ (see {_CUTOVER_RUNBOOK})."
+                ),
+            })
+    fallback = retired_repo_root_fallback(repo_root)
+    if fallback is not None:
+        findings.append({
+            "path": str(fallback),
+            "message": (
+                f"{fallback} is no longer read as the project layer; move its artifacts to the project pack root "
+                f"{PROJECT_PACK_ROOT_POSIX}/ (see {_CUTOVER_RUNBOOK})."
+            ),
+        })
+    return findings
+
+
+def _run_retired_layout_check(report: DoctrineHealthReport, repo_root: Path) -> None:
+    """Report the retired doctrine layouts that now resolve to nothing (#3732, FR-011).
+
+    The nested org-pack layout ``<pack>/doctrine/<plural>/<layer>/`` and the
+    repo-root ``doctrine/`` fallback are no longer read, so their artifacts are
+    silently absent from activation. Mirrors :func:`_run_cross_grain_check`: each
+    finding's message goes to ``org_drg["errors"]`` (unhealthy, RC=1) and the
+    structured list to ``org_drg["retired_layouts"]``. Read-only; never raises.
+    """
+    org_drg = report.org_drg
+    if not isinstance(org_drg, dict):
+        return
+    findings = _retired_layout_findings(repo_root)
+    if not findings:
+        return
+    existing = org_drg.get("errors")
+    errors = list(existing) if isinstance(existing, list) else []
+    errors.extend(finding["message"] for finding in findings)
+    org_drg["errors"] = errors
+    org_drg["retired_layouts"] = findings

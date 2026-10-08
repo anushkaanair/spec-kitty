@@ -269,3 +269,30 @@ def test_kittify_as_a_regular_file_is_absent_not_unreadable(tmp_path: Path) -> N
     (tmp_path / ".kittify").write_text("not a directory\n", encoding="utf-8")
 
     assert detect_legacy_charter_layout(tmp_path) == ()
+
+
+def test_retired_nested_org_layout_detection(tmp_path: Path) -> None:
+    pack = tmp_path / "acme"
+    assert layout.retired_nested_org_layout(pack) is None  # absent
+    (pack / "doctrine").mkdir(parents=True)
+    assert layout.retired_nested_org_layout(pack) is None  # empty: nothing was ever read there
+    (pack / "doctrine" / "directives").mkdir()
+    assert layout.retired_nested_org_layout(pack) == pack / "doctrine"
+
+
+def test_retired_nested_org_layout_unlistable_dir_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    (tmp_path / "doctrine").mkdir()
+
+    def _denied(_self: Path) -> Any:
+        raise PermissionError("denied")
+
+    monkeypatch.setattr(Path, "iterdir", _denied)
+    assert layout.retired_nested_org_layout(tmp_path) == tmp_path / "doctrine"
+
+
+def test_retired_repo_root_fallback_detection(tmp_path: Path) -> None:
+    assert layout.retired_repo_root_fallback(tmp_path) is None
+    (tmp_path / "doctrine").mkdir()
+    assert layout.retired_repo_root_fallback(tmp_path) == tmp_path / "doctrine"
+    (tmp_path / "src" / "charter" / "offering").mkdir(parents=True)
+    assert layout.retired_repo_root_fallback(tmp_path) is None  # an earlier candidate won, as before

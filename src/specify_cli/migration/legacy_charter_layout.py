@@ -36,7 +36,7 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from kernel.charter_pack_paths import KITTIFY_DIRNAME
+from kernel.charter_pack_paths import KITTIFY_DIRNAME, PROJECT_PACK_ROOT_POSIX
 
 __all__ = [
     "CONFIG_KEY_FINDINGS",
@@ -51,6 +51,8 @@ __all__ = [
     "governance_file_path",
     "is_convertible_organisation_pack",
     "legacy_org_block",
+    "retired_nested_org_layout",
+    "retired_repo_root_fallback",
 ]
 
 # --------------------------------------------------------------------------- #
@@ -68,6 +70,9 @@ LEGACY_PROJECT_ROOT_POSIX = LEGACY_PROJECT_ROOT_RELPATH.as_posix()
 LEGACY_SELECTION_KEYWORD = _LEGACY_PROJECT_DIRNAME
 #: The retired flat org list key (OD-4).
 ORGANISATION_PACKS_KEYWORD = "organisation_packs"
+#: The repo-root candidates that came before the retired repo-root ``doctrine/``
+#: fallback in project-root resolution; it was read only when none existed.
+_EARLIER_PROJECT_ROOT_CANDIDATES = (PurePosixPath(PROJECT_PACK_ROOT_POSIX), PurePosixPath("src", "charter", "offering"))
 
 _ORG_KEY = "org"
 _GOVERNANCE_KEY = "governance"
@@ -226,3 +231,40 @@ def detect_legacy_charter_layout(root: Path) -> tuple[str, ...]:
     elif isinstance(config, Mapping):
         findings.extend(_config_findings(config))
     return tuple(findings)
+
+
+def _is_dir(path: Path) -> bool:
+    try:
+        return stat.S_ISDIR(os.stat(path).st_mode)
+    except (OSError, ValueError):
+        return False
+
+
+def retired_nested_org_layout(pack_root: Path) -> Path | None:
+    """The retired nested ``<pack>/doctrine/`` layout dir of an org pack, if it has one (#3732, FR-011).
+
+    Org packs are read only from the flat ``<pack>/<plural>/`` layout; a nested
+    ``<pack>/doctrine/<plural>/<layer>/`` tree is not read, so a caller reports it.
+    Returns the ``doctrine`` directory when it holds at least one directory.
+    """
+    nested = pack_root / _LEGACY_PROJECT_DIRNAME
+    if not _is_dir(nested):
+        return None
+    try:
+        return nested if any(child.is_dir() for child in nested.iterdir()) else None
+    except OSError:
+        return nested
+
+
+def retired_repo_root_fallback(repo_root: Path) -> Path | None:
+    """The repo-root ``doctrine/`` dir, when project-root resolution used to fall back to it (#3732).
+
+    It was read only when neither the project pack root nor ``src/charter/offering``
+    existed; it no longer is, so a caller reports it then.
+    """
+    candidate = repo_root / _LEGACY_PROJECT_DIRNAME
+    if not _is_dir(candidate):
+        return None
+    if any(_is_dir(repo_root.joinpath(*earlier.parts)) for earlier in _EARLIER_PROJECT_ROOT_CANDIDATES):
+        return None
+    return candidate

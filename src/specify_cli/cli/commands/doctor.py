@@ -89,6 +89,7 @@ from ._doctrine_collect import (  # noqa: E402
     _run_cross_grain_check,
     _run_operating_procedures_check,
     _run_retired_governance_key_check,
+    _run_retired_layout_check,
     _sanction_entry_snippet,
     _sanction_file_labels,
 )
@@ -1134,6 +1135,7 @@ def doctrine_check(
     # #3732 FR-011: a retired ``governance.doctrine`` key in charter.yaml is a
     # finding (the CLI-root gate does not read charter.yaml).
     _run_retired_governance_key_check(report, repo_root)
+    _run_retired_layout_check(report, repo_root)
 
     # WP09 T050 / FR-018: the Selections diagnostic is independent of whether
     # org packs are configured, so build it for both branches.
@@ -1148,6 +1150,7 @@ def doctrine_check(
         if not json_output:
             _render_cross_grain_findings(report)
             _render_retired_governance_key_finding(report)
+            _render_retired_layout_findings(report)
         raise typer.Exit(exit_code)
 
     pack_entries = _build_pack_entries(registry, repo_root)
@@ -1185,6 +1188,7 @@ def doctrine_check(
     # JSON surface already carries them via the ``org_drg`` passthrough).
     _render_cross_grain_findings(report)
     _render_retired_governance_key_finding(report)
+    _render_retired_layout_findings(report)
     raise typer.Exit(exit_code)
 
 
@@ -1312,6 +1316,18 @@ def _render_retired_governance_key_finding(report: DoctrineHealthReport) -> None
         return
     console.print(f"\n[bold red]Retired charter key[/bold red] — {finding.get('key')} is not read; the project's selections are ignored\n")
     console.print(f"  {finding.get('message')}", markup=False, soft_wrap=True)
+
+
+def _render_retired_layout_findings(report: DoctrineHealthReport) -> None:
+    """Render the ``org_drg['retired_layouts']`` findings (#3732); a no-op without any."""
+    org_drg = report.org_drg
+    findings = org_drg.get("retired_layouts") if isinstance(org_drg, dict) else None
+    if not isinstance(findings, list) or not findings:
+        return
+    console.print(f"\n[bold red]Retired layout[/bold red] — {len(findings)} location(s) no longer read\n")
+    for finding in findings:
+        if isinstance(finding, dict):
+            console.print(f"  • {finding.get('message')}", markup=False, soft_wrap=True)
 
 
 def _render_cross_grain_findings(report: DoctrineHealthReport) -> None:
