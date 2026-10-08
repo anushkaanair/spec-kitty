@@ -219,5 +219,5 @@ def test_regenerate_leaves_authored_files_byte_unchanged() -> None:
     # (c) the committed manifest is already fresh (stale => FIX-1-class drift).
     assert after[MANIFEST_FILENAME] == before[MANIFEST_FILENAME], (
         "committed packs/built-in/pack-manifest.yaml is stale; run "
-        "`spec-kitty doctrine regenerate-graph` and commit the result"
+        "`spec-kitty charter pack regenerate-graph` and commit the result"
     )

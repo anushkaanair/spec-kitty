@@ -22,7 +22,7 @@ import pytest
 from ruamel.yaml import YAML
 from typer.testing import CliRunner
 
-from specify_cli.cli.commands import _doctrine_asset as asset_module
+from specify_cli.cli.commands.charter import pack_asset as asset_module
 from specify_cli.cli.commands.doctrine import app as doctrine_app
 
 pytestmark = [pytest.mark.unit, pytest.mark.fast]
@@ -155,7 +155,7 @@ def test_resolved_path_str_renders_marker_on_not_found_not_just_escape() -> None
 
     from charter.offering.assets.repository import AssetNotFoundError, AssetRepository
 
-    from specify_cli.cli.commands._doctrine_asset import _UNRESOLVABLE, _resolved_path_str
+    from specify_cli.cli.commands.charter.pack_asset import _UNRESOLVABLE, _resolved_path_str
 
     repo = create_autospec(AssetRepository, instance=True)
     repo.resolve_path.side_effect = AssetNotFoundError("orphaned-org-asset")

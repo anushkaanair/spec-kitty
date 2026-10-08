@@ -9,7 +9,7 @@ from typing import Any
 
 import typer
 
-from charter.offering.packs.retired_fields import RetiredPackFieldError
+from charter.packs import RetiredPackFieldError
 
 from specify_cli.task_utils import TaskCliError
 

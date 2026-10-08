@@ -70,12 +70,13 @@ def test_project_identity_wins_regardless_of_layer_map_order(tmp_path: Path) -> 
     project = tmp_path / ".kittify" / "charter-packs"
     org = tmp_path / "org"
     _directive(project / "directive", "project", "ACME-001-FOO")
-    _directive(org / "doctrine/directives/org", "org", "ACME-001-FOO")
+    _directive(org / "directives", "org", "ACME-001-FOO")
     assert (
         resolve_config_id(
             "directive:ACME-001-FOO",
             doctrine_root=tmp_path,
-            layer_roots={"project": project, "org": org},
+            org_roots=[org],
+            layer_roots={"project": project},
         )
         == "project"
     )

@@ -63,14 +63,20 @@ from charter.offering.packs.pack_validator import (
     render_validation_result,
     validate_pack,
 )
+from charter.offering.packs.retired_fields import (
+    RETIRED_PACK_FIELD,
+    RetiredPackFieldError,
+)
 
 __all__ = [
     "RECOGNISED_ARTIFACT_DIRS",
+    "RETIRED_PACK_FIELD",
     "ActivationPreset",
     "AssemblyResult",
     "OfferingPack",
     "PresetFormatError",
     "PresetNotFoundError",
+    "RetiredPackFieldError",
     "ValidationIssue",
     "artifact_schema_registry",
     "assemble_pack",

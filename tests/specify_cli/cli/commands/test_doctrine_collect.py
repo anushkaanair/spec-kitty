@@ -213,7 +213,7 @@ def test_read_project_selections_reads_lists(tmp_path: Path) -> None:
     charter = tmp_path / ".kittify" / "charter"
     charter.mkdir(parents=True)
     (charter / "charter.yaml").write_text(
-        "governance:\n  doctrine:\n    selected_directives:\n      - d1\n      - d2\n",
+        "governance:\n  charter:\n    selected_directives:\n      - d1\n      - d2\n",
         encoding="utf-8",
     )
     selections = collect._read_project_selections(tmp_path)

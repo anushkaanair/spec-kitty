@@ -40,7 +40,7 @@ from pathlib import Path
 from charter.activation.mission_type_profiles import MissionTypeProfile
 from charter.offering.base import BaseDoctrineRepository
 from charter.offering.pack_paths import built_in_missions_root as _pack_paths_built_in_missions_root
-from kernel.charter_pack_paths import resolve_project_pack_read_root
+from kernel.charter_pack_paths import project_pack_root
 
 __all__ = ["MissionTypeProfileRepository", "builtin_missions_root"]
 
@@ -107,7 +107,7 @@ class MissionTypeProfileRepository(BaseDoctrineRepository[MissionTypeProfile]):
         """
         return cls(
             org_dirs=org_dirs,
-            project_dir=resolve_project_pack_read_root(repo_root, quiet=True) / _PROJECT_OVERRIDE_DIRNAME,
+            project_dir=project_pack_root(repo_root) / _PROJECT_OVERRIDE_DIRNAME,
         )
 
     @staticmethod

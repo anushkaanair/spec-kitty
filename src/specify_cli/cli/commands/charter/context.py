@@ -6,7 +6,8 @@ import json
 
 import typer
 
-from charter.offering.packs.retired_fields import RetiredPackFieldError
+from charter.activation.pack_context import ActiveCharterConfigError
+from charter.packs import RetiredPackFieldError
 from charter.resolution import GitCommonDirUnavailableError, NotInsideRepositoryError
 
 from specify_cli.cli.helpers import git_resolution_failure_message
@@ -217,6 +218,10 @@ def context(
         # #3732: a pack file still carries a retired field; name the code, the
         # file, the field and its replacement (contracts/errors.md).
         _emit_error(console, json_output=json_output, message=str(e), code=e.code)
+        raise typer.Exit(code=1) from e
+    except ActiveCharterConfigError as e:
+        # #3732: e.g. the retired ``governance.doctrine`` key; the body names the remedy.
+        _emit_error(console, json_output=json_output, message=e.body, code=e.code)
         raise typer.Exit(code=1) from e
     except ValueError as e:
         _emit_error(console, json_output=json_output, message=str(e))

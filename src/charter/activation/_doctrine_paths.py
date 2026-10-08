@@ -7,14 +7,14 @@ the two call-sites cannot drift apart.
 
 Candidate ordering (FR-009 / T024 / T025):
 
-1. the project pack root     — ``.kittify/charter-packs/`` (read through
-                              :func:`kernel.charter_pack_paths.resolve_project_pack_read_root`,
-                              so a project still on the retired
-                              ``.kittify/doctrine/`` tree is read there);
+1. the project pack root     — ``.kittify/charter-packs/``
+                              (:func:`kernel.charter_pack_paths.project_pack_root`);
                               present only after a successful
                               ``spec-kitty charter synthesize`` run.
 2. ``src/charter/offering/``        — code-local built-in-layer path (legacy 3.x default).
-3. ``doctrine/``            — flat built-in-layer fallback.
+
+The former repo-root ``doctrine/`` candidate is gone with the retired doctrine
+layout (FR-011).
 
 Discovery is **conditional on directory presence**: if the project pack root
 does not exist the resolver returns the next matching candidate, preserving
@@ -25,17 +25,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from kernel.charter_pack_paths import resolve_project_pack_read_root
+from kernel.charter_pack_paths import project_pack_root
 
 # ---------------------------------------------------------------------------
 # Candidate list (ordered: synthesis-aware first, built-in-layer fallbacks after)
 # ---------------------------------------------------------------------------
 
 #: Repo-relative built-in-layer fallbacks, tried after the project pack root.
-_BUILT_IN_FALLBACK_CANDIDATES: tuple[str, ...] = (
-    "src/charter/offering",  # relocated code-local built-in-layer path
-    "doctrine",  # existing — flat built-in-layer fallback
-)
+_BUILT_IN_FALLBACK_CANDIDATES: tuple[str, ...] = ("src/charter/offering",)  # relocated code-local built-in-layer path
 
 
 def _project_root_candidates(repo_root: Path) -> tuple[Path, ...]:
@@ -44,7 +41,7 @@ def _project_root_candidates(repo_root: Path) -> tuple[Path, ...]:
     The first candidate is the project pack root, decided by the kernel
     resolver (FR-016), never by a path string spelled here.
     """
-    project_pack = resolve_project_pack_read_root(repo_root, quiet=True)
+    project_pack = project_pack_root(repo_root)
     return (project_pack, *(repo_root / candidate for candidate in _BUILT_IN_FALLBACK_CANDIDATES))
 
 

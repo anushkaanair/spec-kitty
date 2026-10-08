@@ -182,7 +182,7 @@ spec-kitty charter context --action specify --json
 If `charter status` reports the bundle as stale, run `spec-kitty charter synthesize` (dry-run
 first) to promote it — see
 [How to Synthesize and Maintain Doctrine](../../guides/how-to/governance/synthesize-doctrine.md) for the full
-synthesis workflow. If something looks wrong at any step, `spec-kitty doctor doctrine` and
+synthesis workflow. If something looks wrong at any step, `spec-kitty doctor charter-packs` and
 [Troubleshooting Charter Failures](../../guides/how-to/governance/troubleshoot-charter.md) are the first places to
 check.
 
@@ -270,15 +270,15 @@ step. Confirm the asset is discoverable and resolves to your blob:
 
 ```bash
 # List every resolvable asset and its source tier (built-in / org / project)
-spec-kitty doctrine asset list
+spec-kitty charter pack asset list
 
 # Resolve one identifier to a filesystem path (exit 0 on success;
 # an unknown id exits non-zero and names the id)
-spec-kitty doctrine asset path team-release-checklist
+spec-kitty charter pack asset path team-release-checklist
 ```
 
 The `path` command prints the absolute path to your blob and exits `0`. Downstream code (a mission
-step, a hook, a shipped lint) consumes the asset by calling `spec-kitty doctrine asset path <id>`
+step, a hook, a shipped lint) consumes the asset by calling `spec-kitty charter pack asset path <id>`
 and reading the file at the returned path — never by hard-coding a source-tree path. A more
 specific tier wins: a project or org asset of the same `id` shadows the built-in, and the shadow is
 reported by `asset list`.

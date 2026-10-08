@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from charter.bundle import CHARTER_YAML
 from charter.drg import ArtifactKind
-from kernel.charter_pack_paths import resolve_project_pack_read_root
+from kernel.charter_pack_paths import PROJECT_PACK_ROOT_POSIX, pack_org_charter, project_pack_root
 from ._profile_health_render import _SELECTION_KIND_PLURALS
 
 logger = logging.getLogger(__name__)
@@ -70,6 +70,8 @@ __all__ = [
     "_collect_profile_health",
     "_run_cross_grain_check",
     "_run_operating_procedures_check",
+    "_run_retired_governance_key_check",
+    "_run_retired_layout_check",
     "_attach_pack_health",
     "_build_pack_entries",
     "_collect_doctrine_collisions",
@@ -83,7 +85,7 @@ _ORG_ARTIFACT_DIRS: tuple[str, ...] = tuple(kind.plural for kind in ArtifactKind
 
 def _project_pack_root_or_none(repo_root: Path) -> Path | None:
     """Return the project pack root to read for *repo_root*, or ``None`` when absent."""
-    project_pack = resolve_project_pack_read_root(repo_root, quiet=True)
+    project_pack = project_pack_root(repo_root)
     return project_pack if project_pack.exists() else None
 
 
@@ -177,7 +179,7 @@ def _summarize_org_charter(snapshot_path: Path) -> dict[str, object]:
     Gracefully degrades when the optional
     ``charter.activation.org_charter`` module is not yet shipped (WP09).
     """
-    charter_path = snapshot_path / "org-charter.yaml"
+    charter_path = pack_org_charter(snapshot_path)
     if not charter_path.exists():
         return {"present": False}
 
@@ -1078,25 +1080,69 @@ def _read_project_selections(repo_root: Path) -> dict[str, list[str]]:
     charter_yaml = repo_root / CHARTER_YAML
     if not charter_yaml.exists():
         return selections
+    from charter.activation.pack_context import ActiveCharterConfigError
+
     try:
         from charter.activation.charter_yaml_io import load_charter_yaml
+        from charter.activation.sync import require_canonical_governance
 
         data = load_charter_yaml(charter_yaml)
         governance_block = (data or {}).get("governance") or {}
-        # CR-01 (charter-authority-flip-01M14RB3 WP03): the selection block's
-        # key was renamed doctrine -> charter. This diagnostic reads the raw
-        # dict directly (see the docstring above) rather than through
-        # charter.activation.sync.load_governance_config's warn-once compat shim, so it
-        # carries its own narrow read of both keys, preferring the canonical
-        # one.
-        doctrine_block = governance_block.get("charter") or governance_block.get("doctrine") or {}
+        # Canonical key only. A retired ``governance.doctrine`` raises; the CLI-root
+        # LEGACY_CHARTER_STATE gate does NOT catch it (its predicate never reads
+        # charter.yaml), so :func:`_run_retired_governance_key_check` reports it
+        # as a finding and the selections here stay empty.
+        doctrine_block = require_canonical_governance(governance_block, source=charter_yaml).get("charter") or {}
         for kind in _SELECTION_KIND_PLURALS:
             value = doctrine_block.get(f"selected_{kind}")
             if isinstance(value, list):
                 selections[kind] = [str(v) for v in value]
+    except ActiveCharterConfigError:
+        # Reported by _run_retired_governance_key_check, not swallowed.
+        return {kind: [] for kind in _SELECTION_KIND_PLURALS}
     except Exception:  # noqa: BLE001 — diagnostics must never crash on malformed yaml
         pass
     return selections
+
+
+#: The retired governance selection key, as the doctor finding names it.
+_RETIRED_GOVERNANCE_KEY = "governance.doctrine"
+
+
+def _run_retired_governance_key_check(report: DoctrineHealthReport, repo_root: Path) -> None:
+    """Report a retired ``governance.doctrine`` key in ``charter.yaml`` (#3732, FR-011).
+
+    The selections reader cannot use it (it is the retired key), and the CLI-root
+    gate does not see it (its predicate never reads ``charter.yaml``), so this is
+    where an operator learns the project's selections are not being read.
+    Mirrors :func:`_run_cross_grain_check`: the message goes to
+    ``org_drg["errors"]`` (the report turns unhealthy, RC=1) and a structured
+    ``org_drg["retired_governance_key"]`` finding names the file, the key and the
+    remedy for the JSON and human surfaces. A missing or malformed ``charter.yaml``
+    is not this check's finding (read-only; never raises).
+    """
+    from charter.activation.charter_yaml_io import load_charter_yaml
+    from charter.activation.pack_context import ActiveCharterConfigError
+    from charter.activation.sync import require_canonical_governance
+
+    org_drg = report.org_drg
+    charter_yaml = repo_root / CHARTER_YAML
+    if not isinstance(org_drg, dict) or not charter_yaml.exists():
+        return
+    try:
+        governance = (load_charter_yaml(charter_yaml) or {}).get("governance")
+    except Exception:  # noqa: BLE001 — a malformed charter.yaml is reported by other surfaces
+        return
+    if not isinstance(governance, dict):
+        return
+    try:
+        require_canonical_governance(governance, source=charter_yaml)
+    except ActiveCharterConfigError as exc:
+        existing = org_drg.get("errors")
+        errors = list(existing) if isinstance(existing, list) else []
+        errors.append(exc.body)
+        org_drg["errors"] = errors
+        org_drg["retired_governance_key"] = {"file": str(charter_yaml), "key": _RETIRED_GOVERNANCE_KEY, "message": exc.body}
 
 
 def _read_org_required(repo_root: Path) -> dict[str, list[str]]:
@@ -1109,7 +1155,7 @@ def _read_org_required(repo_root: Path) -> dict[str, list[str]]:
         OrgPackEnvVarUnsetError,
         OrgPackSubdirEscapeError,
     )
-    from charter.offering.packs.retired_fields import RetiredPackFieldError
+    from charter.packs import RetiredPackFieldError
 
     org_required: dict[str, list[str]] = {kind: [] for kind in _SELECTION_KIND_PLURALS}
     try:
@@ -1204,3 +1250,65 @@ def _build_selection_block(repo_root: Path) -> dict[str, list[dict[str, str]]]:
             })
         result[kind] = entries
     return result
+
+
+#: Where a retired-layout finding sends the operator.
+_CUTOVER_RUNBOOK = "docs/migrations/charter-pack-cutover.md"
+
+
+def _retired_layout_findings(repo_root: Path) -> list[dict[str, str]]:
+    from charter.drg import load_pack_registry
+
+    from specify_cli.migration.legacy_charter_layout import retired_nested_org_layout, retired_repo_root_fallback
+
+    findings: list[dict[str, str]] = []
+    try:
+        packs = list(load_pack_registry(repo_root, quiet=True).packs)
+    except Exception:  # noqa: BLE001 — an unreadable registry is reported by the org-layer collector
+        packs = []
+    for pack in packs:
+        try:
+            root = pack.effective_root(repo_root)
+        except ValueError:
+            continue
+        nested = retired_nested_org_layout(root)
+        if nested is not None:
+            findings.append({
+                "path": str(nested),
+                "message": (
+                    f"org pack {pack.name!r} uses the retired nested layout {nested}/<kind>/<layer>/, which is not read; "
+                    f"move its artifacts to the flat layout {root}/<kind>/ (see {_CUTOVER_RUNBOOK})."
+                ),
+            })
+    fallback = retired_repo_root_fallback(repo_root)
+    if fallback is not None:
+        findings.append({
+            "path": str(fallback),
+            "message": (
+                f"{fallback} is no longer read as the project layer; move its artifacts to the project pack root "
+                f"{PROJECT_PACK_ROOT_POSIX}/ (see {_CUTOVER_RUNBOOK})."
+            ),
+        })
+    return findings
+
+
+def _run_retired_layout_check(report: DoctrineHealthReport, repo_root: Path) -> None:
+    """Report the retired doctrine layouts that now resolve to nothing (#3732, FR-011).
+
+    The nested org-pack layout ``<pack>/doctrine/<plural>/<layer>/`` and the
+    repo-root ``doctrine/`` fallback are no longer read, so their artifacts are
+    silently absent from activation. Mirrors :func:`_run_cross_grain_check`: each
+    finding's message goes to ``org_drg["errors"]`` (unhealthy, RC=1) and the
+    structured list to ``org_drg["retired_layouts"]``. Read-only; never raises.
+    """
+    org_drg = report.org_drg
+    if not isinstance(org_drg, dict):
+        return
+    findings = _retired_layout_findings(repo_root)
+    if not findings:
+        return
+    existing = org_drg.get("errors")
+    errors = list(existing) if isinstance(existing, list) else []
+    errors.extend(finding["message"] for finding in findings)
+    org_drg["errors"] = errors
+    org_drg["retired_layouts"] = findings

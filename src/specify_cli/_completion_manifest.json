@@ -431,8 +431,13 @@
      "hidden": false,
      "deprecated": false
     },
+    "consistency-check": {
+     "help": "Check the active charter for coherence against the offering (FR-011).",
+     "hidden": false,
+     "deprecated": false
+    },
     "new": {
-     "help": "Scaffold a stub doctrine artifact YAML (FR-016).\n\nThe scaffolder pre-fills the canonical schema's required fields with\n``TODO …`` placeholders so the file passes ``doctrine validate`` on\nfirst emit.  Refuses to overwrite an existing file.",
+     "help": "Scaffold a stub doctrine artifact YAML (FR-016).\n\nThe scaffolder pre-fills the canonical schema's required fields with\n``TODO …`` placeholders so the file passes ``charter validate`` on\nfirst emit.  Refuses to overwrite an existing file.",
      "hidden": false,
      "deprecated": false
     },
@@ -509,7 +514,7 @@
      "deprecated": false,
      "commands": {
       "list": {
-       "help": "List mission types for the current project (FR-016).\n\nBy default, returns only mission types that are explicitly activated in\nthis project's charter. Pass ``--include-inactive`` to also see every\ntype registered in the built-in/org/project layers regardless of\nactivation state -- the deprecated ``spec-kitty doctrine mission-type\nlist`` group covered this before CR-02; this flag is its canonical\nreplacement, not a straight alias (activation state still distinguishes\nthe two row classes -- see ACTION SEQUENCE below).\n\nOutput columns (table): ID, SOURCE, DISPLAY NAME, ACTION SEQUENCE. A\nnon-activated ``--include-inactive`` row shows ``(not activated)`` in\nACTION SEQUENCE: resolving a real action sequence requires activation\n(the FR-006 gate), so there is nothing to compute for it.",
+       "help": "List mission types for the current project (FR-016).\n\nBy default, returns only mission types that are explicitly activated in\nthis project's charter. Pass ``--include-inactive`` to also see every\ntype registered in the built-in/org/project layers regardless of\nactivation state (it replaced the removed doctrine-group listing; it is\nnot a straight alias: activation state still distinguishes the two row\nclasses -- see ACTION SEQUENCE below).\n\nOutput columns (table): ID, SOURCE, DISPLAY NAME, ACTION SEQUENCE. A\nnon-activated ``--include-inactive`` row shows ``(not activated)`` in\nACTION SEQUENCE: resolving a real action sequence requires activation\n(the FR-006 gate), so there is nothing to compute for it.",
        "hidden": false,
        "deprecated": false
       }
@@ -525,11 +530,6 @@
      "hidden": false,
      "deprecated": false,
      "commands": {
-      "consistency-check": {
-       "help": "Run consistency check against activated doctrine artifacts (FR-011).",
-       "hidden": false,
-       "deprecated": false
-      },
       "list": {
        "help": "List the packs of the project's offering and the presets each ships (FR-004).",
        "hidden": false,
@@ -539,6 +539,38 @@
        "help": "Print a pack's root, or with --preset the preset file (FR-006).\n\nFails closed (exit 1) with PACK_NOT_FOUND or PRESET_NOT_FOUND, listing the\nvalid names.",
        "hidden": false,
        "deprecated": false
+      },
+      "validate": {
+       "help": "Validate a doctrine pack against schema and DRG constraints.\n\nExits 0 when the pack passes validation (advisories do not affect the\nexit code) and 1 when at least one error is reported.",
+       "hidden": false,
+       "deprecated": false
+      },
+      "assemble": {
+       "help": "Assemble multiple doctrine packs into a single distributable.\n\nExits 0 on success and 1 when conflicts block the merge or when the\nassembled output fails validation.",
+       "hidden": false,
+       "deprecated": false
+      },
+      "regenerate-graph": {
+       "help": "Regenerate the shipped DRG graph source deterministically (FR-009).\n\nComposes the DRG extractor + calibrator into per-populated-node-kind\n``packs/built-in/*.graph.yaml`` fragments (sharded per mission #2680 WP05;\nrelocated from ``src/charter/offering/`` by the pack flatten),\nretiring the legacy ``graph.yaml`` monolith in the same write. Running twice\non unchanged inputs yields byte-identical fragments. With ``--check`` the\ncommand never writes: it regenerates into a temp directory and compares the\nfragment set against the committed source, exiting non-zero when stale — the\noperator-facing twin of the freshness gate.\n\nBoth the write path and ``--check`` merge in the enumerable hand-authored\noverlay (:mod:`charter.offering.drg.migration.hand_authored_overlay`) — the\n``in_tension_with``/``reconciles_tension``/``rejects`` edges and\n``anti_pattern`` nodes hand-authored directly in the graph fragments\n(mission doctrine-tension-edges-01KY1WPC). The extractor has no\nfrontmatter mechanism that could ever mint these, so a bare pure\nregeneration would (a) silently drop them from the committed source on\nwrite, and (b) always report \"stale\" under ``--check`` even when nothing\nis actually stale.",
+       "hidden": false,
+       "deprecated": false
+      },
+      "asset": {
+       "help": "Resolve shipped and overlay doctrine assets (no install — C-002).",
+       "hidden": false,
+       "deprecated": false,
+       "commands": {
+        "list": {
+         "help": "List all resolvable doctrine assets and their source tiers.",
+         "hidden": false,
+         "deprecated": false
+        },
+        "path": {
+         "help": "Resolve an asset identifier to a filesystem path (fail-closed on miss).\n\nExits ``0`` and prints the path on success. An unknown id or a containment\nrefusal exits non-zero with the offending id named (A-7 / NFR-006).",
+         "hidden": false,
+         "deprecated": false
+        }
+       }
       }
      }
     },
@@ -730,8 +762,8 @@
      "hidden": false,
      "deprecated": false
     },
-    "doctrine": {
-     "help": "Check org doctrine snapshot status and list installed pack artifacts.\n\nExit code reflects health (WP01, operator directive: loud over hidden): the\ncommand exits **1 when the report is unhealthy** and 0 only when healthy\n(``report.healthy`` drives the code on every output path). A clear RC=1 with\na surfaced error is preferred over an RC=0 that hides a defect.  It\nenumerates each configured org pack (from ``.kittify/config.yaml``), prints\nits on-disk version (``git describe`` for git-managed packs, otherwise the\n``pack-manifest.yaml`` ``pack_version``), per-artifact YAML counts, and\n``org-charter.yaml`` policy status when present.\n\nOverride governance (FR-010 / FR-012): when org packs are configured, any\n``org:``-provenance override of a built-in DRG node that is NOT sanctioned\nby ``.kittify/doctrine/replaceable-builtins.yaml`` or by the overriding\npack's own pack-root ``replaceable-builtins.yaml`` is reported as an\n``unsanctioned_overrides`` finding and flips the report unhealthy (RC=1).\nA pack sanction applies only to overrides that same pack contributes, and\nthe consumer file can withdraw it with ``revoked_pack_sanctions``. Sanctioned\noverrides and their source are listed as ``sanctioned_overrides``.\nProject-tier (``.kittify/doctrine/``) overrides of built-ins are\nintentionally **ungoverned** — project doctrine is the trusted operator tier\nand is not gated by the consumer-facing allowlist; only org-tier overrides\nare adjudicated.\n\nExamples:\n    spec-kitty doctor doctrine\n    spec-kitty doctor doctrine --json",
+    "charter-packs": {
+     "help": "Check org charter pack snapshot status and list installed pack artifacts.\n\nExit code reflects health (WP01, operator directive: loud over hidden): the\ncommand exits **1 when the report is unhealthy** and 0 only when healthy\n(``report.healthy`` drives the code on every output path). A clear RC=1 with\na surfaced error is preferred over an RC=0 that hides a defect.  It\nenumerates each configured org pack (from ``.kittify/config.yaml``), prints\nits on-disk version (``git describe`` for git-managed packs, otherwise the\n``pack-manifest.yaml`` ``pack_version``), per-artifact YAML counts, and\n``org-charter.yaml`` policy status when present.\n\nOverride governance (FR-010 / FR-012): when org packs are configured, any\n``org:``-provenance override of a built-in DRG node that is NOT sanctioned\nby ``.kittify/charter-packs/replaceable-builtins.yaml`` or by the overriding\npack's own pack-root ``replaceable-builtins.yaml`` is reported as an\n``unsanctioned_overrides`` finding and flips the report unhealthy (RC=1).\nA pack sanction applies only to overrides that same pack contributes, and\nthe consumer file can withdraw it with ``revoked_pack_sanctions``. Sanctioned\noverrides and their source are listed as ``sanctioned_overrides``.\nProject-tier (``.kittify/charter-packs/``) overrides of built-ins are\nintentionally **ungoverned** — the project layer is the trusted operator tier\nand is not gated by the consumer-facing allowlist; only org-tier overrides\nare adjudicated.\n\nExamples:\n    spec-kitty doctor charter-packs\n    spec-kitty doctor charter-packs --json",
      "hidden": false,
      "deprecated": false
     },
@@ -773,7 +805,7 @@
      "deprecated": false
     },
     "new": {
-     "help": "Scaffold a stub doctrine artifact YAML (FR-016).\n\nThe scaffolder pre-fills the canonical schema's required fields with\n``TODO …`` placeholders so the file passes ``doctrine validate`` on\nfirst emit.  Refuses to overwrite an existing file.",
+     "help": "Scaffold a stub doctrine artifact YAML (FR-016).\n\nThe scaffolder pre-fills the canonical schema's required fields with\n``TODO …`` placeholders so the file passes ``charter validate`` on\nfirst emit.  Refuses to overwrite an existing file.",
      "hidden": false,
      "deprecated": false
     },
@@ -1130,7 +1162,7 @@
      "deprecated": true
     },
     "list": {
-     "help": "List activated mission types for the current project (FR-016).\n\nAlias for ``spec-kitty charter mission-type list``.\n\nReturns only mission types that are explicitly activated in this\nproject's charter (activation-filtered).  For all doctrine-layer\ntypes regardless of activation, use ``spec-kitty doctrine mission-type list``.",
+     "help": "List activated mission types for the current project (FR-016).\n\nAlias for ``spec-kitty charter mission-type list``.\n\nReturns only mission types that are explicitly activated in this\nproject's charter (activation-filtered).  For all doctrine-layer\ntypes regardless of activation, use ``spec-kitty charter mission-type list --include-inactive``.",
      "hidden": false,
      "deprecated": false
     },
@@ -1187,7 +1219,7 @@
      "deprecated": true
     },
     "list": {
-     "help": "List activated mission types for the current project (FR-016).\n\nAlias for ``spec-kitty charter mission-type list``.\n\nReturns only mission types that are explicitly activated in this\nproject's charter (activation-filtered).  For all doctrine-layer\ntypes regardless of activation, use ``spec-kitty doctrine mission-type list``.",
+     "help": "List activated mission types for the current project (FR-016).\n\nAlias for ``spec-kitty charter mission-type list``.\n\nReturns only mission types that are explicitly activated in this\nproject's charter (activation-filtered).  For all doctrine-layer\ntypes regardless of activation, use ``spec-kitty charter mission-type list --include-inactive``.",
      "hidden": false,
      "deprecated": false
     },

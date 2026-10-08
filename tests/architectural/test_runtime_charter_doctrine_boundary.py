@@ -102,7 +102,7 @@ _FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "doctrine_boundar
 _LAZY_BASELINE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         # #3179: wrapped sole-door service construction for asset operations.
-        ("src/specify_cli/cli/commands/_doctrine_asset.py", "charter.offering.service"),
+        ("src/specify_cli/cli/commands/charter/pack_asset.py", "charter.offering.service"),
         # #3179: wrapped raw service for unfiltered diagnostic repositories.
         ("src/specify_cli/cli/commands/_doctrine_collect.py", "charter.offering.service"),
         # #3179: existing operating-procedure diagnostics, pending facade migration.
@@ -116,7 +116,7 @@ _LAZY_BASELINE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
         # #3179: diagnostic pack location, pending facade migration.
         ("src/specify_cli/cli/commands/_doctrine_collect.py", "charter.offering.pack_paths"),
         # #3179: doorless DRG-regeneration internal (TICKETED-BASELINE).
-        ("src/specify_cli/cli/commands/doctrine.py", "charter.offering.drg.migration.hand_authored_overlay"),
+        ("src/specify_cli/cli/commands/charter/pack_tooling.py", "charter.offering.drg.migration.hand_authored_overlay"),
         # #3179: package __file__ metadata, not a symbol reach-through.
         ("src/specify_cli/tool_surface/bundles/codex.py", "charter.offering"),
         # #3522: pre-existing step-contract reach, charter.missions migration #2173.

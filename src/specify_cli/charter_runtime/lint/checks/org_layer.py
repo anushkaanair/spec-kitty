@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from charter.drg import ArtifactKind
-from charter.offering.packs.retired_fields import RETIRED_PACK_FIELD, RetiredPackFieldError
+from charter.packs import RETIRED_PACK_FIELD, RetiredPackFieldError
 from specify_cli.charter_runtime.lint.findings import LintFinding
 
 KITTIFY_DIR_NAME = ".kittify"

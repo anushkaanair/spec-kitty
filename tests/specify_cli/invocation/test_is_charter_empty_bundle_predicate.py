@@ -271,7 +271,7 @@ def test_org_pack_present_no_bundle_keeps_net_off(tmp_path: Path) -> None:
     pack_root.mkdir(parents=True)
     _write_config(
         tmp_path,
-        {"doctrine": {"org": {"packs": [{"name": "orgzilla-governance-pack", "local_path": str(pack_root)}]}}},
+        {"charter_packs": {"org": {"packs": [{"name": "orgzilla-governance-pack", "local_path": str(pack_root)}]}}},
     )
     assert not (tmp_path / ".kittify" / "charter" / "charter.yaml").exists()
 

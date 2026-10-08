@@ -144,7 +144,7 @@ def _write_consumer_pack_config(repo_root: Path, *, pack_name: str, local_path: 
     (config_dir / "config.yaml").write_text(
         textwrap.dedent(
             f"""\
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: {pack_name}
