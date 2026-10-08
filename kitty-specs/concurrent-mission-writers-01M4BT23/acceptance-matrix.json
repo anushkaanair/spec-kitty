@@ -1,0 +1,119 @@
+{
+  "mission_slug": "concurrent-mission-writers-01M4BT23",
+  "mission_number": "",
+  "mission_type": "software-dev",
+  "overall_verdict": "pass",
+  "criteria": [
+    {
+      "criterion_id": "FR-001",
+      "description": "Verify FR-001 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/status/test_mission_write.py (mission_write_lock, locked_rewrite_text, capture_rollback_point held-lock check incl. owned/coord/flat)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:00:12.152906+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-002",
+      "description": "Verify FR-002 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/status/test_mission_write.py rollback refusal cases (vanished, shrank, torn tail, not owned, committed at HEAD, HEAD unreadable, IO error; byte-identical on refusal)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:00:19.353233+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-003",
+      "description": "Verify FR-003 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/architectural/test_mission_write_discipline.py rule 1 (truncate/unlink only in status/mission_write.py) + tests/architectural/test_status_events_writes_gate.py",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:00:26.053449+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-004",
+      "description": "Verify FR-004 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/status/test_concurrent_mission_writers.py (#5819 transition+annotation modes incl. HEAD, #5804 coord, real-revert lane-sync refusal)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:00:33.001270+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-005",
+      "description": "Verify FR-005 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/test_implement_claim_concurrency.py (#5468 claim commit never takes half of a concurrent writer's operation)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:00:39.522363+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-006",
+      "description": "Verify FR-006 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/agent/test_concurrent_appenders.py tracer coord+lanes (committed file keeps both findings)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:00:46.033817+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-007",
+      "description": "Verify FR-007 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/agent/test_concurrent_appenders.py add-history (writer paused inside the locked transform)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:00:52.791158+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-008",
+      "description": "Verify FR-008 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/specify_cli/cli/commands/test_implement_claim_concurrency.py #5796 cases (implement/implement same+cross Mission, orchestrator-api both orders) + tests/status/test_concurrent_mission_writers.py agent action arm",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:00:59.690315+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-009",
+      "description": "Verify FR-009 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/lanes/test_shared_workspace_warning.py (CLI-level implement and review arms, lanes arm, absent/same-actor cases)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:01:06.177690+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-010",
+      "description": "Verify FR-010 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "packs/built-in/missions/mission-steps/software-dev/{implement,review}/prompt.md one-writer-per-checkout paragraph; prompt/provenance tests green",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:01:12.705491+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    },
+    {
+      "criterion_id": "FR-011",
+      "description": "Verify FR-011 is satisfied",
+      "proof_type": "automated_test",
+      "evidence": "tests/architectural/test_mission_write_discipline.py (empty allowlists, synthetic offenders + self-mutation non-vacuity)",
+      "pass_fail": "pass",
+      "verified_by": "claude",
+      "verified_at": "2026-10-08T04:01:19.900594+00:00",
+      "notes": "TODO: replace with a real acceptance criterion"
+    }
+  ],
+  "negative_invariants": []
+}

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "mission_slug": "concurrent-mission-writers-01M4BT23",
+  "mission_id": "01M4BT2339XAN22576N1DZ4WQJ",
+  "mission_branch": "issue-5819-concurrent-mission-writers",
+  "target_branch": "issue-5819-concurrent-mission-writers",
+  "lanes": [
+    {
+      "lane_id": "lane-planning",
+      "wp_ids": [
+        "WP01",
+        "WP02",
+        "WP03",
+        "WP04",
+        "WP05",
+        "WP06"
+      ],
+      "write_scope": [
+        "docs/architecture/status-model.md",
+        "docs/changelog/CHANGELOG.md",
+        "packs/built-in/missions/mission-steps/software-dev/implement/prompt.md",
+        "packs/built-in/missions/mission-steps/software-dev/review/prompt.md",
+        "src/kernel/git/__init__.py",
+        "src/kernel/git/listing.py",
+        "src/specify_cli/cli/commands/agent/tasks.py",
+        "src/specify_cli/cli/commands/agent/tasks_mark_status.py",
+        "src/specify_cli/cli/commands/agent/tasks_move_task_executor.py",
+        "src/specify_cli/cli/commands/agent/workflow.py",
+        "src/specify_cli/cli/commands/agent/workflow_executor.py",
+        "src/specify_cli/cli/commands/implement.py",
+        "src/specify_cli/cli/commands/implement_claim.py",
+        "src/specify_cli/cli/commands/implement_phases.py",
+        "src/specify_cli/coordination/status_surface_guard.py",
+        "src/specify_cli/coordination/status_transition.py",
+        "src/specify_cli/coordination/transaction.py",
+        "src/specify_cli/lanes/checkout_occupancy.py",
+        "src/specify_cli/lanes/implement_support.py",
+        "src/specify_cli/orchestrator_api/wp_lifecycle.py",
+        "src/specify_cli/retrospective/tracer_writer.py",
+        "src/specify_cli/status/__init__.py",
+        "src/specify_cli/status/lifecycle_events.py",
+        "src/specify_cli/status/locking.py",
+        "src/specify_cli/status/mission_write.py",
+        "tests/architectural/test_mission_write_discipline.py",
+        "tests/architectural/test_status_events_writes_gate.py",
+        "tests/lanes/test_shared_workspace_warning.py",
+        "tests/specify_cli/cli/commands/agent/test_concurrent_appenders.py",
+        "tests/specify_cli/cli/commands/test_implement_claim_concurrency.py",
+        "tests/status/test_checkout_claim_lock.py",
+        "tests/status/test_concurrent_mission_writers.py",
+        "tests/status/test_mission_write.py",
+        "tests/status/test_status_lock_keys.py"
+      ],
+      "predicted_surfaces": [],
+      "depends_on_lanes": [],
+      "parallel_group": 0
+    }
+  ],
+  "computed_at": "2026-10-07T18:48:58.854730+00:00",
+  "computed_from": "dependency_graph+ownership",
+  "planning_artifact_wps": [
+    "WP06"
+  ],
+  "planning_commit_sha": "95414d05af2941358e6c26231e3d1bab6cbe07f6"
+}
