@@ -195,3 +195,37 @@ None.
 
 - Retiring the remaining `src/specify_cli/missions` type directories (`mission.yaml`, `templates/`): #2652 slice 2+, #2661, #4822.
 - Serialising two concurrent runtime commits (#5854); git `index.lock` collisions (#5515, #5443).
+
+## Amendments after the post-plan squad (binding; they override D1–D10 where they disagree)
+
+### Lens A: lock key, helpers, matrix, gate
+
+- **A1 (blocker): one key for every lock caller.** The rekey covers every per-Mission lock caller, not only `mission_write_lock`. That means every direct `feature_status_lock(root, X.name)` caller: emit `:977/:1153/:1263`, work_package_lifecycle `:312/:468`, move-task executor, mark-status, agent status, decisions emit, finalize status surface, retrospective lifecycle events and the migrations. Each passes `mission_lock_key(...)`. `BookkeepingTransaction` and `coord_status_lock` call the same function, so there is a single authority. The bare-directory coordination fixture (a `060-test` primary directory and a `060-test-<mid8>` coordination directory) is the fixture for every key test and for a lock-order test. That test runs the lifecycle path and the implement claim path on two threads and must not deadlock.
+- **A2 (blocker).** `_holds_mission_lock` and `capture_rollback_point` resolve the key through `mission_lock_key`. A test covers the bare-directory coordination shape.
+- **A3.** `mission_lock_key` uses the transaction's mid8 cascade (`resolve_transaction_mid8`: `meta.mid8`, then `mission_id[:8]`, then the slug tail) through one shared helper. An empty mid8 on a coordination-routed Mission makes `mission_lock_key` raise a typed error, and the transaction's trailing-dash key is fixed to use the same function.
+- **A4: key stability within a hold.** The key is read from the canonical primary `meta.json` (the read-path resolver), never from a lane worktree's copy. While a thread holds a Mission lock, nested entries for the same Mission reuse the held key from a thread-local, so a writer that changes `coordination_branch` or `mid8` inside the hold never takes a second lock. A test pins this with `flatten_coordination_metadata` inside a hold.
+- **A5: Rule 4 regions.** A region is a lexical `with` of a lock context manager, extended to `ExitStack.enter_context(<lock cm>)`, `<lock cm>.__enter__()` up to the matching `__exit__`, a `with <name>` whose name was assigned from a lock context manager, and `locked_acceptance_verdict_guard`.
+  - A sink inside function F is accepted when F is a registered locked helper, or when every same-module call site of F sits in a region.
+  - A cross-module callee whose call sites cannot all be resolved fails closed.
+  - There are no class or function-name exemptions.
+- **A6: Rule 3.**
+  - Key arguments (`feature_status_lock`) are accepted only as `mission_lock_key(...)`.
+  - Path arguments (`mission_write_lock`, `hold_mission_write_lock`) are accepted as a `mission_write_lock_dir(...)` result or a function parameter.
+  - A bare `.name` is no longer accepted.
+- **A7: Rules 1 and 4, target tracking.**
+  - Within a function, names assigned from `EVENTS_FILENAME`, `"status.events.jsonl"`, `"meta.json"`, `META_FILENAME`, `"run.events.jsonl"` or `"state.json"` are tracked through assignments and `/` joins.
+  - The sinks are truncate, `write_text`, `write_bytes`, `open(..., "w"/"x"/"a"/"r+")`, `os.replace` and `shutil.move` onto a target, and `atomic_write`.
+  - `rebuild_state.py:777` and `migrate_lifecycle_envelope.py:250-272` are dispositioned explicitly: they are locked, or excluded by a stated structural rule.
+  - Each variant gets a synthetic offender.
+  - The merge-driver exclusion applies to Rule 4 as well.
+- **A8: compare-and-swap restore.** Every branch of the finalize write-scope restore, rewrite and unlink alike, plus `restore_meta_text`, runs inside the lock and acts only while the current bytes equal what finalize wrote (or, for an unlink, the file finalize created). Files that changed are reported as kept.
+- **A9: red tests that fail today.**
+  - FR-005 uses the bare-directory coordination fixture.
+  - FR-003's finalize applies its field delta to the freshly read frontmatter and body. Its red test covers a concurrent frontmatter field (a map-requirements ref) and a concurrent body note.
+- **A10: FR-020 additions.**
+  - New writers: `task_metadata_validation.py:178` and `implement_support.py:491` (`update_fields`).
+  - The body of `set_vcs_lock` moves to the locked helper.
+  - `tasks.md` becomes a Rule 4 sink.
+  - Line numbers are re-derived at implement time (research line numbers are indicative).
+- **A11: Rule 2 escapes.** A reference to the parameter other than as the function of a call counts as an escape. That includes passing it as an argument or keyword (`Thread(target=f)`, `submit(f)`, `partial(f)`) and capturing it in a nested def or lambda.
+- **A12: NFR-003 measurement.** Warm the `git_common_dir` cache first, then count the change in subprocess calls. `mission_write_lock_dir` stays off the hot path of a writer that already has `feature_dir`.
