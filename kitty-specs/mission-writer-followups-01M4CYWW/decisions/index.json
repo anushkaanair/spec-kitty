@@ -1,0 +1,100 @@
+{
+  "entries": [
+    {
+      "created_at": "2026-10-08T05:14:09.320297Z",
+      "decision_id": "01M4CYXSH8P2N42Z8KBCB06Z5F",
+      "final_answer": "Remove the rollback (gate as before_run_completed hook)",
+      "input_key": "run_log_rollback",
+      "mission_id": "01M4CYWW2JE17MK86TMYDR0FYH",
+      "mission_slug": "mission-writer-followups-01M4CYWW",
+      "opened_by": "cli",
+      "options": [
+        "Remove the rollback (gate as before_run_completed hook)",
+        "Kernel verified truncate + run-dir lock",
+        "Defer #5884"
+      ],
+      "origin_flow": "specify",
+      "other_answer": false,
+      "question": "#5884: how should the runtime run-log speculative rollback be fixed?",
+      "rationale": null,
+      "resolved_at": "2026-10-08T05:14:22.955287Z",
+      "resolved_by": null,
+      "slot_key": "specify.runtime.run-log-rollback",
+      "status": "resolved",
+      "step_id": null,
+      "summary_json": null
+    },
+    {
+      "created_at": "2026-10-08T05:14:13.918917Z",
+      "decision_id": "01M4CYXY0Y7YC06KGMKC8J17TF",
+      "final_answer": "All 5 commit sites",
+      "input_key": "commit_wording_scope",
+      "mission_id": "01M4CYWW2JE17MK86TMYDR0FYH",
+      "mission_slug": "mission-writer-followups-01M4CYWW",
+      "opened_by": "cli",
+      "options": [
+        "All 5 commit sites",
+        "Finalize only"
+      ],
+      "origin_flow": "specify",
+      "other_answer": false,
+      "question": "#5885: how many 'for feature' commit-message sites change to 'mission'?",
+      "rationale": null,
+      "resolved_at": "2026-10-08T05:14:27.225907Z",
+      "resolved_by": null,
+      "slot_key": "specify.terminology.commit-sites",
+      "status": "resolved",
+      "step_id": null,
+      "summary_json": null
+    },
+    {
+      "created_at": "2026-10-08T05:14:18.584674Z",
+      "decision_id": "01M4CYY2JRZVZCCHKH1G8GJ4BR",
+      "final_answer": "Prompts + runtime step",
+      "input_key": "analyze_gate_surface",
+      "mission_id": "01M4CYWW2JE17MK86TMYDR0FYH",
+      "mission_slug": "mission-writer-followups-01M4CYWW",
+      "opened_by": "cli",
+      "options": [
+        "Prompts only",
+        "Prompts + runtime step"
+      ],
+      "origin_flow": "specify",
+      "other_answer": false,
+      "question": "#5885: prompt-only, or also a runtime analyze step before implement?",
+      "rationale": null,
+      "resolved_at": "2026-10-08T05:14:31.339341Z",
+      "resolved_by": null,
+      "slot_key": "specify.planning.analyze-gate",
+      "status": "resolved",
+      "step_id": null,
+      "summary_json": null
+    },
+    {
+      "created_at": "2026-10-08T05:14:40.249949Z",
+      "decision_id": "01M4CYYQQSV0SQKBVCMT6YQ98E",
+      "final_answer": "Confirmed",
+      "input_key": "intent_summary_confirmed",
+      "mission_id": "01M4CYWW2JE17MK86TMYDR0FYH",
+      "mission_slug": "mission-writer-followups-01M4CYWW",
+      "opened_by": "cli",
+      "options": [
+        "Confirmed",
+        "Confirmed with changes",
+        "Other"
+      ],
+      "origin_flow": "specify",
+      "other_answer": false,
+      "question": "Confirm the Intent Summary (including: a re-poll of an already-terminal run no longer re-runs the retrospective gate; mission-runtime.yaml is deprecated so the analyze step goes into the live step-contract dispatch)",
+      "rationale": null,
+      "resolved_at": "2026-10-08T05:16:36.078714Z",
+      "resolved_by": null,
+      "slot_key": "specify.intent.summary-confirm",
+      "status": "resolved",
+      "step_id": null,
+      "summary_json": null
+    }
+  ],
+  "mission_id": "01M4CYWW2JE17MK86TMYDR0FYH",
+  "version": 1
+}
