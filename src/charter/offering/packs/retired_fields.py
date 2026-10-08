@@ -47,8 +47,6 @@ from kernel.charter_pack_paths import ORG_CHARTER_FILENAME
 
 __all__ = [
     "RETIRED_PACK_FIELD",
-    "RETIRED_PACK_FIELDS",
-    "RetiredField",
     "RetiredPackFieldError",
     "SCOPE_ACTIVATION_ENTRY",
     "SCOPE_ORG_CHARTER",

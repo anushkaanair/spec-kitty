@@ -747,9 +747,9 @@ def _absent_key_default(kind: ArtifactKind, repo_root: Path) -> frozenset[str] |
 def _read_org_packs(repo_root: Path, _data: dict[str, Any]) -> tuple[tuple[str, ...], tuple[Path, ...]]:
     """Resolve org pack names and root paths from config data.
 
-    Delegates to ``charter.offering.drg.org_pack_config.load_pack_registry``
-    so that legacy ``organisation_packs`` form and deprecation warnings
-    are handled consistently with the rest of the codebase.
+    Delegates to ``charter.offering.drg.org_pack_config.load_pack_registry``,
+    which reads only the canonical ``charter_packs.org.packs``: a config that
+    carries only a retired key yields no packs, never an error.
 
     Returns
     -------

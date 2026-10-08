@@ -92,7 +92,7 @@ def _write_consumer_config(
     optional pre-existing ``activated_<kind>`` lists."""
     config_dir = consumer / ".kittify"
     config_dir.mkdir(parents=True, exist_ok=True)
-    lines = ["doctrine:", "  org:", "    packs:"]
+    lines = ["charter_packs:", "  org:", "    packs:"]
     for name, path in packs:
         lines.append(f"      - name: {name}")
         lines.append(f"        local_path: {path}")

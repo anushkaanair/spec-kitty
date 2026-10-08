@@ -60,7 +60,7 @@ def _seed_project_charter(repo_root: Path) -> None:
         textwrap.dedent(
             """
             governance:
-              doctrine:
+              charter:
                 selected_styleguides:
                   - my-project-styleguide
                   - shared-team-styleguide
@@ -101,7 +101,7 @@ def _seed_org_pack(repo_root: Path) -> None:
     (config_dir / "config.yaml").write_text(
         textwrap.dedent(
             f"""
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: snapshot-org-pack

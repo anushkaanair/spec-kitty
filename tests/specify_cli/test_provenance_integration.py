@@ -20,7 +20,7 @@ from ruamel.yaml import YAML
 
 from specify_cli.charter_runtime.lint import LintEngine
 from specify_cli.charter_runtime.lint.engine import _ALL_CHECKS, _CHECK_MAP
-from charter.offering.drg.org_pack_config import OrgPackConfig, PackRegistry, save_pack_registry
+from tests._support.org_pack_config import write_org_packs
 from charter.activation.org_charter_loader import load_org_charter_json_block
 
 pytestmark = [pytest.mark.integration]
@@ -181,10 +181,7 @@ class TestLintOrgOverridesAdvisory:
         # Configure the registry on the synthetic repo root.
         repo_root = tmp_path / "repo"
         repo_root.mkdir()
-        save_pack_registry(
-            repo_root,
-            PackRegistry(packs=[OrgPackConfig(name="acme", local_path=org_root)]),
-        )
+        write_org_packs(repo_root, [{"name": "acme", "local_path": org_root}])
 
         # Patch the lazy ``DoctrineService`` builders inside the checker so
         # they consume the synthetic shipped/project roots.  We swap the

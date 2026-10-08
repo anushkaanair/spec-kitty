@@ -365,7 +365,10 @@ def test_org_overlay_activated_artefact_resolves_for_parity(tmp_path: Path) -> N
 
     kittify = _write_config(
         tmp_path,
-        (f"activated_directives:\n  - org-only-directive\ndoctrine:\n  org:\n    packs:\n      - name: test-org\n        local_path: {org_pack_root.as_posix()}\n"),
+        (
+            "activated_directives:\n  - org-only-directive\n"
+            f"charter_packs:\n  org:\n    packs:\n      - name: test-org\n        local_path: {org_pack_root.as_posix()}\n"
+        ),
     )
     # Compiled WITHOUT the org directive -- the exact #2524 dangler shape.
     _write_charter_yaml_catalog(kittify, [])

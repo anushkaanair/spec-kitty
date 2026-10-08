@@ -219,7 +219,7 @@ class TestCollectGlossaryPackHealth:
         self, bare_repo_root: Path
     ) -> None:
         """INVALID arm (T024): a term missing ``definition`` fails schema validation."""
-        project_glossary_dir = bare_repo_root / ".kittify" / "doctrine" / "glossary_packs"
+        project_glossary_dir = bare_repo_root / ".kittify" / "charter-packs" / "glossary_packs"
         _write_glossary_pack(
             project_glossary_dir,
             "broken.glossary-pack.yaml",
@@ -253,7 +253,7 @@ class TestCollectGlossaryPackHealth:
             "confidence": 0.9,
             "status": "active",
         }
-        project_glossary_dir = bare_repo_root / ".kittify" / "doctrine" / "glossary_packs"
+        project_glossary_dir = bare_repo_root / ".kittify" / "charter-packs" / "glossary_packs"
         _write_glossary_pack(
             project_glossary_dir,
             "dup.glossary-pack.yaml",
@@ -299,7 +299,7 @@ class TestDoctorDoctrineGlossaryPackJson:
         self, bare_repo_root: Path
     ) -> None:
         """INVALID arm (T024): a malformed pack flips RC=1, never silently healthy."""
-        project_glossary_dir = bare_repo_root / ".kittify" / "doctrine" / "glossary_packs"
+        project_glossary_dir = bare_repo_root / ".kittify" / "charter-packs" / "glossary_packs"
         _write_glossary_pack(
             project_glossary_dir,
             "broken.glossary-pack.yaml",

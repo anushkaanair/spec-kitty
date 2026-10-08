@@ -18,7 +18,7 @@ def _profile(root: Path, value: str) -> None:
 
 def test_compiler_resolves_project_profile_from_charter_pointer(tmp_path: Path) -> None:
     kittify = tmp_path / ".kittify"
-    _profile(kittify / "doctrine" / "agent_profiles", "project-local")
+    _profile(kittify / "charter-packs" / "agent_profiles", "project-local")
     (kittify / "config.yaml").write_text("charter: .kittify/custom/charter.yaml\n")
     source = kittify / "custom" / "charter.yaml"
     source.parent.mkdir()
@@ -54,7 +54,7 @@ def test_compiler_preflights_proposed_activation_without_writing(tmp_path: Path)
     from charter.activation.pack_context import PackContext
 
     kittify = tmp_path / ".kittify"
-    _profile(kittify / "doctrine" / "agent_profiles", "project-local")
+    _profile(kittify / "charter-packs" / "agent_profiles", "project-local")
     config = kittify / "config.yaml"
     config.write_text("activated_agent_profiles: []\n")
     proposed = dataclasses.replace(PackContext.from_config(tmp_path), activated_agent_profiles=frozenset({"local"}))

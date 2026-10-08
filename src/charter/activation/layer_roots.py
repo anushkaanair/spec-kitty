@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from charter.offering.drg.org_pack_config import resolve_existing_org_roots, resolve_org_roots
-from kernel.charter_pack_paths import resolve_project_pack_read_root
+from kernel.charter_pack_paths import project_pack_root
 
 __all__ = ["resolve_layer_roots", "resolve_org_root_chain"]
 
@@ -21,14 +21,12 @@ def resolve_layer_roots(repo_root: Path) -> dict[str, Path]:
     """Resolve the org and project charter pack roots for *repo_root*.
 
     ``roots["project"]`` is the project pack root, present only when it is a
-    directory. It reads through
-    :func:`kernel.charter_pack_paths.resolve_project_pack_read_root` (quietly),
-    so a project that still has the retired ``.kittify/doctrine/`` tree is read
-    from there until the migration moves it.
+    directory (:func:`kernel.charter_pack_paths.project_pack_root`; the
+    retired ``.kittify/doctrine/`` tree is never read, FR-011).
     """
     roots: dict[str, Path] = {}
 
-    project = resolve_project_pack_read_root(repo_root, quiet=True)
+    project = project_pack_root(repo_root)
     if project.is_dir():
         roots["project"] = project
 

@@ -35,7 +35,7 @@ from charter.offering.drg.project_scan import (walk_project_agent_profile_nodes,
 
 from charter.activation.synthesizer._constants import GRAPH_FILENAME as _GRAPH_FILENAME
 from kernel.clock import now_utc_seconds
-from kernel.charter_pack_paths import PROJECT_PACK_DIRNAME, resolve_project_pack_read_root
+from kernel.charter_pack_paths import PROJECT_PACK_DIRNAME, project_pack_root
 
 from .errors import ProjectDRGValidationError
 from .path_guard import PathGuard
@@ -458,7 +458,7 @@ def apply_post_condition(
     from .path_guard import PathGuard  # noqa: PLC0415
 
     manifest_path = repo_root / MANIFEST_PATH
-    graph_path = resolve_project_pack_read_root(repo_root, quiet=True) / _GRAPH_FILENAME
+    graph_path = project_pack_root(repo_root) / _GRAPH_FILENAME
 
     if not manifest_path.exists():
         # Synthesizer must have already written the manifest. Defensive: if

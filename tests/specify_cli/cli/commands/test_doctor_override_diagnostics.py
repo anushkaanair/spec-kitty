@@ -9,7 +9,7 @@ regression (the finding path stays unreachable without org packs).
 The governance boundary under test (FR-010 / FR-012):
 
 * an ``org:``-provenance override of a built-in DRG node that is NOT sanctioned
-  by ``.kittify/doctrine/replaceable-builtins.yaml`` is flagged and flips the
+  by ``.kittify/charter-packs/replaceable-builtins.yaml`` is flagged and flips the
   report unhealthy (RC=1);
 * a sanctioning allowlist entry (with a reason, since the target is a built-in
   *directive*) clears the finding;
@@ -107,21 +107,19 @@ def _write_org_override_pack(
 
 
 def _write_config(repo_root: Path, pack_root: Path) -> None:
-    """Write the canonical ``doctrine.org.packs`` config that ``load_org_drg`` reads."""
+    """Write the canonical ``charter_packs.org.packs`` config that ``load_org_drg`` reads."""
     _write_packs_config(repo_root, [("acme-org", pack_root)])
 
 
 def _write_packs_config(
     repo_root: Path,
     packs: list[tuple[str, Path]],
-    *,
-    top_key: str = "doctrine",
 ) -> None:
-    """Write several packs under ``doctrine.org.packs`` or ``charter_packs.org.packs``."""
+    """Write several packs under ``charter_packs.org.packs``."""
     kittify = repo_root / ".kittify"
     kittify.mkdir(exist_ok=True)
     entries = "".join(f'      - name: {name}\n        local_path: "{root}"\n' for name, root in packs)
-    (kittify / "config.yaml").write_text(f"{top_key}:\n  org:\n    packs:\n{entries}")
+    (kittify / "config.yaml").write_text(f"charter_packs:\n  org:\n    packs:\n{entries}")
 
 
 def _sanction_text(*entries: tuple[str, str]) -> str:
@@ -139,7 +137,7 @@ def _write_allowlist(repo_root: Path, *, reason: str) -> None:
 
 
 def _write_consumer_file(repo_root: Path, text: str) -> None:
-    doctrine_dir = repo_root / ".kittify" / "doctrine"
+    doctrine_dir = repo_root / ".kittify" / "charter-packs"
     doctrine_dir.mkdir(parents=True, exist_ok=True)
     (doctrine_dir / "replaceable-builtins.yaml").write_text(text)
 
@@ -412,7 +410,7 @@ def test_pack_root_sanction_beats_stale_consumer_allowlist(tmp_path: Path) -> No
 
 def test_pack_root_sanction_via_charter_packs_key(tmp_path: Path) -> None:
     pack = _write_org_override_pack(tmp_path, sanction=_sanction_text((_BUILT_IN_DIRECTIVE_URN, _REASON)))
-    _write_packs_config(tmp_path, [("acme-org", pack)], top_key="charter_packs")
+    _write_packs_config(tmp_path, [("acme-org", pack)])
 
     exit_code, payload = _run_doctrine_json(tmp_path)
 
@@ -841,7 +839,7 @@ def test_unsanctioned_human_block_characterisation(tmp_path: Path) -> None:
         "Add the URN to .kittify/charter-packs/replaceable-builtins.yaml (with a reason for directives), have the overriding pack "
         "ship it in its pack-root replaceable-builtins.yaml, or remove the org override."
     ) in output
-    assert "Only org-tier overrides are adjudicated; project-tier (.kittify/doctrine/) overrides are intentionally ungoverned (FR-012)." in output
+    assert "Only org-tier overrides are adjudicated; project-tier (.kittify/charter-packs/) overrides are intentionally ungoverned (FR-012)." in output
 
 
 # -- NFR-001 bounded I/O ------------------------------------------------------
@@ -923,18 +921,3 @@ def test_legacy_entry_lines_use_shared_renderer_and_reason_rule() -> None:
     assert _legacy_entry_lines({"urn": "tactic:t", "kind": "tactic"}, {}) == ["replaceable_builtins:", "- urn: tactic:t"]
 
 
-def test_legacy_organisation_packs_deprecation_warns_at_most_once(tmp_path: Path) -> None:
-    import warnings
-
-    from specify_cli.cli.commands._doctrine_collect import _collect_org_layer_data
-
-    pack = _write_org_override_pack(tmp_path, sanction=None)
-    (tmp_path / ".kittify").mkdir(exist_ok=True)
-    (tmp_path / ".kittify" / "config.yaml").write_text(f'organisation_packs:\n  - name: acme-org\n    path: "{pack}"\n')
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always")
-        _collect_org_layer_data(tmp_path)
-
-    legacy = [w for w in caught if issubclass(w.category, DeprecationWarning) and "organisation_packs" in str(w.message)]
-    assert len(legacy) <= 1

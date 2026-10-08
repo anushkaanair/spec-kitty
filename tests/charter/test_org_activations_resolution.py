@@ -102,7 +102,7 @@ def _register_org_pack(repo_root: Path, pack_root: Path, *, name: str = _ORG_PAC
                 # "software-dev" mission type, unrelated to the org∪project
                 # activation-union semantics under test.
                 "mission_type_activations": ["software-dev"],
-                "doctrine": {"org": {"packs": [{"name": name, "local_path": str(pack_root)}]}},
+                "charter_packs": {"org": {"packs": [{"name": name, "local_path": str(pack_root)}]}},
             },
             fh,
         )

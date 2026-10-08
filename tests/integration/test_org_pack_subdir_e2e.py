@@ -51,7 +51,7 @@ def _write_config(repo_root: Path, *, local_path: Path, subdir: str | None = Non
     subdir_line = f"\n                    subdir: {subdir}" if subdir else ""
     (kittify / "config.yaml").write_text(
         dedent(f"""\
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: {_PACK_NAME}
@@ -327,7 +327,7 @@ def test_config_schema_accepts_every_runtime_source_type() -> None:
     assert form_b_types == runtime_types
     Draft202012Validator(schema).validate(
         {
-            "doctrine": {
+            "charter_packs": {
                 "org": {
                     "packs": [
                         {

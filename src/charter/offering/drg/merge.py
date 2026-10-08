@@ -555,7 +555,7 @@ def _resolve_edge_endpoint(
 
     Rule 3 reads the built-in layer ONLY, never the running merge state. Were
     it to consult earlier fragments, whether a pack's bare cross-pack
-    reference resolved would depend on the operator's ``organisation_packs:``
+    reference resolved would depend on the operator's ``charter_packs.org.packs``
     ordering — an order-dependent graph is a silent-difference generator of
     the same family this mission closes. Cross-pack references must be
     qualified (rule 2), which is order-independent by construction.

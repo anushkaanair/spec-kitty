@@ -72,7 +72,7 @@ def project_with_malformed_org_mission_type(tmp_path: Path) -> Path:
             f"""\
             mission_type_activations:
               - software-dev
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: broken-org-pack

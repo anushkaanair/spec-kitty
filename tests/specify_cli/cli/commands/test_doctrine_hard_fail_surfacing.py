@@ -83,10 +83,11 @@ def _write_repo(root: Path, *, dangling: bool = False, unresolved: bool = False)
     (kittify / "config.yaml").write_text(
         dedent(
             f"""\
-            organisation_packs:
-              - name: example-org
-                source: local_path
-                path: {pack_dest}
+            charter_packs:
+              org:
+                packs:
+                  - name: example-org
+                    local_path: {pack_dest}
             """
         ),
         encoding="utf-8",

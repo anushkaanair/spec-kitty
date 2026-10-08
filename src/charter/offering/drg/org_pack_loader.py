@@ -13,7 +13,7 @@ Architectural boundary
     kernel (root) <- doctrine <- charter <- specify_cli
 
 This module MUST NOT import from ``charter`` or ``specify_cli``. Charter
-reads ``organisation_packs:`` from ``.kittify/config.yaml`` (project-config
+reads ``charter_packs.org.packs`` from ``.kittify/config.yaml`` (project-config
 knowledge, charter-domain) and calls :func:`load_org_pack` for each
 configured pack root. All per-pack parsing and schema validation is the
 doctrine domain's responsibility and lives here.
@@ -41,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from charter.offering.artifact_kinds import _NON_AUGMENTATION_ELIGIBLE_KINDS, ArtifactKind
 from charter.offering.drg.models import NodeKind, Relation
+from kernel.charter_pack_paths import pack_drg_fragment
 
 __all__ = [
     "AUGMENTATION_ELIGIBLE_KINDS",
@@ -439,7 +440,7 @@ class _ProjectedOrgDRGEdge(_OrgDRGEdge):
 class OrgDRGFragment(BaseModel):
     """A loaded organisation-tier DRG fragment with provenance metadata.
 
-    One instance per configured ``organisation_packs:`` entry. The loader
+    One instance per configured ``charter_packs.org.packs`` entry. The loader
     (:func:`load_org_pack`) produces a single fragment per pack root.
     ``layer_index`` (1..N) is assigned by the caller
     (``charter.drg.load_org_drg``) once it knows the declaration order.
@@ -533,7 +534,7 @@ def load_org_pack(
     if not pack_root.is_dir():
         raise OrgPackMissingError(pack_name, pack_root)
 
-    fragment_yaml = pack_root / "drg" / "fragment.yaml"
+    fragment_yaml = pack_drg_fragment(pack_root)
     if not fragment_yaml.exists():
         raise OrgPackMissingError(pack_name, fragment_yaml)
 

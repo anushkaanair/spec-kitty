@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import typer
-from kernel.charter_pack_paths import resolve_project_pack_read_root
+from kernel.charter_pack_paths import project_pack_root
 from specify_cli.cli.console import console
 from rich.table import Table
 
@@ -103,7 +103,7 @@ def _profile_catalog(
     # Overlay charter doctrine project/org profiles that the legacy invocation
     # registry cannot see. The doctrine inner repository is read UNGATED so the
     # catalog view shows every layer; activation state is annotated separately.
-    project_doctrine_profiles = resolve_project_pack_read_root(repo_root, quiet=True) / "agent_profiles"
+    project_doctrine_profiles = project_pack_root(repo_root) / "agent_profiles"
     from charter.drg import resolve_org_roots
 
     org_roots = [root for root in resolve_org_roots(repo_root) if root.exists()]

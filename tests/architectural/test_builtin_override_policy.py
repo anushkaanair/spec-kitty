@@ -53,7 +53,7 @@ def _load_org_fragments(repo_root: Path) -> list[OrgDRGFragment]:
     """Load configured org fragments, tolerating a repo with none.
 
     The org-pack registry loader lives in the charter layer; the architectural
-    suite is allowed to reach across layers. A repo with no ``organisation_packs``
+    suite is allowed to reach across layers. A repo with no ``charter_packs.org.packs``
     yields an empty list (the common case, including this repo).
     """
     from charter.activation.drg_activation import load_org_drg

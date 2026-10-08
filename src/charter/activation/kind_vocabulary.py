@@ -289,17 +289,19 @@ def _org_scan_dirs(kind: ArtifactKind, org_roots: list[Path] | None) -> list[tup
     return flat_dirs + legacy_dirs
 
 
-def _layer_candidate_dir(kind: ArtifactKind, layer: str, root: Path) -> Path:
-    """Return the candidate doctrine dir for *kind* within a single *layer*.
+def _layer_candidate_dir(kind: ArtifactKind, layer: str, root: Path) -> Path | None:
+    """Return the candidate dir for *kind* within a single *layer*, or ``None``.
 
-    The project *root* is the project pack root (``.kittify/charter-packs/``),
-    so kind directories join straight onto it.
+    Only the project layer is resolved here: its *root* is the project pack
+    root (``.kittify/charter-packs/``), so kind directories join straight onto
+    it. Org packs are scanned flat through ``org_roots`` (:func:`_org_scan_dirs`)
+    and the built-in pack through :func:`_built_in_scan_dir`; the retired nested
+    ``<pack>/doctrine/<plural>/<layer>`` layout is not read (FR-011).
     """
-    if layer == "project":
-        project_dir: Path = root / PROJECT_KIND_DIRS.get(kind, kind.plural)
-        return project_dir
-    layer_dir: Path = root / "doctrine" / kind.plural / layer
-    return layer_dir
+    if layer != "project":
+        return None
+    project_dir: Path = root / PROJECT_KIND_DIRS.get(kind, kind.plural)
+    return project_dir
 
 
 def _layer_scan_dirs(kind: ArtifactKind, layer_roots: dict[str, Path] | None) -> list[tuple[Path, bool]]:
@@ -308,7 +310,7 @@ def _layer_scan_dirs(kind: ArtifactKind, layer_roots: dict[str, Path] | None) ->
     recursive = overlay_scan_is_recursive(kind)
     for layer, root in (layer_roots or {}).items():
         candidate = _layer_candidate_dir(kind, layer, root)
-        if candidate.is_dir():
+        if candidate is not None and candidate.is_dir():
             dirs.append((candidate, recursive))
     return dirs
 

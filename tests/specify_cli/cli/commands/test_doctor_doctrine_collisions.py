@@ -47,7 +47,7 @@ def _write_kittify_config_with_pack(repo_root: Path, pack_path: Path) -> None:
     (config_dir / "config.yaml").write_text(
         textwrap.dedent(
             f"""
-            doctrine:
+            charter_packs:
               org:
                 packs:
                   - name: test-pack
