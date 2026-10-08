@@ -1,0 +1,220 @@
+{
+  "event_count": 61,
+  "last_event_id": "01M4CGQYWAKA0EZM8TFXDS536T",
+  "materialized_at": "2026-10-08T01:06:18.122584+00:00",
+  "mission_number": "",
+  "mission_slug": "concurrent-mission-writers-01M4BT23",
+  "mission_type": "software-dev",
+  "schema_version": 2,
+  "summary": {
+    "approved": 6,
+    "blocked": 0,
+    "canceled": 0,
+    "claimed": 0,
+    "done": 0,
+    "for_review": 0,
+    "in_progress": 0,
+    "in_review": 0,
+    "planned": 0
+  },
+  "work_packages": {
+    "WP01": {
+      "actor": "claude-reviewer",
+      "agent": "claude-reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 1,
+      "implementer_of_record": "claude",
+      "lane": "approved",
+      "last_event_id": "01M4BZ0D2VDTG30GKBVB7TZ3X8",
+      "last_transition_at": "2026-10-07T19:56:20.443218+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "Mission write primitive (status/mission_write.py), write_checkout_claim_lock, blob_at lift, txn+coord rollback migrated, gate census updated; 133 targeted + coordination 1198 + gates 25/124 passed, make test-fast 2378 passed (2 own tests fixed after)",
+        "Review cycle 1 fixed: txn _rollback OSError guard, owned-checkout capture test, C-locale non-git probe; targeted 89 passed, coordination 1198 passed, make test-fast 2383 passed",
+        "Review passed (cycle 2): all 3 cycle-1 items resolved (txn rollback tolerates OSError, EIO repro now BookkeepingCommitFailed+STATUS_ROLLBACK_REFUSED; owned-checkout capture test; LC_ALL=C non-git probe). Tests: targeted 136 passed 1 skipped; gates 124 passed; coordination 1198 passed 10 skipped; ruff/format clean; mypy unchanged vs base; make test-fast 2380 passed (cycle 1)."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review": null,
+      "review_result": {
+        "reference": "auto-approval:WP01:20261007",
+        "reviewer": "Claude",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 30355,
+      "shell_pid_created_at": "1791402728.31",
+      "subtasks": {
+        "T001": "done",
+        "T002": "done",
+        "T003": "done",
+        "T004": "done",
+        "T005": "done",
+        "T006": "done"
+      }
+    },
+    "WP02": {
+      "actor": "claude-reviewer",
+      "agent": "claude-reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 1,
+      "implementer_of_record": "claude",
+      "lane": "approved",
+      "last_event_id": "01M4C5V40DB6FX2C5MH0H8SYDY",
+      "last_transition_at": "2026-10-07T21:55:47.341615+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "Fix #5819/#5804/#5796(agent arm)/#5099: one mission_write_lock hold around implement claim (capture+emit+commit+rollback), review re-keyed via capture_rollback_point, committed-claim reporting (A4), checkout claim lock via ExitStack, shared-workspace warning. Red-first: 3 T007 repros RED on base, T011 RED with lock disabled. Tests: new 23 pass; agent+lanes+status dirs+gate files 5201 passed/0 failed; concurrency tests 20/20 (240 passed); make test-fast 2383 passed. ruff/format/mypy clean.",
+        "Cycle 2: all review items fixed. #5819 HEAD half pinned (committing B, committing next writer; RED on base f93d9fdd9). CLI warning tests for implement+review; coord review test; exit-arm/lane-sync receipt consistency; noqa removed. Tests: concurrency file 10/10 (150 passed); agent dir+warning+related 2625 passed; make test-fast 2383 passed; ruff/format/mypy clean.",
+        "Review passed (cycle 2): all 3 blocking items fixed. Wiring mutation-checked: removing workflow.py:1640/2297 reds the implement/review CLI tests. #5819 test red on base f93d9fdd9 (on-disk assert; with those disabled, carol's implement exits 1 on the truncated log, so the HEAD asserts cannot be reached on base: accepted, the HEAD half is a downstream symptom and the asserts read the real HEAD). Coord review test (A15) + receipt/message consistency in Exit and lane-sync arms added. noqa removed; except tuple is narrow, not broad (a ClickException in writer B would escape unrecorded but the disk asserts still catch it), low. Coordination note: PR #5876 adds operator_force_note at the implement_claim_transition signature where the wrapper is inserted, a certain but mechanical conflict. Tests: targeted+gates 60 passed; concurrency file 5x 15/15; agent dir+touched 2635 passed/5 skipped/2 xfailed; ruff/format/mypy clean."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review": null,
+      "review_result": {
+        "reference": "auto-approval:WP02:20261007",
+        "reviewer": "Claude",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 32387,
+      "shell_pid_created_at": "1791409016.96",
+      "subtasks": {
+        "T007": "done",
+        "T008": "done",
+        "T009": "done",
+        "T010": "done",
+        "T011": "done",
+        "T012": "done"
+      }
+    },
+    "WP03": {
+      "actor": "claude-reviewer",
+      "agent": "claude-reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 0,
+      "implementer_of_record": "claude",
+      "lane": "approved",
+      "last_event_id": "01M4C9179R9S0MQKVTG79TWGWC",
+      "last_transition_at": "2026-10-07T22:51:33.048906+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "implement holds one mission_write_lock (timeout -1) claim emit->claim commit + ensure_vcs_locked under it; checkout claim lock (reusing workflow_executor.enter_checkout_claim_lock) before allocate in implement and before the scan in orchestrator-api start-implementation. New tests 5/5 (10/10 repeats, RED first on 5/5); commands -k implement 483 passed; orchestrator/lanes dirs 1502 passed 3 skipped; placement pin+lane selection 28 passed; make test-fast 2420 passed 8 skipped. ruff/format clean; mypy: only 2 pre-existing wp_lifecycle errors.",
+        "Review passed: implement holds the checkout lock (WP02 predicate, single_branch repo-root only) before allocate and the Mission lock (ctx.mission_dir, the same canonicalized dir+lock root start_implementation_status re-enters, so re-entrant, also on coord where the coord transaction lock nests as before) from record_claim through commit_claim in one ExitStack; ensure_vcs_locked under the Mission lock after the checkout lock (order holds); orchestrator-api wraps the body, envelopes/codes unchanged. Mutation-checked: no-op hold_mission_write_lock reds the #5468 test, no-op checkout lock reds all 4 #5796 cases. Deviation accepted: on this base move-task on a coord-less lanes Mission makes no status commit, and WP02's verified rollback closes the truncation half; a committing-B variant (agent action implement WP02 as B) is feasible in principle but my probe hit an unrelated concurrent-index safe_commit failure (planning-artifact commit vs claim commit), i.e. #5443 territory, so not required here. Tests: new file 5x 5/5; commands -k implement 483 passed; orchestrator_api dirs + placement routing 253 passed 1 skipped; ruff/format clean; mypy only 2 pre-existing wp_lifecycle errors (lines 65, 384, outside diff)."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review_result": {
+        "reference": "auto-approval:WP03:20261007",
+        "reviewer": "Claude",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 9664,
+      "shell_pid_created_at": "1791412627.83",
+      "subtasks": {
+        "T013": "done",
+        "T014": "done",
+        "T015": "done",
+        "T016": "done"
+      }
+    },
+    "WP04": {
+      "actor": "claude-reviewer",
+      "agent": "claude-reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 1,
+      "implementer_of_record": "claude",
+      "lane": "approved",
+      "last_event_id": "01M4CCSQGAZ6YDCNC7CB4WXB26",
+      "last_transition_at": "2026-10-07T23:57:21.802384+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "WP04: add-history via locked_rewrite_text; tracer-append under mission_write_lock; move-task/mark-status/lifecycle re-keyed to Mission dir name. Red-first recorded (3 appender + 4 lock-key RED). New tests 3+7 green 20/20; broad subsystem run 5300 passed after fixing 4 slug-key seam tests; make test-fast 2427 passed. lock-composition census gate (WP05) lists tracer_writer as new site.",
+        "Review cycle 1 fixed: add-history test pauses inside transform (RED on base and unlocked mutant, GREEN fixed); mypy no-any-return fixed; coord key pinned. 12/12 repeats; retro/status 2032 passed; agent -k 565 passed; gates 36 passed; test-fast 2428 passed.",
+        "Review passed (cycle 2): the #5820 test now pauses writer A inside the transform (append_activity_log); it is red against the unlocked fresh read-then-write mutant and red on base c58359978, green on HEAD. Real-coord test pins the tracer key = coord dir name and that coord_status_lock re-enters. lifecycle_events mypy no-any-return fixed (mypy clean). Tests: new files 5x 11/11; gates 36 passed; retrospective+status dirs 2032 passed 14 skipped; ruff/format clean."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review": null,
+      "review_result": {
+        "reference": "auto-approval:WP04:20261007",
+        "reviewer": "Claude",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 17122,
+      "shell_pid_created_at": "1791416900.02",
+      "subtasks": {
+        "T017": "done",
+        "T018": "done",
+        "T019": "done",
+        "T020": "done"
+      }
+    },
+    "WP05": {
+      "actor": "claude-reviewer",
+      "agent": "claude-reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 1,
+      "implementer_of_record": "claude",
+      "lane": "approved",
+      "last_event_id": "01M4CFYRQP0FAK9XH08HKFTXVJ",
+      "last_transition_at": "2026-10-08T00:52:32.631032+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "Gate tests/architectural/test_mission_write_discipline.py: 74 passed, 1 failed (rule 3 real findings: review/cycle.py x3, migration/backfill_runtime_state.py:1682 - reported, no allowlist). Prompts edited (implement+review); terminology 137 passed with prompt tests; pack gates 11 passed; make test-fast 2428 passed 8 skipped.",
+        "Cycle 2: rule-3 sites fixed via mission_write_lock_dir. Gate+lock keys+writes gate+layer+status boundary 172 passed; review/retrospective 1203 passed; make test-fast 2432 passed.",
+        "Review passed (cycle 2): rule 3 green, allowlists empty (gate fully green). One canonical read-only mission_write_lock_dir (missions/_read_path_resolver, topology-aware candidate_feature_dir_for_mission, falls back to the handle) reused by tracer_writer and all three review/cycle.py takes, resolved before each with; lock root unchanged (main_repo_root, also on the owned arm, as before). backfill keyed on feature_dir.name. Convergence tests: red on base 35d5a4c25 for slug and mid8 handles on a dir-name != slug Mission; the real-coord test is a pin, not a reproduction (fixture slug == dir name). Low: only _allocate_and_write_review_cycle_locked is spied; the two _adopt_or_allocate takes share the code shape. Prompt now names agent action implement too. Tests: gates+keys+layer+boundary+review+retrospective+migration 1634 passed 16 skipped; make test-fast 2432 passed 8 skipped; ruff/format/mypy clean."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review": null,
+      "review_result": {
+        "reference": "auto-approval:WP05:20261008",
+        "reviewer": "Claude",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 23213,
+      "shell_pid_created_at": "1791420179.0",
+      "subtasks": {
+        "T021": "done",
+        "T022": "done",
+        "T023": "done",
+        "T024": "done"
+      }
+    },
+    "WP06": {
+      "actor": "claude-reviewer",
+      "agent": "claude-reviewer",
+      "agent_profile": "__resolved_profile_absent__",
+      "agent_profile_version": "__resolved_profile_version_absent__",
+      "force_count": 1,
+      "implementer_of_record": "claude",
+      "lane": "approved",
+      "last_event_id": "01M4CGQYWAKA0EZM8TFXDS536T",
+      "last_transition_at": "2026-10-08T01:06:18.122584+00:00",
+      "model": "__resolved_model_absent__",
+      "notes": [
+        "CHANGELOG (4 Fixed entries) and status-model 'Mission write lock and rollback' section added; freshness errors=0, terminology 96 passed, changelog/spelling docs tests 200 passed",
+        "Review cycle 1 fixed: committed-claim case, printed diff path, 'reports', unbounded claim windows; style/terminology/index 240 passed, freshness errors=0",
+        "Review passed (cycle 2): all four items fixed (committed-claim case stated in both docs with nothing to revert; printed git diff HEAD -- <log> path incl. coord worktree log; 'reports' wording; bounded-by-default vs unbounded claim windows). Nit: status-model's clause 'the coordination fallback logs it' would go stale if the follow-up fold surfaces the refusal; the sentence's 'reports' already covers it. Doc tests green."
+      ],
+      "provider": "__resolved_provider_absent__",
+      "review": null,
+      "review_result": {
+        "reference": "auto-approval:WP06:20261008",
+        "reviewer": "Claude",
+        "verdict": "approved"
+      },
+      "role": "reviewer",
+      "shell_pid": 18485,
+      "shell_pid_created_at": "1791421479.39",
+      "subtasks": {
+        "T025": "done",
+        "T026": "done"
+      }
+    }
+  }
+}

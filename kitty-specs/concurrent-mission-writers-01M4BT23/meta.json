@@ -1,0 +1,33 @@
+{
+  "accept_commit": "764ce8d78002c47e096efd3f50b51ebc9be297f3",
+  "acceptance_history": [
+    {
+      "accept_commit": "764ce8d78002c47e096efd3f50b51ebc9be297f3",
+      "acceptance_mode": "pr",
+      "accepted_at": "2026-10-08T04:01:50.457218+00:00",
+      "accepted_by": "claude",
+      "accepted_from_commit": "7cd3ebb2ac2eb3ff98f260c44b36750261979504"
+    }
+  ],
+  "acceptance_mode": "pr",
+  "accepted_at": "2026-10-08T04:01:50.457218+00:00",
+  "accepted_by": "claude",
+  "accepted_from_commit": "7cd3ebb2ac2eb3ff98f260c44b36750261979504",
+  "contracts": "none",
+  "contracts_rationale": "No Mission-local contract artifacts: the only interface change is the orchestrator-api STATUS_LOCK_HELD envelope for start-implementation, recorded in the canonical contract (upstream_contract.json, docs/contracts, docs/api/orchestrator-api.md; version 1.13.0). The shared-workspace warning is human output only.",
+  "created_at": "2026-10-07T18:30:03.045020+00:00",
+  "flattened": false,
+  "friendly_name": "Concurrent writers to a Mission's files never lose or steal a write",
+  "mid8": "01M4BT23",
+  "mission_id": "01M4BT2339XAN22576N1DZ4WQJ",
+  "mission_number": null,
+  "mission_slug": "concurrent-mission-writers-01M4BT23",
+  "mission_type": "software-dev",
+  "pr_bound": true,
+  "purpose_context": "Parallel agents on one Mission routinely overlap: implement claims, move-task, add-history, tracer-append. Today several of these writers read-modify-write or roll back without the Mission's lock, so a command that exited 0 can have its committed write erased, or two claims can both pass a single-writer check. This Mission routes every Mission-file mutation through one locked primitive and keeps ad-hoc unlocked writes out with an architectural gate.",
+  "purpose_tldr": "Two agents writing the same Mission at once never silently lose, steal or corrupt each other's status, WP, tracer or claim writes.",
+  "slug": "concurrent-mission-writers-01M4BT23",
+  "status_phase": "1",
+  "target_branch": "issue-5819-concurrent-mission-writers",
+  "topology": "single_branch"
+}
