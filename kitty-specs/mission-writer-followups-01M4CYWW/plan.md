@@ -17,6 +17,7 @@ This Mission finishes what PR #5890 started, in three areas.
 - **Only the runtime step order moves to the pack.** `mission.yaml`, the per-type `templates/` and the Python modules stay under `src/specify_cli/missions` (#2652's later slices own them). Only the four `mission-runtime.yaml` copies are retired from `src` (C-008).
 - **In-flight runs keep their frozen order.** A software-dev run started before the change keeps its frozen step order with no analyze step. Its recorded template path disappears when the `src` copy is retired, so the drift check is skipped (FR-017). The existing implement-time `analysis_report_required` refusal stays the backstop.
 - **Operator change: the pack's software-dev prompts and steps are cleaned up in this Mission** (new FR-022, SC-008).
+- **Operator change, 2026-10-08: the pack's Mission config must match the one the CLI runs today** (new FR-023, SC-009). Today the CLI reads `src/specify_cli/missions/<type>/{mission.yaml,mission-runtime.yaml}`, while the charter repository reads the pack copies. The pack copies diverge: `agent-profile` keys on runtime steps, `task_types` blocks, documentation `deliverables: docs/output/` vs `docs/`, a plan runtime template that does not load, and feature/mission wording. The running value wins in every case. Wording fixes go to both copies.
 
 ## Technical Context
 
@@ -85,6 +86,7 @@ This Mission finishes what PR #5890 started, in three areas.
   - The pack's `plan` template takes the `src` shape, because today the pack copy does not load.
   - An `agent-profile` stays only on a step that already dispatches through composition. Discovery and documentation-accept lose theirs, so routing does not widen.
   - A per-type test asserts that the planned step sequence and the dispatch route of every step equal today's, apart from the software-dev analyze step.
+- **Config parity (FR-023).** Each pack `mission.yaml` is made byte-equal to its src copy. The pack-only `task_types` and the documentation `deliverables: docs/output/` are dropped, because the CLI never ran them; the wording fixes are applied to both copies. A parity test over the four types pins `mission.yaml` equality while the src copy exists. Before a pack-only key is dropped, check whether any charter reader of the pack copy (`charter/offering/missions/repository.py`, `charter/activation/*`, `dossier/manifest.py`) consumes it; if one does, stop and raise it as an owner decision rather than dropping it. `pack-manifest.yaml` hashes are refreshed with `spec-kitty doctrine regenerate-graph`.
 
 ### D7 — Analyze step (FR-016, FR-017)
 
@@ -166,7 +168,7 @@ tests/architectural/test_layer_rules.py, _baselines.yaml  # ledger 23 -> 22 (D6)
 
 ### IC-05 — Canonical runtime templates and the analyze step
 - **Purpose**: `next` reads the pack, and the analyze step is guarded.
-- **Relevant requirements**: FR-016..FR-018, NFR-006, C-001, C-004, C-008
+- **Relevant requirements**: FR-016..FR-018, FR-023, NFR-006, SC-009, C-001, C-004, C-008
 - **Affected surfaces**: runtime_bridge_io, runtime_bridge_cores, decision, next_cmd, pack mission-runtime.yaml files, layer-rule ledger
 - **Sequencing/depends-on**: IC-04 (same runtime files)
 - **Risks**: agent-profile routing widening; the finalized-board override skipping analyze; in-flight drift.
