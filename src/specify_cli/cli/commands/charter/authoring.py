@@ -110,7 +110,7 @@ def fetch(
 #: rendered stub is the *minimum* payload that passes the corresponding Pydantic
 #: schema in ``src/charter/offering/*/models.py`` (or ``AssetManifest``).  The scaffolder
 #: validates the rendered stub against the schema before writing — a future
-#: schema tightening surfaces at the next ``doctrine new`` rather than silently
+#: schema tightening surfaces at the next ``charter new`` rather than silently
 #: scaffolding an invalid file.
 #:
 #: This is a ``dict[ArtifactKind, str]`` (not an eight-arm ``if``-chain) so the
@@ -120,7 +120,7 @@ def fetch(
 #: only through the membership gate in :func:`new`, so it is carried as an
 #: allow-listed ``.get``/membership partial in the guard's
 #: ``_EXEMPT_GET_PARTIALS`` with that reason. The set of keys is exactly the
-#: kinds ``doctrine new`` supports.
+#: kinds ``charter new`` supports.
 _STUB_TEMPLATES: dict[ArtifactKind, str] = {
     # Directive: id must match [A-Z][A-Z0-9_-]*; intent + title required.
     ArtifactKind.DIRECTIVE: ('schema_version: "1.0"\nid: {artifact_id}\ntitle: TODO short title\nintent: TODO why this directive exists\nenforcement: advisory\n'),

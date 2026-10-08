@@ -43,7 +43,8 @@ def _built_in_pack_root() -> Path:
     freshness read source; the extractor resolves ``missions/`` (which did NOT
     move) internally.
 
-    Routes through :func:`charter.offering.pack_paths.built_in_root` (C1.6), the single
+    Routes through :func:`charter.pack_paths.built_in_root` (the charter facade over
+    :mod:`charter.offering.pack_paths`, C1.6), the single
     root-resolution authority every root-needing reader must use instead of
     scattering bare ``resolve_pack_root("built-in")`` calls or a hand-rolled
     walk. This retires the CWD ancestor-walk this function previously
@@ -54,7 +55,7 @@ def _built_in_pack_root() -> Path:
     override → editable-checkout ancestor walk from the *module's* location →
     installed wheel sibling → fail-closed) rather than a CWD-rooted walk. The
     normal in-checkout case (operator invoking from inside the repo whose
-    ``src/doctrine`` this module loads from) resolves identically either way.
+    ``packs/built-in`` this module loads from) resolves identically either way.
     """
     from charter.pack_paths import built_in_root
 

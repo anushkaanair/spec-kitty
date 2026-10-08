@@ -68,7 +68,7 @@ my-pack/
 ```
 
 **Important: do not create `pack-manifest.yaml` yourself.** It is written by
-`charter fetch` (for non-git sources) and `doctrine pack assemble`. Authors should leave
+`charter fetch` (for non-git sources) and `charter pack assemble`. Authors should leave
 it alone; manual edits surface as an advisory in `pack validate`.
 
 ---
@@ -379,7 +379,7 @@ artifact set. Either add the missing artifact, fix the URN, or remove the edge.
 ## Step 6 (optional): Assemble multiple packs into a distributable
 
 If your organization prefers a single distributable artifact over multiple independent
-pack repositories, you can merge several packs into one with `doctrine pack assemble`:
+pack repositories, you can merge several packs into one with `charter pack assemble`:
 
 ```bash
 uv run spec-kitty charter pack assemble \

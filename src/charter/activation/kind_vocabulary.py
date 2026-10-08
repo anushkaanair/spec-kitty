@@ -61,7 +61,7 @@ from charter.offering.pack_paths import (
 #: Public re-export of :data:`charter.offering.artifact_kinds.PROJECT_KIND_DIRS`.
 #:
 #: Landing-fold addition (write-side-seam-matrix-tracer Wave B / #3070):
-#: ``specify_cli.cli.commands.doctrine``'s ``new`` scaffolder needs the
+#: ``specify_cli.cli.commands.charter.authoring``'s ``new`` scaffolder needs the
 #: project-tier directory-per-kind mapping but, as a runtime-layer module,
 #: may not import ``doctrine.*`` directly (the runtime -> charter ->
 #: doctrine boundary ratchet, ``test_runtime_charter_doctrine_boundary.py``).
@@ -105,7 +105,7 @@ _DEFAULT_ID_FIELD = "id"
 #: The project-tier overlay directory name per kind is the single canonical
 #: authority :data:`charter.offering.artifact_kinds.PROJECT_KIND_DIRS` (imported and
 #: re-exported above as ``PROJECT_KIND_DIRS`` — the runtime→charter→doctrine
-#: boundary facade for this mapping; see ``cli/commands/doctrine.py``'s
+#: boundary facade for this mapping; see ``cli/commands/charter/authoring.py``'s
 #: ``new`` scaffolder for the consumer). It is *total*, so
 #: ``.get(kind, kind.plural)`` below never actually falls back — the default
 #: is retained only as a belt-and-braces guard against a future partial
