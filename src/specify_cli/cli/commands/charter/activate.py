@@ -517,8 +517,7 @@ def recompile_catalog(repo_root: Path) -> list[str]:
     `activate_cmd` and `deactivate_cmd` (FR-001/FR-002) unless `--no-compile`
     is passed.
 
-    Modeled EXACTLY on `pack.py`'s `_compile_bundle_after_merge` (the
-    `charter pack apply --compile` seam) -- the same
+    Uses the same
     `_load_interview_for_generate(..., from_interview=False, ...)` ->
     `compile_charter` -> `write_compiled_charter` call chain `charter
     generate --no-from-interview` itself uses (single compiler authority,
@@ -812,7 +811,7 @@ def reproject_pack_skills(repo_root: Path, kind: str) -> None:
 DEFAULT_PRESET_PACK = "built-in"
 
 #: Code of a ``--preset --json`` run whose preset was written but whose
-#: post-write resynthesis failed. Provisional name pending the owner's ruling.
+#: post-write resynthesis failed.
 _RESYNTHESIS_FAILED = "RESYNTHESIS_FAILED"
 
 _PRESET_ONLY_OPTIONS: tuple[tuple[str, str], ...] = (("pack", "--pack"), ("force", "--force"), ("json_output", "--json"))

@@ -475,13 +475,13 @@ def _provision_missing_mission_type_activations(project_path: Path, *, dry_run: 
     resolve), while ``upgrade`` may be healing an already-migrated project and
     must target whichever authority that project actually reads.
 
-    Both provisioners share the same seed-read
-    (:func:`charter.activation.default_pack.load_default_mission_type_activations`) so
-    they can never seed a divergent activation set — only the write target
+    Both provisioners share the same seed-read, the built-in pack's
+    ``default`` preset (:func:`charter.activation.compiler.default_preset_mission_types`),
+    so they can never seed a divergent activation set — only the write target
     differs, additive-only (never overwrites an authored list, including an
     authored empty ``[]``), idempotent (a second call is a no-op), and
-    fail-closed if the shipped ``src/charter/activation/packs/default.yaml`` is missing
-    or the resolved ``charter:`` pointer is dangling/unreadable.
+    fail-closed when that preset is missing (``DEFAULT_PRESET_MISSING``) or the
+    resolved ``charter:`` pointer is dangling/unreadable.
 
     Must run on every real ``upgrade`` invocation, mirroring the surface
     repair's "even when no migrations are pending" wiring (FR-001/FR-002;
@@ -495,13 +495,15 @@ def _provision_missing_mission_type_activations(project_path: Path, *, dry_run: 
     if dry_run:
         return []
 
-    from charter.activation.compiler import provision_mission_type_activations
+    from charter.activation.compiler import DefaultPresetMissingError, provision_mission_type_activations
     from charter.activation.pack_context import ActiveCharterConfigError
 
     try:
         provision_mission_type_activations(project_path)
     except ActiveCharterConfigError as exc:
         return [exc.body]
+    except DefaultPresetMissingError as exc:
+        return [_preparation_error_text(exc)]
     return []
 
 
@@ -924,6 +926,24 @@ def _render_no_op_tail(outcome: UpgradeOutcome, *, auto_commit_paths: list[str],
     _print_commit_line(outcome, auto_commit_paths=auto_commit_paths, left_uncommitted=left_uncommitted)
 
 
+def _print_migration_summaries(result: UpgradeResult) -> None:
+    """Print the per-item change lines of every migration that reports a JSON summary.
+
+    A migration that carries a structured report puts it in ``changes_made[0]``
+    (decoded for ``--json`` as ``migration_reports``) and one human line per
+    change after it; those lines are printed under the migration id. Kept and
+    review lines are migration warnings and print in the Warnings section.
+    """
+    for migration_id, migration_result in result.migration_results.items():
+        changes = migration_result.changes_made
+        try:
+            structured = bool(changes) and isinstance(json.loads(changes[0]), dict)
+        except (TypeError, ValueError):
+            structured = False
+        if structured:
+            _print_upgrade_section(f"[cyan]{escape(migration_id)}:[/cyan]", changes[1:], "  [cyan]•[/cyan] ")
+
+
 def _render_outcome_tail(
     outcome: UpgradeOutcome,
     *,
@@ -946,6 +966,7 @@ def _render_outcome_tail(
     if outcome.kind is UpgradeOutcomeKind.NO_OP:
         _render_no_op_tail(outcome, auto_commit_paths=auto_commit_paths, left_uncommitted=left_uncommitted)
         return
+    _print_migration_summaries(outcome.result)
     _print_upgrade_section(_WARNINGS_HEADER, outcome.warnings(), "  [yellow]![/yellow] ")
     _print_upgrade_section(_ERRORS_HEADER, outcome.errors(), "  [red]✗[/red] ")
     _print_upgrade_section(_MANUAL_REVIEW_HEADER, manual_review_paths, "  [yellow]![/yellow] ")
@@ -1024,14 +1045,20 @@ def _preparation_error_text(exc: Exception) -> str:
     """The operator-facing text of a repair-preparation failure.
 
     A charter-pack config error carries only its code in ``str(exc)``; the explanation
-    (what is wrong and how to fix it) is its ``body``.
+    (what is wrong and how to fix it) is its ``body``. A missing built-in ``default``
+    preset renders as ``Error (DEFAULT_PRESET_MISSING): <body>``, the text ``init`` and
+    ``charter generate`` print for it.
     """
+    from charter.activation.compiler import DefaultPresetMissingError
     from charter.activation.pack_context import ActiveCharterConfigError
 
+    if isinstance(exc, DefaultPresetMissingError):
+        return f"Error ({exc.code}): {exc.body}"
     return exc.body or str(exc) if isinstance(exc, ActiveCharterConfigError) else str(exc)
 
 
 def _prepare_finalizer_repairs(project_path: Path, ctx: _FinalizerRenderContext) -> tuple[str, ...]:
+    from charter.activation.compiler import DefaultPresetMissingError
     from charter.activation.pack_context import ActiveCharterConfigError
     from specify_cli.upgrade.assessment import prepare_upgrade_repairs
     from specify_cli.tool_surface.operations import ApplyConsent
@@ -1039,7 +1066,7 @@ def _prepare_finalizer_repairs(project_path: Path, ctx: _FinalizerRenderContext)
 
     try:
         ctx.prepared_repairs = prepare_upgrade_repairs(project_path, consent=ApplyConsent(automatic=True))
-    except (OSError, ValueError, AgentConfigError, ActiveCharterConfigError) as exc:
+    except (OSError, ValueError, AgentConfigError, ActiveCharterConfigError, DefaultPresetMissingError) as exc:
         return (_preparation_error_text(exc),)
     return ()
 
@@ -1055,8 +1082,14 @@ def _finalizer_repair_preflight(prepared: PreparedUpgradeRepairs | None, errors:
         yield errors + tuple(d.message for d in diagnostics)
 
 
+def _clause(text: str) -> str:
+    """*text* without its closing period, so a caller can end the sentence once."""
+    return text.rstrip().rstrip(".")
+
+
 def _supporting_repair_preview(project_path: Path) -> tuple[str, bool]:
     """Describe canonical retained effects without entering any write boundary."""
+    from charter.activation.compiler import DefaultPresetMissingError
     from charter.activation.pack_context import ActiveCharterConfigError
     from specify_cli.core.agent_config import AgentConfigError
     from specify_cli.tool_surface.operations import ApplyConsent
@@ -1067,10 +1100,10 @@ def _supporting_repair_preview(project_path: Path) -> tuple[str, bool]:
         prepared = prepare_upgrade_repairs(project_path, consent=ApplyConsent())
         if not prepared.complete:
             detail = "; ".join(d.message for d in prepared.diagnostics if d.severity == "error")
-            return f"Supporting repair preview incomplete: {detail[:350] or 'Required owner assessment incomplete'}. {hint}", True
+            return f"Supporting repair preview incomplete: {_clause(detail[:350]) or 'Required owner assessment incomplete'}. {hint}", True
         effects = prepared.effects
-    except (OSError, ValueError, AgentConfigError, ActiveCharterConfigError) as exc:
-        return f"Supporting repair preview incomplete: {_preparation_error_text(exc)[:350]}. {hint}", True
+    except (OSError, ValueError, AgentConfigError, ActiveCharterConfigError, DefaultPresetMissingError) as exc:
+        return f"Supporting repair preview incomplete: {_clause(_preparation_error_text(exc)[:350])}. {hint}", True
     preserved = sum(d.state == "consent_required" for owner in prepared.owners for d in owner.dispositions)
     if not effects and not preserved:
         return "", False
@@ -1504,7 +1537,7 @@ def _run_full_plan_json(
         prepared = prepare_upgrade_repairs(project_path, consent=ApplyConsent())
     except Exception as exc:  # noqa: BLE001 - assessment failure is contract data
         payload.update(decision="incomplete", process_exit_code=1)
-        payload["diagnostics"] = [{"code": "assessment_failed", "owner": None, "severity": "error", "message": str(exc)}]
+        payload["diagnostics"] = [{"code": "assessment_failed", "owner": None, "severity": "error", "message": _preparation_error_text(exc)}]
         print(json.dumps(payload, indent=2))
         raise typer.Exit(1) from None
 
