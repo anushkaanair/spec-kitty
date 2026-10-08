@@ -119,9 +119,7 @@ def json_key_set(payload: object) -> list[str]:
 
 #: Literal markers (test_traceability requires a literal WP id at every call site).
 _FR006_PENDING: dict[str, pytest.MarkDecorator] = {}
-_FR007_PENDING = {
-    "WP16": pending_until("WP16", "`spec-kitty doctrine` group removed (FR-007)"),
-}
+_FR007_PENDING: dict[str, pytest.MarkDecorator] = {}
 
 
 def _leaf_param(leaf: Leaf) -> object:
