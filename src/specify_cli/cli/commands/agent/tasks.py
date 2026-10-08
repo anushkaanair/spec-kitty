@@ -102,6 +102,7 @@ from specify_cli.git.protection_policy import ProtectionPolicy
 # ``_ms_apply_updates`` (WP08) route it via ``_tasks.<attr>``.
 from specify_cli.status import feature_status_lock as feature_status_lock
 from specify_cli.status import locked_rewrite_text
+from specify_cli.missions._read_path_resolver import mission_write_lock_dir
 # ``get_auto_commit_default`` (D7 ×7) — the relocated ``_mt_resolve_targets``
 # (WP05) and ``_ms_resolve_context`` (WP08) route it via ``_tasks.<attr>``.
 from specify_cli.core.agent_config import get_auto_commit_default as get_auto_commit_default
@@ -1189,7 +1190,14 @@ def add_history(
             front, body, padding = split_frontmatter(current.removeprefix("\ufeff"))
             return build_document(front, append_activity_log(body, history_entry), padding)
 
-        locked_rewrite_text(wp.path, _append, feature_dir=_ah_feature_dir, repo_root=_ah_main_repo_root)
+        # Lock on the canonical Mission directory name (the coordination worktree's on a coord
+        # Mission), the file ``status.emit`` takes; the primary tasks dir above only keys the layout guard.
+        locked_rewrite_text(
+            wp.path,
+            _append,
+            feature_dir=mission_write_lock_dir(_ah_main_repo_root, mission_slug),
+            repo_root=_ah_main_repo_root,
+        )
 
         result = {"result": "success", "task_id": task_id, "note": note}
 
