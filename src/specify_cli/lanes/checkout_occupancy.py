@@ -25,9 +25,9 @@ from pathlib import Path
 from typing import Any
 
 from kernel.git import GitPath
-from mission_runtime import MissionArtifactKind, MissionTopology, is_single_branch, placement_seam, single_branch_write_ref
+from mission_runtime import MissionArtifactKind, MissionTopology, is_single_branch, placement_seam, resolve_topology, single_branch_write_ref
 
-__all__ = ["SharedWorkspaceWriter", "dirty_paths", "in_progress_wps_in_write_checkout", "shared_workspace_writers"]
+__all__ = ["SharedWorkspaceWriter", "dirty_paths", "in_progress_wps_in_write_checkout", "is_single_branch_repo_root_lane", "shared_workspace_writers"]
 
 #: Lanes in which a WP counts as a writer of its workspace (advisory #5099 warning).
 _WRITER_LANES: frozenset[str] = frozenset({"in_progress", "in_review"})
@@ -47,6 +47,20 @@ class SharedWorkspaceWriter:
         """The one-line advisory rendered by ``agent action implement`` / ``review`` (#5099)."""
         by = self.actor or "an unknown actor"
         return f"Warning: {self.mission_slug}/{self.wp_id} is {self.lane} by {by} in this workspace; one writer per checkout (#5099)."
+
+
+def is_single_branch_repo_root_lane(repo_root: Path, mission_slug: str, lane_or_workspace: object) -> bool:
+    """True when *lane_or_workspace* is the repository-root lane of a ``single_branch`` Mission (the shared write checkout).
+
+    The one predicate behind the claim lock, the repo-root claim guard and the shared-workspace
+    advisory. *lane_or_workspace* is an :class:`~specify_cli.lanes.models.ExecutionLane` or a
+    resolved workspace (anything :func:`specify_cli.lanes.compute.is_repo_root_lane` accepts).
+    A planning WP of a lanes/coord Mission also sits in the repo-root lane, so the lane alone
+    is not enough: the Mission's STORED topology must be ``single_branch`` as well.
+    """
+    from specify_cli.lanes.compute import is_repo_root_lane
+
+    return bool(is_repo_root_lane(lane_or_workspace)) and is_single_branch(resolve_topology(repo_root, mission_slug))
 
 
 def _repo_root_lane_claim(feature_dir: Path) -> tuple[frozenset[str], str | None]:
@@ -283,11 +297,10 @@ def shared_workspace_writers(
     excluded, and only a writer whose actor differs from *actor* is reported (an
     unknown actor counts as different).
     """
-    from mission_runtime import resolve_topology
     from specify_cli.lanes.compute import is_repo_root_lane
 
     if is_repo_root_lane(workspace):
-        if not is_single_branch(resolve_topology(repo_root, mission_slug)):
+        if not is_single_branch_repo_root_lane(repo_root, mission_slug, workspace):
             return []
         found = _writers_in_write_checkout(repo_root, repo_root, lanes=_WRITER_LANES, exclude=(mission_slug, wp_id))
     else:

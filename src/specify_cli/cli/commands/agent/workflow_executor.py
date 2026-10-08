@@ -412,14 +412,6 @@ def commit_workflow_change(
         )
 
 
-def _is_single_branch_repo_root_claim(main_repo_root: Path, mission_slug: str, workspace: ResolvedWorkspace) -> bool:
-    """True when *workspace* is a single_branch Mission's repository-root lane (the shared write checkout)."""
-    from mission_runtime import is_single_branch, resolve_topology
-    from specify_cli.lanes.compute import is_repo_root_lane
-
-    return bool(is_repo_root_lane(workspace)) and is_single_branch(resolve_topology(main_repo_root, mission_slug))
-
-
 def enter_checkout_claim_lock(stack: ExitStack, main_repo_root: Path, mission_slug: str, workspace: ResolvedWorkspace) -> None:
     """Hold the write-checkout claim lock on *stack* for a single_branch repo-root claim (#5796).
 
@@ -428,9 +420,10 @@ def enter_checkout_claim_lock(stack: ExitStack, main_repo_root: Path, mission_sl
     scan. A lane worktree (or a non-single_branch Mission) takes nothing. Lock
     order: this lock first, then any Mission write lock.
     """
+    from specify_cli.lanes.checkout_occupancy import is_single_branch_repo_root_lane
     from specify_cli.status import write_checkout_claim_lock
 
-    if _is_single_branch_repo_root_claim(main_repo_root, mission_slug, workspace):
+    if is_single_branch_repo_root_lane(main_repo_root, mission_slug, workspace):
         stack.enter_context(write_checkout_claim_lock(main_repo_root))
 
 
@@ -466,6 +459,7 @@ def guard_repo_root_claim(main_repo_root: Path, mission_slug: str, wp_id: str, w
     renders a write-checkout refusal as an ``Error:`` line with exit 1, before
     any status event is written.
     """
+    from specify_cli.lanes.checkout_occupancy import is_single_branch_repo_root_lane
     from specify_cli.lanes.implement_support import (
         WriteCheckoutDirtyError,
         WriteCheckoutOccupiedError,
@@ -473,7 +467,7 @@ def guard_repo_root_claim(main_repo_root: Path, mission_slug: str, wp_id: str, w
         guard_repo_root_claim as _guard,
     )
 
-    if not _is_single_branch_repo_root_claim(main_repo_root, mission_slug, workspace):
+    if not is_single_branch_repo_root_lane(main_repo_root, mission_slug, workspace):
         return
     try:
         _guard(main_repo_root, mission_slug, wp_id, workspace)

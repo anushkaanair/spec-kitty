@@ -11,14 +11,21 @@ is human output only; the structured entries are :class:`SharedWorkspaceWriter`.
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from specify_cli.cli.commands.agent import workflow_executor
-from specify_cli.lanes.checkout_occupancy import SharedWorkspaceWriter, in_progress_wps_in_write_checkout, shared_workspace_writers
+from specify_cli.lanes.checkout_occupancy import (
+    SharedWorkspaceWriter,
+    in_progress_wps_in_write_checkout,
+    is_single_branch_repo_root_lane,
+    shared_workspace_writers,
+)
 from specify_cli.lanes.compute import PLANNING_LANE_ID
+from specify_cli.lanes.models import ExecutionLane
 from tests.lanes.test_checkout_occupancy import _init_repo, _write_lanes, _write_repo_root_lane, _write_single_branch_meta
 from specify_cli.workspace.context import ResolvedWorkspace
 from tests.utils import write_wp
@@ -171,6 +178,40 @@ def test_warn_helper_survives_an_unrelated_mission_with_a_corrupt_log(tmp_path: 
 
     assert workflow_executor.warn_shared_workspace_writers(repo, MISSION, "WP01", _repo_root_workspace(), "alice") == []
     assert capsys.readouterr().out == ""
+
+
+def _lane(lane_id: str) -> ExecutionLane:
+    return ExecutionLane(lane_id=lane_id, wp_ids=("WP01",), write_scope=(), predicted_surfaces=(), depends_on_lanes=(), parallel_group=0)
+
+
+def _set_topology(repo: Path, mission: str, topology: str) -> None:
+    meta_path = repo / "kitty-specs" / mission / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["topology"] = topology
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+
+def test_predicate_accepts_the_repo_root_lane_and_the_repo_root_workspace_of_a_single_branch_mission(tmp_path: Path) -> None:
+    repo = _single_branch_repo(tmp_path)
+
+    assert is_single_branch_repo_root_lane(repo, MISSION, _lane(PLANNING_LANE_ID))
+    assert is_single_branch_repo_root_lane(repo, MISSION, _repo_root_workspace())
+
+
+def test_predicate_refuses_a_code_lane_of_a_single_branch_mission(tmp_path: Path) -> None:
+    repo = _single_branch_repo(tmp_path)
+
+    assert not is_single_branch_repo_root_lane(repo, MISSION, _lane("lane-a"))
+    assert not is_single_branch_repo_root_lane(repo, MISSION, _workspace("lane-a", ("WP01",)))
+
+
+def test_predicate_refuses_the_planning_lane_of_a_lanes_mission(tmp_path: Path) -> None:
+    """A planning WP of a lanes Mission also sits in the repo-root lane, but it does not own the shared write checkout."""
+    repo = _single_branch_repo(tmp_path)
+    _set_topology(repo, MISSION, "lanes")
+
+    assert not is_single_branch_repo_root_lane(repo, MISSION, _lane(PLANNING_LANE_ID))
+    assert not is_single_branch_repo_root_lane(repo, MISSION, _repo_root_workspace())
 
 
 # ---------------------------------------------------------------------------
