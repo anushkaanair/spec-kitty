@@ -9,7 +9,7 @@ import pytest
 from kernel.paths import get_package_asset_root
 from specify_cli.analysis_inputs import collect_material_inputs
 from specify_cli.analysis_report import check_analysis_report_current
-from tests.specify_cli.cli.commands.agent.test_analysis_report_transaction import BODY, REPORT, SLUG, git, invoke, repo as repo
+from tests.specify_cli.cli.commands.agent.test_analysis_report_transaction import REPORT, SLUG, git, invoke, repo as repo
 
 pytestmark = [pytest.mark.integration, pytest.mark.git_repo]
 
@@ -73,8 +73,8 @@ def test_global_template_refusal_is_before_write(repo, mirror, tmp_path, bad):
     assert (git(repo, "status", "--porcelain"), git(repo, "rev-parse", "HEAD")) == before
 
 
-@pytest.mark.parametrize("change", ["content", "tier", "override"])
-def test_template_selection_changes_invalidate_freshness(repo, mirror, change):
+@pytest.mark.parametrize("change", ["content", "tier", "override", "home"])
+def test_template_selection_changes_invalidate_freshness(repo, mirror, change, tmp_path, monkeypatch):
     directory = install(mirror, "general")
     result = invoke("--report-only")
     assert result.exit_code == 0, result.output
@@ -82,6 +82,12 @@ def test_template_selection_changes_invalidate_freshness(repo, mirror, change):
         (directory / "spec-template.md").write_text("changed authority\n")
     elif change == "tier":
         install(mirror, "mission")
+    elif change == "home":
+        from specify_cli.runtime import resolver
+
+        other_home = tmp_path / "other-global"
+        install(other_home, "general")
+        monkeypatch.setattr(resolver, "get_kittify_home", lambda: other_home)
     else:
         override = repo / ".kittify/overrides/missions/software-dev/templates"
         override.mkdir(parents=True)

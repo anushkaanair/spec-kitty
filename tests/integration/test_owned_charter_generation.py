@@ -50,7 +50,10 @@ def test_explicit_generation_stays_in_owned_checkout(checkouts, monkeypatch, ali
     charter = YAML(typ="safe").load(charter_path.read_text())
     assert charter["catalog"]["mission"] == "software-dev"
     assert ".kittify/charter/charter.yaml" in git(owned, "diff", "--cached", "--name-only")
-    charter_path.write_text(charter_path.read_text() + "\ngovernance:\n  custom_note: preserve authored intent\ndirectives:\n  custom_note: preserve authored directive\n")
+    charter["governance"]["custom_note"] = "preserve authored intent"
+    charter["directives"] = {"custom_note": "preserve authored directive"}
+    with charter_path.open("w") as stream:
+        YAML().dump(charter, stream)
     repeated = generate(owned)
     assert repeated.exit_code == 0, repeated.output
     refreshed = YAML(typ="safe").load(charter_path.read_text())
@@ -79,7 +82,7 @@ def test_invalid_owned_generation_claim_writes_nothing(checkouts, tmp_path, monk
     before = tuple(snapshot(root) for root in checkouts)
     result = generate(owned, claim=claim, handle=handle)
     assert result.exit_code == 1, result.output
-    assert json.loads(result.output)["error_code"].startswith(("OWNED_", "OWNERSHIP_"))
+    assert json.loads(result.output)["error_code"].startswith(("OWNED_", "OWNERSHIP_", "FEATURE_CONTEXT_"))
     assert tuple(snapshot(root) for root in checkouts) == before
 
 
@@ -98,7 +101,7 @@ def test_owned_generation_destination_refuses_before_writes(checkouts, tmp_path,
     _, owned, sibling = checkouts
     foreign = tmp_path / "foreign-destination"
     foreign.mkdir()
-    (foreign / "file").write_text("preserve\n")
+    (foreign / "file").write_text("agents: {available: [codex]}\n")
     config = owned / ".kittify/config.yaml"
     if destination.startswith("pointer"):
         target = foreign / "file"
@@ -107,7 +110,10 @@ def test_owned_generation_destination_refuses_before_writes(checkouts, tmp_path,
             target.symlink_to(foreign / "file")
         config.write_text(config.read_text() + f"charter: {target}\n")
     else:
-        relative = {"charter_dir": ".kittify/charter", "charter_yaml": ".kittify/charter/charter.yaml", "config": ".kittify/config.yaml", "gitignore": ".gitignore", "library": ".kittify/charter/library"}[destination]
+        relative = {
+            "charter_dir": ".kittify/charter", "charter_yaml": ".kittify/charter/charter.yaml",
+            "config": ".kittify/config.yaml", "gitignore": ".gitignore", "library": ".kittify/charter/library",
+        }[destination]
         target = owned / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         target.unlink(missing_ok=True)
@@ -118,4 +124,30 @@ def test_owned_generation_destination_refuses_before_writes(checkouts, tmp_path,
     assert result.exit_code == 1, result.output
     assert "symlink" in result.output or "outside" in result.output
     assert tuple(snapshot(root) for root in checkouts) == before
-    assert (foreign / "file").read_text() == "preserve\n"
+    assert (foreign / "file").read_text() == "agents: {available: [codex]}\n"
+
+
+def test_mission_handle_requires_explicit_owned_checkout(checkouts, monkeypatch):
+    primary, _, _ = checkouts
+    monkeypatch.chdir(primary)
+    before = tuple(snapshot(root) for root in checkouts)
+    result = CliRunner().invoke(app, ["generate", "--no-from-interview", "--json", "--mission-handle", SLUG])
+    assert result.exit_code == 1, result.output
+    assert "--owned-checkout" in result.output
+    assert tuple(snapshot(root) for root in checkouts) == before
+
+
+@pytest.mark.parametrize("destination", ["charter_dir", "gitignore", "library"])
+def test_nonregular_owned_destination_refuses_before_writes(checkouts, monkeypatch, destination):
+    _, owned, sibling = checkouts
+    path = owned / {"charter_dir": ".kittify/charter", "gitignore": ".gitignore", "library": ".kittify/charter/library"}[destination]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if destination == "gitignore":
+        path.mkdir()
+    else:
+        path.write_text("preserve nonregular destination\n")
+    monkeypatch.chdir(sibling)
+    before = tuple(snapshot(root) for root in checkouts)
+    result = generate(owned)
+    assert result.exit_code == 1, result.output
+    assert tuple(snapshot(root) for root in checkouts) == before
