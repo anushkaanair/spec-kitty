@@ -126,7 +126,7 @@ def cutover_migration() -> Any:
 
 
 @covers("FR-012")
-@pending_until("WP10", "the cutover migration runs before every other pending migration")
+@pending_until("WP11", "the cutover migration runs before every other pending migration")
 def test_fr012_cutover_runs_first(tmp_path: Path) -> None:
     project = build("legacy_keys_only", tmp_path)
     result = run_cli(["upgrade", "--dry-run", "--json"], project)
@@ -137,7 +137,6 @@ def test_fr012_cutover_runs_first(tmp_path: Path) -> None:
 
 
 @covers("FR-012", "US2-6")
-@pending_until("WP10", "rc35 default-pack and normalizer migrations are recorded no-ops")
 def test_fr012_rc35_and_normalizer_recorded_skipped(tmp_path: Path) -> None:
     project = build("pre_rc35", tmp_path)
     result, payload = upgrade(project)
@@ -484,8 +483,12 @@ def _default_preset_mission_types() -> list[str]:
 
 
 def _nfr001_param(name: str) -> object:
-    """``equal`` fixtures already hold at base (the legacy readers still work): unmarked regression guards."""
-    if EXPECTED_RELATION[name] == "equal":
+    """``equal`` fixtures already hold at base (the legacy readers still work): unmarked regression guards.
+
+    ``pre_rc35`` (no activation keys, nothing to migrate) only waited for the built-in
+    ``presets/default.yaml`` its expectation reads; it holds since WP07 ships that file.
+    """
+    if EXPECTED_RELATION[name] in ("equal", "pre_rc35"):
         return pytest.param(name, id=name)
     return pytest.param(name, id=name, marks=pending_until("WP12", "upgrade resets stale state and preserves the effective set"))
 
