@@ -199,6 +199,14 @@ def test_named_constructor_builds_a_point_without_reading_or_locking(root: Path)
     assert point == RollbackPoint(events_path=root / "log.jsonl", status_path=root / "status.json", pre_event_size=7, pre_status_bytes=None, events_existed=True)
 
 
+def test_io_error_refusal_does_not_claim_the_log_is_unchanged(tmp_path: Path) -> None:
+    outcome = mw.RollbackOutcome(rolled_back=False, refusal=RollbackRefusal.IO_ERROR, events_path=tmp_path / EVENTS)
+
+    assert STATUS_ROLLBACK_REFUSED in outcome.message()
+    assert "partly rewritten" in outcome.message() and "left unchanged" not in outcome.message()
+    assert f"git diff HEAD -- {tmp_path / EVENTS}" in outcome.message()
+
+
 # --- lock and capture ---------------------------------------------------------------------
 
 
