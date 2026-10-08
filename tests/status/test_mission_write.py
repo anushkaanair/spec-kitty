@@ -562,6 +562,79 @@ def test_transaction_rollback_survives_an_oserror_in_the_log_cut(txn_repo: Path,
     assert doomed.event_id in events_path.read_text(encoding="utf-8")
 
 
+def _materialize_fails_for(wp_id: str) -> Any:
+    """A ``reducer.materialize`` stand-in that fails once the log holds a row for *wp_id* (after the append landed)."""
+
+    def _materialize(feature_dir: Path) -> None:
+        if wp_id in (feature_dir / EVENTS).read_text(encoding="utf-8"):
+            raise RuntimeError("materialize failed after the append")
+
+    return _materialize
+
+
+def test_transaction_rollback_owns_a_unit_whose_post_append_step_failed(txn_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F4 (two-unit shape): unit 2 is on disk when its materialize fails; the rollback must cut both units, not refuse unit 2's rows."""
+    monkeypatch.setattr(transaction_module._reducer, "materialize", _materialize_fails_for("WP02"))
+    txn = _txn(txn_repo)
+
+    def _body() -> None:
+        with txn:
+            txn.append_event(_event("WP01"))
+            txn.append_event(_event("WP02"))
+
+    with pytest.raises(RuntimeError, match="materialize failed"):
+        _body()
+    assert not (txn.feature_dir / EVENTS).exists()
+
+
+def test_transaction_rollback_still_cuts_unit_one_when_unit_two_never_landed(txn_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F4: an attempted unit whose append raised before writing anything is not expected in the tail."""
+    txn = _txn(txn_repo)
+
+    def _refused(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("append refused before writing")
+
+    def _body() -> None:
+        with txn:
+            txn.append_event(_event("WP01"))
+            monkeypatch.setattr(transaction_module, "append_event_stream_log", _refused)
+            txn.append_event(_event("WP02"))
+
+    with pytest.raises(RuntimeError, match="append refused"):
+        _body()
+    assert not (txn.feature_dir / EVENTS).exists()
+
+
+def test_exit_path_exception_carries_the_refused_rollback(txn_repo: Path) -> None:
+    """F4: an error raised in the body (not by commit) shows STATUS_ROLLBACK_REFUSED when the rows were already committed."""
+    txn = _txn(txn_repo)
+
+    def _body() -> None:
+        with txn:
+            txn.append_event(_event("WP01"))
+            _commit_all(txn.worktree_root, "someone else committed the row")
+            raise RuntimeError("body failed")
+
+    with pytest.raises(RuntimeError) as raised:
+        _body()
+    assert "body failed" in str(raised.value)
+    assert STATUS_ROLLBACK_REFUSED in str(raised.value)
+
+
+def test_transaction_rollback_survives_a_lock_timeout_in_the_log_cut(txn_repo: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(transaction_module, "safe_commit", _failing_commit)
+
+    def _timeout(*_args: object, **_kwargs: object) -> None:
+        raise FeatureStatusLockTimeoutError("lock held", timeout=0.1)
+
+    monkeypatch.setattr(transaction_module, "rollback_events_log", _timeout)
+    doomed = _event("WP01")
+    events_path, failure = _run_doomed_transaction(txn_repo, doomed, committed_by_another_writer=False)
+    assert "forced commit failure" in failure
+    assert STATUS_ROLLBACK_REFUSED in failure and "lock held" in failure
+    assert doomed.event_id in events_path.read_text(encoding="utf-8")
+
+
 def _failing_commit(**_kwargs: object) -> None:
     raise RuntimeError("forced commit failure (test)")
 
