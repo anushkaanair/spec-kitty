@@ -557,6 +557,121 @@ def test_lane_sync_refusal_arm_keeps_receipt_and_message_consistent(
         assert outcome == "committed"
 
 
+def _coord_claim_with_slow_lane_sync(claimed: _ClaimedRepo, monkeypatch: pytest.MonkeyPatch, during_sync: Callable[[], None]) -> None:
+    """Stub a coord commit that lands the claim and a lane sync that runs *during_sync* and then refuses."""
+    from kernel.clock import now_utc
+    from specify_cli.coordination.types import CommitReceipt
+    from specify_cli.lanes.lifecycle_sync import LaneAutoRebaseSyncError
+
+    receipt = CommitReceipt(commit_sha="abc123", committed_at=now_utc(), destination_ref=COORD_META[0], worktree_root=claimed.repo, event_ids=("claim",))
+
+    def _sync(**_kwargs: Any) -> None:
+        during_sync()
+        raise LaneAutoRebaseSyncError(lane_id="lane-a", lane_branch="kitty/mission-demo-lane-a", lane_worktree_path=claimed.repo / "lane-a")
+
+    monkeypatch.setattr(workflow, "_load_coord_branch_meta", lambda _fd: COORD_META)
+    monkeypatch.setattr(workflow, "_commit_via_coordination_transaction", lambda **_kw: receipt)
+    monkeypatch.setattr(workflow, "_sync_lane_after_coordination_commit", _sync)
+    monkeypatch.setattr(workflow, "_revert_coordination_commit", lambda _receipt: None)
+    workflow._reset_workflow_receipts()
+
+
+def _commit_releasing_lock_for_lane_sync(claimed: _ClaimedRepo) -> None:
+    """Commit as a claim caller does: hold the Mission lock for the commit, release it before the lane sync."""
+    with ExitStack() as hold:
+        hold.enter_context(mission_write_lock(claimed.feature_dir, repo_root=claimed.repo, timeout=-1))
+        workflow._commit_workflow_change(
+            repo_root=claimed.repo,
+            mission_slug="demo",
+            target_branch="main",
+            paths=[claimed.events],
+            message="chore: Start WP01 implementation [alice]",
+            operation="planned -> claimed for WP01",
+            wp_id="WP01",
+            rollback_point=claimed.point,
+            auto_rebase_lane_after_commit=True,
+            before_lane_sync=hold.close,
+        )
+
+
+def _bounded_taker_succeeds(claimed: _ClaimedRepo) -> bool:
+    """Whether another thread takes the Mission lock within a short bound (it is free)."""
+    taken: list[bool] = []
+
+    def _take() -> None:
+        try:
+            with mission_write_lock(claimed.feature_dir, repo_root=claimed.repo, timeout=2.0):
+                taken.append(True)
+        except locking.FeatureStatusLockTimeoutError:
+            taken.append(False)
+
+    thread = threading.Thread(target=_take, name="bounded-taker")
+    thread.start()
+    thread.join(WAIT_SECONDS)
+    return taken == [True]
+
+
+def test_lane_sync_runs_without_the_mission_lock_and_a_clean_refusal_cuts_only_the_claim(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F1: the slow lane auto-rebase must not hold the Mission lock; the refusal still rolls the claim back."""
+    claimed = _claim_repo(tmp_path, commit_claim=False)
+    free_during_sync: list[bool] = []
+    _coord_claim_with_slow_lane_sync(claimed, monkeypatch, lambda: free_during_sync.append(_bounded_taker_succeeds(claimed)))
+
+    with pytest.raises(typer.Exit):
+        _commit_releasing_lock_for_lane_sync(claimed)
+
+    assert free_during_sync == [True], "a bounded taker must get the Mission lock while the lane sync runs"
+    assert claimed.events.read_text(encoding="utf-8") == _claim_row("before")
+
+
+def test_lane_sync_refusal_keeps_a_row_a_foreign_writer_appended_during_the_sync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """F1: the rollback after a released-lock sync cuts only the claim's own rows and refuses when a foreign row followed."""
+    claimed = _claim_repo(tmp_path, commit_claim=False)
+
+    def _foreign_writer_appends() -> None:
+        with mission_write_lock(claimed.feature_dir, repo_root=claimed.repo, timeout=2.0), claimed.events.open("a", encoding="utf-8") as fh:
+            fh.write(_claim_row("foreign"))
+
+    _coord_claim_with_slow_lane_sync(claimed, monkeypatch, _foreign_writer_appends)
+
+    with pytest.raises(typer.Exit):
+        _commit_releasing_lock_for_lane_sync(claimed)
+
+    assert STATUS_ROLLBACK_REFUSED in capsys.readouterr().out
+    assert claimed.events.read_text(encoding="utf-8") == _claim_row("before") + _claim_row("claim") + _claim_row("foreign")
+
+
+def test_claim_wrappers_hand_the_body_a_release_for_the_mission_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F1: ``implement_claim_transition`` holds the lock for the body and the body can release it for the lane sync."""
+    repo, mission, _coord_branch = _build_two_lane_coord_mission(tmp_path, monkeypatch, mission_slug="release-hook")
+    seen: list[tuple[bool, bool]] = []
+
+    def _body(*, release_lock: Callable[[], None], **_kwargs: Any) -> None:
+        held = bool(locking._get_thread_locks())
+        release_lock()
+        seen.append((held, bool(locking._get_thread_locks())))
+
+    monkeypatch.setattr(workflow_executor, "_implement_claim_transition_body", _body)
+    unused: Any = None
+    workflow_executor.implement_claim_transition(
+        repo_root=repo,
+        main_repo_root=repo,
+        mission_slug=mission,
+        normalized_wp_id="WP01",
+        wp=unused,
+        wp_meta=unused,
+        feature_dir=repo,
+        agent="alice",
+        target_branch="mission-target",
+        workspace_path=repo,
+        status_execution_mode="worktree",
+    )
+
+    assert seen == [(True, False)]
+
+
 def test_exit_arm_records_a_committed_receipt_when_the_claim_is_committed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
