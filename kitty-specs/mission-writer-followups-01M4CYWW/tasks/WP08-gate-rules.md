@@ -1,0 +1,91 @@
+---
+work_package_id: WP08
+title: 'Mission write discipline gate: Rules 1–4 close the writer class'
+dependencies:
+- WP03
+- WP04
+- WP07
+requirement_refs:
+- FR-006
+- FR-007
+- FR-008
+- FR-019
+- NFR-004
+- NFR-005
+planning_base_branch: issue-5883-mission-writer-followups
+merge_target_branch: issue-5883-mission-writer-followups
+branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
+subtasks:
+- T034
+- T035
+- T036
+- T037
+phase: Phase 4 - Gate
+history:
+- at: '2026-10-08T12:00:00Z'
+  actor: system
+  action: Prompt generated via /spec-kitty.tasks
+agent_profile: python-pedro
+authoritative_surface: tests/architectural/test_mission_write_discipline.py
+create_intent: []
+execution_mode: code_change
+model: claude-sonnet
+owned_files:
+- tests/architectural/test_mission_write_discipline.py
+- src/specify_cli/consolidation/bookkeeping_projection.py
+- src/specify_cli/lanes/auto_rebase.py
+tags: []
+tracker_refs: []
+---
+# Work Package Prompt: WP08 – Mission write discipline gate: Rules 1–4 close the writer class
+
+## Objective
+
+The gate closes the writer class by construction with an empty allowlist. Rule 1 also catches whole-file rewrites and replaces of status and run logs, and scans `src/runtime`. Rule 2 treats every non-call reference to the callable parameter as an escape. Rule 3 accepts only `mission_lock_key(...)` for keys and only `mission_write_lock_dir(...)` or a parameter for paths. New Rule 4 keeps `meta.json`, `tasks/WP*.md` and `tasks.md` writes inside a lock region or a registered locked helper.
+
+## Independent test
+
+`tests/architectural/test_mission_write_discipline.py`: for every new or extended rule, a synthetic offender, a near-miss negative and a self-mutation proof of a real module (NFR-004); the rule passes on the real tree.
+
+## Subtasks
+
+- **T034**: Rule 1 (FR-008, A7): track target names assigned from the log/meta/state filenames through assignments and `/` joins; sinks are truncate, `write_text`, `write_bytes`, `open` in w/x/a/r+ modes, `os.replace`/`shutil.move` onto a target, and `atomic_write`; scan `src/runtime` with the run-log and run-state names; fix the consolidation bookkeeping projection (rewrite under the status lock), the lane auto-rebase create-if-missing (exclusive create), and confirm the WP01 dispositions of `rebuild_state.py` and `migrate_lifecycle_envelope.py` pass the rule; the merge driver is excluded by a stated structural rule
+- **T035**: Rule 2 (FR-006, A11): any non-call-func reference to the parameter, including passing it as an argument or keyword or capturing it in a nested def or lambda, is an escape; an unresolvable callee fails closed
+- **T036**: Rule 3 (FR-007, A6): keys only as `mission_lock_key(...)`; paths as `mission_write_lock_dir(...)` or a function parameter; a bare `.name` is refused
+- **T037**: Rule 4 (FR-019, A5): regions are lexical lock `with`, `ExitStack.enter_context(<lock cm>)`, `__enter__`..`__exit__`, a `with` on a name assigned from a lock cm, and `locked_acceptance_verdict_guard`; a sink in function F is accepted when F is a registered locked helper or every same-module call site of F is in a region; unresolvable cross-module callers fail closed; no name-based exemptions; the merge driver exclusion applies
+
+## Notes and risks
+
+Fix real-tree hits in the owning code, not by allowlisting. If a hit sits in a file another WP owned, fix it here and note it in the Activity Log.
+
+## Dependencies
+
+WP03, WP04, WP07
+
+## Rules for every WP in this Mission
+
+- Read `.kittify/charter/charter.md`, then `kitty-specs/mission-writer-followups-01M4CYWW/spec.md` and `plan.md`. The plan's "Amendments after the post-plan squad" section (A*, B*, C* items) is binding and overrides D1–D10 where they disagree. `research.md` line numbers are indicative; re-derive them.
+- **Red-first (C-006).** For every requirement marked "no-op passable: no", commit the reproduction first and show it failing against the pre-fix code; record the command and the failing output in the Activity Log. Compound requirements are proven part by part.
+- **Concurrency tests (NFR-001).** Run the two writers on distinct threads or processes (the lock is re-entrant per thread), use injected pause points rather than sleeps, and pass 5 of 5 repeated runs. Mutation-check each one: remove the lock and confirm the test fails.
+- **Quality (NFR-005).** `uv run --frozen ruff check <files>`, `uv run --frozen ruff format --check --force-exclude <files>` and `uv run --frozen mypy <files>` report no new issues. No new `noqa` or `type: ignore`. Every touched function has complexity ≤ 15. Every new branch or helper has a focused test.
+- **Tests.** Run your own test files, the test directory of each owning subsystem and `make test-fast`. Never run `make test-full` or the bare `tests/architectural/` directory; run only the specific architectural gate files you implicate. Use `.venv/bin/python -m pytest ...` (not a bare `uv run` that re-syncs). Record the exact commands and the pass/fail counts in the Activity Log.
+- **Baseline red.** Classify a failure you did not cause per CLAUDE.md (pre-existing P0, CI env, stale install, stale venv) before chasing it.
+- **Commits.** Commit with explicit paths (never `git add -A`, never `git stash`), with a conventional subject scoped `(mission-writer-followups)`, and end every message with:
+  ```
+  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+  Claude-Session: https://claude.ai/code/session_01WiYizc1WL4ic8QMezcXUiy
+  ```
+  Commit after each subtask so a lost session loses nothing. Do not push; the orchestrator pushes.
+- **Status.** Mark each subtask with `spec-kitty agent tasks mark-status <Txxx> --status done --mission mission-writer-followups-01M4CYWW`. When the WP is complete, move it with `spec-kitty agent tasks move-task <WP> --to for_review --mission mission-writer-followups-01M4CYWW --note "<summary>"`.
+- **Sources only (C-003).** Edit `packs/built-in/...` sources, never the generated agent copies.
+
+## Definition of done
+
+- Every subtask is done and marked; every red-first reproduction was shown failing on the pre-fix code and now passes.
+- The owned tests, the owning subsystem test directories, the implicated architectural gate files and `make test-fast` pass, with the commands and counts recorded in the Activity Log.
+- ruff, ruff format and mypy are clean on changed files; there are no new suppressions.
+- Every change is committed with explicit paths.
+
+## Activity Log
+
+- 2026-10-08T12:00:00Z – system – Prompt created.
