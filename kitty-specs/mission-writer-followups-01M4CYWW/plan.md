@@ -257,3 +257,44 @@ None.
   - `mission_loader/command.py:224-226` switches to the same accessor, because its `runtime/missions` root does not exist.
   - The `_baselines.yaml:22` justification text is updated.
   - The ten test files that hard-code the `src` runtime path move to the pack path in the same WP. Among them are `tests/next/test_plan_mission_runtime.py`, `tests/contract/test_plan_mission_yaml_validates.py` and `tests/specify_cli/missions/test_mission_template_consistency.py`.
+
+### Lens C — pack cleanup, wording, glossary
+
+- **C1 (blocker): step-contract bootstrap command.** Every built-in step contract declares `--profile` and `--tool` inputs on its bootstrap step, and the executor appends them to `spec-kitty charter context`, which refuses both options. Decision: remove those two inputs from the bootstrap step of every built-in step contract, in all Mission types, because the CLI refuses them for every type. Update `tests/doctrine/mission_step_contracts/test_shipped_contracts.py:61-70` and add a test that renders each contract's bootstrap command and parses it against the Click command. This is the one deliberate exception to the Locality claim; the PR calls it out. Adding the options to `charter context` is not in scope.
+- **C2: R7 inventory additions.**
+  - In the step contracts: `kitty-specs/{feature}/` (specify:47, plan:49); "Commit … to main branch" (specify:51, plan:53), reworded to the planning branch the CLI reports; "Merge later records done" (review:78, `review/guidelines.md:28`), which becomes consolidate; "Include WP ID in commit scope" (implement:64); and `move-task {wp_id}` with no `--mission` (implement:68, review:75).
+  - The software-dev contracts are edited, and so is the C1 bootstrap input in every type.
+- **C3: `--mission` boilerplate.** Nine prompts tell the agent to pass `--mission` to every command. They are reworded to "every command that accepts `--mission`", and `test_has_feature_flag_guidance` stays green.
+- **C4: more false "next advances" claims.**
+  - Fix accept:119 (there is no consolidate step), specify:504 (after tasks, `next` now issues analyze), and review:323 and implement:360 (add `--mission`).
+  - "Merge" becomes "consolidate" where that is what is meant (accept:10-12, :77).
+  - review:317-318 loses its hosted-sync wording.
+- **C5: repo-local residue in implement.**
+  - Remove the spec-kitty-repo "authority pointers" (:95-101).
+  - The mandatory `.venv/bin/ruff` check becomes "the project's own lint and format commands" (:188-190).
+  - `git merge-base HEAD main` uses the mission's target branch (:197).
+  - The agent directory list is replaced by a pointer to `spec-kitty agent config list` (:291-295).
+- **C6: analyze stays off the action sequence.** `analyze/step.yaml` keeps `in_action_sequence: false`, so no action index and no graph edge are added, and `test_softwaredev_roundtrip.py` stays as it is. The runtime template gains the step; the prompt resolves from the step directory (B5 asserts this). The tasks prompt's "undefined template" is fixed by referring to the tasks template through the existing template resolver wording, not by adding `template:` to `tasks/step.yaml`.
+- **C7: more pinning tests to update in the same WP.**
+  - Snapshots: the rendered `tests/specify_cli/regression/_twelve_agent_baseline/{claude,gemini}/specify.*` and `tests/specify_cli/skills/__snapshots__/codex/specify.SKILL.md`, regenerated with the repository's snapshot update flag.
+  - Correction: `test_command_template_cleanliness.py:396-408` pins the tasks prompt, not analyze. The same file's `:193` limits the tasks-template fix.
+  - Wording pins: `test_mission_creation_probe_order.py:107/:270`, `test_mission_creation_fanout_commit_boundary.py:164` and `tests/next/test_next_command_integration.py:556`.
+- **C8: provenance ratchet.**
+  - The baseline is edited by hand, entry by entry, and the diff may only lower counts. The census dump is not redirected over the file.
+  - C-003 is reworded from "no `kitty-specs/` paths" to "no concrete Mission slugs, WP ids, issue numbers, requirement ids or `src/specify_cli` paths". Placeholders such as `kitty-specs/<mission>/analysis-report.md` are allowed.
+  - tasks-finalize gains a baseline entry only if it is at zero.
+- **C9: more "feature" sites (FR-012/FR-014).**
+  - Errors to fix: `lanes/consolidation.py:273/:377`, `implement.py:379`, `implement_phases.py:145`, `task_utils/support.py:606`, `validate_tasks.py:78/:125`, `validate_encoding.py:50`, `core/mission_creation_identity.py:47`, `cli/helpers.py:437`, `mission_type.py:1666`, `mission_branch_context.py:149`.
+  - Commitlint covers the "origin-ticket binding" subject as well.
+  - The FR-014 scan covers every non-docstring string constant under `src/specify_cli` that contains "for feature" or starts with "Feature:", not only call arguments.
+  - The error code `FEATURE_CONTEXT_UNRESOLVED` is a machine contract and stays as it is. It is filed as a follow-up.
+- **C10: analyze recovery recipe.** The recipe writes the report to a path outside the checkout (the scratch or temp directory) and passes that path to `record-analysis`. Writing into the checkout makes the worktree dirty, and `record-analysis` then refuses with `DIRTY_WORKTREE`.
+- **C11: glossary.** Fix `docs/context/spec-driven.md:329`. The contextive regeneration is expected to widen the `test_no_legacy_terminology` baseline diff for `orchestration.yml`; it may only shrink.
+- **C12: SC-008 gate.**
+  - SC-008 is a gate file, `tests/doctrine/test_software_dev_prompt_walk.py`. It extends `test_builtin_cli_command_references.py` with:
+    1. checking each `--option` in the same code span against the command's Click params;
+    2. scanning step-contract `command:` values rendered through `_render_declared_command`;
+    3. checking each "next advances to X" claim against the runtime template order;
+    4. resolving consumer paths against a `spec-kitty init` fixture, with an explicit list of placeholder forms.
+  - It covers the CLI-driven implement, review, accept and tasks-finalize prompts.
+- **C13.** Run `pip install -e .` (or `uv sync --frozen`) before trusting `test_doctrine_regenerate_graph_roundtrip.py`. The glossary pack is hashed, so run regenerate-graph after D10.
