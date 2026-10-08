@@ -407,6 +407,7 @@ from .mission_write import (
     locked_rewrite_text,
     mission_write_lock,
     rollback_events_log,
+    rollback_io_failure,
     rollback_status_artifacts,
 )
 
@@ -699,6 +700,7 @@ __all__ = [
     "locked_rewrite_text",
     "mission_write_lock",
     "rollback_events_log",
+    "rollback_io_failure",
     "rollback_status_artifacts",
     "write_checkout_claim_lock",
 ]

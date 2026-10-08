@@ -61,6 +61,7 @@ __all__ = [
     "capture_rollback_point",
     "locked_rewrite_text",
     "mission_write_lock",
+    "rollback_io_failure",
     "rollback_events_log",
     "rollback_status_artifacts",
 ]
@@ -183,6 +184,7 @@ class RollbackRefusal(StrEnum):
     TAIL_NOT_OWNED = "the rows after the capture point are not the rows this operation appended"
     TAIL_ALREADY_COMMITTED = "the rows after the capture point are already committed at HEAD"
     HEAD_UNREADABLE = "HEAD could not be read to prove the rows are uncommitted"
+    IO_ERROR = "the rollback hit an I/O error before it could finish"
 
 
 @dataclass(frozen=True)
@@ -204,6 +206,16 @@ def _refuse(events_path: Path, refusal: RollbackRefusal) -> RollbackOutcome:
     outcome = RollbackOutcome(rolled_back=False, refusal=refusal, events_path=events_path)
     logger.warning("%s", outcome.message())
     return outcome
+
+
+def rollback_io_failure(point: RollbackPoint, exc: OSError) -> RollbackOutcome:
+    """The refusal outcome for a rollback that raised *exc*, so the caller prints a coded message instead of a traceback.
+
+    The files may be partly rewritten (the failure came from the filesystem), so the
+    message tells the operator to inspect them.
+    """
+    logger.warning("rollback of %s failed: %s", point.events_path, exc)
+    return _refuse(point.events_path, RollbackRefusal.IO_ERROR)
 
 
 def _done(events_path: Path) -> RollbackOutcome:

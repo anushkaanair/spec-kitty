@@ -96,7 +96,7 @@ from specify_cli.review.cycle import (
 )
 from specify_cli.status import feature_status_lock  # noqa: F401 -- late-bound via workflow_executor._wf() / patched by tests
 from specify_cli.status import Lane
-from specify_cli.status import RollbackOutcome, RollbackPoint, rollback_status_artifacts
+from specify_cli.status import RollbackOutcome, RollbackPoint, rollback_io_failure, rollback_status_artifacts
 from specify_cli.status import (
     ResolvedBinding,
     read_wp_frontmatter,
@@ -292,9 +292,15 @@ def _restore_status_artifacts(
 
     Cuts only the rows this operation appended and refuses (``STATUS_ROLLBACK_REFUSED``,
     files left byte-identical) when the tail is not exactly that, e.g. because it is
-    already committed (#5819, #5804). The caller reports the returned outcome.
+    already committed (#5819, #5804), or when the filesystem fails mid-rollback (``IO_ERROR``).
+    The caller reports the returned outcome.
     """
-    return rollback_status_artifacts(rollback_point, repo_root=repo_root, expected_event_ids=expected_event_ids)
+    try:
+        return rollback_status_artifacts(rollback_point, repo_root=repo_root, expected_event_ids=expected_event_ids)
+    except OSError as exc:
+        # The caller is already surfacing the original commit failure; a filesystem error here
+        # must not replace it with a traceback.
+        return rollback_io_failure(rollback_point, exc)
 
 
 def _safe_commit_recovery_commit_sha(exc: BaseException) -> str | None:
