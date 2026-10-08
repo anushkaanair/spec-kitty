@@ -44,7 +44,7 @@ allocated by `spec-kitty agent action implement WPxx --agent <name>`. For a `sin
 **One writer per checkout.** Concurrent implementers and reviewers each work in their own checkout
 (a lane worktree, or a harness-isolated worktree). On `single_branch` the repository root checkout has
 one writer at a time: `implement` refuses a second claim there (`WRITE_CHECKOUT_OCCUPIED`) while
-`agent action review` warns when another actor is working in it.
+`agent action implement` and `agent action review` warn when another actor is working in it.
 
 Prefer to stay within
 your `owned_files` boundaries. If a small, well-justified change to a file outside the map is

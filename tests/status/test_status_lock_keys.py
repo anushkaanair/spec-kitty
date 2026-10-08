@@ -23,11 +23,11 @@ import typer
 
 import specify_cli.cli.commands.agent.tasks as tasks_module
 import specify_cli.cli.commands.agent.tasks_move_task_executor as move_task_module
-import specify_cli.retrospective.tracer_writer as tracer_module
 import specify_cli.status.emit as emit_module
 import specify_cli.status.lifecycle_events as lifecycle_module
 from specify_cli.cli.commands.agent.tasks_mark_status import _ms_apply_updates
 from specify_cli.coordination.status_transition import coord_status_lock
+from specify_cli.missions._read_path_resolver import mission_write_lock_dir
 from specify_cli.status import TransitionRequest, emit_status_transition, mission_write_lock
 from specify_cli.status.locking import _get_thread_locks, feature_status_lock_path
 from tests.status.conftest import seed_wp_to_planned
@@ -134,7 +134,7 @@ def test_tracer_lock_dir_is_the_mission_directory_name_and_reenters_coord_lock(m
     """The tracer's key is the directory name, and the router's ``coord_status_lock`` re-enters it."""
     repo, feature_dir = mission
     (feature_dir / "meta.json").write_text('{"mission_slug": "foo", "mission_id": "01AAAAAAAAAAAAAAAAAAAAAAAA"}', encoding="utf-8")
-    lock_dir = tracer_module._mission_lock_dir(repo, DIR_NAME)
+    lock_dir = mission_write_lock_dir(repo, DIR_NAME)
     assert lock_dir == feature_dir
 
     with mission_write_lock(lock_dir, repo_root=repo) as held:
@@ -152,8 +152,8 @@ def test_tracer_lock_dir_for_a_slug_without_mid8(tmp_path: Path) -> None:
     legacy.mkdir(parents=True)
     (legacy / "meta.json").write_text('{"mission_slug": "legacy-mission"}', encoding="utf-8")
 
-    assert tracer_module._mission_lock_dir(tmp_path, "legacy-mission").name == "legacy-mission"
-    assert tracer_module._mission_lock_dir(tmp_path, "no-such-mission").name == "no-such-mission"
+    assert mission_write_lock_dir(tmp_path, "legacy-mission").name == "legacy-mission"
+    assert mission_write_lock_dir(tmp_path, "no-such-mission").name == "no-such-mission"
 
 
 def test_tracer_lock_dir_on_a_real_coord_mission_is_the_coord_directory_name(tmp_path: Path) -> None:
@@ -162,7 +162,7 @@ def test_tracer_lock_dir_on_a_real_coord_mission_is_the_coord_directory_name(tmp
 
     ctx = _build_coord_topology(tmp_path, write_husk_meta=False)
 
-    lock_dir = tracer_module._mission_lock_dir(ctx.repo, ctx.slug)
+    lock_dir = mission_write_lock_dir(ctx.repo, ctx.slug)
 
     assert lock_dir.name == ctx.coord_feature_dir.name
     with mission_write_lock(lock_dir, repo_root=ctx.repo) as held:
@@ -170,3 +170,70 @@ def test_tracer_lock_dir_on_a_real_coord_mission_is_the_coord_directory_name(tmp
         with coord_status_lock(ctx.repo, ctx.coord_feature_dir) as inner:
             assert inner == held
             assert set(_get_thread_locks()) == before
+
+
+# --- review-cycle allocation lock (WP05 review, rule-3 finding) -----------------
+
+
+class _StopCycle(Exception):
+    pass
+
+
+def _record_lock_paths(monkeypatch: pytest.MonkeyPatch) -> list[Path]:
+    """Record every lock file any ``feature_status_lock`` take resolves to."""
+    import specify_cli.status.locking as locking_module
+
+    paths: list[Path] = []
+    original = locking_module.feature_status_lock_path
+
+    def _record(root: Path, key: str) -> Path:
+        paths.append(original(root, key))
+        return paths[-1]
+
+    monkeypatch.setattr(locking_module, "feature_status_lock_path", _record)
+    return paths
+
+
+def _cycle_lock_path(repo: Path, handle: str, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The lock file the review-cycle allocation takes for *handle* (stops right after the take)."""
+    import specify_cli.review.cycle as cycle_module
+
+    def _stop(**_kwargs: Any) -> None:
+        raise _StopCycle
+
+    monkeypatch.setattr(cycle_module, "_allocate_and_write_review_cycle_while_locked", _stop)
+    paths = _record_lock_paths(monkeypatch)
+    with pytest.raises(_StopCycle):
+        cycle_module._allocate_and_write_review_cycle_locked(
+            main_repo_root=repo,
+            mission_slug=handle,
+            wp_id="WP01",
+            sub_artifact_dir=repo,
+            reviewer_agent="r",
+            affected_files=[],
+            body="b",
+        )
+    assert len(set(paths)) == 1
+    return paths[0]
+
+
+@pytest.mark.parametrize("handle", [DIR_NAME, "01AAAAAA", SLUG], ids=["dir-name", "mid8", "slug"])
+def test_review_cycle_locks_the_emit_lock_file(mission: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch, handle: str) -> None:
+    """On a Mission whose directory name differs from its slug the cycle take is ``emit``'s file."""
+    repo, feature_dir = mission
+    (feature_dir / "meta.json").write_text('{"mission_slug": "foo", "mission_id": "01AAAAAAAAAAAAAAAAAAAAAAAA"}', encoding="utf-8")
+    expected = _emit_lock_path(repo, feature_dir, monkeypatch)
+
+    assert _cycle_lock_path(repo, handle, monkeypatch) == expected
+
+
+def test_review_cycle_lock_on_a_real_coord_mission_is_the_coord_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.integration.coord_topology_fixture import _build_coord_topology
+
+    ctx = _build_coord_topology(tmp_path, write_husk_meta=False)
+
+    path = _cycle_lock_path(ctx.repo, ctx.slug, monkeypatch)
+
+    assert path.name == f"{ctx.coord_feature_dir.name}.status.lock"
+    with coord_status_lock(ctx.repo, ctx.coord_feature_dir) as held:
+        assert held == path

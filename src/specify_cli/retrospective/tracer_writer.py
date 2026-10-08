@@ -57,7 +57,7 @@ from specify_cli.coordination.write_seam import (
     WriteSeamResult,
     write_artifact,
 )
-from specify_cli.missions._read_path_resolver import StatusReadPathNotFound, candidate_feature_dir_for_mission
+from specify_cli.missions._read_path_resolver import StatusReadPathNotFound, mission_write_lock_dir
 from specify_cli.status import mission_write_lock
 
 logger = logging.getLogger(__name__)
@@ -231,25 +231,6 @@ def _local_staging_path(repo_root: Path, mission_slug: str, filename: str) -> Pa
     return location.path / _TRACES_DIRNAME / filename
 
 
-def _mission_lock_dir(repo_root: Path, mission_slug: str) -> Path:
-    """The Mission directory whose name keys the Mission write lock (#5467, plan A10).
-
-    Derived with the read-only resolver, so nothing is materialized and no
-    coordination surface is touched before ``write_artifact``'s routability
-    probe. The lock only uses ``.name`` (the canonical Mission directory name,
-    the same key ``status.emit`` and the commit router's ``coord_status_lock``
-    take) and ``repo_root``, so the path is rebuilt under the primary checkout.
-    A handle that resolves to nothing falls back to the handle itself: the
-    write is then refused by the probe and there is nothing to protect.
-    """
-    dir_name: str
-    try:
-        dir_name = candidate_feature_dir_for_mission(repo_root, mission_slug).name
-    except _NO_EXISTING_CONTENT_EXCEPTIONS:
-        dir_name = mission_slug
-    return repo_root / "kitty-specs" / dir_name
-
-
 def _entry_id(category: str, entry_line: str) -> str:
     # Non-charter use (TID251): a short, stable content-addressed identifier for
     # the WriteSeamResult.entry_id row/entry reference -- not a charter
@@ -338,7 +319,7 @@ def append_tracer_finding(
     # #5467: the stage read, the merge, the write and the commit are one
     # read-modify-write, so they run under the Mission write lock (re-entrant:
     # the coord seed and the commit router take the same file).
-    with mission_write_lock(_mission_lock_dir(repo_root, mission_slug), repo_root=repo_root):
+    with mission_write_lock(mission_write_lock_dir(repo_root, mission_slug), repo_root=repo_root):
         result = write_artifact(
             repo_root=repo_root,
             mission_slug=mission_slug,

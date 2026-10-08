@@ -1679,7 +1679,7 @@ def apply_wp_status_backfill(
         return WpStatusBackfillResult(feature_dir=feature_dir, slug=slug, skip_reason=COORD_SURFACE_LIVE)
     lock_root = resolve_status_lock_root(feature_dir, None)
     try:
-        with feature_status_lock(lock_root, slug):
+        with feature_status_lock(lock_root, feature_dir.name):
             return _apply_wp_status_backfill_locked(feature_dir, dry_run=dry_run, evidence=evidence, coord_probed=probed)
     except _WP_STATUS_MISSION_ERRORS as exc:
         return WpStatusBackfillResult(feature_dir=feature_dir, slug=slug, error=f"{type(exc).__name__}: {exc}")
