@@ -1,6 +1,6 @@
 ---
 work_package_id: WP01
-title: One canonical Mission lock key for every lock caller
+title: 'One canonical Mission lock key: the key function and the core doors'
 dependencies: []
 requirement_refs:
 - FR-005
@@ -16,7 +16,6 @@ subtasks:
 - T002
 - T003
 - T004
-- T005
 phase: Phase 1 - Lock key
 history:
 - at: '2026-10-08T12:00:00Z'
@@ -35,47 +34,31 @@ owned_files:
 - src/specify_cli/missions/_read_path_resolver.py
 - src/specify_cli/coordination/transaction.py
 - src/specify_cli/coordination/status_transition.py
-- src/specify_cli/coordination/coord_seed.py
 - src/specify_cli/lanes/branch_naming.py
-- src/specify_cli/status/emit.py
-- src/specify_cli/status/work_package_lifecycle.py
-- src/specify_cli/status/lifecycle_events.py
-- src/specify_cli/status/migrate_lifecycle_envelope.py
-- src/specify_cli/cli/commands/agent/tasks_move_task_executor.py
-- src/specify_cli/cli/commands/agent/tasks_mark_status.py
-- src/specify_cli/cli/commands/agent/status.py
-- src/specify_cli/cli/commands/agent/finalize_status_surface.py
-- src/specify_cli/decisions/emit.py
-- src/specify_cli/retrospective/lifecycle_events.py
-- src/specify_cli/review/cycle.py
-- src/specify_cli/migration/backfill_runtime_state.py
-- src/specify_cli/migration/rebuild_state.py
-- src/specify_cli/migration/verdict_provenance_backfill.py
 - tests/status/test_mission_lock_key.py
 tags: []
 tracker_refs: []
 ---
-# Work Package Prompt: WP01 – One canonical Mission lock key for every lock caller
+# Work Package Prompt: WP01 – One canonical Mission lock key: the key function and the core doors
 
 ## Objective
 
-`mission_lock_key(feature_dir)` is the one key every per-Mission lock caller uses (`mission_write_lock`, `hold_mission_write_lock`, every direct `feature_status_lock` caller, `BookkeepingTransaction`, `coord_status_lock`, `_holds_mission_lock`/`capture_rollback_point`), so a legacy bare-directory coordination Mission (`060-test` primary with a `060-test-<mid8>` coordination surface) locks one file from every door, in one order.
+`mission_lock_key(feature_dir)` exists and the core doors use it: `mission_write_lock`, `_holds_mission_lock`/`capture_rollback_point`, `mission_write_lock_dir`, `BookkeepingTransaction` and `coord_status_lock`. On a legacy bare-directory coordination Mission (`060-test` primary with a `060-test-<mid8>` coordination surface), these resolve one lock file. WP13 then moves every remaining caller onto the key.
 
 ## Independent test
 
-`tests/status/test_mission_lock_key.py`: key equality across primary, coordination and flat Missions plus the bare-directory coordination fixture; the mid8 cascade; the empty-mid8 typed error; key stability inside a hold; a cross-thread lock-order test (lifecycle path vs implement claim path) that does not deadlock; the subprocess-count check.
+`tests/status/test_mission_lock_key.py`: key equality across primary, coordination, flat and bare-directory coordination Missions; the mid8 cascade; the empty-mid8 typed error; key stability inside a hold; capture under a held primary lock; the subprocess-count check.
 
 ## Subtasks
 
 - **T001**: Red-first: the bare-directory coordination fixture shows the transaction and `mission_write_lock`/emit resolving different lock files, and `capture_rollback_point` raising under a held primary lock after a naive rekey (plan A1, A2)
-- **T002**: `mission_lock_key(feature_dir)` in `status/mission_write.py`, using the transaction's mid8 cascade through one shared helper (with `branch_naming`/`resolve_transaction_mid8`); a typed error for a coordination-routed Mission with no resolvable mid8; the key read from the canonical primary `meta.json` via the read-path resolver (A3, A4)
+- **T002**: `mission_lock_key(feature_dir)` in `status/mission_write.py`, using the transaction's mid8 cascade through one shared helper (with `branch_naming`/`resolve_transaction_mid8`); a typed error for a coordination-routed Mission with no resolvable mid8, and the transaction's trailing-dash key (`status_transition.py` legacy NNN arm) fixed to use the same function; the key read from the canonical primary `meta.json` via the read-path resolver (A3, A4)
 - **T003**: Thread-local held-key reuse: nested entries for the same Mission reuse the held key; a test with `flatten_coordination_metadata`-style meta mutation inside a hold (A4)
-- **T004**: Route every per-Mission lock caller through the key: `mission_write_lock`, `hold_mission_write_lock`, `_holds_mission_lock`/`capture_rollback_point`, `mission_write_lock_dir`, `BookkeepingTransaction._mission_specs_dir_name`, `coord_status_lock` and every direct `feature_status_lock(root, X.name)` caller listed in A1 (emit, work_package_lifecycle, lifecycle_events, migrate_lifecycle_envelope, move-task, mark-status, agent status, decisions emit, finalize status surface, retrospective lifecycle events, review cycle, the migrations)
-- **T005**: Disposition the two Rule 1 whole-file rewrites in files this WP owns: `migration/rebuild_state.py` (`os.replace` onto the events log) and `status/migrate_lifecycle_envelope.py` run their rewrite under the Mission lock (plan A7). Cross-thread lock-order test on the bare-directory coordination fixture (lifecycle path vs implement claim path); NFR-003 subprocess delta with a warmed `git_common_dir` cache (A12)
+- **T004**: Route the core doors through the key: `mission_write_lock`, `_holds_mission_lock`/`capture_rollback_point`, `mission_write_lock_dir`, `BookkeepingTransaction._mission_specs_dir_name`, `coord_status_lock`; the NFR-003 subprocess delta with a warmed `git_common_dir` cache (A12)
 
 ## Notes and risks
 
-This WP changes which file a writer locks on legacy Missions; it never adds a second mechanism (C-002). Keep `feature_status_lock`'s signature; callers pass `mission_lock_key(...)`. Re-derive the caller list with `grep -rn "feature_status_lock(\|mission_write_lock(\|hold_mission_write_lock(" src`.
+Keep `feature_status_lock`'s signature. Handoff: the remaining direct `feature_status_lock` callers and `hold_mission_write_lock` move in WP13, and `implement_phases.py` is later edited for wording by WP10.
 
 ## Dependencies
 

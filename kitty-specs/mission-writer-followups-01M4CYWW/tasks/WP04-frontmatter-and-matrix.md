@@ -67,7 +67,7 @@ map-requirements, the finalize flush, the finalize write-scope restore, the issu
 - **T016**: `locked_update_frontmatter` in `frontmatter.py`, preserving the body byte for byte; map-requirements uses it (re-read refs under the lock)
 - **T017**: Finalize flush applies its field delta to the freshly read frontmatter and body under the lock; the write-scope restore (rewrite and unlink branches) and `restore_meta_text` become compare-and-swap inside the lock and report kept files (A8); `mission_finalize_branch_contract.py` meta writes use `locked_update_meta`
 - **T018**: `scaffold_issue_matrix` exists-check and write in one hold; `acceptance/matrix.py` and `issue_verdict.py` lock through `mission_write_lock` keyed via WP01
-- **T019**: Other frontmatter writers: `task_metadata_validation.py` (`validate-tasks` repair), `lanes/implement_support.py` `update_fields`, the frontmatter migrations (`backfill_ownership`, `strip_frontmatter`, `m_2_0_6_consistency_sweep`); the lane mirror in `emit.py` stays as it is (runtime-locked; WP08 recognizes it)
+- **T019**: Other frontmatter and `tasks.md` writers: `task_metadata_validation.py` (`validate-tasks` repair), `lanes/implement_support.py` `update_fields`, the frontmatter migrations (`backfill_ownership`, `strip_frontmatter`, `m_2_0_6_consistency_sweep` including its `tasks.md` write), and the finalize `tasks.md` write in `mission_finalize_bootstrap.py` (A10); the lane mirror in `emit.py` stays as it is (runtime-locked; WP15 recognizes it)
 
 ## Notes and risks
 

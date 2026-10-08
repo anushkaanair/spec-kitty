@@ -2,7 +2,7 @@
 work_package_id: WP11
 title: The glossary defines topic branch, Mission and Mission Run consistently
 dependencies:
-- WP09
+- WP17
 requirement_refs:
 - FR-021
 planning_base_branch: issue-5883-mission-writer-followups
@@ -34,6 +34,8 @@ owned_files:
 - packs/built-in/glossary_packs/spec-kitty-core.glossary-pack.yaml
 - packs/built-in/pack-manifest.yaml
 - src/specify_cli/.contextive/**
+- packs/built-in/*.graph.yaml
+- tests/architectural/test_no_legacy_terminology.py
 tags: []
 tracker_refs: []
 ---
@@ -59,7 +61,7 @@ If a `docs/context` file named here does not exist, find the real one. This WP h
 
 ## Dependencies
 
-WP09
+WP17
 
 ## Rules for every WP in this Mission
 

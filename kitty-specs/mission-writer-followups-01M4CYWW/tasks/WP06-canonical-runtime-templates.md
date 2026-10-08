@@ -1,12 +1,13 @@
 ---
 work_package_id: WP06
-title: next reads the pack templates; the pack Mission config matches what runs
+title: next reads the pack runtime templates; in-flight runs keep working
 dependencies:
 - WP05
 - WP02
 requirement_refs:
 - FR-017
 - FR-018
+- FR-020
 - FR-023
 - NFR-006
 - C-001
@@ -19,7 +20,6 @@ subtasks:
 - T025
 - T026
 - T027
-- T028
 - T029
 phase: Phase 3 - Runtime
 history:
@@ -30,7 +30,7 @@ agent_profile: python-pedro
 authoritative_surface: src/runtime/next/runtime_bridge_io.py
 create_intent:
 - tests/runtime/test_pack_runtime_template_parity.py
-- tests/specify_cli/missions/test_pack_mission_config_parity.py
+- tests/runtime/fixtures/runtime_template_baseline.json
 execution_mode: code_change
 model: claude-sonnet
 owned_files:
@@ -41,16 +41,8 @@ owned_files:
 - src/specify_cli/missions/documentation/mission-runtime.yaml
 - src/specify_cli/missions/research/mission-runtime.yaml
 - src/specify_cli/missions/plan/mission-runtime.yaml
-- src/specify_cli/missions/software-dev/mission.yaml
-- src/specify_cli/missions/documentation/mission.yaml
-- src/specify_cli/missions/research/mission.yaml
-- src/specify_cli/missions/plan/mission.yaml
 - packs/built-in/missions/software-dev/mission-runtime.yaml
 - packs/built-in/missions/plan/mission-runtime.yaml
-- packs/built-in/missions/software-dev/mission.yaml
-- packs/built-in/missions/documentation/mission.yaml
-- packs/built-in/missions/research/mission.yaml
-- packs/built-in/missions/plan/mission.yaml
 - packs/built-in/pack-manifest.yaml
 - tests/architectural/test_layer_rules.py
 - tests/architectural/_baselines.yaml
@@ -58,31 +50,43 @@ owned_files:
 - tests/contract/test_plan_mission_yaml_validates.py
 - tests/specify_cli/missions/test_mission_template_consistency.py
 - tests/runtime/test_pack_runtime_template_parity.py
-- tests/specify_cli/missions/test_pack_mission_config_parity.py
+- packs/built-in/*.graph.yaml
+- tests/runtime/test_bridge_io.py
+- tests/research/test_research_plan_missions_integration.py
+- tests/specify_cli/events/test_runtime_moments.py
+- tests/specify_cli/test_documentation_template_resolution.py
+- tests/specify_cli/orchestrator_api/test_answer_decision.py
+- tests/specify_cli/orchestrator_api/test_planning_client_journey.py
+- tests/specify_cli/next/test_next_invocation_lifecycle_seam.py
+- tests/integration/test_research_runtime_walk.py
+- tests/integration/test_documentation_runtime_walk.py
+- tests/doctrine/test_shipped_profiles.py
+- tests/next/test_next_command_integration.py
+- tests/next/test_runtime_bridge_unit.py
+- tests/runtime/fixtures/runtime_template_baseline.json
 tags: []
 tracker_refs: []
 ---
-# Work Package Prompt: WP06 – next reads the pack templates; the pack Mission config matches what runs
+# Work Package Prompt: WP06 – next reads the pack runtime templates; in-flight runs keep working
 
 ## Objective
 
-The runtime resolves built-in runtime templates from `packs/built-in/missions` through `charter.activation.mission_type_profile_repository.builtin_missions_root()` with the same tier order. The four `src` `mission-runtime.yaml` copies are deleted, and the runtime→specify_cli ledger drops from 23 to 22. Every pack Mission config matches what the CLI runs today (FR-023, operator ruling): software-dev and plan runtime templates take the src content, documentation and research runtime bytes stay unchanged, and every pack `mission.yaml` becomes byte-equal to its src copy. In-flight runs keep working.
+The runtime resolves built-in runtime templates from `packs/built-in/missions` through `charter.activation.mission_type_profile_repository.builtin_missions_root()`, with the same tier order. The four `src` `mission-runtime.yaml` copies are deleted, and the runtime→specify_cli ledger drops from 23 to 22. Each pack runtime template matches what the CLI runs today (FR-023): software-dev and plan take the src content, while the documentation and research bytes stay unchanged. In-flight runs keep working.
 
 ## Independent test
 
-`tests/runtime/test_pack_runtime_template_parity.py`: for each type, the resolved template plans the same step sequence and dispatch route per step as the baseline recorded from today's resolver (NFR-006, SC-009); a persisted run whose recorded src path is gone still advances and answers query mode (B1). `tests/specify_cli/missions/test_pack_mission_config_parity.py`: pack `mission.yaml` byte-equal to src for all four types.
+`tests/runtime/test_pack_runtime_template_parity.py`: for each type, the resolved template plans the same step sequence and the same dispatch route per step as the committed baseline fixture recorded from today's resolver (NFR-006, SC-009). The software-dev analyze step is exempt from the start, so WP07 does not have to edit this test. A persisted run whose recorded src path is gone still advances and answers query mode (B1).
 
 ## Subtasks
 
-- **T025**: Red-first: record today's resolved template per type, then show that the pack software-dev/plan templates diverge (agent-profile routing widening, plan does not load), that a pack `mission.yaml` differs from src, and that query mode on a run with a vanished recorded path raises `QueryModeValidationError`
-- **T026**: Built-in tier via `builtin_missions_root()`, `PackRootNotFound` failing closed with a named error and a test; `mission_loader/command.py` switches to the same accessor; both bare `import specify_cli` edges removed; the ledger entry removed, cap 23→22, and the `_baselines.yaml` justification updated (B8)
-- **T027**: Reconcile the pack runtime templates per B2: software-dev and plan take the src content; documentation and research are byte-unchanged; delete the four src `mission-runtime.yaml` copies and the deprecation banner; move the tests that hard-code the src path to the pack path (B8)
-- **T028**: `mission.yaml` parity (FR-023): pack copies made byte-equal to src (drop `task_types`, documentation `deliverables: docs/output/`), wording fixes applied to both; first confirm no pack-copy reader consumes the dropped keys and stop for an owner decision if one does; regenerate the charter-bundle goldens the compiler embeds; `spec-kitty doctrine regenerate-graph`
+- **T025**: Red-first: record today's resolved template plan per type (step sequence and dispatch route) into the committed fixture `tests/runtime/fixtures/runtime_template_baseline.json` BEFORE any copy is deleted; then show the pack software-dev/plan templates diverge (agent-profile routing widening, plan does not load) and that query mode on a run with a vanished recorded path raises `QueryModeValidationError`
+- **T026**: Built-in tier via `builtin_missions_root()`, `PackRootNotFound` failing closed with a named error and a test; `mission_loader/command.py` switches to the same accessor and its `write_meta` goes through `locked_update_meta` (FR-020); both bare `import specify_cli` edges removed; the ledger entry removed, cap 23→22, and the `_baselines.yaml` justification updated (B8)
+- **T027**: Reconcile the pack runtime templates per B2: software-dev and plan take the src content; documentation and research stay byte-unchanged. Delete the four src `mission-runtime.yaml` copies and the deprecation banner. Move every test that hard-codes the src runtime path (the owned test list) to the pack path, then run `spec-kitty doctrine regenerate-graph` if the manifest hashes them (B8)
 - **T029**: Query mode loads `run_dir/mission_template_frozen.yaml`; the live path is used only for drift (B1); confirm the planner drift-skip keeps an in-flight software-dev run on its frozen order (FR-017)
 
 ## Notes and risks
 
-Only `mission-runtime.yaml` moves (C-008); `templates/` and the Python modules stay. After the change, run `pip install -e .` or `uv sync --frozen` before `tests/doctrine/test_doctrine_regenerate_graph_roundtrip.py` (C13). Owned test paths that do not exist under these exact names: find the real ones (`grep -rln "specify_cli/missions/.*/mission-runtime.yaml" tests`) and record them in the Activity Log.
+Only `mission-runtime.yaml` moves (C-008). Before trusting `tests/doctrine/test_doctrine_regenerate_graph_roundtrip.py`, reinstall with `pip install -e .` or `uv sync --frozen` (C13). Handoffs: WP14 does `mission.yaml` parity; WP07 edits `runtime_bridge_query.py`, `runtime_bridge_io.py` and the pack software-dev runtime template again (analyze); WP14, WP17 and WP11 edit `pack-manifest.yaml` and the graph files again.
 
 ## Dependencies
 

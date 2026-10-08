@@ -62,7 +62,7 @@ On every legacy `next` path, including the stale-plan and no-plan fallbacks, the
 
 ## Notes and risks
 
-`src/runtime` must not gain a `specify_cli` import (C-001). Keep `engine._append_event` append-only. Run `tests/runtime tests/next` plus `tests/architectural/test_layer_rules.py`.
+`src/runtime` must not gain a `specify_cli` import (C-001). Keep `engine._append_event` append-only. Run `tests/runtime tests/next` plus `tests/architectural/test_layer_rules.py`. The T020 foreign-append reproduction is FR-010's red proof; the Rule 1 runtime scan arrives later in WP08. Handoff: `runtime_bridge.py` is edited again by WP07 (board override); `tests/next/test_runtime_bridge_unit.py` again by WP06 (template path).
 
 ## Dependencies
 

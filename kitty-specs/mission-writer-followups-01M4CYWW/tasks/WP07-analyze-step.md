@@ -2,7 +2,7 @@
 work_package_id: WP07
 title: next issues a guarded analyze step between tasks and implement
 dependencies:
-- WP06
+- WP14
 requirement_refs:
 - FR-016
 - FR-017
@@ -16,6 +16,7 @@ subtasks:
 - T031
 - T032
 - T033
+- T056
 phase: Phase 3 - Runtime
 history:
 - at: '2026-10-08T12:00:00Z'
@@ -36,6 +37,13 @@ owned_files:
 - src/specify_cli/orchestrator_api/decision_verbs.py
 - packs/built-in/missions/software-dev/mission-runtime.yaml
 - tests/runtime/test_analyze_step.py
+- src/runtime/next/runtime_bridge_io.py
+- src/runtime/next/runtime_bridge_composition.py
+- tests/specify_cli/next/test_workflow_software_dev_default_is_byte_stable.py
+- tests/specify_cli/next/test_runtime_bridge_composition.py
+- tests/runtime/test_bridge_composition.py
+- tests/runtime/test_composition_advance_alignment.py
+- tests/runtime/test_runtime_seam.py
 tags: []
 tracker_refs: []
 ---
@@ -55,14 +63,15 @@ The software-dev runtime order becomes `discovery → specify → plan → tasks
 - **T031**: Add the analyze step to the pack software-dev runtime template (analyze stays `in_action_sequence: false`, C6)
 - **T032**: Inject the analysis-currency callable inside the shared `next_cmd.decide_next` wrapper and route `orchestrator_api/decision_verbs.py` through it (B4); the bridge computes the verdict into `status_facts` only for `analyze` or the board override, so the cores module stays pure (B5)
 - **T033**: `analyze` guard in `_evaluate_software_dev_guards`, error codes in `decision.py`, the precedence rule (a prompt-resolution failure wins), and the board override in decide and query modes (B3, B5)
+- **T056**: Update the tests that pin the software-dev tasks→implement order and go red; check whether the `runtime_bridge_composition.py` tasks→implement advance can skip analyze, and add a red test and a fix if it can. Record every other test that turns red, and its fix, in the Activity Log
 
 ## Notes and risks
 
-The runtime gets the callable injected; it imports nothing new from `specify_cli` (C-001). The callable wraps `analysis_report.check_analysis_report_current`.
+The runtime gets the callable injected; it imports nothing new from `specify_cli` (C-001). The callable wraps `analysis_report.check_analysis_report_current`. `status_facts` is built in `runtime_bridge_io.py`, and B5 puts the verdict there. The WP06 parity test already exempts the analyze step.
 
 ## Dependencies
 
-WP06
+WP14
 
 ## Rules for every WP in this Mission
 

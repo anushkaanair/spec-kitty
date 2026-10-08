@@ -1,82 +1,66 @@
 ---
-work_package_id: WP10
-title: Operator-facing text and generated commits say mission
+work_package_id: WP17
+title: Scripted prompt walk gate, ratchet, snapshots and graph
 dependencies:
-- WP03
-- WP04
+- WP16
 requirement_refs:
-- FR-012
-- FR-013
-- FR-014
+- FR-022
+- C-003
 planning_base_branch: issue-5883-mission-writer-followups
 merge_target_branch: issue-5883-mission-writer-followups
 branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
 subtasks:
-- T044
-- T045
-- T046
-- T047
-phase: Phase 5 - Wording
+- T057
+- T043
+phase: Phase 5 - Pack
 history:
 - at: '2026-10-08T12:00:00Z'
   actor: system
   action: Prompt generated via /spec-kitty.tasks
 agent_profile: python-pedro
-authoritative_surface: src/specify_cli/cli/commands/agent/mission_finalize_planning_pin.py
+authoritative_surface: tests/doctrine/test_software_dev_prompt_walk.py
 create_intent:
-- tests/specify_cli/test_no_for_feature_operator_text.py
+- tests/doctrine/test_software_dev_prompt_walk.py
 execution_mode: code_change
 model: claude-sonnet
 owned_files:
-- src/specify_cli/cli/commands/agent/mission_finalize_planning_pin.py
-- src/specify_cli/cli/commands/agent/mission_setup_plan.py
-- src/specify_cli/core/mission_creation_commit.py
-- src/specify_cli/status/uninitialized_hint.py
-- src/specify_cli/task_utils/support.py
-- src/specify_cli/acceptance/__init__.py
-- src/specify_cli/plan_validation.py
-- src/specify_cli/cli/commands/validate_tasks.py
-- src/specify_cli/cli/commands/validate_encoding.py
-- src/specify_cli/cli/commands/agent/mission_branch_context.py
-- src/specify_cli/lanes/consolidation.py
-- src/specify_cli/cli/commands/implement.py
-- src/specify_cli/cli/commands/implement_phases.py
-- src/specify_cli/core/mission_creation_identity.py
-- src/specify_cli/cli/helpers.py
-- src/specify_cli/cli/commands/mission_type.py
-- commitlint.config.cjs
-- tests/specify_cli/test_no_for_feature_operator_text.py
-- tests/specify_cli/test_canonical_acceptance.py
-- tests/core/golden/**
-- tests/tasks/conftest.py
-- src/specify_cli/verify_enhanced.py
+- tests/doctrine/test_software_dev_prompt_walk.py
+- tests/architectural/_builtin_pack_provenance_baseline.yaml
+- tests/specify_cli/regression/_twelve_agent_baseline/**
+- tests/specify_cli/skills/__snapshots__/**
+- packs/built-in/pack-manifest.yaml
+- packs/built-in/*.graph.yaml
 tags: []
 tracker_refs: []
 ---
-# Work Package Prompt: WP10 – Operator-facing text and generated commits say mission
+# Work Package Prompt: WP17 – Scripted prompt walk gate, ratchet, snapshots and graph
 
 ## Objective
 
-The five planning commit builders and the operator-facing CLI errors say "mission". The finalize drift check accepts both the new and the legacy subjects. An AST scan keeps "for feature" out of operator text. commitlint covers every planning subject for both words.
+SC-008 is enforced by a gate: a scripted walk of the software-dev step prompts and contracts finds 0 refused instructions and 0 non-existent references. The provenance ratchet baseline counts are lowered, the rendered snapshots are regenerated, and the graph is regenerated.
 
 ## Independent test
 
-`tests/specify_cli/test_no_for_feature_operator_text.py` (FR-014, C9): scans every non-docstring string constant under `src/specify_cli` for "for feature" or a leading "Feature:"; a synthetic offender per construction form (f-string, concatenation, variable).
+`tests/doctrine/test_software_dev_prompt_walk.py` (C12) extends `test_builtin_cli_command_references.py`:
+  1. command paths and each `--option` resolve against Click;
+  2. rendered step-contract `command:` values parse;
+  3. every "next advances to X" claim matches the runtime order;
+  4. consumer paths resolve against a `spec-kitty init` fixture with an explicit placeholder list.
+
+  It covers the CLI-driven implement, review, accept and tasks-finalize prompts.
 
 ## Subtasks
 
-- **T044**: Red-first: the FR-014 scan fails on today's tree, and so does the drift check on a legacy-subject Mission. The scan gets two structural exemptions, each with a test: the legacy-subject constant the drift check must keep (a module-level constant named for that purpose), and hosted-only modules (`tracker/saas_*`, C-007)
-- **T045**: Commit builders: finalize planning pin, `mission_setup_plan` (spec/plan setup, gap analysis, generator config), `core/mission_creation_commit`; the drift check accepts the old and new subjects (FR-013)
-- **T046**: CLI errors from R8 and C9; `FEATURE_CONTEXT_UNRESOLVED` stays (machine contract) and is filed as a follow-up
-- **T047**: commitlint: the planning-subject rule covers the scaffold, gap-analysis, generator-config and origin-ticket-binding subjects for both words; update tests and goldens that assert the old text (R8, C7)
+- **T057**: Red-first: write the walk gate and show it failing against the pre-cleanup prompt tree (a temporary `git worktree add` at the WP09 base commit, removed afterwards), then passing on the current tree
+- **T043**: Lower the ratchet baseline by hand, entry by entry, so the diff only goes down (C8). Regenerate the rendered snapshots with the repository's snapshot update flag. Run `spec-kitty doctrine regenerate-graph`, reinstall, then run the regenerate-graph roundtrip test and `tests/doctrine/test_builtin_cli_command_references.py`
 
 ## Notes and risks
 
-Golden and fixture files that assert the old subjects (R8, C7 wording pins) change in this WP. Find them with `grep -rn "for feature" tests`. `src/specify_cli/verify_enhanced.py` (`"   Feature: "`) is in scope. Handoff: `acceptance/__init__.py` and `mission_type.py` were last edited in WP02 or WP03, `mission_setup_plan.py` in WP03, and `implement_phases.py` in WP13.
+Never `git stash`; use a temporary worktree for the pre-fix comparison and remove it. Handoff: WP11 edits `pack-manifest.yaml` and the graph files again.
 
 ## Dependencies
 
-WP03, WP04
+WP16
 
 ## Rules for every WP in this Mission
 

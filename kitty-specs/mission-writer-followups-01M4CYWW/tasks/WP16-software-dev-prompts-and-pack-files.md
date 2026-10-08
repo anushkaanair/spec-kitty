@@ -1,82 +1,75 @@
 ---
-work_package_id: WP10
-title: Operator-facing text and generated commits say mission
+work_package_id: WP16
+title: Other software-dev prompts and pack files
 dependencies:
-- WP03
-- WP04
+- WP09
 requirement_refs:
-- FR-012
-- FR-013
-- FR-014
+- FR-022
+- C-003
 planning_base_branch: issue-5883-mission-writer-followups
 merge_target_branch: issue-5883-mission-writer-followups
 branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
 subtasks:
-- T044
-- T045
-- T046
-- T047
-phase: Phase 5 - Wording
+- T041
+- T042
+phase: Phase 5 - Pack
 history:
 - at: '2026-10-08T12:00:00Z'
   actor: system
   action: Prompt generated via /spec-kitty.tasks
 agent_profile: python-pedro
-authoritative_surface: src/specify_cli/cli/commands/agent/mission_finalize_planning_pin.py
+authoritative_surface: packs/built-in/missions/mission-steps/software-dev/
 create_intent:
-- tests/specify_cli/test_no_for_feature_operator_text.py
+- tests/prompts/test_software_dev_prompt_sections.py
 execution_mode: code_change
 model: claude-sonnet
 owned_files:
-- src/specify_cli/cli/commands/agent/mission_finalize_planning_pin.py
-- src/specify_cli/cli/commands/agent/mission_setup_plan.py
-- src/specify_cli/core/mission_creation_commit.py
-- src/specify_cli/status/uninitialized_hint.py
-- src/specify_cli/task_utils/support.py
-- src/specify_cli/acceptance/__init__.py
-- src/specify_cli/plan_validation.py
-- src/specify_cli/cli/commands/validate_tasks.py
-- src/specify_cli/cli/commands/validate_encoding.py
-- src/specify_cli/cli/commands/agent/mission_branch_context.py
-- src/specify_cli/lanes/consolidation.py
-- src/specify_cli/cli/commands/implement.py
-- src/specify_cli/cli/commands/implement_phases.py
-- src/specify_cli/core/mission_creation_identity.py
-- src/specify_cli/cli/helpers.py
-- src/specify_cli/cli/commands/mission_type.py
-- commitlint.config.cjs
-- tests/specify_cli/test_no_for_feature_operator_text.py
-- tests/specify_cli/test_canonical_acceptance.py
-- tests/core/golden/**
-- tests/tasks/conftest.py
-- src/specify_cli/verify_enhanced.py
+- packs/built-in/missions/mission-steps/software-dev/analyze/**
+- packs/built-in/missions/mission-steps/software-dev/accept/**
+- packs/built-in/missions/mission-steps/software-dev/implement/**
+- packs/built-in/missions/mission-steps/software-dev/review/**
+- packs/built-in/missions/mission-steps/software-dev/plan/**
+- packs/built-in/missions/mission-steps/software-dev/specify/**
+- packs/built-in/missions/mission-steps/software-dev/charter/**
+- packs/built-in/missions/mission-steps/software-dev/research/**
+- packs/built-in/missions/software-dev/README.md
+- packs/built-in/missions/software-dev/expected-artifacts.yaml
+- packs/built-in/missions/software-dev/governance-profile.yaml
+- packs/built-in/missions/software-dev/templates/**
+- packs/built-in/missions/software-dev/actions/**
+- packs/built-in/missions/README.md
+- tests/prompts/test_prompt_fragment_rendering.py
+- tests/doctrine/missions/test_mission_steps_layout.py
+- tests/specify_cli/cli/commands/test_analyze_surface_agreement.py
+- tests/dossier/test_manifest_guard_parity.py
+- tests/prompts/test_software_dev_prompt_sections.py
+- packs/built-in/pack-manifest.yaml
+- packs/built-in/*.graph.yaml
 tags: []
 tracker_refs: []
 ---
-# Work Package Prompt: WP10 – Operator-facing text and generated commits say mission
+# Work Package Prompt: WP16 – Other software-dev prompts and pack files
 
 ## Objective
 
-The five planning commit builders and the operator-facing CLI errors say "mission". The finalize drift check accepts both the new and the legacy subjects. An AST scan keeps "for feature" out of operator text. commitlint covers every planning subject for both words.
+The analyze, accept, implement, review, plan and specify prompts, the README files, `expected-artifacts.yaml`, the governance profile and the analyze `step.yaml` describe what the CLI does: the R7 items plus C3, C4, C5 and C10.
 
 ## Independent test
 
-`tests/specify_cli/test_no_for_feature_operator_text.py` (FR-014, C9): scans every non-docstring string constant under `src/specify_cli` for "for feature" or a leading "Feature:"; a synthetic offender per construction form (f-string, concatenation, variable).
+`tests/prompts/test_software_dev_prompt_sections.py`: section-scoped asserts for each fixed item. These cover the accept worktree root, the implement analysis gate and its absence of retired paths, the analyze staleness rule and recovery recipe, `--mission` on `next` and `move-task`, and the "every command that accepts `--mission`" wording.
 
 ## Subtasks
 
-- **T044**: Red-first: the FR-014 scan fails on today's tree, and so does the drift check on a legacy-subject Mission. The scan gets two structural exemptions, each with a test: the legacy-subject constant the drift check must keep (a module-level constant named for that purpose), and hosted-only modules (`tracker/saas_*`, C-007)
-- **T045**: Commit builders: finalize planning pin, `mission_setup_plan` (spec/plan setup, gap analysis, generator config), `core/mission_creation_commit`; the drift check accepts the old and new subjects (FR-013)
-- **T046**: CLI errors from R8 and C9; `FEATURE_CONTEXT_UNRESOLVED` stays (machine contract) and is filed as a follow-up
-- **T047**: commitlint: the planning-subject rule covers the scaffold, gap-analysis, generator-config and origin-ticket-binding subjects for both words; update tests and goldens that assert the old text (R8, C7)
+- **T041**: Red-first, then the prompts: the analyze, accept, implement, review, plan and specify prompts get the R7 items plus C3 (`--mission` boilerplate), C4, C5 and C10 (the recovery recipe outside the checkout)
+- **T042**: Pack files: `software-dev/README.md`, `missions/README.md`, `expected-artifacts.yaml` (retired tasks_* ids; the analysis report on implement), `governance-profile.yaml`, and `analyze/step.yaml`, which depends on tasks; update the pinning tests (C7)
 
 ## Notes and risks
 
-Golden and fixture files that assert the old subjects (R8, C7 wording pins) change in this WP. Find them with `grep -rn "for feature" tests`. `src/specify_cli/verify_enhanced.py` (`"   Feature: "`) is in scope. Handoff: `acceptance/__init__.py` and `mission_type.py` were last edited in WP02 or WP03, `mission_setup_plan.py` in WP03, and `implement_phases.py` in WP13.
+The specify prompt change requires regenerating the rendered snapshots; WP17 owns those and regenerates them. Do not raise any provenance ratchet count (C8).
 
 ## Dependencies
 
-WP03, WP04
+WP09
 
 ## Rules for every WP in this Mission
 

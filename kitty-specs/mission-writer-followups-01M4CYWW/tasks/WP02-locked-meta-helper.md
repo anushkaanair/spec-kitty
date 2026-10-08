@@ -2,7 +2,7 @@
 work_package_id: WP02
 title: Locked meta.json helper, setters and accept restamps
 dependencies:
-- WP01
+- WP13
 requirement_refs:
 - FR-001
 - FR-005
@@ -61,11 +61,11 @@ Every `mission_metadata` read-modify-write and accept's direct restamp writes ru
 
 ## Notes and risks
 
-`mutate` is a pure function that is only called, never stored, returned or assigned (gate Rule 2). Watch for nesting: `ensure_vcs_locked` already holds the same per-thread re-entrant lock. A subprocess cannot re-enter its parent's hold; document that edge case if one exists. Edit `dead_symbol_allowlist.yaml` wherever it lives (`grep -rn set_change_mode tests`).
+`mutate` is a pure function that is only called, never stored, returned or assigned (gate Rule 2). Watch for nesting: `ensure_vcs_locked` already holds the same per-thread re-entrant lock. A subprocess cannot re-enter its parent's hold; document that edge case if one exists. Edit `dead_symbol_allowlist.yaml` wherever it lives (`grep -rn set_change_mode tests`). Handoff: `implement_support.py` is edited again by WP04 (`update_fields`); `acceptance/__init__.py` and `cli/commands/mission_type.py` are edited again by WP10 (wording).
 
 ## Dependencies
 
-WP01
+WP13
 
 ## Rules for every WP in this Mission
 

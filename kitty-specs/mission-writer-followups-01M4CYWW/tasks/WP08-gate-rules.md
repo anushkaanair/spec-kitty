@@ -1,25 +1,20 @@
 ---
 work_package_id: WP08
-title: 'Mission write discipline gate: Rules 1–4 close the writer class'
+title: 'Mission write discipline gate: Rules 1 and 3'
 dependencies:
 - WP03
 - WP04
 - WP07
 requirement_refs:
-- FR-006
 - FR-007
 - FR-008
-- FR-019
 - NFR-004
-- NFR-005
 planning_base_branch: issue-5883-mission-writer-followups
 merge_target_branch: issue-5883-mission-writer-followups
 branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
 subtasks:
 - T034
-- T035
 - T036
-- T037
 phase: Phase 4 - Gate
 history:
 - at: '2026-10-08T12:00:00Z'
@@ -37,22 +32,20 @@ owned_files:
 tags: []
 tracker_refs: []
 ---
-# Work Package Prompt: WP08 – Mission write discipline gate: Rules 1–4 close the writer class
+# Work Package Prompt: WP08 – Mission write discipline gate: Rules 1 and 3
 
 ## Objective
 
-The gate closes the writer class by construction with an empty allowlist. Rule 1 also catches whole-file rewrites and replaces of status and run logs, and scans `src/runtime`. Rule 2 treats every non-call reference to the callable parameter as an escape. Rule 3 accepts only `mission_lock_key(...)` for keys and only `mission_write_lock_dir(...)` or a parameter for paths. New Rule 4 keeps `meta.json`, `tasks/WP*.md` and `tasks.md` writes inside a lock region or a registered locked helper.
+With an empty allowlist, Rule 1 catches whole-file rewrites and replaces of status and run logs, including in `src/runtime`, while appends and fresh-snapshot publishes stay legitimate by a stated structural rule. Rule 3 accepts only `mission_lock_key(...)` for keys and only `mission_write_lock_dir(...)` or a parameter for paths.
 
 ## Independent test
 
-`tests/architectural/test_mission_write_discipline.py`: for every new or extended rule, a synthetic offender, a near-miss negative and a self-mutation proof of a real module (NFR-004); the rule passes on the real tree.
+`tests/architectural/test_mission_write_discipline.py`: a synthetic offender, a near-miss negative and a self-mutation proof per extended rule (NFR-004); both rules pass on the real tree.
 
 ## Subtasks
 
-- **T034**: Rule 1 (FR-008, A7): track target names assigned from the log/meta/state filenames through assignments and `/` joins; sinks are truncate, `write_text`, `write_bytes`, `open` in w/x/a/r+ modes, `os.replace`/`shutil.move` onto a target, and `atomic_write`; scan `src/runtime` with the run-log and run-state names; fix the consolidation bookkeeping projection (rewrite under the status lock), the lane auto-rebase create-if-missing (exclusive create), and confirm the WP01 dispositions of `rebuild_state.py` and `migrate_lifecycle_envelope.py` pass the rule; the merge driver is excluded by a stated structural rule
-- **T035**: Rule 2 (FR-006, A11): any non-call-func reference to the parameter, including passing it as an argument or keyword or capturing it in a nested def or lambda, is an escape; an unresolvable callee fails closed
+- **T034**: Rule 1 (FR-008, A7): track target names assigned from the log, meta and state filenames through assignments and `/` joins. Sinks: truncate, `write_text`, `write_bytes`, `open` in w/x/r+ modes, `shutil.move` onto a target, and a whole-file `os.replace`/`atomic_write` onto a target. Structural near-misses that are not sinks, each with a test: an append-only `"a"` open (`engine._append_event`, `status/store.py`), and the tmp-then-`os.replace` publish of a freshly built snapshot (`engine._write_snapshot`). Scan `src/runtime` with the run-log and run-state names. Fix the consolidation bookkeeping projection (rewrite under the status lock) and the lane auto-rebase create-if-missing (exclusive create). Confirm WP13's dispositions of `rebuild_state.py` and `migrate_lifecycle_envelope.py` pass. Exclude the merge driver by a stated structural rule
 - **T036**: Rule 3 (FR-007, A6): keys only as `mission_lock_key(...)`; paths as `mission_write_lock_dir(...)` or a function parameter; a bare `.name` is refused
-- **T037**: Rule 4 (FR-019, A5): regions are lexical lock `with`, `ExitStack.enter_context(<lock cm>)`, `__enter__`..`__exit__`, a `with` on a name assigned from a lock cm, and `locked_acceptance_verdict_guard`; a sink in function F is accepted when F is a registered locked helper or every same-module call site of F is in a region; unresolvable cross-module callers fail closed; no name-based exemptions; the merge driver exclusion applies
 
 ## Notes and risks
 

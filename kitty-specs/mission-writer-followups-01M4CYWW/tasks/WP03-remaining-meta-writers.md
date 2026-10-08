@@ -61,7 +61,7 @@ Every other read-modify-write of `meta.json` runs through `locked_update_meta`, 
 
 ## Notes and risks
 
-Migrations get no exemption (plan D5); they write through the helper. The merge driver (`consolidation/drivers.py`) is out of scope: it writes the temporary path git hands it, and WP08 excludes it structurally. Re-derive line numbers (lens A10).
+Migrations get no exemption (plan D5); they write through the helper. The merge driver (`consolidation/drivers.py`) is out of scope: it writes the temporary path git hands it, and WP08 excludes it structurally. Re-derive line numbers (lens A10). Handoff: `mission_setup_plan.py` is edited again by WP10 (commit subjects).
 
 ## Dependencies
 

@@ -13,6 +13,11 @@ dependencies:
 - WP09
 - WP10
 - WP11
+- WP13
+- WP14
+- WP15
+- WP16
+- WP17
 requirement_refs:
 - C-005
 - C-007
@@ -60,7 +65,7 @@ Describe behaviour, not WP ids or requirement ids.
 
 ## Dependencies
 
-WP01, WP02, WP03, WP04, WP05, WP06, WP07, WP08, WP09, WP10, WP11
+WP01, WP02, WP03, WP04, WP05, WP06, WP07, WP08, WP09, WP10, WP11, WP13, WP14, WP15, WP16, WP17
 
 ## Rules for every WP in this Mission
 
