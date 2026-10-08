@@ -160,6 +160,19 @@ def test_warn_helper_prints_nothing_without_a_concurrent_writer(tmp_path: Path, 
     assert capsys.readouterr().out == ""
 
 
+def test_warn_helper_survives_an_unrelated_mission_with_a_corrupt_log(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    """F3: the advisory scan reads other Missions' logs; a malformed one must degrade to no warning, never crash the command."""
+    repo = _single_branch_repo(tmp_path)
+    write_wp(repo, MISSION, "planned", "WP01", agent="alice")
+    _write_single_branch_meta(repo, OTHER_MISSION, "01SHAREDWSOTHER0000000001")
+    _write_repo_root_lane(repo, OTHER_MISSION, "WP01")
+    write_wp(repo, OTHER_MISSION, "in_progress", "WP01", agent="carol")
+    (repo / "kitty-specs" / OTHER_MISSION / "status.events.jsonl").write_text("{not json\n", encoding="utf-8")
+
+    assert workflow_executor.warn_shared_workspace_writers(repo, MISSION, "WP01", _repo_root_workspace(), "alice") == []
+    assert capsys.readouterr().out == ""
+
+
 # ---------------------------------------------------------------------------
 # CLI wiring: deleting the call from implement() / review() must fail these
 # ---------------------------------------------------------------------------
