@@ -245,7 +245,7 @@ class TestDiagnosticControls:
         )
         _write_config(tmp_path, pack_root, activated=[])
         builtin_dir = tmp_path / "builtin-profiles"
-        project_dir = tmp_path / ".kittify/doctrine/agent_profiles"
+        project_dir = tmp_path / ".kittify/charter-packs/agent_profiles"
         for directory in (builtin_dir, project_dir):
             directory.mkdir(parents=True)
             # Same filename as an org failure: layer, not ID/path heuristics,

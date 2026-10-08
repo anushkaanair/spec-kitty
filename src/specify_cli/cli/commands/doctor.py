@@ -1294,7 +1294,7 @@ def _render_unsanctioned_override_findings(report: DoctrineHealthReport) -> None
         f"its pack-root {pack_file}, or remove the org override.[/dim]",
         soft_wrap=True,
     )
-    console.print("  [dim]Only org-tier overrides are adjudicated; project-tier (.kittify/doctrine/) overrides are intentionally ungoverned (FR-012).[/dim]")
+    console.print("  [dim]Only org-tier overrides are adjudicated; project-tier (.kittify/charter-packs/) overrides are intentionally ungoverned (FR-012).[/dim]")
 
 
 def _render_cross_grain_findings(report: DoctrineHealthReport) -> None:

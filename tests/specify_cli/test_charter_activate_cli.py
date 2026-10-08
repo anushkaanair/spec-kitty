@@ -151,7 +151,7 @@ class TestLayerAwareActivation:
     ) -> None:
         org_pack = tmp_path / "org-pack"
         _write_directive(
-            org_pack / "doctrine" / "directives" / "org",
+            org_pack / "directives",
             "900-org-only-directive",
             "DIRECTIVE_900",
         )
@@ -186,7 +186,7 @@ class TestLayerAwareActivation:
         self, project_root: Path
     ) -> None:
         _write_directive(
-            project_root / ".kittify" / "doctrine" / "directive",
+            project_root / ".kittify" / "charter-packs" / "directive",
             "950-project-only-directive",
             "DIRECTIVE_950",
         )

@@ -228,7 +228,7 @@ class TestNestedLayoutBackwardCompat:
         """Layout-tolerant fallback: a nested ``<pack>/doctrine/<plural>/org/`` pack
         remains activatable, so the un-owned nested catalog fixtures stay green."""
         pack_root = project_root / "org-packs" / "legacy"
-        nested_dir = pack_root / "doctrine" / "directives" / "org"
+        nested_dir = pack_root / "directives"
         nested_dir.mkdir(parents=True, exist_ok=True)
         (nested_dir / "950-legacy-rule.directive.yaml").write_text(
             _DIRECTIVE_TEMPLATE.format(did="DIRECTIVE_950", title="950-legacy-rule"),

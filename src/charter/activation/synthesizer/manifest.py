@@ -69,8 +69,9 @@ class ManifestArtifactEntry(BaseModel):
     path: str
     """Repo-relative path to the artifact YAML under ``.kittify/charter-packs/``.
 
-    Manifests written before the cutover migration carry the retired
-    ``.kittify/doctrine/`` prefix; :func:`verify` still accepts it on read.
+    A manifest written before the cutover migration carries the retired
+    ``.kittify/doctrine/`` prefix until ``spec-kitty upgrade`` rewrites it;
+    :func:`verify` rejects that prefix (FR-011).
     """
 
     provenance_path: str

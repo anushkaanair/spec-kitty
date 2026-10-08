@@ -56,7 +56,7 @@ def _setup_fixture_profiles(repo_root: Path) -> None:
 
 def _write_project_graph(repo_root: Path) -> None:
     _write_yaml(
-        repo_root / ".kittify" / "doctrine" / "graph.yaml",
+        repo_root / ".kittify" / "charter-packs" / "graph.yaml",
         {
             "schema_version": "1.0",
             "generated_at": "2026-04-24T00:00:00Z",

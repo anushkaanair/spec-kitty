@@ -85,8 +85,8 @@ POLICY_RELPATH = PROJECT_PACK_ROOT / PACK_POLICY_FILENAME
 def _consumer_policy_path(repo_root: Path) -> Path:
     """Return the consumer allowlist path to read for *repo_root*.
 
-    Resolved through the project pack read root (FR-016), so a project still on
-    the retired ``.kittify/doctrine/`` tree is read there until it migrates.
+    Resolved through the project pack root (FR-016); the retired
+    ``.kittify/doctrine/`` tree is never read (FR-011).
     """
     return project_pack_root(repo_root) / PACK_POLICY_FILENAME
 
