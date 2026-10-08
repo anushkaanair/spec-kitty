@@ -229,3 +229,31 @@ None.
   - Line numbers are re-derived at implement time (research line numbers are indicative).
 - **A11: Rule 2 escapes.** A reference to the parameter other than as the function of a call counts as an escape. That includes passing it as an argument or keyword (`Thread(target=f)`, `submit(f)`, `partial(f)`) and capturing it in a nested def or lambda.
 - **A12: NFR-003 measurement.** Warm the `git_common_dir` cache first, then count the change in subprocess calls. `mission_write_lock_dir` stays off the hot path of a writer that already has `feature_dir`.
+
+### Lens B — runtime, templates, analyze, config parity
+
+- **B1 (blocker, FR-017).** Query mode (`runtime_bridge_query.py:449-450`) loads the run's frozen copy (`run_dir/mission_template_frozen.yaml`), as the ephemeral branch already does. The recorded live path is used only for the drift check. Red test: a persisted run whose recorded `src` template path no longer exists answers a bare `spec-kitty next` without `QueryModeValidationError`.
+- **B2 (blocker, FR-017/FR-023/NFR-006): "what runs today" is decided per type, by what actually resolves.**
+  - **Documentation and research** resolve from the user-global tier, which `ensure_runtime` overwrites from the pack at startup. So for these two types the pack `mission-runtime.yaml` is already the template that runs, including documentation's accept `agent-profile`. Their pack runtime bytes stay untouched: no wording or comment edits. A byte change would be re-copied to the global tier and would trip the drift check for in-flight runs.
+  - **Software-dev and plan** resolve to the `src` copy today. Their pack copy takes the `src` content: no `agent-profile` keys beyond what `src` carries, and the loadable `plan` shape. Software-dev also gains the analyze step.
+  - **Tier order is unchanged.**
+  - **NFR-006/SC-009 baseline.** The baseline for each type is the template that resolves today, recorded by a test helper that runs the current resolver before the change.
+  - **`mission.yaml`.** The CLI pins built-ins to `src` (`mission.py:649-663`), so `src` is what runs and the pack copy becomes byte-equal to it. `task_types` and the documentation `deliverables: docs/output/` have no reader, so dropping them changes no CLI behaviour. Wording fixes land in both copies. The charter compiler embeds the whole pack `mission.yaml` in the compiled `template-set-*.md` (`compiler.py:1992-2005`), so the charter-bundle goldens are regenerated and the change is called out in the PR.
+- **B3 (blocker, D7).** `_dn_finalized_board_override` (`runtime_bridge.py:575-629`) and its query-mode twin (`runtime_bridge_query.py:98-123`) check analysis currency for software-dev before they hand out implement. When the report is missing or stale they issue `analyze` with the error code. Red tests cover both paths with a hand-run specify, plan and tasks and a finalized board.
+- **B4 (D7): no caller skips the check.**
+  - The currency callable is injected inside the shared `next_cmd.decide_next` wrapper, and `orchestrator_api/decision_verbs.py:712` is routed through that wrapper.
+  - On the analyze step and in the board override, a missing callable fails closed with `ANALYSIS_CURRENCY_UNAVAILABLE`, never "not evaluated". data-model is amended to match.
+- **B5 (D7): plumbing.**
+  - The verdict is computed by the bridge only when the step is `analyze`, or when the board override would issue implement. It is stored in the snapshot's `status_facts`, so the cores module stays a pure leaf.
+  - Precedence: a prompt-resolution failure's error code wins over the analysis code.
+  - Tests assert that `_state_to_action("analyze")` and `_build_prompt_or_error` resolve for the new step, and that `_with_guard_failure_paths` renders the stale-input entries.
+- **B6 (D4): refusal type.**
+  - `MissionCompletionBlocked` keeps its real shape, `(decision: GateDecision)`.
+  - One bridge-level adapter wraps every failure of the hook in one typed refusal on both the legacy and the composition paths: `MissionCompletionBlocked`, the policy error, and an arbitrary capture exception. The adapter is caught before the generic "Runtime engine error" and `_advance_failed_decision` handlers.
+  - The hook signature is `Callable[[], None]`. data-model is amended to match.
+- **B7 (D4).** A test pins that a terminal re-poll does not re-run the gate. The non-blocking learning capture also fires only on the transition into terminal.
+- **B8 (D6).**
+  - `PackRootNotFound` from `builtin_missions_root()` fails closed with a named error and is covered by a test.
+  - `mission_loader/command.py:224-226` switches to the same accessor, because its `runtime/missions` root does not exist.
+  - The `_baselines.yaml:22` justification text is updated.
+  - The ten test files that hard-code the `src` runtime path move to the pack path in the same WP. Among them are `tests/next/test_plan_mission_runtime.py`, `tests/contract/test_plan_mission_yaml_validates.py` and `tests/specify_cli/missions/test_mission_template_consistency.py`.

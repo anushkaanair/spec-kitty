@@ -26,13 +26,13 @@ This Mission adds no persisted schema. It adds one key function, two locked help
 
 ## Runtime terminal gate (D4)
 
-- The hook is `before_run_completed: Callable[[RunState], None] | None`. It is passed to `commit_advance` (it exists today) and to `next_step` (new).
-- If the hook raises `MissionCompletionBlocked(reason, guard_failures)`, nothing is appended to `run.events.jsonl` or `state.json`.
-- The bridge maps that exception to a decision with `kind="blocked"`, `reason` naming the retrospective gate, and `guard_failures` copied from the exception.
+- The hook is `before_run_completed: Callable[[], None] | None`. It is passed to `commit_advance` (it exists today) and to `next_step` (new).
+- If the hook raises anything (`MissionCompletionBlocked(decision: GateDecision)`, the policy error, or a capture failure), nothing is appended to `run.events.jsonl` or `state.json`.
+- One bridge-level adapter maps every hook failure, on the legacy and composition paths, to a decision with `kind="blocked"`, a `reason` naming the retrospective gate, and `guard_failures` taken from the gate decision when present. It is caught before the generic engine-error handlers.
 
 ## Analysis-currency fact (D7)
 
-- Type: `AnalysisCurrency = Callable[[], AnalysisVerdict]`. It is injected into `DecideNextContext.analysis_currency` and defaults to `None`, meaning not evaluated.
+- Type: `AnalysisCurrency = Callable[[], AnalysisVerdict]`. It is injected into `DecideNextContext.analysis_currency` by the shared `next_cmd.decide_next` wrapper. On the analyze step and in the finalized-board override, a missing callable fails closed with `ANALYSIS_CURRENCY_UNAVAILABLE`.
 - `AnalysisVerdict` has two fields: `status: Literal["current", "missing", "stale"]` and `stale_inputs: tuple[str, ...]`.
 
 | Verdict | Decision on the `analyze` step |
@@ -40,6 +40,9 @@ This Mission adds no persisted schema. It adds one key function, two locked help
 | `current` | advance to `implement` |
 | `missing` | re-issue `analyze`, `error_code="ANALYSIS_REPORT_MISSING"` |
 | `stale` | re-issue `analyze`, `error_code="ANALYSIS_REPORT_STALE"`, `guard_failures` = one entry per stale input |
+| no callable | re-issue `analyze`, `error_code="ANALYSIS_CURRENCY_UNAVAILABLE"` |
+
+The verdict is computed by the bridge into the snapshot's `status_facts`; the cores module stays pure. A prompt-resolution error code takes precedence over these. The finalized-board override applies the same table before it hands out implement.
 
 ## Software-dev runtime step order (D7)
 
