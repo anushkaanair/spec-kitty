@@ -459,7 +459,7 @@
     },
     "WP14": {
       "actor": "claude",
-      "agent": "claude",
+      "agent": null,
       "agent_profile": "architect-alphonso",
       "agent_profile_version": "1.0",
       "force_count": 1,
@@ -469,9 +469,11 @@
       "last_transition_at": "2026-10-08T01:30:37.315520+00:00",
       "model": "__resolved_model_absent__",
       "notes": [
-        "WP14 done: step-0 campsite (6 commits), red-first 716552db (59 red), CLI-root LEGACY_CHARTER_STATE gate 47bf0250, tracker CR-03 removal e8097447, read-shim deletion + fail-closed governance dbc79355, fixtures dcce9545. Acceptance 269 passed/84 xfailed/0 xpassed; make test-fast green; new reds vs base: 0 (CI-like clone)."
+        "WP14 done: step-0 campsite (6 commits), red-first 716552db (59 red), CLI-root LEGACY_CHARTER_STATE gate 47bf0250, tracker CR-03 removal e8097447, read-shim deletion + fail-closed governance dbc79355, fixtures dcce9545. Acceptance 269 passed/84 xfailed/0 xpassed; make test-fast green; new reds vs base: 0 (CI-like clone).",
+        "Changes requested: B1 golden refusals red from ActiveCharterConfigError.__str__; B2 doctor selections silently drop governance.doctrine (charter.yaml not gate-covered)"
       ],
       "provider": "__resolved_provider_absent__",
+      "review": null,
       "review_result": {
         "feedback_path": "/home/user/spec-kitty/.worktrees/charter-pack-cutover-01M491G6-coord/kitty-specs/charter-pack-cutover-01M491G6/tasks/WP14-remove-shims-and-legacy-gate/review-cycle-1.md",
         "reference": "review-cycle://charter-pack-cutover-01M491G6/WP14-remove-shims-and-legacy-gate/review-cycle-1.md",
@@ -479,14 +481,14 @@
         "verdict": "changes_requested"
       },
       "role": "reviewer",
-      "shell_pid": 7625,
-      "shell_pid_created_at": "1791419560.85",
+      "shell_pid": null,
+      "shell_pid_created_at": null,
       "subtasks": {
-        "T070": "done",
-        "T071": "done",
-        "T072": "done",
-        "T073": "done",
-        "T074": "done"
+        "T070": "planned",
+        "T071": "planned",
+        "T072": "planned",
+        "T073": "planned",
+        "T074": "planned"
       }
     },
     "WP15": {
