@@ -30,7 +30,7 @@ It is intentionally stricter than the human-facing CLI:
 
 ## Contract Version
 
-- `CONTRACT_VERSION`: `1.12.0`
+- `CONTRACT_VERSION`: `1.13.0`
 - `MIN_PROVIDER_VERSION`: `0.1.0`
 - Startup probe: `spec-kitty orchestrator-api contract-version`
 - A `--provider-version` below `MIN_PROVIDER_VERSION`, or one that does not
@@ -130,6 +130,11 @@ constant in `src/specify_cli/orchestrator_api/envelope.py`):
   and `UNSUPPORTED_CAPABILITY`. Behaviour change: `plan` now fails when its
   delegate payload result is `blocked` or `error` instead of emitting success.
   See [Governed planning delivery](#governed-planning-delivery-python-profile).
+- `1.13.0` — `start-implementation` can newly fail with `STATUS_LOCK_HELD` (#5819)
+  when the single_branch write-checkout claim lock stays held by another claimant
+  past its bound (it used to escape as a traceback). The failure `data` carries the
+  Mission identity, `wp_id`, `message` and `lock_timeout_seconds`. A new `error_code`
+  on an existing verb, so a minor bump; no field is removed or renamed.
 
 ## Response Envelope
 
@@ -137,7 +142,7 @@ Every command returns exactly one JSON object with these 7 top-level keys:
 
 ```json
 {
-  "contract_version": "1.12.0",
+  "contract_version": "1.13.0",
   "command": "orchestrator-api.mission-state",
   "timestamp": "2026-04-08T12:00:00+00:00",
   "correlation_id": "corr-0123456789abcdef",
@@ -878,6 +883,7 @@ Current machine-readable error codes (the authoritative list is
 - `DEPENDENCIES_NOT_SATISFIED`
 - `LANE_ALLOCATION_FAILED`
 - `ANCESTRY_NOT_ESTABLISHED`
+- `STATUS_LOCK_HELD` (`start-implementation`: the single_branch write-checkout claim lock stayed held past its bound; retry)
 - `SAFE_COMMIT_BACKSTOP`
 - `SAFE_COMMIT_DESTINATION_NOT_FOUND`
 - `SAFE_COMMIT_DESTINATION_REF_SHAPE`

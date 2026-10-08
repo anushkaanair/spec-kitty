@@ -319,3 +319,37 @@ def test_overlapping_single_branch_claims_leave_exactly_one_wp_in_progress(
     assert b_rc != [0], out
     assert "WRITE_CHECKOUT_OCCUPIED" in out or "already in_progress in the shared write checkout" in out
     assert held == [True], "writer A did not hold the checkout lock between its scan and its claim (#5796)"
+
+
+def test_start_implementation_reports_a_held_checkout_lock_as_an_envelope_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """F5: a checkout claim lock that stays held past its bound is the command's STATUS_LOCK_HELD JSON envelope."""
+    repo = _single_branch_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+    monkeypatch.setenv("SPECIFY_REPO_ROOT", str(repo))
+    mission, mission_id = "lock-held-alpha", "01LOCKHELDALPHA000000001"
+    _build_mission(repo, mission, mission_id)
+    monkeypatch.setattr(wp_lifecycle, "CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS", 0.2)
+    holding, release = threading.Event(), threading.Event()
+
+    def _hold() -> None:
+        with locking.write_checkout_claim_lock(repo):
+            holding.set()
+            release.wait(WAIT_SECONDS)
+
+    holder = threading.Thread(target=_hold, name="checkout-holder", daemon=True)
+    holder.start()
+    assert holding.wait(WAIT_SECONDS), "the holder never took the checkout claim lock"
+    try:
+        rc = _claim_via(_ORCHESTRATOR, mission, "WP01", "alice")
+    finally:
+        release.set()
+        holder.join(WAIT_SECONDS)
+
+    envelope = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert rc == 1
+    assert envelope["success"] is False
+    assert envelope["error_code"] == "STATUS_LOCK_HELD"
+    assert envelope["data"]["wp_id"] == "WP01"
+    assert "Timed out acquiring status lock" in envelope["data"]["message"]

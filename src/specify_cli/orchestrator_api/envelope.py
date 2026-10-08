@@ -105,7 +105,13 @@ from kernel.clock import now_utc_iso
 # UNSUPPORTED_CAPABILITY.
 # Behaviour change: ``plan`` now fails when its delegate payload result is
 # ``blocked`` or ``error`` (or ``success`` is false) instead of emitting success.
-CONTRACT_VERSION = "1.12.0"
+# 1.13.0: ``start-implementation`` can newly fail with ``STATUS_LOCK_HELD`` (#5819):
+# the single_branch write-checkout claim lock stayed held by another claimant past its
+# bound (or was requested out of lock order). It used to escape as a traceback. The
+# failure ``data`` carries the mission identity, ``wp_id`` and ``message`` (and
+# ``lock_timeout_seconds`` for a timeout). A new ``error_code`` on an existing verb, so
+# a minor bump; no field is removed or renamed.
+CONTRACT_VERSION = "1.13.0"
 MIN_PROVIDER_VERSION = "0.1.0"
 
 # Banned flags: enforced by parse_and_validate_policy() below (a policy whose
