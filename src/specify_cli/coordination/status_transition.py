@@ -80,6 +80,7 @@ from specify_cli.status.mission_write import (
     RollbackPoint,
     capture_rollback_point,
     mission_write_lock,
+    rollback_io_failure,
     rollback_status_artifacts,
 )
 from specify_cli.status.models import (
@@ -414,9 +415,8 @@ def _restore_coord_status_artifacts(point: RollbackPoint, *, repo_root: Path) ->
     """
     try:
         return rollback_status_artifacts(point, repo_root=repo_root)
-    except OSError:
-        _logger.exception("Could not roll back %s on coord commit failure", point.events_path)
-        return RollbackOutcome(rolled_back=False, refusal=None, events_path=point.events_path)
+    except OSError as exc:
+        return rollback_io_failure(point, exc)
 
 
 @contextmanager

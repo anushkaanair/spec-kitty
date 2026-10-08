@@ -509,6 +509,43 @@ def test_other_refusals_print_the_error_code_and_the_remedy_and_leave_the_log(
     assert [r["outcome"] for r in workflow._WORKFLOW_COMMIT_RECEIPTS] == ["refused"]
 
 
+def _raise_permission_error(*_args: Any, **_kwargs: Any) -> None:
+    raise PermissionError("read-only file system")
+
+
+def test_rollback_io_error_is_reported_with_the_original_commit_error_not_a_traceback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """F2: an OSError out of the rollback becomes a coded refusal; the receipt, the commit error and exit 1 survive."""
+    claimed = _claim_repo(tmp_path, commit_claim=False)
+    monkeypatch.setattr(workflow, "_load_coord_branch_meta", lambda _fd: (None, None, None))
+    _fail_follow_up(monkeypatch, "_commit_via_legacy_safe_commit")
+    monkeypatch.setattr(workflow, "rollback_status_artifacts", _raise_permission_error)
+    workflow._reset_workflow_receipts()
+
+    with pytest.raises(typer.Exit) as exit_info:
+        _commit_change(claimed)
+
+    out = capsys.readouterr().out
+    assert exit_info.value.exit_code == 1
+    assert "Failed to commit workflow status update for WP01: follow-up failed" in out
+    assert STATUS_ROLLBACK_REFUSED in out
+    assert [r["outcome"] for r in workflow._WORKFLOW_COMMIT_RECEIPTS] == ["refused"]
+
+
+def test_coord_fallback_rollback_io_error_carries_the_refusal_code(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """F2: the coord fallback arm's OSError path returns the same coded refusal (non-empty message)."""
+    from specify_cli.coordination import status_transition
+
+    point = RollbackPoint(events_path=tmp_path / EVENTS, status_path=tmp_path / "status.json", pre_event_size=0, pre_status_bytes=None, events_existed=False)
+    monkeypatch.setattr(status_transition, "rollback_status_artifacts", _raise_permission_error)
+
+    outcome = status_transition._restore_coord_status_artifacts(point, repo_root=tmp_path)
+
+    assert not outcome.rolled_back
+    assert STATUS_ROLLBACK_REFUSED in outcome.message()
+
+
 @pytest.mark.parametrize("revert", ["real", "silent_noop"])
 def test_lane_sync_refusal_arm_keeps_receipt_and_message_consistent(
     revert: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
