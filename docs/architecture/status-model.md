@@ -2,7 +2,7 @@
 title: 'Status Model: Operator Documentation'
 description: 'Operator reference for the Spec Kitty status model: the append-only event-log lane state machine, the canonical --mission selector, and mission_id ULID identity.'
 doc_status: active
-updated: '2026-10-06'
+updated: '2026-10-08'
 type: explanation
 audience: docs/context/audience/internal/system-architect.md
 related:
@@ -488,6 +488,18 @@ outcome, and is tracked as follow-up work under the parent epic. Two former
 residuals are closed by the closed-world check and are pinned as REFUSE: an
 out-of-workflow commit on the lane after a cancel, and a commit by a WP that
 never entered implementation.
+
+## Mission write lock and rollback
+
+Several agents can write one Mission checkout at once (#5819). Two rules keep their writes apart.
+
+**One lock per Mission.** Every writer of a Mission's status files and shared planning files takes `<git common dir>/spec-kitty-locks/<Mission directory name>.status.lock`. The key is the Mission directory name, never the bare slug, and a coordination Mission uses its coordination directory's name. The primitive is `status/mission_write.py`: `mission_write_lock(feature_dir)` (re-entrant per thread, bounded wait), `locked_rewrite_text(path, transform, feature_dir=...)` (read, transform and atomic write under the lock), `capture_rollback_point`, `rollback_events_log` and `rollback_status_artifacts`. Non-status writers resolve the directory with `mission_write_lock_dir` (`missions/_read_path_resolver.py`).
+
+**Rollback is verified.** `capture_rollback_point` records the log size and `status.json` bytes and refuses unless the caller holds the lock. A rollback cuts only the rows its own operation appended and that are not committed at `HEAD`. It refuses on any doubt: the log vanished or shrank, the tail is not whole JSON rows, the tail is not the rows the caller appended, the tail is already committed, or `HEAD` cannot be read. A refusal leaves the files unchanged and prints `STATUS_ROLLBACK_REFUSED` with the reason. It never extends the file. Only this module truncates or unlinks `status.events.jsonl`.
+
+**Checkout claim lock.** On `single_branch` the write checkout has one occupant. `write_checkout_claim_lock(write_checkout)` serializes the occupancy scan and the claim emit, keyed on the resolved checkout root. Lock order is fixed: the checkout claim lock first, then the Mission lock. Taking them the other way raises `RuntimeError`. `agent action implement` and `agent action review` also warn, without refusing, when `shared_workspace_writers` (`lanes/checkout_occupancy.py`) finds another actor's work package active in the same checkout.
+
+**Gate.** `tests/architectural/test_mission_write_discipline.py` fails the build on a truncate or unlink of the status log outside the primitive, on a read-modify-write pair of Mission files outside one locked region, and on a status lock keyed by a slug.
 
 ## File Layout (per feature)
 
