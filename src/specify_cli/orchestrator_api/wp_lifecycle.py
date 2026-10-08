@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from contextlib import ExitStack
 from kernel.clock import now_utc_stamp
@@ -22,6 +23,7 @@ import typer
 
 from specify_cli.core.contract_gate import validate_outbound_payload
 from specify_cli.status import wp_state_for
+from specify_cli.status.locking import CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS, FeatureStatusLockTimeoutError
 from specify_cli.status import Lane
 from specify_cli.status import ReviewResult
 from specify_cli.status import parse_review_result_json
@@ -46,6 +48,9 @@ from ._common import (
 
 
 _HELP_WP_ID = "Work package ID"
+
+
+logger = logging.getLogger(__name__)
 
 
 def _transition_requires_policy(lane: str) -> bool:
@@ -441,13 +446,15 @@ def resolve_workspace(
     _emit(envelope)
 
 
-def _enter_checkout_claim_lock(stack: ExitStack, main_repo_root: Path, mission: str, wp: str) -> None:
+def _enter_checkout_claim_lock(stack: ExitStack, cmd: str, main_repo_root: Path, mission: str, mission_dir: Path, wp: str) -> None:
     """Hold the write-checkout claim lock on *stack* when *wp* claims a single_branch repo-root lane (#5796, plan A7).
 
     Entered before the occupancy scan in :func:`_resolve_start_workspace` and kept until
     *stack* closes, i.e. through the claim emit. Any other WP (lane worktree, legacy
     Mission, non-single_branch Mission) takes nothing; a Mission whose lanes cannot be
-    read takes nothing here and fails later with its usual error envelope.
+    read takes nothing here and fails later with its usual error envelope. A lock that
+    stays held past the bound (or a lock-order violation) fails the command with the
+    ``STATUS_LOCK_HELD`` envelope instead of a traceback.
     """
     from kernel.errors import GuardedReadError
     from specify_cli.lanes.compute import is_repo_root_lane
@@ -460,9 +467,17 @@ def _enter_checkout_claim_lock(stack: ExitStack, main_repo_root: Path, mission: 
         assignment = _lane_assignment_or_legacy(main_repo_root, mission, wp)
         if isinstance(assignment, _StartWorkspace) or not is_repo_root_lane(assignment[1]):
             return
-    except (ValueError, FileNotFoundError, GuardedReadError):
+    except (ValueError, FileNotFoundError, GuardedReadError) as exc:
+        # Intentional fail-open: an unreadable Mission takes no checkout lock here and
+        # fails later with its own envelope.
+        logger.debug("no checkout claim lock for %s/%s: %s", mission, wp, exc)
         return
-    stack.enter_context(write_checkout_claim_lock(main_repo_root))
+    try:
+        stack.enter_context(write_checkout_claim_lock(main_repo_root, timeout=CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS))
+    except FeatureStatusLockTimeoutError as exc:
+        _fail(cmd, "STATUS_LOCK_HELD", str(exc), {**_common._mission_identity_payload(mission_dir), "wp_id": wp, "lock_timeout_seconds": exc.timeout})
+    except RuntimeError as exc:  # the lock-order guard of write_checkout_claim_lock
+        _fail(cmd, "STATUS_LOCK_HELD", str(exc), {**_common._mission_identity_payload(mission_dir), "wp_id": wp})
 
 
 def start_implementation(
@@ -544,7 +559,7 @@ def _start_implementation(mission: str, wp: str, actor: str, policy: str | None,
     # when the mission has lanes, mirroring the native implement flow so
     # merge-mission has a lane branch to integrate. Legacy / non-lane missions
     # keep the historical bare path.
-    _enter_checkout_claim_lock(claim_stack, main_repo_root, mission, wp)
+    _enter_checkout_claim_lock(claim_stack, cmd, main_repo_root, mission, mission_dir, wp)
     start_ws = _resolve_start_workspace(cmd, main_repo_root, mission, mission_dir, wp)
     workspace_path = start_ws.workspace_path
     prompt_path = str(wp_path)
