@@ -23,15 +23,11 @@ runner = CliRunner()
 _SHIPPED_ASSET_ID = "common-docs-structural-lint"
 
 
-def test_asset_list_json_shape_matches_the_old_command(tmp_path: Path) -> None:
-    from specify_cli.cli.commands.doctrine import app as doctrine_app
-
+def test_asset_list_json_shape(tmp_path: Path) -> None:
     with contextlib.chdir(tmp_path):
-        new = runner.invoke(charter_app, ["pack", "asset", "list", "--json"])
-        old = runner.invoke(doctrine_app, ["asset", "list", "--json"])
-    assert new.exit_code == old.exit_code == 0, new.output
-    rows = json.loads(new.stdout)
-    assert rows == json.loads(old.stdout)
+        result = runner.invoke(charter_app, ["pack", "asset", "list", "--json"])
+    assert result.exit_code == 0, result.output
+    rows = json.loads(result.stdout)
     assert rows and all(set(row) == {"id", "tier", "path"} for row in rows)
     assert _SHIPPED_ASSET_ID in {row["id"] for row in rows}
 

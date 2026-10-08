@@ -232,18 +232,18 @@ This recipe is executable against a fresh project — copy it verbatim.
 
 ### Step A: place the blob
 
-The project-tier asset directory is `.kittify/doctrine/assets/` (from the single canonical
+The project-tier asset directory is `.kittify/charter-packs/assets/` (from the single canonical
 `PROJECT_KIND_DIRS` mapping). Put the blob there. For a worked example, a shared release checklist:
 
 ```bash
-mkdir -p .kittify/doctrine/assets
-printf '# Release checklist\n- [ ] Tests green\n' > .kittify/doctrine/assets/team-release-checklist.md
+mkdir -p .kittify/charter-packs/assets
+printf '# Release checklist\n- [ ] Tests green\n' > .kittify/charter-packs/assets/team-release-checklist.md
 ```
 
 ### Step B: write the sidecar manifest
 
 Alongside the blob, create a manifest named `<blob>.asset.yaml` — here
-`.kittify/doctrine/assets/team-release-checklist.md.asset.yaml`. The manifest is the validated
+`.kittify/charter-packs/assets/team-release-checklist.md.asset.yaml`. The manifest is the validated
 surface; it requires `id`, `mime`, and `path`, with an optional `title`:
 
 ```yaml

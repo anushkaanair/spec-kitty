@@ -454,9 +454,9 @@ def _build_source(pack: OrgPackConfig) -> OrgDoctrineSource:
             (``url``) are missing.
     """
     if pack.source_type is None:
-        raise ValueError(f"Pack '{pack.name}' has no source_type configured; set doctrine.org.packs[].source_type to one of: git, https, artifactory, api.")
+        raise ValueError(f"Pack '{pack.name}' has no source_type configured; set charter_packs.org.packs[].source_type to one of: git, https, artifactory, api.")
     if not pack.url:
-        raise ValueError(f"Pack '{pack.name}' has source_type={pack.source_type!r} but no url; set doctrine.org.packs[].url.")
+        raise ValueError(f"Pack '{pack.name}' has source_type={pack.source_type!r} but no url; set charter_packs.org.packs[].url.")
 
     if pack.source_type == "git":
         from .sources.git_source import GitSource

@@ -35,7 +35,7 @@ constituents:
   kind: agent_profile
   path: agent_profiles/diagram-daisy.agent.yaml
   provenance_path:
-- content_hash: 6c1779acaa8c11438846a30f347bb636dae1a4521bf1297b038e3349ad3f54d9
+- content_hash: 9121635d67c58fa61e91d590ecb9bd8153d1511999529d9459f617ad64abe5db
   id: doctrine-daphne
   kind: agent_profile
   path: agent_profiles/doctrine-daphne.agent.yaml
@@ -1375,7 +1375,7 @@ constituents:
 fetched_at:
 generated_at:
 generated_by: spec-kitty charter pack regenerate-graph
-manifest_hash: 03e839a5a015862f4d59d09c11c7e12e553127bc1920206166c2e6d746459b69
+manifest_hash: ff7c3f975cd1efe2ce3ada4b772d1a5bfceac0f17a5e948aafde846bb334acd7
 presets:
 - content_hash: f0e3e26b23029c9073d5d7799d41f5ca8bd35e7a13f370d7e1bf400705552fc7
   name: default

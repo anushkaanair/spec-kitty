@@ -58,12 +58,8 @@ def fetch(
 
     registry = load_pack_registry(repo_root)
     if not registry.packs:
-        console.print("[red]No org doctrine packs configured.[/red]")
-        console.print(
-            "Add a [bold]doctrine.org.packs[/bold] block to "
-            ".kittify/config.yaml. See the contract at "
-            "kitty-specs/layered-doctrine-org-layer-*/contracts/config-schema.yaml."
-        )
+        console.print("[red]No org charter packs configured.[/red]")
+        console.print("Add an entry to the [bold]charter_packs.org.packs[/bold] list in .kittify/config.yaml.")
         raise typer.Exit(1)
 
     target_packs = list(registry.packs)

@@ -517,7 +517,6 @@ exclude = [
     "src/specify_cli/cli/commands/config_cmd.py",
     "src/specify_cli/cli/commands/dispatch.py",
     "src/specify_cli/cli/commands/docs.py",
-    "src/specify_cli/cli/commands/doctrine.py",
     "src/specify_cli/cli/commands/glossary.py",
     "src/specify_cli/cli/commands/implement_cores.py",
     "src/specify_cli/cli/commands/intake.py",

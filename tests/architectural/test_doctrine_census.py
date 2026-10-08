@@ -107,7 +107,8 @@ TICKETED_BASELINE: dict[str, str] = {
         "Doctrine-management internal consumed by _doctrine_collect.py (override-audit paths); no clean charter door. Ratchet allowlist, #3179."
     ),
     "charter.offering.drg.migration.hand_authored_overlay": (
-        "write_reference_graph_with_overlay is a DRG-regeneration internal consumed by cli/commands/doctrine.py; no clean charter door. Ratchet allowlist, #3179."
+        "write_reference_graph_with_overlay is a DRG-regeneration internal consumed by cli/commands/charter/pack_tooling.py; "
+        "no clean charter door. Ratchet allowlist, #3179."
     ),
 }
 

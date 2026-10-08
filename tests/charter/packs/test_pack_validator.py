@@ -1207,9 +1207,9 @@ class TestDrgRootGraphMissing:
         # AC-4's exit-code half: exercise the same fixture through the CLI.
         from typer.testing import CliRunner
 
-        from specify_cli.cli.commands.doctrine import app as doctrine_app
+        from specify_cli.cli.commands.charter import charter_app
 
-        cli_result = CliRunner().invoke(doctrine_app, ["pack", "validate", str(tmp_path)])
+        cli_result = CliRunner().invoke(charter_app, ["pack", "validate", str(tmp_path)])
         assert cli_result.exit_code == 1, cli_result.output
 
     def test_pack_root_graph_present_suppresses_diagnostic(self, tmp_path: Path) -> None:

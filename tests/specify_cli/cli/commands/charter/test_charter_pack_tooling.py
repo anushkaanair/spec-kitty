@@ -135,7 +135,7 @@ def test_regenerate_graph_check_reports_a_stale_fragment(tmp_path: Path, monkeyp
 
 
 # --------------------------------------------------------------------------------------
-# Handler identity: the doctrine group re-registers the charter handlers
+# Handler identity: the charter homes register the moved handler objects
 # --------------------------------------------------------------------------------------
 
 
@@ -149,17 +149,17 @@ def _callbacks(app: object, group: str | None = None) -> dict[str, object]:
     return {str(c.name): c.callback for c in app.registered_commands}
 
 
-def test_doctrine_group_registers_the_same_handler_objects() -> None:
+def test_charter_homes_register_the_moved_handler_objects() -> None:
     from specify_cli.cli.commands.charter import authoring, org
     from specify_cli.cli.commands.charter.pack import charter_pack_app
-    from specify_cli.cli.commands.doctrine import app as doctrine_app
+    from specify_cli.cli.commands.charter.pack_asset import asset_app
 
     charter = _callbacks(charter_app)
-    doctrine = _callbacks(doctrine_app)
     for name in ("fetch", "new", "validate"):
-        assert charter[name] is doctrine[name] is getattr(authoring, name)
-    assert doctrine["regenerate-graph"] is _callbacks(charter_pack_app)["regenerate-graph"] is pack_tooling.regenerate_graph
-    for name, handler in (("validate", pack_tooling.pack_validate), ("assemble", pack_tooling.pack_assemble)):
-        assert _callbacks(doctrine_app, "pack")[name] is _callbacks(charter_pack_app)[name] is handler
-    assert _callbacks(doctrine_app, "org") == _callbacks(charter_app, "org") == _callbacks(org.org_app)
-    assert _callbacks(doctrine_app, "asset") == _callbacks(charter_pack_app, "asset")
+        assert charter[name] is getattr(authoring, name)
+    pack = _callbacks(charter_pack_app)
+    assert pack["regenerate-graph"] is pack_tooling.regenerate_graph
+    assert pack["validate"] is pack_tooling.pack_validate
+    assert pack["assemble"] is pack_tooling.pack_assemble
+    assert _callbacks(charter_app, "org") == _callbacks(org.org_app)
+    assert _callbacks(charter_pack_app, "asset") == _callbacks(asset_app)
