@@ -42,7 +42,6 @@ def _assert_names_the_remedy(exc: ActiveCharterConfigError, source: Path) -> Non
     assert exc.code == "ACTIVE_CHARTER_CONFIG_INVALID"
     for needle in (str(source), "governance.doctrine", "spec-kitty upgrade", "docs/migrations/charter-pack-cutover.md"):
         assert needle in exc.body, exc.body
-    assert "spec-kitty upgrade" in str(exc)
 
 
 def test_require_canonical_governance_passes_the_canonical_mapping_through(tmp_path: Path) -> None:
@@ -79,8 +78,9 @@ def test_mission_type_override_probe_fails_closed(tmp_path: Path) -> None:
     from charter.activation.mission_type_profiles import _project_has_doctrine_overrides
 
     _write_governance_section(tmp_path, _LEGACY_BODY)
-    with pytest.raises(ActiveCharterConfigError, match="spec-kitty upgrade"):
+    with pytest.raises(ActiveCharterConfigError) as caught:
         _project_has_doctrine_overrides(tmp_path)
+    assert "spec-kitty upgrade" in caught.value.body
 
     _write_governance_section(tmp_path, _CANONICAL_BODY)
     assert _project_has_doctrine_overrides(tmp_path) is True
@@ -90,8 +90,9 @@ def test_analysis_inputs_declared_paths_fail_closed(tmp_path: Path) -> None:
     from specify_cli.analysis_inputs import _declared_paths
 
     source = tmp_path / "charter.yaml"
-    with pytest.raises(ActiveCharterConfigError, match="spec-kitty upgrade"):
+    with pytest.raises(ActiveCharterConfigError) as caught:
         _declared_paths({"governance": {"doctrine": {"authority_paths": ["x.md"]}}}, source=source)
+    assert "spec-kitty upgrade" in caught.value.body
 
     declared = _declared_paths({"governance": {"charter": {"authority_paths": ["x.md"]}}}, source=source)
     assert "x.md" in declared
@@ -108,9 +109,11 @@ def test_doctor_selection_diagnostic_degrades_instead_of_crashing(tmp_path: Path
     assert _read_project_selections(tmp_path)["directives"] == ["DIRECTIVE_001"]
 
 
-def test_active_charter_config_error_str_keeps_the_body() -> None:
-    assert str(ActiveCharterConfigError("fix it")) == "ACTIVE_CHARTER_CONFIG_INVALID: fix it"
-    assert str(ActiveCharterConfigError("")) == "ACTIVE_CHARTER_CONFIG_INVALID"
+def test_active_charter_config_error_shape_is_unchanged() -> None:
+    """contracts/errors.md: the shape is unchanged; ``str`` is the code, the remedy is ``.body``."""
+    err = ActiveCharterConfigError("fix it")
+    assert str(err) == "ACTIVE_CHARTER_CONFIG_INVALID"
+    assert (err.code, err.body) == ("ACTIVE_CHARTER_CONFIG_INVALID", "fix it")
 
 
 # --------------------------------------------------------------------------- #

@@ -70,10 +70,6 @@ class ActiveCharterConfigError(KittyInternalConsistencyError):
     def __init__(self, body: str) -> None:
         super().__init__("ACTIVE_CHARTER_CONFIG_INVALID", body)
 
-    def __str__(self) -> str:
-        """The code and the body, so a generic renderer or log keeps the remediation."""
-        return f"{self.code}: {self.body}" if self.body else self.code
-
 
 # ---------------------------------------------------------------------------
 # Built-in constants

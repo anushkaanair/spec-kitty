@@ -471,8 +471,10 @@ def test_fr011_shims_removed(tmp_path: Path) -> None:
 def test_fr011_load_governance_config_fails_closed(tmp_path: Path) -> None:
     project = project_from_template("governance_doctrine_in_charter_yaml", tmp_path / "p")
     sync = importlib.import_module("charter.activation.sync")
-    with pytest.raises(Exception, match="spec-kitty upgrade"):
+    with pytest.raises(Exception, match="ACTIVE_CHARTER_CONFIG_INVALID") as caught:
         sync.load_governance_config(project)
+    # The error keeps its shape (str is the code, contracts/errors.md); the remedy is in .body.
+    assert "spec-kitty upgrade" in getattr(caught.value, "body", str(caught.value)), caught.value
     # Control: the canonical key loads.
     canonical = project_from_template("two_org_packs", tmp_path / "c")
     assert sync.load_governance_config(canonical) is not None
