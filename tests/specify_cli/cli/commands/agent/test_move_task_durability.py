@@ -1650,7 +1650,7 @@ def test_evidence_git_runs_without_allocation_lock_and_inside_checkout_queue(
         git=FakeGitOps(),
         render=FakeRender(),
     )
-    real_status_lock = _review_cycle.feature_status_lock
+    real_status_lock = _review_cycle.mission_write_lock
     real_subprocess_run = subprocess.run
     allocation_lock_depth = 0
     observations: list[tuple[str, bool, bool]] = []
@@ -1691,7 +1691,7 @@ def test_evidence_git_runs_without_allocation_lock_and_inside_checkout_queue(
             )
         return real_subprocess_run(command, *args, **kwargs)  # type: ignore[call-overload]
 
-    monkeypatch.setattr(_review_cycle, "feature_status_lock", _observing_status_lock)
+    monkeypatch.setattr(_review_cycle, "mission_write_lock", _observing_status_lock)
     monkeypatch.setattr(_review_cycle.subprocess, "run", _observing_subprocess_run)
 
     signal = _tvp._persist_approved_review_cycle(st, ports)
