@@ -1310,12 +1310,11 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
 
     def _rollback_point(self) -> RollbackPoint:
         # Built here rather than captured: ``_acquire_locked`` already took the pre-emit
-        # measurements inside this transaction's own lock hold.
-        return RollbackPoint(
+        # measurements inside this transaction's own lock hold, which is still held.
+        return RollbackPoint.measured_under_held_lock(
             events_path=self._events_path,
             status_path=self._snapshot_path,
             pre_event_size=self._pre_emit_size,
-            pre_status_bytes=None,
             events_existed=self._pre_emit_events_existed,
         )
 

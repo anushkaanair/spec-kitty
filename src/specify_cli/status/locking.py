@@ -54,6 +54,9 @@ _thread_state = threading.local()
 #: follow-up.
 BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS: float = 10.0
 
+#: ``timeout`` value for a lock take that queues instead of failing (the claim windows).
+UNBOUNDED_LOCK_WAIT: float = -1
+
 _HOLDER_SUFFIX = ".holder"
 
 
@@ -119,6 +122,12 @@ def _get_thread_locks() -> dict[str, int]:
         depths = {}
         _thread_state.lock_depths = depths
     return depths
+
+
+def holds_status_lock(lock_path: Path) -> bool:
+    """Whether the calling thread currently holds the status lock file *lock_path* (real-path comparison)."""
+    wanted = os.path.realpath(lock_path)
+    return any(os.path.realpath(held) == wanted for held in _get_thread_locks())
 
 
 def _git_common_dir(repo_root: Path) -> Path:
@@ -290,7 +299,7 @@ def feature_status_lock(
     repo_root: Path,
     lock_key: str,
     *,
-    timeout: float = -1,
+    timeout: float = UNBOUNDED_LOCK_WAIT,
 ) -> Iterator[Path]:
     """Acquire the per-mission status lock.
 
@@ -312,7 +321,7 @@ def feature_status_lock(
 def project_event_log_lock(
     repo_root: Path,
     *,
-    timeout: float = -1,
+    timeout: float = UNBOUNDED_LOCK_WAIT,
 ) -> Iterator[Path]:
     """Acquire the project-level lock for ``.kittify/canonical-events.jsonl``.
 

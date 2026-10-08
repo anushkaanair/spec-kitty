@@ -63,7 +63,7 @@ from specify_cli.cli.commands.agent.workflow_cores import (
 from specify_cli.core.constants import MISSION_TYPE_RESEARCH
 from specify_cli.mission import get_deliverables_path, get_mission_type
 from specify_cli.status import FORCE_NOTE_HINT, Lane, StoreError, WorkPackageClaimConflict, WorkPackageStartRejected, read_wp_frontmatter
-from specify_cli.status import RollbackOutcome, RollbackPoint, RollbackRefusal, appended_event_ids, capture_rollback_point, mission_write_lock
+from specify_cli.status import RollbackOutcome, RollbackPoint, RollbackRefusal, UNBOUNDED_LOCK_WAIT, appended_event_ids, capture_rollback_point, mission_write_lock
 from specify_cli import status as _status_facade
 from specify_cli.task_utils import extract_scalar
 from specify_cli.workspace.context import ResolvedWorkspace, husk_resolution_error
@@ -134,11 +134,16 @@ def _committed_receipt_sha(repo_root: Path, ref: str) -> str | None:
     return result.stdout.decode("utf-8", "replace").strip() or None
 
 
-def _report_refused_rollback(outcome: RollbackOutcome, *, wp_id: str, operation: str, exc: BaseException | None) -> bool:
-    """Print the truthful account of a rollback that left the files alone; return ``True`` when the claim was committed."""
+def _report_refused_rollback(outcome: RollbackOutcome, *, wp_id: str, operation: str, exc: BaseException | None, failed_step: str | None = None) -> bool:
+    """Print the truthful account of a rollback that left the files alone; return ``True`` when the claim was committed.
+
+    *failed_step* names what failed after the claim was committed; it defaults to the follow-up
+    commit of *operation* (the lane-sync caller names the lane sync instead).
+    """
     if outcome.refusal is RollbackRefusal.TAIL_ALREADY_COMMITTED:
         cause = f": {exc}" if exc is not None else ""
-        print(f"{wp_id} claim was committed; the follow-up {operation} commit failed{cause}")
+        step = failed_step or f"follow-up {operation} commit"
+        print(f"{wp_id} claim was committed; the {step} failed{cause}")
         return True
     print(outcome.message())
     return False
@@ -222,7 +227,7 @@ def _sync_lane_or_revert(
         )
     except Exception as exc:  # noqa: BLE001 — structured sync refusal
         try:
-            with mission_write_lock(rollback_point.events_path.parent, repo_root=repo_root, timeout=-1):
+            with mission_write_lock(rollback_point.events_path.parent, repo_root=repo_root, timeout=UNBOUNDED_LOCK_WAIT):
                 w._revert_coordination_commit(receipt)
                 outcome = w._restore_status_artifacts(
                     rollback_point=rollback_point, repo_root=repo_root, expected_event_ids=claim_event_ids
@@ -232,7 +237,7 @@ def _sync_lane_or_revert(
             if outcome.refusal is not RollbackRefusal.TAIL_ALREADY_COMMITTED:
                 w._mark_receipt_refused(commit_sha=receipt.commit_sha)
             if not outcome.rolled_back:
-                _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=exc)
+                _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=exc, failed_step=f"lane sync after the {operation} commit")
         except Exception as rollback_exc:  # noqa: BLE001
             print(f"Error: Failed to rollback lifecycle state after lane sync refusal: {rollback_exc}")
         w._render_lane_auto_rebase_failure(exc)
@@ -1067,9 +1072,10 @@ def implement_claim_transition(
     """
     wf_feature_dir = _wf()._canonical_status_feature_dir(main_repo_root, mission_slug)
     with ExitStack() as hold:
-        hold.enter_context(mission_write_lock(wf_feature_dir, repo_root=main_repo_root, timeout=-1))
+        hold.enter_context(mission_write_lock(wf_feature_dir, repo_root=main_repo_root, timeout=UNBOUNDED_LOCK_WAIT))
         return _implement_claim_transition_body(
             release_lock=hold.close,
+            wf_feature_dir=wf_feature_dir,
             repo_root=repo_root,
             main_repo_root=main_repo_root,
             mission_slug=mission_slug,
@@ -1089,6 +1095,7 @@ def implement_claim_transition(
 def _implement_claim_transition_body(
     *,
     release_lock: Callable[[], None],
+    wf_feature_dir: Path,
     repo_root: Path,
     main_repo_root: Path,
     mission_slug: str,
@@ -1123,7 +1130,6 @@ def _implement_claim_transition_body(
 
     # Move to in_progress lane if not already there, and ensure agent is recorded
     # Lane is event-log-only; read from canonical event log (no frontmatter fallback)
-    wf_feature_dir = w._canonical_status_feature_dir(main_repo_root, mission_slug)
     wf_events = wf_read_events(wf_feature_dir)
     wf_snapshot = wf_reduce(wf_events) if wf_events else None
     wf_has_canonical = wf_snapshot is not None and normalized_wp_id in wf_snapshot.work_packages
@@ -1869,7 +1875,7 @@ def review_claim_transition(
     # ``feature_dir`` is the status write surface (``_canonical_status_feature_dir``): the
     # coordination worktree's Mission directory on a coord Mission (A15).
     with ExitStack() as hold:
-        hold.enter_context(mission_write_lock(feature_dir, repo_root=main_repo_root, timeout=-1))
+        hold.enter_context(mission_write_lock(feature_dir, repo_root=main_repo_root, timeout=UNBOUNDED_LOCK_WAIT))
         # Capture inside the hold so a failed commit rolls back only this claim's rows.
         rollback_point_rev = capture_rollback_point(feature_dir, repo_root=main_repo_root)
         try:
