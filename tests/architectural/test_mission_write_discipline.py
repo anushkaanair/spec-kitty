@@ -23,6 +23,10 @@ Three AST rules over ``src/specify_cli/**/*.py`` close the defect class behind
 3. **No slug-keyed status lock.** ``feature_status_lock(<root>, <key>)`` whose key
    is a Name/Attribute with ``slug`` in its identifier is flagged.
 
+Known residuals (not caught): rule 3 sees only Name/Attribute keys, so a subscript
+key such as ``meta["mission_slug"]`` passes; rule 1 does not catch truncation by
+``open(events_path, "w")`` or ``write_text("")``.
+
 Out of scope by design: ``src/runtime`` (``run.events.jsonl``) and ``src/kernel``
 (lock files). All allowlists are EMPTY; a hit is a finding to fix, not to list.
 """

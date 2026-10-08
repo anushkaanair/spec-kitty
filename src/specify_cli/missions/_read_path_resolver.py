@@ -31,7 +31,7 @@ import enum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from mission_runtime import MissionArtifactKind
+from mission_runtime import ActionContextError, MissionArtifactKind
 
 if TYPE_CHECKING:
     from mission_runtime import MissionResolver, MissionTopology, OwnedCheckout
@@ -1862,6 +1862,25 @@ def resolve_partition_read_dir(feature_dir: Path, kind: MissionArtifactKind) -> 
     return resolved
 
 
+def mission_write_lock_dir(repo_root: Path, mission_handle: str) -> Path:
+    """The Mission directory whose name keys the Mission write lock (#5467, #5819, plan A10).
+
+    The ONE read-only resolution every non-status writer uses to reach the lock
+    ``status.emit`` and the commit router's ``coord_status_lock`` take for the
+    same Mission: the canonical Mission directory name (the coordination
+    worktree's on a coord Mission), under the primary checkout. Nothing is
+    materialized and no coordination surface is touched. The resolution may
+    consult Git, so resolve it BEFORE entering any status-lock scope. A handle
+    that resolves to nothing falls back to the handle itself: there is then no
+    Mission content to protect.
+    """
+    try:
+        dir_name = candidate_feature_dir_for_mission(repo_root, mission_handle).name
+    except (ActionContextError, StatusReadPathNotFound, FileNotFoundError):
+        dir_name = mission_handle
+    return repo_root.joinpath(KITTY_SPECS_DIR, dir_name)
+
+
 # ``coord_feature_dir``, ``probe_coord_state`` and ``CoordState`` are the WP01
 # shared compose/probe helpers (paula C1/C2). They are exported because the
 # coord-empty/coord-deleted convergence wired cross-module importers for them
@@ -1900,6 +1919,7 @@ __all__ = [
     "candidate_feature_dir_for_mission",
     "coord_feature_dir",
     "mission_dir_aliases",
+    "mission_write_lock_dir",
     "probe_coord_state",
     "resolve_bare_modern_mission_dir_name",
     "resolve_planning_read_dir",

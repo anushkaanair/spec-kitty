@@ -38,9 +38,10 @@ from specify_cli.review.verdict_commit_queue import (
 from specify_cli.status import (
     ReviewResult,
     emission_event_verdict,
-    feature_status_lock,
     git_operation_in_progress,
+    mission_write_lock,
 )
+from specify_cli.missions._read_path_resolver import mission_write_lock_dir
 
 logger = logging.getLogger(__name__)
 
@@ -1112,9 +1113,10 @@ def _allocate_and_write_review_cycle_locked(
     observe the orphan mid-cleanup and mistake it for a legitimate prior
     cycle.
     """
-    with feature_status_lock(
-        main_repo_root,
-        mission_slug,
+    lock_dir = mission_write_lock_dir(main_repo_root, mission_slug)
+    with mission_write_lock(
+        lock_dir,
+        repo_root=main_repo_root,
         timeout=_in_queue_status_lock_timeout(main_repo_root),
     ):
         return _allocate_and_write_review_cycle_while_locked(
@@ -1157,9 +1159,10 @@ def _adopt_or_allocate_review_cycle_locked(
     operation_root = _operation_root(main_repo_root, owned)
     evidence_root = surface_root if surface_root is not None else operation_root
     destination_ref = placement_seam(main_repo_root, mission_slug, owned=owned).write_target(MissionArtifactKind.REVIEW_CYCLE).ref
-    with feature_status_lock(
-        main_repo_root,
-        mission_slug,
+    lock_dir = mission_write_lock_dir(main_repo_root, mission_slug)
+    with mission_write_lock(
+        lock_dir,
+        repo_root=main_repo_root,
         timeout=_in_queue_status_lock_timeout(main_repo_root),
     ):
         candidates = _local_matching_retained_review_cycles(
@@ -1198,9 +1201,9 @@ def _adopt_or_allocate_review_cycle_locked(
         raise ReviewCycleError("Multiple identical pending review-cycle records are ambiguous: " + names)
     selected = pending[0] if pending else max(committed, key=lambda candidate: candidate.artifact.cycle_number) if committed else None
 
-    with feature_status_lock(
-        main_repo_root,
-        mission_slug,
+    with mission_write_lock(
+        lock_dir,
+        repo_root=main_repo_root,
         timeout=_in_queue_status_lock_timeout(main_repo_root),
     ):
         refreshed = _local_matching_retained_review_cycles(
