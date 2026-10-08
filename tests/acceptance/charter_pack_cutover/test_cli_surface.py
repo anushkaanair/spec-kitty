@@ -20,7 +20,7 @@ import pytest
 from click.testing import Result
 
 from ._requirements import REPO_ROOT
-from ._support import covers, describe, output_of, pending_until, read_json_output, run_cli
+from ._support import covers, describe, output_of, read_json_output, run_cli
 from .legacy_fixtures import MISSION_TYPES, build_doctrine_command_fixture, finish, project_from_template, upgraded_copy, write_doctrine_pack
 
 FIXTURES_ROOT = REPO_ROOT / "tests" / "fixtures" / "charter_pack_cutover"
