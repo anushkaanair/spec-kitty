@@ -43,9 +43,9 @@ from kernel.atomic import atomic_write
 from kernel.git import GitCommandError, blob_at, run_git
 from specify_cli.status.locking import (
     BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS,
-    _get_thread_locks,
     feature_status_lock,
     feature_status_lock_path,
+    holds_status_lock,
 )
 from specify_cli.status.reducer import SNAPSHOT_FILENAME as _STATUS_FILENAME
 from specify_cli.status.store import EVENTS_FILENAME as _EVENTS_FILENAME
@@ -130,11 +130,22 @@ class RollbackPoint:
     pre_status_bytes: bytes | None
     events_existed: bool
 
+    @classmethod
+    def measured_under_held_lock(cls, *, events_path: Path, status_path: Path, pre_event_size: int, events_existed: bool) -> RollbackPoint:
+        """A point from measurements the caller already took while holding the Mission write lock.
+
+        For a caller that measured the log before this call (``BookkeepingTransaction``
+        measures inside its own lock hold): it does not re-read the files and does not
+        check the lock, so the CALLER must hold it, and must also hold it for the
+        rollback. ``status.json`` bytes are not captured (``None``): the caller restores
+        ``status.json`` from its own snapshot. Prefer :func:`capture_rollback_point`.
+        """
+        return cls(events_path=events_path, status_path=status_path, pre_event_size=pre_event_size, pre_status_bytes=None, events_existed=events_existed)
+
 
 def _holds_mission_lock(feature_dir: Path, repo_root: Path | None) -> bool:
     lock_path = feature_status_lock_path(resolve_status_lock_root(feature_dir, repo_root), feature_dir.name)
-    wanted = os.path.realpath(lock_path)
-    return any(os.path.realpath(held) == wanted for held in _get_thread_locks())
+    return holds_status_lock(lock_path)
 
 
 def capture_rollback_point(feature_dir: Path, *, repo_root: Path | None = None) -> RollbackPoint:

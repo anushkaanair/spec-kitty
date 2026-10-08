@@ -227,6 +227,7 @@ from .identity_audit import (
 )
 from .locking import (
     BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS,
+    UNBOUNDED_LOCK_WAIT,
     FeatureStatusLockTimeoutError,
     feature_status_lock,
 )
@@ -500,6 +501,7 @@ __all__ = [
     "CoordAuthorityUnavailable",
     "EventLogMergeError",
     "BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS",
+    "UNBOUNDED_LOCK_WAIT",
     "FeatureStatusLockTimeoutError",
     "GuardContext",
     "IdentityState",

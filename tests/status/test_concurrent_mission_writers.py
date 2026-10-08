@@ -590,7 +590,8 @@ def test_lane_sync_refusal_arm_keeps_receipt_and_message_consistent(
         assert outcome == "refused"
         assert claimed.events.read_text(encoding="utf-8") == _claim_row("before")
     else:  # the revert changed nothing: the claim is still committed, in the message and the receipt alike
-        assert "claim was committed; the follow-up planned -> claimed for WP01 commit failed" in out
+        assert "claim was committed; the lane sync after the planned -> claimed for WP01 commit failed" in out
+        assert "follow-up" not in out
         assert outcome == "committed"
 
 
@@ -684,8 +685,10 @@ def test_claim_wrappers_hand_the_body_a_release_for_the_mission_lock(tmp_path: P
     """F1: ``implement_claim_transition`` holds the lock for the body and the body can release it for the lane sync."""
     repo, mission, _coord_branch = _build_two_lane_coord_mission(tmp_path, monkeypatch, mission_slug="release-hook")
     seen: list[tuple[bool, bool]] = []
+    status_dirs: list[Path] = []
 
-    def _body(*, release_lock: Callable[[], None], **_kwargs: Any) -> None:
+    def _body(*, release_lock: Callable[[], None], wf_feature_dir: Path, **_kwargs: Any) -> None:
+        status_dirs.append(wf_feature_dir)
         held = bool(locking._get_thread_locks())
         release_lock()
         seen.append((held, bool(locking._get_thread_locks())))
@@ -707,6 +710,7 @@ def test_claim_wrappers_hand_the_body_a_release_for_the_mission_lock(tmp_path: P
     )
 
     assert seen == [(True, False)]
+    assert status_dirs == [workflow._canonical_status_feature_dir(repo, mission)], "the body gets the resolved status dir instead of resolving it again"
 
 
 def test_exit_arm_records_a_committed_receipt_when_the_claim_is_committed(

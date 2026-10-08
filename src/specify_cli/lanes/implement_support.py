@@ -1027,9 +1027,9 @@ def ensure_vcs_locked(feature_dir: Path, *, repo_root: Path | None = None) -> bo
     because the claim commit stages that file and a concurrent claim would otherwise
     commit or overwrite a half-written copy (#5468, plan A6).
     """
-    from specify_cli.status import mission_write_lock
+    from specify_cli.status import UNBOUNDED_LOCK_WAIT, mission_write_lock
 
-    with mission_write_lock(feature_dir, repo_root=repo_root, timeout=-1):
+    with mission_write_lock(feature_dir, repo_root=repo_root, timeout=UNBOUNDED_LOCK_WAIT):
         meta = load_meta_fail_closed(feature_dir)
         if meta is None:
             raise MissionMetaMissing(feature_dir)

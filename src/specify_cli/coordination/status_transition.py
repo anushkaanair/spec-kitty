@@ -464,7 +464,7 @@ def _fan_out_committed_coord_tail(
     F-3: also refreshes the derived execution-state projection (gated on
     :func:`hosted_posture.ledger_posture`), from ``coord_feature_dir`` -- the
     coord worktree's on-disk feature dir the commit just landed on -- against
-    ``repo_root``. Skipped when either is ``None`` (no coord feature dir was
+    ``repo_root``. Skipped when either is ``None`` (no coord Mission directory was
     resolved, or no repository root is known).
     """
     for event in stream.transitions:
@@ -498,7 +498,7 @@ def _emit_on_coord_then_commit(
     the just-emitted rows back (rollback-symmetry with the transactional
     True-arm) and NO fan-out fires for them (SC-002) -- the ``finally`` only
     restores; the deferred step 7 is reached only on the success path.
-    Returns the emit result and the coord feature dir the write landed on.
+    Returns the emit result and the coord Mission directory the write landed on.
 
     coord-artifact-single-home-01M3V4BE WP07 (T038): the coord Mission dir
     comes from the single write-location accessor

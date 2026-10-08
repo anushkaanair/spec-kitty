@@ -29,7 +29,7 @@ from specify_cli.git.commit_helpers import (
 )
 from specify_cli.lanes import implement_support
 from specify_cli.lanes.implement_support import create_lane_workspace
-from specify_cli.status import mission_write_lock, read_events, reduce as reduce_status_events
+from specify_cli.status import UNBOUNDED_LOCK_WAIT, mission_write_lock, read_events, reduce as reduce_status_events
 from specify_cli.workspace import context as workspace_context
 from specify_cli.workspace.context import resolve_workspace_for_wp
 
@@ -409,10 +409,10 @@ def hold_mission_write_lock(stack: ExitStack, ctx: ImplementContext) -> None:
     The key is the Mission directory the claim emit itself re-enters
     (``start_implementation_status`` locks ``resolve_status_lock_root`` + ``feature_dir.name``),
     so the emit nests inside this hold and the claim commit stages a consistent snapshot of
-    the status files. Unbounded wait (``timeout=-1``): the initiating command queues rather
+    the status files. Unbounded wait (``UNBOUNDED_LOCK_WAIT``): the initiating command queues rather
     than failing.
     """
-    stack.enter_context(mission_write_lock(ctx.mission_dir, repo_root=ctx.repo_root, timeout=-1))
+    stack.enter_context(mission_write_lock(ctx.mission_dir, repo_root=ctx.repo_root, timeout=UNBOUNDED_LOCK_WAIT))
 
 
 def allocate(ctx: ImplementContext, wp_id: str, selection: WorkspaceSelection, base: str | None) -> AllocationResult:
