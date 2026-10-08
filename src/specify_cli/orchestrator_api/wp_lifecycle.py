@@ -457,15 +457,12 @@ def _enter_checkout_claim_lock(stack: ExitStack, cmd: str, main_repo_root: Path,
     ``STATUS_LOCK_HELD`` envelope instead of a traceback.
     """
     from kernel.errors import GuardedReadError
-    from specify_cli.lanes.compute import is_repo_root_lane
-    from specify_cli.lanes.implement_support import _is_single_branch_mission
+    from specify_cli.lanes.checkout_occupancy import is_single_branch_repo_root_lane
     from specify_cli.status import write_checkout_claim_lock
 
     try:
-        if not _is_single_branch_mission(main_repo_root, mission):
-            return
         assignment = _lane_assignment_or_legacy(main_repo_root, mission, wp)
-        if isinstance(assignment, _StartWorkspace) or not is_repo_root_lane(assignment[1]):
+        if isinstance(assignment, _StartWorkspace) or not is_single_branch_repo_root_lane(main_repo_root, mission, assignment[1]):
             return
     except (ValueError, FileNotFoundError, GuardedReadError) as exc:
         # Intentional fail-open: an unreadable Mission takes no checkout lock here and
