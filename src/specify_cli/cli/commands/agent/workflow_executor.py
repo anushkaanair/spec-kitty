@@ -229,8 +229,12 @@ def _sync_lane_or_revert(
         try:
             with mission_write_lock(rollback_point.events_path.parent, repo_root=repo_root, timeout=UNBOUNDED_LOCK_WAIT):
                 w._revert_coordination_commit(receipt)
+                # The real revert already removed the claim's rows from the log. An empty tail
+                # is the finished state (still restore status.json); a non-empty one must be
+                # exactly the claim's rows, so a foreign row makes the rollback refuse.
+                reverted = appended_event_ids(rollback_point) == []
                 outcome = w._restore_status_artifacts(
-                    rollback_point=rollback_point, repo_root=repo_root, expected_event_ids=claim_event_ids
+                    rollback_point=rollback_point, repo_root=repo_root, expected_event_ids=None if reverted else claim_event_ids
                 )
             # A rows-still-committed tail means the revert left the claim in place: the
             # output says "committed", so the receipt stays committed too.
@@ -238,8 +242,13 @@ def _sync_lane_or_revert(
                 w._mark_receipt_refused(commit_sha=receipt.commit_sha)
             if not outcome.rolled_back:
                 _report_refused_rollback(outcome, wp_id=wp_id, operation=operation, exc=exc, failed_step=f"lane sync after the {operation} commit")
-        except Exception as rollback_exc:  # noqa: BLE001
+        except Exception as rollback_exc:  # noqa: BLE001 — rollback is best-effort; the original sync error is rendered and re-raised below
             print(f"Error: Failed to rollback lifecycle state after lane sync refusal: {rollback_exc}")
+            print(
+                f"  {wp_id} stays claimed and its lane was not synced. Resolve the lane conflict, then run "
+                f"`spec-kitty agent action implement {wp_id}` again to re-sync, or move it back with "
+                f"`spec-kitty agent tasks move-task {wp_id} --to planned --mission {mission_slug}`."
+            )
         w._render_lane_auto_rebase_failure(exc)
         raise typer.Exit(1) from exc
 

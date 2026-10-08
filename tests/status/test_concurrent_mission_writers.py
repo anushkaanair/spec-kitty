@@ -713,6 +713,75 @@ def test_claim_wrappers_hand_the_body_a_release_for_the_mission_lock(tmp_path: P
     assert status_dirs == [workflow._canonical_status_feature_dir(repo, mission)], "the body gets the resolved status dir instead of resolving it again"
 
 
+def test_real_revert_after_a_lane_sync_refusal_leaves_no_rollback_refusal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The real ``git revert`` already restores the log; the follow-up rollback must see that as done, not as a foreign tail."""
+    from kernel.clock import now_utc
+    from specify_cli.coordination.types import CommitReceipt
+    from specify_cli.lanes.lifecycle_sync import LaneAutoRebaseSyncError
+
+    claimed = _claim_repo(tmp_path, commit_claim=False)
+    (claimed.feature_dir / "status.json").write_text('{"claimed": true}\n', encoding="utf-8")
+    _git(claimed.repo, "add", "-A")
+    _git(claimed.repo, "commit", "-q", "-m", "claim")
+    receipt = CommitReceipt(
+        commit_sha=_git(claimed.repo, "rev-parse", "HEAD").strip(),
+        committed_at=now_utc(),
+        destination_ref=COORD_META[0],
+        worktree_root=claimed.repo,
+        event_ids=("claim",),
+    )
+
+    def _sync_refuses(**_kwargs: Any) -> None:
+        raise LaneAutoRebaseSyncError(
+            lane_id="lane-a",
+            lane_branch="kitty/mission-demo-lane-a",
+            lane_worktree_path=claimed.repo / "lane-a",
+            coordination_branch=COORD_META[0],
+            coordination_head=None,
+            halt_reason="conflict",
+        )
+
+    monkeypatch.setattr(workflow, "_load_coord_branch_meta", lambda _fd: COORD_META)
+
+    def _commit(**kwargs: Any) -> CommitReceipt:
+        workflow._record_receipt(COORD_META[0], str(kwargs["message"]), "committed", sha=receipt.commit_sha, wp_id="WP01")
+        return receipt
+
+    monkeypatch.setattr(workflow, "_commit_via_coordination_transaction", _commit)
+    monkeypatch.setattr(workflow, "_sync_lane_after_coordination_commit", _sync_refuses)  # _revert_coordination_commit stays REAL
+    workflow._reset_workflow_receipts()
+
+    with pytest.raises(typer.Exit):
+        _commit_change(claimed)
+
+    out = capsys.readouterr().out
+    assert STATUS_ROLLBACK_REFUSED not in out
+    assert "Failed to rollback" not in out
+    assert claimed.events.read_text(encoding="utf-8") == _claim_row("before")
+    assert (claimed.feature_dir / "status.json").read_text(encoding="utf-8") == "{}\n"
+    assert workflow._WORKFLOW_COMMIT_RECEIPTS[-1]["outcome"] == "refused"
+
+
+def test_failed_revert_after_a_lane_sync_refusal_names_the_remedy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    claimed = _claim_repo(tmp_path, commit_claim=True)
+
+    def _no_revert(_receipt: Any) -> None:
+        raise RuntimeError("coordination branch advanced")
+
+    _coord_claim_with_slow_lane_sync(claimed, monkeypatch, lambda: None)
+    monkeypatch.setattr(workflow, "_revert_coordination_commit", _no_revert)
+
+    with pytest.raises(typer.Exit):
+        _commit_change(claimed)
+
+    out = capsys.readouterr().out
+    assert "Failed to rollback lifecycle state after lane sync refusal: coordination branch advanced" in out
+    assert "WP01 stays claimed and its lane was not synced" in out
+    assert "move-task WP01 --to planned --mission demo" in out
+
+
 def test_exit_arm_records_a_committed_receipt_when_the_claim_is_committed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
