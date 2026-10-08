@@ -62,7 +62,7 @@ from specify_cli.cli.commands.agent.workflow_cores import (
 )
 from specify_cli.core.constants import MISSION_TYPE_RESEARCH
 from specify_cli.mission import get_deliverables_path, get_mission_type
-from specify_cli.status import FORCE_NOTE_HINT, Lane, WorkPackageClaimConflict, WorkPackageStartRejected, read_wp_frontmatter
+from specify_cli.status import FORCE_NOTE_HINT, Lane, StoreError, WorkPackageClaimConflict, WorkPackageStartRejected, read_wp_frontmatter
 from specify_cli.status import RollbackOutcome, RollbackPoint, RollbackRefusal, appended_event_ids, capture_rollback_point, mission_write_lock
 from specify_cli import status as _status_facade
 from specify_cli.task_utils import extract_scalar
@@ -446,7 +446,7 @@ def warn_shared_workspace_writers(
 
     try:
         writers = shared_workspace_writers(main_repo_root, mission_slug, wp_id, workspace, agent)
-    except (OSError, ValueError, RuntimeError):
+    except (OSError, ValueError, RuntimeError, StoreError):
         logger.debug("shared-workspace probe failed for %s/%s", mission_slug, wp_id, exc_info=True)
         return []
     lines = [writer.warning() for writer in writers]
