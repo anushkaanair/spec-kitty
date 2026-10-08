@@ -1,135 +1,195 @@
-# Implementation Plan: [MISSION]
+# Implementation Plan: Every Mission-file writer takes the lock, and the runtime never cuts a log it cannot prove is its own
 
-**Branch**: `[###-mission-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Mission specification from `kitty-specs/[mission-slug]/spec.md`
-
-**Note**: This template is filled in by the `/spec-kitty.plan` command. See `packs/built-in/missions/mission-steps/software-dev/plan/prompt.md` for the execution workflow.
-
-The planner will not begin until all planning questions have been answered—capture those answers in this document before progressing to later phases.
+**Branch**: `issue-5883-mission-writer-followups` | **Date**: 2026-10-08 | **Spec**: [spec.md](spec.md)
+**Input**: Mission specification from `kitty-specs/mission-writer-followups-01M4CYWW/spec.md`
 
 ## Summary
 
-[Extract from mission spec: primary requirement + technical approach from research]
+This Mission finishes what PR #5890 started, in three areas.
+
+1. **Every Mission-file writer goes through one lock door with one key.** `mission_write_lock` is rekeyed onto one pure, git-free key function so that every door and the status transaction resolve the same lock file for a Mission. The `meta.json`, work-package frontmatter and matrix writers then run their read-modify-write inside that door (FR-001..FR-005, FR-020). The architectural gate gains Rule 4 and closes the three documented holes (FR-006, FR-007, FR-008, FR-019).
+2. **The runtime never cuts a log it cannot prove is its own.** The legacy `next` path runs the retrospective gate through the engine's existing abort-only `before_run_completed` hook, on every path including the stale-plan fallback, and the speculative capture/rollback/buffer is deleted (FR-009..FR-011).
+3. **The planning flow offers every step it enforces, from the canonical template.** `next` reads runtime templates from `packs/built-in/missions` and the software-dev step order gains an analyze step guarded by an injected analysis-currency check (FR-016..FR-018). The shipped software-dev prompts and step definitions are cleaned up (FR-015, FR-022), operator text says "mission" (FR-012..FR-014), and the glossary is made consistent (FR-021).
+
+## Engineering Alignment (confirmed by the operator, 2026-10-08, Decision Moment `01M4D0F447AFXMSGFDJ661P8A2`)
+
+- **Rekey `mission_write_lock`.** The lock key becomes the canonical Mission key, computed once before the lock is entered. On a coordination-routed Mission with a recorded mid8, the canonical key is the coordination directory name (`coord_mission_dir_name`). Otherwise it is the Mission directory name. The status transaction and every door use the same function, so a legacy `060-test` primary directory and its `060-test-<mid8>` coordination surface lock one file.
+- **Only the runtime step order moves to the pack.** `mission.yaml`, the per-type `templates/` and the Python modules stay under `src/specify_cli/missions` (#2652's later slices own them). Only the four `mission-runtime.yaml` copies are retired from `src` (C-008).
+- **In-flight runs keep their frozen order.** A software-dev run started before the change keeps its frozen step order with no analyze step. Its recorded template path disappears when the `src` copy is retired, so the drift check is skipped (FR-017). The existing implement-time `analysis_report_required` refusal stays the backstop.
+- **Operator change: the pack's software-dev prompts and steps are cleaned up in this Mission** (new FR-022, SC-008).
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
-
-  If multiple developers/agents will work on this mission, add an "Implementation
-  Concern Map" section below to decompose architectural intent into IC-## concerns
-  before generating tasks.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
-**Testing**: [Project-specific test approach or NEEDS CLARIFICATION]
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [single/web/mobile - determines source structure]
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: Python 3.11+
+**Primary Dependencies**: typer, rich, ruamel.yaml; the existing `specify_cli.status.mission_write` primitive; the runtime engine `src/runtime/next/_internal_runtime/engine.py`
+**Storage**: Mission files in git (`meta.json`, `tasks/WP*.md`, `issue-matrix.json`, `acceptance-matrix.json`); runtime run directory (`state.json`, `run.events.jsonl`)
+**Testing**: pytest; deterministic cross-thread interleavings with injected pause points (NFR-001); red-first per ADR 2026-07-17-1 (C-006); synthetic offender + near-miss + self-mutation for every gate rule (NFR-004)
+**Target Platform**: Linux, macOS, Windows
+**Project Type**: single project
+**Constraints**: the runtime→specify_cli ledger does not grow (C-001); one lock door (C-002); source prompts only (C-003); only `mission-runtime.yaml` moves (C-008)
+**Scale/Scope**: about 40 production modules, 1 new gate rule plus three extended ones, about 15 prompt or step files, 4 glossary surfaces
 
 ## Charter Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+- **Single canonical authority.** One lock door, one key function and one runtime template per type; the `src` runtime-template copies are retired. PASS.
+- **Architectural alignment.** The runtime gets the analysis-currency check injected by its `specify_cli` caller, and the ledger shrinks from 23 to 22 because both bare `import specify_cli` edges are removed (C-001). PASS.
+- **ATDD / red-first.** Every "no-op passable: no" requirement has a reproduction shown failing first; compound requirements are proven part by part (C-006). PASS.
+- **Gate discipline.** Empty allowlist; every rule gets a synthetic offender, a near-miss and a self-mutation proof (NFR-004). PASS.
+- **Terminology canon.** FR-012..FR-014 and FR-021 are the terminology work itself. PASS.
+- **Locality.** The pack cleanup (FR-022) is bounded to software-dev step files and the files they reference. Other Mission types are untouched. PASS.
 
-[Gates determined based on charter file]
+## Design decisions
+
+### D1 — Canonical Mission lock key (rekey)
+
+`specify_cli.status.mission_write.mission_lock_key(feature_dir) -> str` is pure and git-free. It reads `meta.json` from the given directory: if the Mission is coordination-routed (`coordination_branch` recorded) and a mid8 is recorded, it returns `coord_mission_dir_name(slug, mid8)`. Otherwise it returns `feature_dir.name`.
+- `mission_write_lock(feature_dir)` keys on `mission_lock_key(feature_dir)`.
+- `mission_write_lock_dir(repo_root, handle)` resolves the directory with the existing read-only resolver and returns `repo_root/kitty-specs/<key>`.
+- `BookkeepingTransaction`'s `_mission_specs_dir_name` is asserted equal to it by a test for primary-without-mid8, coordination and flat Missions. It already computes the same composition, so only a test is added there, not a code change.
+- The key is computed before the lock is entered and is passed down; it is never resolved inside the lock.
+
+### D2 — Locked meta and frontmatter helpers
+
+- `mission_metadata.locked_update_meta(feature_dir, mutate, *, repo_root=None, timeout=BOUNDED)` takes the lock, re-reads `meta.json`, applies `mutate`, and writes atomically. Every setter in FR-001 and every writer in FR-020 uses it. `set_change_mode`, `clear_coordination_metadata` and `set_purpose_summary` have no production caller and are removed, along with their dead-symbol allowlist entries and tests.
+- `frontmatter.locked_update_frontmatter(wp_path, mutate, *, feature_dir, repo_root=None)` does the same for work-package frontmatter. map-requirements and the finalize flush use it.
+- The finalize write-scope restore becomes a compare-and-swap: a file is restored only while its bytes still equal what finalize itself wrote.
+- The lane mirror is already locked at runtime, through the emit lock or the transaction. It stays as it is, and the gate recognises both regions (D5).
+
+### D3 — Matrix writers
+
+- `scaffold_issue_matrix` runs its existence check and its write under `mission_write_lock`.
+- The acceptance-matrix and issue-verdict helpers and the acceptance verdict guard lock through `mission_write_lock`, keyed via D1.
+- The FR-005 red test is written first and must show which of the two divergences causes the failure, key or root (research R3).
+
+### D4 — Runtime terminal gate (FR-009..FR-011)
+
+- The legacy `_dn_advance_engine` passes `before_run_completed=retrospective.before_run_completed` to `commit_advance`.
+- `engine.next_step` gains the same keyword argument, so the stale-plan and no-plan fallbacks run the gate before anything is appended.
+- `_run_retrospective_learning_capture` raises the typed `MissionCompletionBlocked`. The bridge turns it into a decision that reads as a retrospective-gate refusal.
+- `_dn_capture_pre_speculative_state`, `_dn_rollback_buffered_run_state`, `_BufferingRuntimeEmitter` and their tests are deleted.
+- A run that is already terminal is not re-gated on a later poll, because the engine hook fires only on the transition into terminal.
+
+### D5 — Gate extensions (FR-006..FR-008, FR-019)
+
+- **Rule 1** also flags `open(..., "w")`, `write_text` and `write_bytes` whose target is a status or run log. It scans `src/runtime` with the run-log and run-state names. Every newly seen site is fixed: the consolidation bookkeeping projection rewrites the status log under the status lock; the lane auto-rebase's create-if-missing becomes an exclusive create. The git merge driver's output write is excluded by a stated structural rule (it writes the path git hands it).
+- **Rule 2** accepts a callable passed into a lock region only if its parameter is only ever called, never stored, returned or assigned.
+- **Rule 3** checks `mission_write_lock`'s first argument as well. It accepts only known Mission-directory-name expressions (`.name` of a directory, `mission_lock_key(...)`, `mission_write_lock_dir(...)`) and reports subscripts, calls and attributes containing "slug".
+- **Rule 4** (new) treats these as sinks: `write_meta`, `restore_meta_text`, `write_frontmatter`, `update_fields`, and `write_text`/`write_bytes`/`atomic_write` on `meta.json` or `tasks/WP*.md`. A sink must be inside a lock region, inside a registered locked helper (D2), or inside a status-core lock region. The status-core regions are `BookkeepingTransaction` and the emit lock, recognised structurally.
+- Migrations get no exemption. They write through the helpers.
+
+### D6 — Canonical runtime templates (FR-018, NFR-006)
+
+- The built-in tier resolves through `charter.activation.mission_type_profile_repository.builtin_missions_root()`, which `runtime` may already import. The two bare `import specify_cli` edges in `runtime_bridge_io` go away, the `""` ledger entry is removed, and the cap drops to 22.
+- The four `src/specify_cli/missions/<type>/mission-runtime.yaml` copies are reconciled into the pack and deleted. The deprecation banner goes.
+- **Reconciliation keeps behaviour.**
+  - The pack's `plan` template takes the `src` shape, because today the pack copy does not load.
+  - An `agent-profile` stays only on a step that already dispatches through composition. Discovery and documentation-accept lose theirs, so routing does not widen.
+  - A per-type test asserts that the planned step sequence and the dispatch route of every step equal today's, apart from the software-dev analyze step.
+
+### D7 — Analyze step (FR-016, FR-017)
+
+- The software-dev runtime template becomes `discovery → specify → plan → tasks → analyze → implement → review → accept`.
+- A new `analyze` guard in `_evaluate_software_dev_guards` reads an injected `analysis_currency` fact. That fact is a callable passed as a keyword argument from `next_cmd.decide_next` through `decide_next` into `DecideNextContext`, so the runtime gets it without importing specify_cli. The callable wraps `analysis_report.check_analysis_report_current`.
+- The callable is evaluated only when the current step is `analyze`.
+- On refusal the step is re-issued with `error_code` set to `ANALYSIS_REPORT_MISSING` or `ANALYSIS_REPORT_STALE`, and `guard_failures` naming each stale input.
+- The finalized-board override (`_dn_finalized_board_override`) must not jump past analyze. It gets a red test and a fix if it does (research R6).
+- In-flight runs: see Engineering Alignment.
+
+### D8 — Pack software-dev cleanup (FR-015, FR-022)
+
+Concrete list in research R7. All edits are to source files under `packs/built-in/missions`. The provenance ratchet baseline is lowered with its refresh command, `spec-kitty doctrine regenerate-graph` is run after the `step.yaml` and action-index changes, and every pinning test listed in R7 is updated.
+
+### D9 — Terminology and commitlint (FR-012..FR-014)
+
+- All five commit builders say "for mission". The finalize drift check accepts the old and new subjects (FR-013).
+- The CLI errors listed in R8 say "mission".
+- The FR-014 scan uses `ast` over commit-message arguments and error strings.
+- commitlint's planning-subject rule is extended to cover the scaffold, gap-analysis and generator-config subjects for both words. That rule rejects them today.
+
+### D10 — Glossary (FR-021)
+
+- topic branch is added. Mission and Mission Run are rewritten. feature branch becomes an alias of topic branch.
+- The changes go to `docs/context/orchestration.md`, the YAML seed, the built-in glossary pack and the generated contextive glossary, which is regenerated.
+- The seven inconsistencies listed in R9 are fixed.
+- The parity tests and the regenerate-graph check run after the pack edit.
 
 ## Project Structure
 
-### Documentation (this mission)
-
 ```
-kitty-specs/[###-mission]/
-├── plan.md              # This file (/spec-kitty.plan command output)
-├── research.md          # Phase 0 output (/spec-kitty.plan command)
-├── data-model.md        # Phase 1 output (/spec-kitty.plan command)
-├── quickstart.md        # Phase 1 output (/spec-kitty.plan command)
-├── contracts/           # Phase 1 output (/spec-kitty.plan command)
-└── tasks.md             # Phase 2 output (/spec-kitty.tasks command - NOT created by /spec-kitty.plan)
+src/specify_cli/status/mission_write.py          # mission_lock_key; mission_write_lock rekeyed (D1)
+src/specify_cli/missions/_read_path_resolver.py  # mission_write_lock_dir via the key (D1)
+src/specify_cli/mission_metadata.py              # locked_update_meta; setters; dead setters removed (D2)
+src/specify_cli/frontmatter.py                   # locked_update_frontmatter (D2)
+src/specify_cli/acceptance/__init__.py, acceptance/matrix.py, cli/commands/agent/issue_verdict.py, tasks/issue_matrix.py  # D2/D3
+src/specify_cli/cli/commands/agent/tasks_map_requirements.py, mission_finalize*.py      # D2
+src/specify_cli/{core/mission_creation_meta.py, tracker/origin.py, cli/commands/mission_type.py, doc_analysis/doc_state.py, consolidation/{phase_teardown,baseline}.py, consolidation/mission_number/bake.py, mission_loader/command.py, migration/*.py, upgrade/*.py}  # FR-020 writers
+src/runtime/next/runtime_bridge.py, runtime_bridge_io.py, runtime_bridge_retrospective.py, runtime_bridge_cores.py, runtime_bridge_engine.py, decision.py, _internal_runtime/engine.py  # D4/D6/D7
+src/specify_cli/cli/commands/next_cmd.py         # inject analysis currency (D7)
+src/specify_cli/missions/*/mission-runtime.yaml  # deleted (D6)
+packs/built-in/missions/{software-dev,documentation,research,plan}/mission-runtime.yaml  # reconciled (D6/D7)
+packs/built-in/missions/software-dev/**, packs/built-in/missions/mission-steps/software-dev/**  # cleanup (D8)
+commitlint.config.cjs; status/uninitialized_hint.py; task_utils/support.py; plan_validation.py; validate_*.py; mission_setup_plan.py; mission_finalize_planning_pin.py; core/mission_creation_commit.py  # D9
+docs/context/*.md; .kittify/glossaries/spec_kitty_core.yaml; packs/built-in/glossary_packs/spec-kitty-core.glossary-pack.yaml; src/specify_cli/.contextive/*.yml  # D10
+tests/architectural/test_mission_write_discipline.py   # Rules 1-4 (D5)
+tests/architectural/test_layer_rules.py, _baselines.yaml  # ledger 23 -> 22 (D6)
 ```
-
-### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this mission. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
-
-```
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
-
-tests/
-├── contract/
-├── integration/
-└── unit/
-
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
-
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
-
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
-```
-
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
-
-## Complexity Tracking
-
-*Fill ONLY if Charter Check has violations that must be justified*
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
 
 ## Implementation Concern Map
 
-*Include this section when the mission has multiple distinct architectural areas that inform how tasks are decomposed.*
+### IC-01 — Canonical lock key and meta.json writers
+- **Purpose**: one key for every door; every `meta.json` read-modify-write under it.
+- **Relevant requirements**: FR-001, FR-020 (meta families), US1, NFR-002, NFR-003
+- **Affected surfaces**: mission_write, _read_path_resolver, mission_metadata, acceptance, the FR-020 writer modules
+- **Sequencing/depends-on**: none
+- **Risks**: nesting under `ensure_vcs_locked` and the acceptance guard; a subprocess holding the parent's lock waits for the bounded timeout (edge case).
 
-> **Note**: Implementation concerns are NOT work packages and are NOT executable units.
-> `/spec-kitty.tasks` translates these into executable WPs — one concern may become
-> multiple WPs; multiple small concerns may merge into one WP. Do not label concerns
-> with WP-style IDs or sequencing language.
+### IC-02 — Frontmatter and matrix writers
+- **Purpose**: map-requirements, finalize and the matrix scaffold/helpers locked.
+- **Relevant requirements**: FR-002..FR-005, US2, US3
+- **Affected surfaces**: tasks_map_requirements, mission_finalize*, issue_matrix, acceptance/matrix, issue_verdict
+- **Sequencing/depends-on**: IC-01
+- **Risks**: finalize's long in-memory window; the restore must be compare-and-swap.
 
-### IC-01 — [Name]
+### IC-03 — Gate Rules 2, 3 and 4
+- **Purpose**: close the writer class by construction.
+- **Relevant requirements**: FR-006, FR-007, FR-019, NFR-004
+- **Affected surfaces**: tests/architectural/test_mission_write_discipline.py
+- **Sequencing/depends-on**: IC-01, IC-02
+- **Risks**: false positives on status-core regions; must be structural, not allowlisted.
 
-- **Purpose**: [One sentence: what this concern addresses and why it matters]
-- **Relevant requirements**: [FR-### refs from spec.md]
-- **Affected surfaces**: [File paths or module names this concern touches]
-- **Sequencing/depends-on**: [IC-## IDs this concern must follow, or "none"]
-- **Risks**: [Key coordination notes or implementation risks]
+### IC-04 — Runtime terminal gate and Rule 1
+- **Purpose**: the gate runs before completion on every path; the rollback is gone; Rule 1 sees whole-file rewrites and `src/runtime`.
+- **Relevant requirements**: FR-008..FR-011, US5
+- **Affected surfaces**: runtime_bridge*, engine, consolidation bookkeeping projection, lane auto-rebase, the gate
+- **Sequencing/depends-on**: none
+- **Risks**: behaviour change: an already-terminal run is not re-gated (accepted, US5-AS6).
 
-### IC-02 — [Name]
+### IC-05 — Canonical runtime templates and the analyze step
+- **Purpose**: `next` reads the pack, and the analyze step is guarded.
+- **Relevant requirements**: FR-016..FR-018, NFR-006, C-001, C-004, C-008
+- **Affected surfaces**: runtime_bridge_io, runtime_bridge_cores, decision, next_cmd, pack mission-runtime.yaml files, layer-rule ledger
+- **Sequencing/depends-on**: IC-04 (same runtime files)
+- **Risks**: agent-profile routing widening; the finalized-board override skipping analyze; in-flight drift.
 
-- **Purpose**: [One sentence]
-- **Relevant requirements**: [FR-### refs]
-- **Affected surfaces**: [Paths/modules]
-- **Sequencing/depends-on**: [IC-## or "none"]
-- **Risks**: [Notes]
+### IC-06 — Pack software-dev cleanup
+- **Purpose**: prompts and step definitions match the CLI.
+- **Relevant requirements**: FR-015, FR-022, SC-008, C-003
+- **Affected surfaces**: packs/built-in/missions/software-dev/**, mission-steps/software-dev/**, ratchet baseline, the pinning tests in R7
+- **Sequencing/depends-on**: IC-05 (prompts describe the new step)
+- **Risks**: shrink-only ratchet tightness; the regenerate-graph check.
+
+### IC-07 — Terminology and glossary
+- **Purpose**: "mission" in operator text; one glossary.
+- **Relevant requirements**: FR-012..FR-014, FR-021
+- **Affected surfaces**: see D9 and D10
+- **Sequencing/depends-on**: none
+- **Risks**: goldens and fixtures that assert the old subjects.
+
+## Complexity Tracking
+
+None.
+
+## Follow-ups (not in scope)
+
+- Retiring the remaining `src/specify_cli/missions` type directories (`mission.yaml`, `templates/`): #2652 slice 2+, #2661, #4822.
+- Serialising two concurrent runtime commits (#5854); git `index.lock` collisions (#5515, #5443).
