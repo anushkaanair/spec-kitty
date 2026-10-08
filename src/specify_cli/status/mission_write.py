@@ -7,8 +7,12 @@ unlinks a Mission's ``status.events.jsonl`` (pinned by the Mission write
 discipline gate), and the single way a non-status writer takes the lock that
 serialises those writes.
 
+* :func:`mission_lock_key` is the ONE key every per-Mission lock door takes: the
+  Mission directory name, or the coordination directory name ``<slug>-<mid8>`` for a
+  coordination-routed Mission, so the primary and coordination directories of one
+  Mission lock one file (mission-writer-followups plan D1, A1-A4).
 * :func:`mission_write_lock` is :func:`~specify_cli.status.locking.feature_status_lock`
-  keyed on the Mission directory name, re-entrant per thread.
+  keyed on :func:`mission_lock_key`, re-entrant per thread.
 * :func:`locked_rewrite_text` is a locked read-modify-write whose transform
   never sees a stale read.
 * :func:`capture_rollback_point` records the log size and ``status.json`` bytes
@@ -31,8 +35,9 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from enum import StrEnum
@@ -41,6 +46,10 @@ from typing import BinaryIO
 
 from kernel.atomic import atomic_write
 from kernel.git import GitCommandError, blob_at, run_git
+from specify_cli.core.constants import KITTY_SPECS_DIR
+from specify_cli.lanes.branch_naming import coordination_lock_dir_name
+from specify_cli.mission_metadata import load_meta_or_empty
+from specify_cli.missions._read_path_resolver import literal_primary_meta
 from specify_cli.status.locking import (
     BOUNDED_STATUS_LOCK_TIMEOUT_SECONDS,
     feature_status_lock,
@@ -61,6 +70,7 @@ __all__ = [
     "appended_event_ids",
     "capture_rollback_point",
     "locked_rewrite_text",
+    "mission_lock_key",
     "mission_write_lock",
     "rollback_io_failure",
     "rollback_events_log",
@@ -80,6 +90,98 @@ _HEAD = "HEAD"
 _NOT_A_REPOSITORY = b"not a git repository"
 
 
+_held_state = threading.local()
+
+
+def _held_keys() -> dict[tuple[str, str], str]:
+    """Per-thread map ``(lock root, directory name) -> lock key`` of the Mission locks this thread holds."""
+    held: dict[tuple[str, str], str] | None = getattr(_held_state, "keys", None)
+    if held is None:
+        held = {}
+        _held_state.keys = held
+    return held
+
+
+def _is_coordination_routed(meta: Mapping[str, object]) -> bool:
+    branch = meta.get("coordination_branch")
+    return isinstance(branch, str) and bool(branch.strip())
+
+
+def _optional_text(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _lock_name_from_meta(meta: Mapping[str, object], primary_name: str) -> str | None:
+    """The coordination lock key *meta* records, or ``None`` when the Mission is not coordination-routed."""
+    if not _is_coordination_routed(meta):
+        return None
+    return coordination_lock_dir_name(
+        _optional_text(meta.get("mission_slug")) or primary_name,
+        mission_id=_optional_text(meta.get("mission_id")),
+        mid8=_optional_text(meta.get("mid8")),
+        coordination_branch=str(meta["coordination_branch"]).strip(),
+    )
+
+
+def _lock_name_for_ad_hoc_dir(feature_dir: Path) -> str:
+    """A directory outside ``kitty-specs/``: its own ``meta.json`` is the only record there is."""
+    return _lock_name_from_meta(load_meta_or_empty(feature_dir), feature_dir.name) or feature_dir.name
+
+
+def _lock_name_for_dir(feature_dir: Path, root: Path) -> str:
+    """The lock key of the Mission whose primary or coordination directory is *feature_dir*.
+
+    A coordination directory is named by the key itself, so a directory whose canonical
+    primary ``meta.json`` does not route through coordination is keyed on its own name.
+    """
+    name = feature_dir.name
+    if feature_dir.parent.name != KITTY_SPECS_DIR:
+        return _lock_name_for_ad_hoc_dir(feature_dir)
+    return _lock_name_from_meta(literal_primary_meta(root, name), name) or name
+
+
+def mission_lock_key(feature_dir: Path, *, repo_root: Path | None = None) -> str:
+    """The lock key of the Mission that owns *feature_dir*: one key for every directory of one Mission.
+
+    Pure and Git-free. A coordination-routed Mission (``coordination_branch`` recorded in
+    its canonical primary ``meta.json``, never a lane worktree's copy) is keyed on its
+    coordination directory name ``<slug>-<mid8>``, whichever of its directories is passed:
+    the primary directory (``060-test``) and the coordination directory
+    (``060-test-01COORD0``) resolve one key, the one ``BookkeepingTransaction`` takes. Every
+    other Mission is keyed on ``feature_dir.name``.
+
+    While the calling thread holds a Mission lock, a nested call for the same Mission returns
+    the held key, so a writer that changes ``coordination_branch`` or ``mid8`` inside the hold
+    never takes a second lock.
+
+    Raises:
+        MissionLockKeyUnresolved: the Mission is coordination-routed but no mid8 resolves.
+    """
+    root = resolve_status_lock_root(feature_dir, repo_root)
+    held = _held_keys().get((os.path.realpath(root), feature_dir.name))
+    if held is not None:
+        return held
+    return _lock_name_for_dir(feature_dir, root)
+
+
+@contextmanager
+def _registered_hold(root: Path, directory_name: str, key: str) -> Iterator[None]:
+    """Record that this thread holds *key* for *directory_name* (and for a directory named *key*) until exit."""
+    held = _held_keys()
+    slots = [(os.path.realpath(root), directory_name), (os.path.realpath(root), key)]
+    previous = {slot: held.get(slot) for slot in slots}
+    for slot in slots:
+        held.setdefault(slot, key)
+    try:
+        yield
+    finally:
+        for slot, before in previous.items():
+            if before is None:
+                held.pop(slot, None)
+            else:
+                held[slot] = before
+
+
 @contextmanager
 def mission_write_lock(
     feature_dir: Path,
@@ -89,12 +191,15 @@ def mission_write_lock(
 ) -> Iterator[Path]:
     """Hold the Mission write lock for *feature_dir*; re-entrant per thread.
 
-    The lock is keyed on the Mission directory name (``feature_dir.name``) under
-    the git common dir of the canonical repo root, so every writer of the same
-    Mission converges on one lock file. A timeout raises
+    The lock is keyed on :func:`mission_lock_key` under the git common dir of the
+    canonical repo root, so every writer of the same Mission converges on one lock file,
+    whichever of the Mission's directories it holds. The key is resolved before the lock
+    is entered. A timeout raises
     :class:`~specify_cli.status.locking.FeatureStatusLockTimeoutError`.
     """
-    with feature_status_lock(resolve_status_lock_root(feature_dir, repo_root), feature_dir.name, timeout=timeout) as held:
+    root = resolve_status_lock_root(feature_dir, repo_root)
+    key = mission_lock_key(feature_dir, repo_root=root)
+    with feature_status_lock(root, key, timeout=timeout) as held, _registered_hold(root, feature_dir.name, key):
         yield held
 
 
@@ -144,8 +249,8 @@ class RollbackPoint:
 
 
 def _holds_mission_lock(feature_dir: Path, repo_root: Path | None) -> bool:
-    lock_path = feature_status_lock_path(resolve_status_lock_root(feature_dir, repo_root), feature_dir.name)
-    return holds_status_lock(lock_path)
+    root = resolve_status_lock_root(feature_dir, repo_root)
+    return holds_status_lock(feature_status_lock_path(root, mission_lock_key(feature_dir, repo_root=root)))
 
 
 def capture_rollback_point(feature_dir: Path, *, repo_root: Path | None = None) -> RollbackPoint:

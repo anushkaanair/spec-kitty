@@ -92,13 +92,14 @@ from specify_cli.coordination.legacy_resolution import (
     _coordination_branch_from_meta,
     _emit_legacy_warning_once,
     _is_legacy_mission,
-    _mission_specs_dir_name,
     _resolve_legacy_lane_destination,
+    _transaction_lock_key,
     _validate_safe_segment,
     _warrants_legacy_warning,
 )
 from specify_cli.coordination.legacy_resolution import (
     _legacy_warning_marker_path as _legacy_warning_marker_path,
+    _mission_specs_dir_name as _mission_specs_dir_name,
 )
 
 # WP09 (T052 / C-010): the confined-artifact orchestration helpers moved to
@@ -564,7 +565,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # transaction object; on any setup failure below, release it before
         # propagating the domain error.
         lock_root = owned.owned_root if owned is not None else repo_root
-        lock_cm = feature_status_lock(lock_root, _mission_specs_dir_name(mission_slug, mid8), timeout=timeout)
+        lock_cm = feature_status_lock(lock_root, _transaction_lock_key(mission_slug, mid8), timeout=timeout)
         try:
             lock_cm.__enter__()
         except FeatureStatusLockTimeoutError as exc:
