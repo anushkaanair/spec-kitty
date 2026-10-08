@@ -8,6 +8,8 @@ requirement_refs:
 - FR-012
 - FR-013
 - FR-014
+- NFR-005
+- C-006
 planning_base_branch: issue-5883-mission-writer-followups
 merge_target_branch: issue-5883-mission-writer-followups
 branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
@@ -16,6 +18,7 @@ subtasks:
 - T045
 - T046
 - T047
+- T061
 phase: Phase 5 - Wording
 history:
 - at: '2026-10-08T12:00:00Z'
@@ -50,6 +53,11 @@ owned_files:
 - tests/core/golden/**
 - tests/tasks/conftest.py
 - src/specify_cli/verify_enhanced.py
+- tests/core/test_mission_creation_probe_order.py
+- tests/core/test_mission_creation_fanout_commit_boundary.py
+- tests/specify_cli/cli/commands/agent/test_finalize_tasks_commit_surface.py
+- tests/specify_cli/cli/commands/agent/test_sc6_planning_placement_e2e.py
+- tests/cli/commands/test_agent_mission_commit_to_branch.py
 tags: []
 tracker_refs: []
 ---
@@ -69,10 +77,11 @@ The five planning commit builders and the operator-facing CLI errors say "missio
 - **T045**: Commit builders: finalize planning pin, `mission_setup_plan` (spec/plan setup, gap analysis, generator config), `core/mission_creation_commit`; the drift check accepts the old and new subjects (FR-013)
 - **T046**: CLI errors from R8 and C9; `FEATURE_CONTEXT_UNRESOLVED` stays (machine contract) and is filed as a follow-up
 - **T047**: commitlint: the planning-subject rule covers the scaffold, gap-analysis, generator-config and origin-ticket-binding subjects for both words; update tests and goldens that assert the old text (R8, C7)
+- **T061**: CLI-entry test: `spec-kitty agent mission finalize-tasks` on a fixture Mission writes a commit whose subject says "for mission" (FR-012)
 
 ## Notes and risks
 
-Golden and fixture files that assert the old subjects (R8, C7 wording pins) change in this WP. Find them with `grep -rn "for feature" tests`. `src/specify_cli/verify_enhanced.py` (`"   Feature: "`) is in scope. Handoff: `acceptance/__init__.py` and `mission_type.py` were last edited in WP02 or WP03, `mission_setup_plan.py` in WP03, and `implement_phases.py` in WP13.
+Golden and fixture files that assert the old subjects (R8, C7 wording pins) change in this WP. Find them with `grep -rn "for feature" tests`. `src/specify_cli/verify_enhanced.py` (`"   Feature: "`) is in scope. Handoff: `acceptance/__init__.py` and `mission_type.py` were last edited in WP02 or WP03, `mission_setup_plan.py` in WP03, and `implement_phases.py` in WP13. `tests/next/test_next_command_integration.py:556` asserts the old "Canonical status not found for feature" text but is owned by WP06; update that one assertion here and record the handoff in the Activity Log.
 
 ## Dependencies
 
@@ -93,6 +102,9 @@ WP03, WP04
   ```
   Commit after each subtask so a lost session loses nothing. Do not push; the orchestrator pushes.
 - **Status.** Mark each subtask with `spec-kitty agent tasks mark-status <Txxx> --status done --mission mission-writer-followups-01M4CYWW`. When the WP is complete, move it with `spec-kitty agent tasks move-task <WP> --to for_review --mission mission-writer-followups-01M4CYWW --note "<summary>"`.
+- **Pre-existing failures (charter).** If you hit a failure that is red on the base too and is not yours, do not chase it. Put the failing test id, the evidence that it is red on the base, and a proposed issue title in your final report; the orchestrator files the GitHub issue before work continues past it.
+- **Tracer files (charter standing order).** Append at least one finding per WP with `spec-kitty agent tracer-append --mission mission-writer-followups-01M4CYWW --category approach|design-decisions|tooling-friction --entry "..." --actor <you>`. Record red-first evidence under approach, non-obvious choices under design-decisions, and CLI friction under tooling-friction.
+- **Issue matrix.** Before moving the WP to for_review, record the verdict for each issue this WP finishes: `spec-kitty agent issue-verdict --mission mission-writer-followups-01M4CYWW --issue "#NNNN" --verdict in-mission --wp <WP> --actor <you>`. The issues are #5883 (writers and gate), #5884 (the runtime run log) and #5885 (planning flow and wording). The final WP of each issue's set records `fixed` instead.
 - **Sources only (C-003).** Edit `packs/built-in/...` sources, never the generated agent copies.
 
 ## Definition of done

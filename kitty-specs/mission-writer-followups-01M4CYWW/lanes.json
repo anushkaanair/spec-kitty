@@ -108,6 +108,7 @@
         "src/specify_cli/consolidation/phase_teardown.py",
         "src/specify_cli/coordination/commit_router.py",
         "src/specify_cli/coordination/coord_seed.py",
+        "src/specify_cli/coordination/legacy_resolution.py",
         "src/specify_cli/coordination/status_transition.py",
         "src/specify_cli/coordination/transaction.py",
         "src/specify_cli/core/mission_creation_commit.py",
@@ -163,14 +164,18 @@
         "src/specify_cli/verify_enhanced.py",
         "tests/architectural/_baselines.yaml",
         "tests/architectural/_builtin_pack_provenance_baseline.yaml",
+        "tests/architectural/dead_symbol_allowlist.yaml",
         "tests/architectural/test_layer_rules.py",
         "tests/architectural/test_mission_write_discipline.py",
         "tests/architectural/test_no_legacy_terminology.py",
         "tests/charter/fixtures/**",
         "tests/charter/test_compiler_charter_yaml.py",
+        "tests/cli/commands/test_agent_mission_commit_to_branch.py",
         "tests/contract/test_plan_mission_yaml_validates.py",
         "tests/contract/test_tasks_packages_prompt_guards.py",
         "tests/core/golden/**",
+        "tests/core/test_mission_creation_fanout_commit_boundary.py",
+        "tests/core/test_mission_creation_probe_order.py",
         "tests/doctrine/mission_step_contracts/test_contract_bootstrap_commands.py",
         "tests/doctrine/mission_step_contracts/test_shipped_contracts.py",
         "tests/doctrine/missions/test_mission_steps_layout.py",
@@ -199,6 +204,8 @@
         "tests/runtime/test_pack_runtime_template_parity.py",
         "tests/runtime/test_runtime_seam.py",
         "tests/runtime/test_terminal_gate_before_completion.py",
+        "tests/specify_cli/cli/commands/agent/test_finalize_tasks_commit_surface.py",
+        "tests/specify_cli/cli/commands/agent/test_sc6_planning_placement_e2e.py",
         "tests/specify_cli/cli/commands/test_analyze_surface_agreement.py",
         "tests/specify_cli/events/test_runtime_moments.py",
         "tests/specify_cli/missions/test_mission_template_consistency.py",
@@ -227,10 +234,10 @@
       "parallel_group": 0
     }
   ],
-  "computed_at": "2026-10-08T06:39:22.300339+00:00",
+  "computed_at": "2026-10-08T06:48:30.952417+00:00",
   "computed_from": "dependency_graph+ownership",
   "planning_artifact_wps": [
     "WP12"
   ],
-  "planning_commit_sha": "1802660c9a95369e0e78b9e3f96481eec7d9a2d2"
+  "planning_commit_sha": "58565866d2404324d63be33eaf92552e27516ae0"
 }

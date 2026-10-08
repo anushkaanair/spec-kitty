@@ -13,6 +13,8 @@ requirement_refs:
 - C-001
 - C-004
 - C-008
+- NFR-005
+- C-006
 planning_base_branch: issue-5883-mission-writer-followups
 merge_target_branch: issue-5883-mission-writer-followups
 branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
@@ -21,6 +23,7 @@ subtasks:
 - T026
 - T027
 - T029
+- T059
 phase: Phase 3 - Runtime
 history:
 - at: '2026-10-08T12:00:00Z'
@@ -83,6 +86,7 @@ The runtime resolves built-in runtime templates from `packs/built-in/missions` t
 - **T026**: Built-in tier via `builtin_missions_root()`, `PackRootNotFound` failing closed with a named error and a test; `mission_loader/command.py` switches to the same accessor and its `write_meta` goes through `locked_update_meta` (FR-020); both bare `import specify_cli` edges removed; the ledger entry removed, cap 23→22, and the `_baselines.yaml` justification updated (B8)
 - **T027**: Reconcile the pack runtime templates per B2: software-dev and plan take the src content; documentation and research stay byte-unchanged. Delete the four src `mission-runtime.yaml` copies and the deprecation banner. Move every test that hard-codes the src runtime path (the owned test list) to the pack path, then run `spec-kitty doctrine regenerate-graph` if the manifest hashes them (B8)
 - **T029**: Query mode loads `run_dir/mission_template_frozen.yaml`; the live path is used only for drift (B1); confirm the planner drift-skip keeps an in-flight software-dev run on its frozen order (FR-017)
+- **T059**: CLI-entry red test: edit a pack runtime-template fixture (a copied pack root) and show that `spec-kitty next` ignores it today and honours it after the change (FR-018)
 
 ## Notes and risks
 
@@ -107,6 +111,9 @@ WP05, WP02
   ```
   Commit after each subtask so a lost session loses nothing. Do not push; the orchestrator pushes.
 - **Status.** Mark each subtask with `spec-kitty agent tasks mark-status <Txxx> --status done --mission mission-writer-followups-01M4CYWW`. When the WP is complete, move it with `spec-kitty agent tasks move-task <WP> --to for_review --mission mission-writer-followups-01M4CYWW --note "<summary>"`.
+- **Pre-existing failures (charter).** If you hit a failure that is red on the base too and is not yours, do not chase it. Put the failing test id, the evidence that it is red on the base, and a proposed issue title in your final report; the orchestrator files the GitHub issue before work continues past it.
+- **Tracer files (charter standing order).** Append at least one finding per WP with `spec-kitty agent tracer-append --mission mission-writer-followups-01M4CYWW --category approach|design-decisions|tooling-friction --entry "..." --actor <you>`. Record red-first evidence under approach, non-obvious choices under design-decisions, and CLI friction under tooling-friction.
+- **Issue matrix.** Before moving the WP to for_review, record the verdict for each issue this WP finishes: `spec-kitty agent issue-verdict --mission mission-writer-followups-01M4CYWW --issue "#NNNN" --verdict in-mission --wp <WP> --actor <you>`. The issues are #5883 (writers and gate), #5884 (the runtime run log) and #5885 (planning flow and wording). The final WP of each issue's set records `fixed` instead.
 - **Sources only (C-003).** Edit `packs/built-in/...` sources, never the generated agent copies.
 
 ## Definition of done

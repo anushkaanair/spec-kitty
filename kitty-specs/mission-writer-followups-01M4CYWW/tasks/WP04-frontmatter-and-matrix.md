@@ -10,6 +10,8 @@ requirement_refs:
 - FR-005
 - FR-020
 - NFR-001
+- NFR-005
+- C-006
 planning_base_branch: issue-5883-mission-writer-followups
 merge_target_branch: issue-5883-mission-writer-followups
 branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
@@ -19,6 +21,7 @@ subtasks:
 - T017
 - T018
 - T019
+- T058
 phase: Phase 2 - Writers
 history:
 - at: '2026-10-08T12:00:00Z'
@@ -66,8 +69,9 @@ map-requirements, the finalize flush, the finalize write-scope restore, the issu
 - **T015**: Red-first: map-requirements overlap (FR-002); finalize erasing a concurrent frontmatter field and body note (FR-003, A9); the scaffold overwriting a verdict (FR-004); matrix helpers on the bare-directory coordination fixture, identifying key vs root as the cause (FR-005, A9)
 - **T016**: `locked_update_frontmatter` in `frontmatter.py`, preserving the body byte for byte; map-requirements uses it (re-read refs under the lock)
 - **T017**: Finalize flush applies its field delta to the freshly read frontmatter and body under the lock; the write-scope restore (rewrite and unlink branches) and `restore_meta_text` become compare-and-swap inside the lock and report kept files (A8); `mission_finalize_branch_contract.py` meta writes use `locked_update_meta`
-- **T018**: `scaffold_issue_matrix` exists-check and write in one hold; `acceptance/matrix.py` and `issue_verdict.py` lock through `mission_write_lock` keyed via WP01
+- **T018**: `scaffold_issue_matrix` exists-check and write in one hold; `acceptance/matrix.py` (re-read helper and `locked_acceptance_verdict_guard`, A13) and `issue_verdict.py` lock through `mission_write_lock` keyed via WP01
 - **T019**: Other frontmatter and `tasks.md` writers: `task_metadata_validation.py` (`validate-tasks` repair), `lanes/implement_support.py` `update_fields`, the frontmatter migrations (`backfill_ownership`, `strip_frontmatter`, `m_2_0_6_consistency_sweep` including its `tasks.md` write), and the finalize `tasks.md` write in `mission_finalize_bootstrap.py` (A10); the lane mirror in `emit.py` stays as it is (runtime-locked; WP15 recognizes it)
+- **T058**: CLI-entry overlap test: two overlapping `spec-kitty agent tasks map-requirements` invocations (via the Typer runner on two threads with an injected pause) keep both refs (FR-002, US2 through the CLI)
 
 ## Notes and risks
 
@@ -92,6 +96,9 @@ WP02
   ```
   Commit after each subtask so a lost session loses nothing. Do not push; the orchestrator pushes.
 - **Status.** Mark each subtask with `spec-kitty agent tasks mark-status <Txxx> --status done --mission mission-writer-followups-01M4CYWW`. When the WP is complete, move it with `spec-kitty agent tasks move-task <WP> --to for_review --mission mission-writer-followups-01M4CYWW --note "<summary>"`.
+- **Pre-existing failures (charter).** If you hit a failure that is red on the base too and is not yours, do not chase it. Put the failing test id, the evidence that it is red on the base, and a proposed issue title in your final report; the orchestrator files the GitHub issue before work continues past it.
+- **Tracer files (charter standing order).** Append at least one finding per WP with `spec-kitty agent tracer-append --mission mission-writer-followups-01M4CYWW --category approach|design-decisions|tooling-friction --entry "..." --actor <you>`. Record red-first evidence under approach, non-obvious choices under design-decisions, and CLI friction under tooling-friction.
+- **Issue matrix.** Before moving the WP to for_review, record the verdict for each issue this WP finishes: `spec-kitty agent issue-verdict --mission mission-writer-followups-01M4CYWW --issue "#NNNN" --verdict in-mission --wp <WP> --actor <you>`. The issues are #5883 (writers and gate), #5884 (the runtime run log) and #5885 (planning flow and wording). The final WP of each issue's set records `fixed` instead.
 - **Sources only (C-003).** Edit `packs/built-in/...` sources, never the generated agent copies.
 
 ## Definition of done

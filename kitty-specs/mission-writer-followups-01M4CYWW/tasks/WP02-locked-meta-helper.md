@@ -9,6 +9,8 @@ requirement_refs:
 - FR-020
 - NFR-001
 - NFR-002
+- NFR-005
+- C-006
 planning_base_branch: issue-5883-mission-writer-followups
 merge_target_branch: issue-5883-mission-writer-followups
 branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
@@ -38,6 +40,7 @@ owned_files:
 - src/specify_cli/cli/commands/_coordination_doctor.py
 - src/specify_cli/lanes/implement_support.py
 - tests/specify_cli/test_locked_meta_writers.py
+- tests/architectural/dead_symbol_allowlist.yaml
 tags: []
 tracker_refs: []
 ---
@@ -56,7 +59,7 @@ Every `mission_metadata` read-modify-write and accept's direct restamp writes ru
 - **T006**: Red-first: two overlapping `meta.json` writers (for example `record_acceptance` vs `set_target_branch`, `set_origin_ticket` vs `record_discard`) lose a write today (US1)
 - **T007**: `locked_update_meta(feature_dir, mutate, *, repo_root=None, timeout=BOUNDED)` in `mission_metadata.py`; every setter (`record_acceptance`, `record_discard`, `flatten_coordination_metadata`, `clear_merge_metadata`, `set_target_branch`, `set_origin_ticket`, `set_documentation_state`, `set_vcs_lock`) uses it; `restore_meta_text` gets a compare-and-swap variant for WP04 (A8)
 - **T008**: Remove `set_change_mode`, `clear_coordination_metadata` and `set_purpose_summary` with their `dead_symbol_allowlist.yaml` entries and tests
-- **T009**: acceptance: the planning-only `record_acceptance` call and the direct restamp writes go through the helper; `locked_acceptance_verdict_guard` locks through `mission_write_lock` keyed via WP01 (FR-005)
+- **T009**: acceptance: the planning-only `record_acceptance` call and the direct restamp writes go through the helper (the verdict guard in `acceptance/matrix.py` is rekeyed in WP04, A13)
 - **T010**: Callers: `core/mission_creation_meta.py`, `tracker/origin.py`, `cli/commands/mission_type.py` (discard, flatten, reopen), `_coordination_doctor.py`, `lanes/implement_support.py` (`set_vcs_lock` under `ensure_vcs_locked`, unbounded wait unchanged)
 
 ## Notes and risks
@@ -82,6 +85,9 @@ WP13
   ```
   Commit after each subtask so a lost session loses nothing. Do not push; the orchestrator pushes.
 - **Status.** Mark each subtask with `spec-kitty agent tasks mark-status <Txxx> --status done --mission mission-writer-followups-01M4CYWW`. When the WP is complete, move it with `spec-kitty agent tasks move-task <WP> --to for_review --mission mission-writer-followups-01M4CYWW --note "<summary>"`.
+- **Pre-existing failures (charter).** If you hit a failure that is red on the base too and is not yours, do not chase it. Put the failing test id, the evidence that it is red on the base, and a proposed issue title in your final report; the orchestrator files the GitHub issue before work continues past it.
+- **Tracer files (charter standing order).** Append at least one finding per WP with `spec-kitty agent tracer-append --mission mission-writer-followups-01M4CYWW --category approach|design-decisions|tooling-friction --entry "..." --actor <you>`. Record red-first evidence under approach, non-obvious choices under design-decisions, and CLI friction under tooling-friction.
+- **Issue matrix.** Before moving the WP to for_review, record the verdict for each issue this WP finishes: `spec-kitty agent issue-verdict --mission mission-writer-followups-01M4CYWW --issue "#NNNN" --verdict in-mission --wp <WP> --actor <you>`. The issues are #5883 (writers and gate), #5884 (the runtime run log) and #5885 (planning flow and wording). The final WP of each issue's set records `fixed` instead.
 - **Sources only (C-003).** Edit `packs/built-in/...` sources, never the generated agent copies.
 
 ## Definition of done

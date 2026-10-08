@@ -8,6 +8,8 @@ requirement_refs:
 - FR-017
 - C-001
 - C-004
+- NFR-005
+- C-006
 planning_base_branch: issue-5883-mission-writer-followups
 merge_target_branch: issue-5883-mission-writer-followups
 branch_strategy: Planning artifacts for this mission were generated on issue-5883-mission-writer-followups. During /spec-kitty.implement this WP may branch from a dependency-specific base, but completed changes must merge back into issue-5883-mission-writer-followups unless the human explicitly redirects the landing branch.
@@ -17,6 +19,7 @@ subtasks:
 - T032
 - T033
 - T056
+- T060
 phase: Phase 3 - Runtime
 history:
 - at: '2026-10-08T12:00:00Z'
@@ -64,6 +67,7 @@ The software-dev runtime order becomes `discovery → specify → plan → tasks
 - **T032**: Inject the analysis-currency callable inside the shared `next_cmd.decide_next` wrapper and route `orchestrator_api/decision_verbs.py` through it (B4); the bridge computes the verdict into `status_facts` only for `analyze` or the board override, so the cores module stays pure (B5)
 - **T033**: `analyze` guard in `_evaluate_software_dev_guards`, error codes in `decision.py`, the precedence rule (a prompt-resolution failure wins), and the board override in decide and query modes (B3, B5)
 - **T056**: Update the tests that pin the software-dev tasks→implement order and go red; check whether the `runtime_bridge_composition.py` tasks→implement advance can skip analyze, and add a red test and a fix if it can. Record every other test that turns red, and its fix, in the Activity Log
+- **T060**: CLI-entry test: `spec-kitty next --json` after tasks issues analyze with `ANALYSIS_REPORT_MISSING`; after `record-analysis`, `next --result success` advances to implement (SC-005, US7)
 
 ## Notes and risks
 
@@ -88,6 +92,9 @@ WP14
   ```
   Commit after each subtask so a lost session loses nothing. Do not push; the orchestrator pushes.
 - **Status.** Mark each subtask with `spec-kitty agent tasks mark-status <Txxx> --status done --mission mission-writer-followups-01M4CYWW`. When the WP is complete, move it with `spec-kitty agent tasks move-task <WP> --to for_review --mission mission-writer-followups-01M4CYWW --note "<summary>"`.
+- **Pre-existing failures (charter).** If you hit a failure that is red on the base too and is not yours, do not chase it. Put the failing test id, the evidence that it is red on the base, and a proposed issue title in your final report; the orchestrator files the GitHub issue before work continues past it.
+- **Tracer files (charter standing order).** Append at least one finding per WP with `spec-kitty agent tracer-append --mission mission-writer-followups-01M4CYWW --category approach|design-decisions|tooling-friction --entry "..." --actor <you>`. Record red-first evidence under approach, non-obvious choices under design-decisions, and CLI friction under tooling-friction.
+- **Issue matrix.** Before moving the WP to for_review, record the verdict for each issue this WP finishes: `spec-kitty agent issue-verdict --mission mission-writer-followups-01M4CYWW --issue "#NNNN" --verdict in-mission --wp <WP> --actor <you>`. The issues are #5883 (writers and gate), #5884 (the runtime run log) and #5885 (planning flow and wording). The final WP of each issue's set records `fixed` instead.
 - **Sources only (C-003).** Edit `packs/built-in/...` sources, never the generated agent copies.
 
 ## Definition of done
