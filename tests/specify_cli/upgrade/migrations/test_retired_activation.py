@@ -336,7 +336,7 @@ def test_still_resolves_via_org_pack_is_left_entirely_untouched(tmp_path: Path) 
     ids=["doctrine-org-packs", "doctrine-org-single-pack", "organisation-packs"],
 )
 def test_org_pack_declared_under_a_retired_key_still_counts(tmp_path: Path, org_config: str) -> None:
-    """This migration runs before the rc6 cutover rewrites the retired org keys (#3732 FR-011).
+    """The retired org keys can still be on disk when this engine's ``detect()`` runs (#3732 FR-011).
 
     The org-pack registry no longer reads them, so the check reads them itself:
     an id an org pack declared there still carries is left untouched.

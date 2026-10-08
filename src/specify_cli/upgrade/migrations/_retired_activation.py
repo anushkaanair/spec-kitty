@@ -358,10 +358,13 @@ def _retired_key_org_roots(project_path: Path) -> list[Path]:
     """Existing org pack roots a config still declares under a retired key.
 
     The retired keys are ``doctrine.org`` (a ``packs`` list or the single-pack
-    form) and ``organisation_packs``. This engine runs before the 4.0.0rc6
-    charter-pack cutover rewrites them, and the org-pack registry no longer reads
-    them (#3732 FR-011), so an org pack declared there is read here: a migration
-    is a reader of legacy state by design.
+    form) and ``organisation_packs``. The org-pack registry no longer reads them
+    (#3732 FR-011), and this engine cannot rely on the 4.0.0rc6 charter-pack
+    cutover having rewritten them: that migration is ``runs_first`` when it
+    applies, but upgrade selection evaluates ``detect()`` of every pending
+    migration before any of them applies, so a retired key can still be on disk
+    here. An org pack declared there is therefore read here: a migration is a
+    reader of legacy state by design.
     """
     from charter.drg import OrgPackConfig  # noqa: PLC0415 -- public door; lazy for the reason given above
 

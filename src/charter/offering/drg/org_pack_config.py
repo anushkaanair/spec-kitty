@@ -227,9 +227,9 @@ class OrgPackConfig(BaseModel):
         """Coerce to ``Path`` WITHOUT expanding ``~``/env-vars.
 
         The stored value must remain exactly what the operator wrote —
-        including any ``${VAR}``/``$VAR``/``~`` tokens, unexpanded — so
-        that :func:`save_pack_registry` round-trips it verbatim. Expansion
-        happens only at resolution time, in :meth:`effective_root`.
+        including any ``${VAR}``/``$VAR``/``~`` tokens, unexpanded, so
+        the model never freezes an expanded path. Expansion happens only at
+        resolution time, in :meth:`effective_root`.
         """
         return Path(str(value))
 
