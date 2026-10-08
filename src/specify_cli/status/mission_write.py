@@ -211,7 +211,8 @@ class RollbackOutcome:
         """Operator text for a refusal (empty when the rollback succeeded)."""
         if self.refusal is None:
             return ""
-        return f"{STATUS_ROLLBACK_REFUSED}: {self.refusal.value}; {self.events_path} left unchanged. Inspect with: git diff HEAD -- {self.events_path}"
+        state = "may be partly rewritten" if self.refusal is RollbackRefusal.IO_ERROR else "left unchanged"
+        return f"{STATUS_ROLLBACK_REFUSED}: {self.refusal.value}; {self.events_path} {state}. Inspect with: git diff HEAD -- {self.events_path}"
 
 
 def _refuse(events_path: Path, refusal: RollbackRefusal) -> RollbackOutcome:
