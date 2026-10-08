@@ -10,9 +10,9 @@ disagree about what "unmigrated" means.
 Exempt (``contracts/cli.md`` "Unmigrated project"): ``upgrade`` (the remedy),
 ``init``, ``--version``, ``--help``, the git merge drivers (``merge-driver-*``:
 git runs them inside the checkout being merged, which is the documented remedy
-for a pre-upgrade lane) and the hook entry points (``live-work``,
+for a pre-upgrade lane) and the hook entry points (``live-work hook``,
 ``session-start``, ``session-stop``, ``commit-guard-hook``: git and harness
-plumbing that must keep exiting 0).
+plumbing that must keep exiting 0; the rest of ``live-work`` is gated).
 
 Cost (research/runtime-seams.md §3): the predicate's two ``stat`` calls and one
 small read per checked root, plus an ``lstat`` per directory while finding the
@@ -42,7 +42,10 @@ __all__ = [
 LEGACY_CHARTER_STATE = "LEGACY_CHARTER_STATE"
 
 #: Top-level commands the gate never refuses.
-EXEMPT_COMMANDS: frozenset[str] = frozenset({"upgrade", "init", "live-work", "session-start", "session-stop", "commit-guard-hook"})
+EXEMPT_COMMANDS: frozenset[str] = frozenset({"upgrade", "init", "session-start", "session-stop", "commit-guard-hook"})
+#: Hook entry points inside an otherwise gated group (AR-S3): only the harness
+#: hook of ``live-work`` is plumbing; ``matrix``/``install``/``watch`` are gated.
+_EXEMPT_COMMAND_PATHS: tuple[tuple[str, ...], ...] = (("live-work", "hook"),)
 #: Prefix of the git merge-driver commands (all exempt).
 _EXEMPT_PREFIX = "merge-driver-"
 _HELP_FLAGS = frozenset({"--help", "-h"})
@@ -116,8 +119,15 @@ def _same_directory(left: Path, right: Path) -> bool:
         return left == right
 
 
+def _is_exempt_hook_path(argv: Sequence[str]) -> bool:
+    positional = tuple(arg for arg in argv if not arg.startswith("-"))
+    return any(positional[: len(path)] == path for path in _EXEMPT_COMMAND_PATHS)
+
+
 def _is_exempt(invoked_subcommand: str | None, argv: Sequence[str]) -> bool:
     if invoked_subcommand is not None and (invoked_subcommand in EXEMPT_COMMANDS or invoked_subcommand.startswith(_EXEMPT_PREFIX)):
+        return True
+    if _is_exempt_hook_path(argv):
         return True
     if any(arg in _HELP_FLAGS for arg in argv):
         return True

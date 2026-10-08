@@ -224,6 +224,7 @@ def test_clean_project_passes_without_running_the_hook(tmp_path: Path) -> None:
     [
         *((name, (name,)) for name in sorted(EXEMPT_COMMANDS)),
         ("merge-driver-meta", ("merge-driver-meta", "b", "o", "t")),
+        ("live-work", ("live-work", "hook", "claude")),
         ("charter", ("charter", "list", "--help")),
         ("charter", ("charter", "-h")),
         (None, ("--version",)),
@@ -232,6 +233,13 @@ def test_clean_project_passes_without_running_the_hook(tmp_path: Path) -> None:
 )
 def test_exempt_invocations_pass_on_a_legacy_project(tmp_path: Path, sub: str | None, argv: tuple[str, ...]) -> None:
     _check(_project(tmp_path, layout="legacy_project_root"), sub=sub, argv=argv)
+
+
+@pytest.mark.parametrize("argv", [("live-work", "matrix"), ("live-work", "install", "claude"), ("live-work",)], ids=["matrix", "install", "bare"])
+def test_only_the_live_work_hook_is_exempt(tmp_path: Path, argv: tuple[str, ...]) -> None:
+    """AR-S3 exempts the hook entry point, not the whole ``live-work`` group."""
+    with pytest.raises(SystemExit):
+        _check(_project(tmp_path, layout="legacy_project_root"), sub="live-work", argv=argv)
 
 
 def test_a_late_version_flag_is_not_an_exemption(tmp_path: Path) -> None:
