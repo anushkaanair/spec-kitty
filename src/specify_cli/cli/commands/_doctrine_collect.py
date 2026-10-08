@@ -70,6 +70,7 @@ __all__ = [
     "_collect_profile_health",
     "_run_cross_grain_check",
     "_run_operating_procedures_check",
+    "_run_retired_governance_key_check",
     "_attach_pack_health",
     "_build_pack_entries",
     "_collect_doctrine_collisions",
@@ -1078,23 +1079,69 @@ def _read_project_selections(repo_root: Path) -> dict[str, list[str]]:
     charter_yaml = repo_root / CHARTER_YAML
     if not charter_yaml.exists():
         return selections
+    from charter.activation.pack_context import ActiveCharterConfigError
+
     try:
         from charter.activation.charter_yaml_io import load_charter_yaml
         from charter.activation.sync import require_canonical_governance
 
         data = load_charter_yaml(charter_yaml)
         governance_block = (data or {}).get("governance") or {}
-        # Canonical key only: a retired ``governance.doctrine`` raises (the CLI-root
-        # LEGACY_CHARTER_STATE gate refuses such a project first); the diagnostic
-        # then degrades to empty selections below instead of crashing.
+        # Canonical key only. A retired ``governance.doctrine`` raises; the CLI-root
+        # LEGACY_CHARTER_STATE gate does NOT catch it (its predicate never reads
+        # charter.yaml), so :func:`_run_retired_governance_key_check` reports it
+        # as a finding and the selections here stay empty.
         doctrine_block = require_canonical_governance(governance_block, source=charter_yaml).get("charter") or {}
         for kind in _SELECTION_KIND_PLURALS:
             value = doctrine_block.get(f"selected_{kind}")
             if isinstance(value, list):
                 selections[kind] = [str(v) for v in value]
+    except ActiveCharterConfigError:
+        # Reported by _run_retired_governance_key_check, not swallowed.
+        return {kind: [] for kind in _SELECTION_KIND_PLURALS}
     except Exception:  # noqa: BLE001 — diagnostics must never crash on malformed yaml
         pass
     return selections
+
+
+#: The retired governance selection key, as the doctor finding names it.
+_RETIRED_GOVERNANCE_KEY = "governance.doctrine"
+
+
+def _run_retired_governance_key_check(report: DoctrineHealthReport, repo_root: Path) -> None:
+    """Report a retired ``governance.doctrine`` key in ``charter.yaml`` (#3732, FR-011).
+
+    The selections reader cannot use it (it is the retired key), and the CLI-root
+    gate does not see it (its predicate never reads ``charter.yaml``), so this is
+    where an operator learns the project's selections are not being read.
+    Mirrors :func:`_run_cross_grain_check`: the message goes to
+    ``org_drg["errors"]`` (the report turns unhealthy, RC=1) and a structured
+    ``org_drg["retired_governance_key"]`` finding names the file, the key and the
+    remedy for the JSON and human surfaces. A missing or malformed ``charter.yaml``
+    is not this check's finding (read-only; never raises).
+    """
+    from charter.activation.charter_yaml_io import load_charter_yaml
+    from charter.activation.pack_context import ActiveCharterConfigError
+    from charter.activation.sync import require_canonical_governance
+
+    org_drg = report.org_drg
+    charter_yaml = repo_root / CHARTER_YAML
+    if not isinstance(org_drg, dict) or not charter_yaml.exists():
+        return
+    try:
+        governance = (load_charter_yaml(charter_yaml) or {}).get("governance")
+    except Exception:  # noqa: BLE001 — a malformed charter.yaml is reported by other surfaces
+        return
+    if not isinstance(governance, dict):
+        return
+    try:
+        require_canonical_governance(governance, source=charter_yaml)
+    except ActiveCharterConfigError as exc:
+        existing = org_drg.get("errors")
+        errors = list(existing) if isinstance(existing, list) else []
+        errors.append(exc.body)
+        org_drg["errors"] = errors
+        org_drg["retired_governance_key"] = {"file": str(charter_yaml), "key": _RETIRED_GOVERNANCE_KEY, "message": exc.body}
 
 
 def _read_org_required(repo_root: Path) -> dict[str, list[str]]:

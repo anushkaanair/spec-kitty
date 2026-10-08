@@ -32,7 +32,7 @@ def _write_governance_with_selections(repo_root: Path) -> None:
     """Write a minimal charter.yaml declaring one selected styleguide.
 
     consolidate-charter-bundle (#2773) retired the compiled ``governance.yaml``
-    and folded selections under ``charter.yaml``'s ``governance.doctrine``
+    and folded selections under ``charter.yaml``'s ``governance.charter``
     section, which is what ``_read_project_selections`` now reads.
     """
     charter_dir = repo_root / ".kittify" / "charter"
@@ -133,3 +133,57 @@ def test_doctor_doctrine_json_includes_selections_block(tmp_path: Path) -> None:
     for entry in selections["styleguides"]:
         if entry["id"] == "my-project-styleguide":
             assert "source" in entry
+
+
+def _write_retired_governance_key(repo_root: Path) -> Path:
+    charter_dir = repo_root / ".kittify" / "charter"
+    charter_dir.mkdir(parents=True, exist_ok=True)
+    (charter_dir / "charter.md").write_text("# Project Charter\n", encoding="utf-8")
+    path = charter_dir / "charter.yaml"
+    path.write_text("governance:\n  doctrine:\n    selected_directives:\n      - PROJECT_DIRECTIVE_01\n", encoding="utf-8")
+    return path
+
+
+def test_doctor_doctrine_reports_a_retired_governance_key(tmp_path: Path) -> None:
+    """#3732 FR-011: a retired ``governance.doctrine`` is reported (human), never dropped in silence.
+
+    The CLI-root gate does not read ``charter.yaml``, so this diagnostic is reachable.
+    """
+    _write_kittify_skeleton(tmp_path)
+    path = _write_retired_governance_key(tmp_path)
+
+    with contextlib.chdir(tmp_path):
+        result = runner.invoke(doctor_app, ["doctrine"], catch_exceptions=False)
+
+    assert result.exit_code == 1, result.stdout
+    text = " ".join(result.stdout.split())
+    assert "governance.doctrine" in text and "spec-kitty upgrade" in text, result.stdout
+    assert path.name in text, result.stdout
+
+
+def test_doctor_doctrine_json_reports_a_retired_governance_key(tmp_path: Path) -> None:
+    _write_kittify_skeleton(tmp_path)
+    path = _write_retired_governance_key(tmp_path)
+
+    with contextlib.chdir(tmp_path):
+        result = runner.invoke(doctor_app, ["doctrine", "--json"], catch_exceptions=False)
+
+    assert result.exit_code == 1, result.stdout
+    payload = json.loads(result.stdout)
+    finding = payload["org_drg"]["retired_governance_key"]
+    assert finding["file"] == str(path)
+    assert finding["key"] == "governance.doctrine"
+    assert "spec-kitty upgrade" in finding["message"]
+    assert any("governance.doctrine" in error for error in payload["org_drg"]["errors"])
+    assert payload["profile_health"]["healthy"] is False
+
+
+def test_doctor_doctrine_canonical_key_has_no_retired_key_finding(tmp_path: Path) -> None:
+    """Control: the canonical key yields no finding."""
+    _write_kittify_skeleton(tmp_path)
+    _write_governance_with_selections(tmp_path)
+
+    with contextlib.chdir(tmp_path):
+        result = runner.invoke(doctor_app, ["doctrine", "--json"], catch_exceptions=False)
+
+    assert "retired_governance_key" not in json.loads(result.stdout)["org_drg"]
