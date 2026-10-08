@@ -26,7 +26,9 @@ def analysis_checkouts(request, monkeypatch, tmp_path, protected):
         charter = root / ".kittify/charter/charter.yaml"
         charter.parent.mkdir(parents=True)
         charter.write_text(f"mission_type_activations: [software-dev]\nmarker: {marker}\n", encoding="utf-8")
-        git(root, "add", str(charter))
+        config = root / ".kittify/config.yaml"
+        config.write_text(config.read_text(encoding="utf-8") + "charter: .kittify/charter/charter.yaml\n", encoding="utf-8")
+        git(root, "add", str(charter), str(config))
         git(root, "commit", "-qm", "fixture: analysis charter")
     monkeypatch.setattr(resolver, "get_kittify_home", lambda: tmp_path / "runtime-home")
     monkeypatch.delenv("SPECIFY_REPO_ROOT", raising=False)
@@ -179,3 +181,80 @@ def test_material_race_keeps_written_report_unqualified(analysis_checkouts, monk
     assert git(owned, "rev-parse", "HEAD") == head
     assert snapshot(sibling) == sibling_before
     assert not check_analysis_report_current(owned / "kitty-specs" / SLUG, owned).ok
+
+
+@pytest.mark.parametrize("protected", [False, True])
+def test_ordinary_owned_dirt_refuses_before_write(analysis_checkouts, monkeypatch):
+    primary, owned, sibling = analysis_checkouts
+    (owned / "app.py").write_text("pending application change\n", encoding="utf-8")
+    monkeypatch.chdir(owned)
+    before = tuple(snapshot(root) for root in (primary, owned, sibling))
+    result = record(owned, explicit=False, report_only=False)
+    assert result.exit_code == 1, result.output
+    assert json.loads(result.output)["error_code"] == "DIRTY_WORKTREE"
+    assert tuple(snapshot(root) for root in (primary, owned, sibling)) == before
+
+
+@pytest.mark.parametrize("protected", [True])
+@pytest.mark.parametrize("report_only", [False, True])
+def test_owned_destination_symlink_refuses_before_write(analysis_checkouts, monkeypatch, report_only):
+    primary, owned, sibling = analysis_checkouts
+    foreign = sibling / "foreign-report.md"
+    foreign.write_text("preserve foreign report\n", encoding="utf-8")
+    (owned / REPORT).symlink_to(foreign)
+    monkeypatch.chdir(owned)
+    before = tuple(snapshot(root) for root in (primary, owned, sibling))
+    result = record(owned, explicit=True, report_only=report_only)
+    assert result.exit_code == 1, result.output
+    assert json.loads(result.output)["error_code"] == "OWNED_MISSION_PATH_REFUSED"
+    assert tuple(snapshot(root) for root in (primary, owned, sibling)) == before
+
+
+@pytest.mark.parametrize("protected", [True])
+def test_transaction_rejects_foreign_mission_directory(analysis_checkouts):
+    from specify_cli.cli.commands._owned_checkout import resolve_owned_or_adopt
+    from specify_cli.core.owned_mission import LIFECYCLE_OWNED_TOPOLOGIES
+    from specify_cli.git.report_transaction import record_report_transaction
+
+    primary, owned, sibling = analysis_checkouts
+    fact = resolve_owned_or_adopt(primary, owned, SLUG, cwd=sibling, allowed_topologies=LIFECYCLE_OWNED_TOPOLOGIES)
+    assert fact is not None
+    before = tuple(snapshot(root) for root in (primary, owned, sibling))
+    outcome = record_report_transaction(
+        repo_root=owned, feature_dir=primary / "kitty-specs" / SLUG, body=BODY,
+        analyzer_agent=None, target_branch=fact.write_branch, owned=fact,
+    )
+    assert not outcome.payload["success"]
+    assert outcome.payload["commit_status"] == "failed_before_write"
+    assert outcome.payload["error_code"] == "OWNED_MISSION_PATH_REFUSED"
+    assert tuple(snapshot(root) for root in (primary, owned, sibling)) == before
+
+
+@pytest.mark.parametrize("protected", [True])
+@pytest.mark.parametrize("fallback", ["markdown", "absent"])
+def test_canonical_charter_deletion_refuses_before_write(analysis_checkouts, monkeypatch, fallback):
+    primary, owned, sibling = analysis_checkouts
+    if fallback == "markdown":
+        markdown = primary / ".kittify/charter/charter.md"
+        markdown.write_text("# Canonical charter fallback\n", encoding="utf-8")
+        git(primary, "add", str(markdown))
+        git(primary, "commit", "-qm", "fixture: charter fallback")
+    (primary / ".kittify/charter/charter.yaml").unlink()
+    monkeypatch.chdir(owned)
+    before = tuple(snapshot(root) for root in (primary, owned, sibling))
+    result = record(owned, explicit=True, report_only=True)
+    assert result.exit_code == 1, result.output
+    assert json.loads(result.output)["error_code"] == "DIRTY_ANALYSIS_INPUT"
+    assert tuple(snapshot(root) for root in (primary, owned, sibling)) == before
+
+
+@pytest.mark.parametrize("protected", [True])
+def test_unselected_canonical_markdown_dirt_is_unrelated(analysis_checkouts, monkeypatch):
+    primary, owned, sibling = analysis_checkouts
+    (primary / ".kittify/charter/charter.md").write_text("# Unselected pending charter\n", encoding="utf-8")
+    monkeypatch.chdir(owned)
+    before = snapshot(primary), snapshot(sibling)
+    result = record(owned, explicit=True, report_only=True)
+    assert result.exit_code == 0, result.output
+    assert (snapshot(primary), snapshot(sibling)) == before
+    assert check_analysis_report_current(owned / "kitty-specs" / SLUG, owned).ok
