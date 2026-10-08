@@ -1,4 +1,4 @@
-"""``doctor doctrine`` reports the retired doctrine layouts it no longer reads (#3732, FR-011).
+"""``doctor charter-packs`` reports the retired doctrine layouts it no longer reads (#3732, FR-011).
 
 The nested org-pack layout ``<pack>/doctrine/<plural>/<layer>/`` and the
 repo-root ``doctrine/`` fallback candidate were read before the cutover; now
@@ -32,7 +32,7 @@ def _project(root: Path) -> Path:
 
 def _doctor_json(root: Path) -> tuple[int, dict[str, object]]:
     with contextlib.chdir(root):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"], catch_exceptions=False)
     return result.exit_code, json.loads(result.stdout)
 
 
@@ -62,7 +62,7 @@ def test_nested_layout_is_rendered_in_the_human_output(tmp_path: Path) -> None:
     write_org_packs(project, [{"name": "acme", "local_path": pack}])
 
     with contextlib.chdir(project):
-        result = runner.invoke(doctor_app, ["doctrine"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs"], catch_exceptions=False)
 
     text = " ".join(result.stdout.split())
     assert result.exit_code == 1

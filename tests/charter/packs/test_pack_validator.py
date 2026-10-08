@@ -954,7 +954,7 @@ class TestAssetManifestValidation:
 class TestProfileSkippedDiagnostics:
     """FR-002: ``pack validate`` surfaces ``AgentProfileRepository``'s
     post-merge profile-skip diagnostics inline (``skipped_profiles()``),
-    not only via the separate, undocumented ``spec-kitty doctor doctrine
+    not only via the separate, undocumented ``spec-kitty doctor charter-packs
     --json`` command.
 
     This is additive wiring (AC-4), not a new validation engine: the checks
@@ -989,7 +989,7 @@ class TestProfileSkippedDiagnostics:
         Before this WP, ``pack_validator.py`` never calls
         ``AgentProfileRepository``/``skipped_profiles()`` at all, so this
         assertion fails — the only surface for this diagnostic today is the
-        separate ``spec-kitty doctor doctrine --json`` command.
+        separate ``spec-kitty doctor charter-packs --json`` command.
         """
         profile_path = _write_agent_profile_yaml(
             tmp_path,

@@ -1,4 +1,4 @@
-"""WP08 — ``doctor doctrine`` health report tests (FR-008/009/010, NFR-001).
+"""WP08 — ``doctor charter-packs`` health report tests (FR-008/009/010, NFR-001).
 
 Covers:
 - ``PackHealth`` / ``DoctrineHealthReport`` derived health (I-H1 / FR-010):
@@ -248,7 +248,7 @@ def test_doctor_doctrine_json_reports_false_healthy_fixed(
         "specify_cli.cli.commands.doctor.locate_project_root",
         return_value=repo_with_invalid_project_profile,
     ):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"])
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"])
 
     # WP01 (C5): an invalid profile makes the report unhealthy → RC=1.
     assert result.exit_code == 1, result.output
@@ -331,7 +331,7 @@ def test_doctor_doctrine_human_and_json_share_one_report(
     with patch.object(doctor_mod, "_collect_profile_health", _counting), patch.object(
         doctor_mod, "locate_project_root", return_value=repo_with_invalid_project_profile
     ):
-        result = runner.invoke(doctor_mod.app, ["doctrine", "--json"])
+        result = runner.invoke(doctor_mod.app, ["charter-packs", "--json"])
     # WP01 (C5): the fixture's invalid profile makes the report unhealthy → RC=1.
     assert result.exit_code == 1, result.output
     # The report is built exactly once per invocation (single source).
@@ -493,7 +493,7 @@ def test_doctor_doctrine_json_inline_ref_unhealthy_and_rc1(
         "specify_cli.cli.commands.doctor.locate_project_root",
         return_value=repo_with_inline_ref_org_profile,
     ):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"])
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"])
 
     # C5: loud RC=1 over a hidden RC=0.
     assert result.exit_code == 1, result.output
@@ -547,7 +547,7 @@ def test_doctor_doctrine_json_healthy_exits_zero(
         "specify_cli.cli.commands.doctor.locate_project_root",
         return_value=clean,
     ):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"])
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"])
 
     payload = json.loads(result.output)
     assert payload["profile_health"]["healthy"] is True

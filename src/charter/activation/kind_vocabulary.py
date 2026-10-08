@@ -483,7 +483,7 @@ def resolve_artifact_urn(
         f"Searched layers: {_searched_layers(kind, org_roots, layer_roots)}. "
         f"Check activated_{kind.plural} in the charter.yaml activation store "
         f"selected by `.kittify/config.yaml` (or its legacy inline activations) for a stale or "
-        f"misspelled entry, or run `spec-kitty doctor doctrine` to verify the "
+        f"misspelled entry, or run `spec-kitty doctor charter-packs` to verify the "
         f"doctrine corpus (including any org packs) is intact."
     )
 
@@ -665,7 +665,7 @@ def resolve_config_id(
         f"Searched layers: {_searched_layers(kind, org_roots, layer_roots)}. "
         f"Check activated_{kind.plural} in the charter.yaml activation store "
         f"selected by `.kittify/config.yaml` (or its legacy inline activations) for a stale or "
-        f"misspelled entry, or run `spec-kitty doctor doctrine` to verify the "
+        f"misspelled entry, or run `spec-kitty doctor charter-packs` to verify the "
         f"doctrine corpus (including any org packs) is intact."
     )
 

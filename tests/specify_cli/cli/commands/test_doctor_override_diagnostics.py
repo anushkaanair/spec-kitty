@@ -1,6 +1,6 @@
-"""WP08 (#2082): ``doctor doctrine`` flags unsanctioned built-in DRG overrides.
+"""WP08 (#2082): ``doctor charter-packs`` flags unsanctioned built-in DRG overrides.
 
-C-005 red-first through the **public** ``doctor doctrine --json`` surface (NOT
+C-005 red-first through the **public** ``doctor charter-packs --json`` surface (NOT
 the promoted predicate API — that is WP07's surface). C-007 realistic org-pack
 fixtures: a real on-disk ``drg/fragment.yaml`` pack layout (read by
 ``load_org_drg``) overriding a real shipped built-in URN. NFR-001 no-org-packs
@@ -143,19 +143,19 @@ def _write_consumer_file(repo_root: Path, text: str) -> None:
 
 
 def _run_doctrine_json(repo_root: Path) -> tuple[int, dict[str, object]]:
-    """Drive ``doctor doctrine --json`` and return ``(exit_code, payload)``."""
+    """Drive ``doctor charter-packs --json`` and return ``(exit_code, payload)``."""
     from specify_cli.cli.commands.doctor import app as doctor_app
 
     with patch(
         "specify_cli.cli.commands.doctor.locate_project_root",
         return_value=repo_root,
     ):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"])
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"])
     try:
         payload = json.loads(result.output)
     except json.JSONDecodeError as exc:  # pragma: no cover - failure diagnostic
         pytest.fail(
-            f"doctor doctrine --json did not produce valid JSON: {exc}\n"
+            f"doctor charter-packs --json did not produce valid JSON: {exc}\n"
             f"output: {result.output!r}"
         )
     return result.exit_code, payload
@@ -336,14 +336,14 @@ _UNHEALTHY_MESSAGE = "expected RC=1 / unhealthy"
 
 
 def _run_doctrine_human(repo_root: Path) -> tuple[int, str]:
-    """Drive the human ``doctor doctrine`` surface and return ``(exit_code, output)``."""
+    """Drive the human ``doctor charter-packs`` surface and return ``(exit_code, output)``."""
     from specify_cli.cli.commands.doctor import app as doctor_app
 
     with patch(
         "specify_cli.cli.commands.doctor.locate_project_root",
         return_value=repo_root,
     ):
-        result = runner.invoke(doctor_app, ["doctrine"])
+        result = runner.invoke(doctor_app, ["charter-packs"])
     return result.exit_code, result.output
 
 
@@ -780,7 +780,7 @@ def test_rich_markup_in_paths_and_reasons_is_printed_literally(tmp_path: Path) -
 # -- FR-012 no-org-packs output unchanged -----------------------------------
 
 _NO_PACKS_HUMAN = """\
-No org doctrine configured.
+No org charter packs configured.
 Add a 'charter_packs.org' block to .kittify/config.yaml to register a pack.
 
 Selections (active globally-selected artifacts):

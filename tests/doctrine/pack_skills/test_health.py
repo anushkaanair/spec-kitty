@@ -93,7 +93,7 @@ def test_collect_degrades_on_hard_load_failure(repo_root: Path) -> None:
 
 def _doctor_json(root: Path) -> tuple[int, dict[str, Any]]:
     with patch("specify_cli.cli.commands.doctor.locate_project_root", return_value=root):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"])
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"])
     return result.exit_code, json.loads(result.output)
 
 

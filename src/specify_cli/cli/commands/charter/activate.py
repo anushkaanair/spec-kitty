@@ -401,12 +401,12 @@ def _render_tension_warnings(repo_root: Path) -> None:
     """Surface unreconciled tension findings as activate-time warnings (FR-010).
 
     Calls the SAME scan :func:`charter.activation.consistency_check.scan_unreconciled_tensions`
-    that ``spec-kitty charter pack consistency-check`` uses (single canonical
+    that ``spec-kitty charter consistency-check`` uses (single canonical
     authority, contracts/tension-finding.md SC-001) so this warning and that
     JSON surface can never render a tension pair differently.
 
     Builds its own fully-populated :class:`ProjectContext` via
-    :meth:`ProjectContext.from_repo` (matching ``pack.py``'s consistency-check
+    :meth:`ProjectContext.from_repo` (matching ``consistency_check.py``'s
     command) rather than reusing the caller's ``ctx_project`` -- the
     ``activate_cmd``/``deactivate_cmd`` local is a bare
     ``ProjectContext(repo_root=repo_root)`` with ``pack_context=None``, which

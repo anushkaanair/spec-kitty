@@ -7,7 +7,7 @@ import pytest
 
 from charter.activation.synthesizer.manifest import load_yaml, verify
 from charter.offering.artifact_kinds import ArtifactKind, PROJECT_KIND_DIRS
-from specify_cli.cli.commands.doctrine import _STUB_TEMPLATES
+from specify_cli.cli.commands.charter.authoring import _STUB_TEMPLATES
 
 pytestmark = pytest.mark.unit
 

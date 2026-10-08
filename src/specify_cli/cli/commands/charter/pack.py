@@ -16,7 +16,6 @@ from rich.markup import escape
 from rich.table import Table
 from specify_cli.cli.console import console
 
-from charter.activation.invocation_context import ProjectContext
 from charter.activation.preset_application import PresetApplicationError, find_offering_pack, load_pack_preset
 from charter.packs import OfferingPack, PresetFormatError, discover_presets, list_offering_packs
 from specify_cli.cli.commands.charter._coded_errors import render_coded_error, render_preset_format_error
@@ -28,38 +27,6 @@ charter_pack_app = typer.Typer(
     help="Charter pack management commands.",
     no_args_is_help=True,
 )
-
-
-@charter_pack_app.command("consistency-check")
-def consistency_check_cmd(
-    json_output: bool = typer.Option(False, "--json", help="Output as JSON."),
-    repo_root: Path = typer.Option(Path("."), hidden=True),
-) -> None:
-    """Run consistency check against activated doctrine artifacts (FR-011)."""
-    from charter.activation.consistency_check import run_consistency_check  # noqa: PLC0415
-
-    ctx = ProjectContext.from_repo(repo_root)
-    report = run_consistency_check(ctx)
-    if json_output:
-        typer.echo(report.to_json())
-    else:
-        if report.coherent:
-            console.print("[green]Charter pack is coherent.[/green]")
-        else:
-            console.print("[red]Consistency issues found:[/red]")
-            for ref in report.unknown_references:
-                console.print(f"  [red]Unknown reference:[/red] {ref}")
-            for ref in report.missing_from_doctrine:
-                console.print(f"  [yellow]Missing from charter.offering:[/yellow] {ref}")
-            for v in report.kind_violations:
-                console.print(f"  [red]Kind violation:[/red] {v}")
-            for ref in report.reference_id_divergences:
-                console.print(f"  [red]Reference ID divergence:[/red] {ref}")
-            for kind in report.graph_kind_gaps:
-                console.print(f"  [red]Graph kind gap:[/red] {kind}")
-            for s in report.suggestions:
-                console.print(f"  [dim]Suggestion:[/dim] {s}")
-    raise typer.Exit(0 if report.coherent else 1)
 
 
 #: Name of the project layer's row (spec Key Entities: it ships no presets).

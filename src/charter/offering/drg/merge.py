@@ -840,7 +840,7 @@ def _warn_dangling_org_endpoints(
             "any merged layer. The edge is kept (the endpoint may belong to a "
             "sibling pack this merge did not load) but it resolves to nothing "
             "here — check the token for a typo, or configure the pack that "
-            "declares it. `spec-kitty doctor doctrine` reports this as an error.",
+            "declares it. `spec-kitty doctor charter-packs` reports this as an error.",
             source_marker,
             urn,
         )

@@ -1,4 +1,4 @@
-"""CLI tests for the FR-018 Selections section in ``spec-kitty doctor doctrine``.
+"""CLI tests for the FR-018 Selections section in ``spec-kitty doctor charter-packs``.
 
 These tests cover the *functional* contract:
 
@@ -66,7 +66,7 @@ def test_doctor_doctrine_renders_selections_header(tmp_path: Path) -> None:
     _write_governance_with_selections(tmp_path)
 
     with contextlib.chdir(tmp_path):
-        result = runner.invoke(doctor_app, ["doctrine"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs"], catch_exceptions=False)
 
     assert result.exit_code == 0, result.stdout
     assert "Selections (active globally-selected artifacts)" in result.stdout
@@ -78,7 +78,7 @@ def test_doctor_doctrine_empty_kinds_render_as_none(tmp_path: Path) -> None:
     _write_governance_with_selections(tmp_path)
 
     with contextlib.chdir(tmp_path):
-        result = runner.invoke(doctor_app, ["doctrine"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs"], catch_exceptions=False)
 
     assert result.exit_code == 0, result.stdout
     # paradigms, tactics, toolguides etc were not selected — they appear
@@ -93,7 +93,7 @@ def test_doctor_doctrine_lists_declared_project_selections(tmp_path: Path) -> No
     _write_governance_with_selections(tmp_path)
 
     with contextlib.chdir(tmp_path):
-        result = runner.invoke(doctor_app, ["doctrine"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs"], catch_exceptions=False)
 
     assert result.exit_code == 0, result.stdout
     # The id appears under styleguides; the source annotation MUST be one of
@@ -109,7 +109,7 @@ def test_doctor_doctrine_json_includes_selections_block(tmp_path: Path) -> None:
     _write_governance_with_selections(tmp_path)
 
     with contextlib.chdir(tmp_path):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"], catch_exceptions=False)
 
     assert result.exit_code == 0, result.stdout
     payload = json.loads(result.stdout)
@@ -153,7 +153,7 @@ def test_doctor_doctrine_reports_a_retired_governance_key(tmp_path: Path) -> Non
     path = _write_retired_governance_key(tmp_path)
 
     with contextlib.chdir(tmp_path):
-        result = runner.invoke(doctor_app, ["doctrine"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs"], catch_exceptions=False)
 
     assert result.exit_code == 1, result.stdout
     text = " ".join(result.stdout.split())
@@ -166,7 +166,7 @@ def test_doctor_doctrine_json_reports_a_retired_governance_key(tmp_path: Path) -
     path = _write_retired_governance_key(tmp_path)
 
     with contextlib.chdir(tmp_path):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"], catch_exceptions=False)
 
     assert result.exit_code == 1, result.stdout
     payload = json.loads(result.stdout)
@@ -184,6 +184,6 @@ def test_doctor_doctrine_canonical_key_has_no_retired_key_finding(tmp_path: Path
     _write_governance_with_selections(tmp_path)
 
     with contextlib.chdir(tmp_path):
-        result = runner.invoke(doctor_app, ["doctrine", "--json"], catch_exceptions=False)
+        result = runner.invoke(doctor_app, ["charter-packs", "--json"], catch_exceptions=False)
 
     assert "retired_governance_key" not in json.loads(result.stdout)["org_drg"]

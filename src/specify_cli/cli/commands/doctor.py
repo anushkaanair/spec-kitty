@@ -1072,15 +1072,16 @@ def mission_state(
 
 
 # ---------------------------------------------------------------------------
-# WP07 T035 + T048: `spec-kitty doctor doctrine` — org-layer snapshot health.
+# WP07 T035 + T048: `spec-kitty doctor charter-packs` — org-layer snapshot health
+# (formerly `doctor doctrine`; renamed by mission charter-pack-cutover-01M491G6, FR-006).
 # ---------------------------------------------------------------------------
 
 
-@app.command(name="doctrine")
-def doctrine_check(
+@app.command(name="charter-packs")
+def charter_packs_check(
     json_output: Annotated[bool, typer.Option("--json", help="Machine-readable JSON output")] = False,
 ) -> None:
-    """Check org doctrine snapshot status and list installed pack artifacts.
+    """Check org charter pack snapshot status and list installed pack artifacts.
 
     Exit code reflects health (WP01, operator directive: loud over hidden): the
     command exits **1 when the report is unhealthy** and 0 only when healthy
@@ -1093,20 +1094,20 @@ def doctrine_check(
 
     Override governance (FR-010 / FR-012): when org packs are configured, any
     ``org:``-provenance override of a built-in DRG node that is NOT sanctioned
-    by ``.kittify/doctrine/replaceable-builtins.yaml`` or by the overriding
+    by ``.kittify/charter-packs/replaceable-builtins.yaml`` or by the overriding
     pack's own pack-root ``replaceable-builtins.yaml`` is reported as an
     ``unsanctioned_overrides`` finding and flips the report unhealthy (RC=1).
     A pack sanction applies only to overrides that same pack contributes, and
     the consumer file can withdraw it with ``revoked_pack_sanctions``. Sanctioned
     overrides and their source are listed as ``sanctioned_overrides``.
-    Project-tier (``.kittify/doctrine/``) overrides of built-ins are
-    intentionally **ungoverned** — project doctrine is the trusted operator tier
+    Project-tier (``.kittify/charter-packs/``) overrides of built-ins are
+    intentionally **ungoverned** — the project layer is the trusted operator tier
     and is not gated by the consumer-facing allowlist; only org-tier overrides
     are adjudicated.
 
     Examples:
-        spec-kitty doctor doctrine
-        spec-kitty doctor doctrine --json
+        spec-kitty doctor charter-packs
+        spec-kitty doctor charter-packs --json
     """
     from charter.drg import load_pack_registry
 

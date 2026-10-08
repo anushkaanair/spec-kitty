@@ -2,8 +2,8 @@
 
 WP05 (mission ``unify-charter-activation-surfaces-01KX5SJ9``). Before this WP,
 ``charter.activation.consistency_check.run_consistency_check`` was reachable only from
-the CLI (``spec-kitty charter pack consistency-check``, wired at
-``src/specify_cli/cli/commands/charter/pack.py:31-47``). NFR-002 requires the
+the CLI (``spec-kitty charter consistency-check``, wired at
+``src/specify_cli/cli/commands/charter/consistency_check.py``). NFR-002 requires the
 fail-closed config<->derived parity guard to bite in the test suite too, not
 only when an operator remembers to run the CLI by hand -- this module is that
 entry point (T019), plus the non-vacuity self-tests (T020) that prove each
@@ -163,7 +163,7 @@ def test_this_project_charter_pack_is_coherent() -> None:
     """The guard runs against this project's own config/doctrine/DRG.
 
     Previously this only happened when an operator ran
-    ``spec-kitty charter pack consistency-check`` by hand; this test makes
+    ``spec-kitty charter consistency-check`` by hand; this test makes
     it a suite-tier gate (NFR-002) so a #2524-style divergence fails
     locally, not only at CI or on manual invocation.
     """

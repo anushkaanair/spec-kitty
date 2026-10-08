@@ -1,4 +1,4 @@
-"""Integration tests for WP07: provenance, doctor doctrine, and lint advisories.
+"""Integration tests for WP07: provenance, doctor charter-packs, and lint advisories.
 
 Covers T037 of mission ``layered-doctrine-org-layer-01KRNPEE``.
 
@@ -6,7 +6,7 @@ These tests exercise the full org-layer flow end-to-end:
 
 * `charter context --json` surfaces ``source`` provenance per artifact and an
   ``org_charter`` block.
-* `spec-kitty doctor doctrine` reports configured packs, version, and counts.
+* `spec-kitty doctor charter-packs` reports configured packs, version, and counts.
 * `charter lint` registers org-layer advisory checkers and surfaces a finding
   when an org pack overrides a shipped artifact.
 """
@@ -107,7 +107,7 @@ class TestOrgCharterJsonBlock:
 
 
 class TestDoctorDoctrineCommand:
-    """`spec-kitty doctor doctrine` reports configured packs."""
+    """`spec-kitty doctor charter-packs` reports configured packs."""
 
     def test_no_org_configured(self, tmp_path: Path) -> None:
         from specify_cli.cli.commands.doctor import (

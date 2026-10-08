@@ -1,4 +1,4 @@
-"""``spec-kitty doctrine asset`` — the operator surface over ASSET resolution.
+"""``spec-kitty charter pack asset`` — the operator surface over ASSET resolution.
 
 WP05 (``doctrine-delivery-reachability``). Two read-only commands let an
 operator see and resolve shipped/overlay doctrine assets, reading exclusively
@@ -14,8 +14,9 @@ consumer repository; there is no auto-install path. Assets are resolved from
 package data (the built-in tier) plus the project/org overlays when the command
 runs inside a project.
 
-The subapp is registered onto the ``doctrine`` group at the WP03 anchor in
-:mod:`specify_cli.cli.commands.doctrine`.
+The subapp is registered under ``spec-kitty charter pack`` by
+:mod:`specify_cli.cli.commands.charter._app` (mission
+charter-pack-cutover-01M491G6, FR-006; moved from ``_doctrine_asset.py``).
 """
 
 from __future__ import annotations
@@ -160,7 +161,7 @@ def asset_path(
     asset_id: str = typer.Argument(
         ...,
         metavar="ASSET_ID",
-        help="Identifier of the asset to resolve (see `doctrine asset list`).",
+        help="Identifier of the asset to resolve (see `charter pack asset list`).",
     ),
     json_output: bool = typer.Option(False, "--json", help=_JSON_OPTION_HELP),
 ) -> None:

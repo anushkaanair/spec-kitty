@@ -1102,7 +1102,7 @@ class TestQualifiedEndpointsAreCheckedOnceEveryLayerIsIn:
         from a legitimate reference into a sibling pack the caller did not load
         (``charter lint`` merges org fragments against an EMPTY built-in graph
         on purpose). Escalation to an error belongs to the caller that holds a
-        complete graph — see the ``doctor doctrine`` coverage.
+        complete graph — see the ``doctor charter-packs`` coverage.
         """
         fragment = _fragment(
             [{"id": "mine", "kind": "directives"}],

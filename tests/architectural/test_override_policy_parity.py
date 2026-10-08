@@ -1,4 +1,4 @@
-"""Parity gate: ``doctor doctrine`` and the built-in-override gate share ONE policy loader.
+"""Parity gate: ``doctor charter-packs`` and the built-in-override gate share ONE policy loader.
 
 SC-005 / FR-013 (#5767). The consumer allowlist, each pack's own sanction and the
 consumer's revocations are combined in exactly one place,

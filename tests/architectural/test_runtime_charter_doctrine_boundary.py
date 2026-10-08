@@ -102,7 +102,7 @@ _FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures" / "doctrine_boundar
 _LAZY_BASELINE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset(
     {
         # #3179: wrapped sole-door service construction for asset operations.
-        ("src/specify_cli/cli/commands/_doctrine_asset.py", "charter.offering.service"),
+        ("src/specify_cli/cli/commands/charter/pack_asset.py", "charter.offering.service"),
         # #3179: wrapped raw service for unfiltered diagnostic repositories.
         ("src/specify_cli/cli/commands/_doctrine_collect.py", "charter.offering.service"),
         # #3179: existing operating-procedure diagnostics, pending facade migration.
