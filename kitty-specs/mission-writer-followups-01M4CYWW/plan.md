@@ -46,7 +46,7 @@ This Mission finishes what PR #5890 started, in three areas.
 `specify_cli.status.mission_write.mission_lock_key(feature_dir) -> str` is pure and git-free. It reads `meta.json` from the given directory: if the Mission is coordination-routed (`coordination_branch` recorded) and a mid8 is recorded, it returns `coord_mission_dir_name(slug, mid8)`. Otherwise it returns `feature_dir.name`.
 - `mission_write_lock(feature_dir)` keys on `mission_lock_key(feature_dir)`.
 - `mission_write_lock_dir(repo_root, handle)` resolves the directory with the existing read-only resolver and returns `repo_root/kitty-specs/<key>`.
-- `BookkeepingTransaction`'s `_mission_specs_dir_name` is asserted equal to it by a test for primary-without-mid8, coordination and flat Missions. It already computes the same composition, so only a test is added there, not a code change.
+- `BookkeepingTransaction`'s `_mission_specs_dir_name` (in `coordination/legacy_resolution.py`) is routed through the same function (amendment A1/A3 supersede the earlier "only a test" wording).
 - The key is computed before the lock is entered and is passed down; it is never resolved inside the lock.
 
 ### D2 — Locked meta and frontmatter helpers
@@ -214,7 +214,8 @@ None.
   - A bare `.name` is no longer accepted.
 - **A7: Rules 1 and 4, target tracking.**
   - Within a function, names assigned from `EVENTS_FILENAME`, `"status.events.jsonl"`, `"meta.json"`, `META_FILENAME`, `"run.events.jsonl"` or `"state.json"` are tracked through assignments and `/` joins.
-  - The sinks are truncate, `write_text`, `write_bytes`, `open(..., "w"/"x"/"a"/"r+")`, `os.replace` and `shutil.move` onto a target, and `atomic_write`.
+  - The sinks are truncate, `write_text`, `write_bytes`, `open(..., "w"/"x"/"r+")`, `shutil.move` onto a target, and a whole-file `os.replace`/`atomic_write` onto a target.
+  - Structural non-sinks (amended after the analysis, binding): an append-only `open(..., "a")` (the engine's `_append_event`, `status/store.py`'s canonical append) and the tmp-then-`os.replace` publish of a freshly built snapshot whose content is not derived from re-reading the target (the engine's `_write_snapshot`). Each gets a near-miss test; a replace whose source was read from the target is still a sink.
   - `rebuild_state.py:777` and `migrate_lifecycle_envelope.py:250-272` are dispositioned explicitly: they are locked, or excluded by a stated structural rule.
   - Each variant gets a synthetic offender.
   - The merge-driver exclusion applies to Rule 4 as well.
@@ -228,6 +229,7 @@ None.
   - `tasks.md` becomes a Rule 4 sink.
   - Line numbers are re-derived at implement time (research line numbers are indicative).
 - **A11: Rule 2 escapes.** A reference to the parameter other than as the function of a call counts as an escape. That includes passing it as an argument or keyword (`Thread(target=f)`, `submit(f)`, `partial(f)`) and capturing it in a nested def or lambda.
+- **A13: matrix verdict guard ownership.** `locked_acceptance_verdict_guard` lives in `acceptance/matrix.py`, so its rekey is done in WP04 with the other matrix helpers.
 - **A12: NFR-003 measurement.** Warm the `git_common_dir` cache first, then count the change in subprocess calls. `mission_write_lock_dir` stays off the hot path of a writer that already has `feature_dir`.
 
 ### Lens B — runtime, templates, analyze, config parity

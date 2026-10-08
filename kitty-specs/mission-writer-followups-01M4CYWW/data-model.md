@@ -2,16 +2,18 @@
 
 This Mission adds no persisted schema. It adds one key function, two locked helpers, one injected runtime fact and two error codes. Everything it writes is already persisted under an existing shape.
 
-## Mission lock key (D1)
+## Mission lock key (D1, amended by A1–A4)
 
-| Input | Rule | Key |
-|-------|------|-----|
-| `meta.json` records `coordination_branch` **and** `mid8` | coordination-routed | `coord_mission_dir_name(mission_slug, mid8)` |
-| anything else (flat, primary-only, legacy primary dir without mid8, unreadable `meta.json`) | primary | `feature_dir.name` |
+| Input (read from the canonical primary `meta.json`) | Key |
+|-------|-----|
+| `coordination_branch` recorded, mid8 resolvable by the transaction cascade (`meta.mid8`, then `mission_id[:8]`, then the slug tail) | `coord_mission_dir_name(mission_slug, mid8)` |
+| `coordination_branch` recorded, no resolvable mid8 | typed error (no silent fallback, no trailing-dash key) |
+| no `coordination_branch` (flat, primary-only) or no `meta.json` | `feature_dir.name` |
 
-- `mission_lock_key(feature_dir: Path) -> str` is pure and git-free: it reads only `feature_dir/meta.json`. An unreadable or missing `meta.json` falls back to `feature_dir.name`. That fallback is exactly the pre-change key, so no writer moves to a new lock file without evidence.
-- Invariant (NFR-002): for every Mission, `mission_lock_key(primary_dir) == mission_lock_key(coord_dir) == BookkeepingTransaction._mission_specs_dir_name`.
-- The key is computed before the lock is entered and passed down; it is never resolved while holding the lock.
+- `mission_lock_key(feature_dir) -> str` is git-free. It reads `meta.json` through the read-path resolver's canonical primary copy, never a lane worktree's copy.
+- Invariant (A1): for every Mission, `mission_lock_key(primary_dir) == mission_lock_key(coord_dir) == BookkeepingTransaction._mission_specs_dir_name`, and every per-Mission lock caller passes this key.
+- Hold stability (A4): while a thread holds a Mission lock, nested entries for the same Mission reuse the held key from a thread-local, so a writer that changes `coordination_branch` or `mid8` inside the hold never takes a second lock.
+- The uncontended cost (NFR-003): one lock acquisition and no subprocess once the `git_common_dir` cache is warm.
 
 ## Locked helpers (D2)
 
