@@ -121,6 +121,51 @@ def test_pin_restore_must_not_pad_a_shrunk_log_with_nul_bytes(mission: Path, roo
     assert b"\x00" not in events.read_bytes()
 
 
+def _run_coord_arm(mission: Path, root: Path, monkeypatch: pytest.MonkeyPatch, *, commit_error: Exception, emitter_commits: bool) -> BaseException:
+    """Run the coord fallback arm with a commit that fails; return the error that propagates out of it."""
+    from types import SimpleNamespace
+
+    identity: Any = SimpleNamespace(repo_root=root, owned=None)
+    seam = SimpleNamespace(write_dir=lambda _kind: SimpleNamespace(path=mission))
+    monkeypatch.setattr(st, "_canonical_coord_mission_slug", lambda *_a: "demo")
+    monkeypatch.setattr(st, "_capture_coord_tail", lambda *_a: None)  # the fixture rows are not full events
+    monkeypatch.setattr(st, "placement_seam", lambda *_a, **_k: seam)
+
+    def _failing_commit(**_kwargs: object) -> None:
+        raise commit_error
+
+    monkeypatch.setattr(st, "_commit_status_artifacts_to_coord", _failing_commit)
+
+    def _emit(coord_fd: Path) -> str:
+        _append(coord_fd / EVENTS, _row("01B"))
+        if emitter_commits:
+            _commit_all(root, "another writer committed the row")
+        return "emitted"
+
+    try:
+        st._emit_on_coord_then_commit(identity, "demo", root, emit=_emit, repo_root=root)
+    except RuntimeError as exc:
+        return exc
+    pytest.fail("the injected commit failure did not surface")
+
+
+def test_coord_arm_appends_a_refused_rollback_to_the_commit_error(mission: Path, root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """F7: the coord fallback arm surfaces STATUS_ROLLBACK_REFUSED on the error it re-raises (it only logged it)."""
+    error = _run_coord_arm(mission, root, monkeypatch, commit_error=RuntimeError("coord commit failed"), emitter_commits=True)
+
+    assert "coord commit failed" in str(error)
+    assert STATUS_ROLLBACK_REFUSED in str(error)
+    assert RollbackRefusal.TAIL_ALREADY_COMMITTED.value in str(error)
+    assert "01B" in (mission / EVENTS).read_text(encoding="utf-8")
+
+
+def test_coord_arm_leaves_the_commit_error_alone_when_the_rollback_succeeds(mission: Path, root: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    error = _run_coord_arm(mission, root, monkeypatch, commit_error=RuntimeError("coord commit failed"), emitter_commits=False)
+
+    assert str(error) == "coord commit failed"
+    assert (mission / EVENTS).read_text(encoding="utf-8") == _row("01A")
+
+
 # --- lock and capture ---------------------------------------------------------------------
 
 

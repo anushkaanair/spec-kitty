@@ -78,6 +78,7 @@ from specify_cli.status.locking import (
 from specify_cli.status.mission_write import (
     RollbackOutcome,
     RollbackPoint,
+    append_refusal_to_error,
     capture_rollback_point,
     mission_write_lock,
     rollback_io_failure,
@@ -526,7 +527,6 @@ def _emit_on_coord_then_commit(
     with coord_status_lock(identity.repo_root, coord_fd):
         point = _snapshot_coord_status_artifacts(coord_fd, identity.repo_root)
         pre_size = point.pre_event_size
-        committed = False
         try:
             result = emit(coord_fd)
             stream = _capture_coord_tail(coord_fd, pre_size)
@@ -536,16 +536,16 @@ def _emit_on_coord_then_commit(
                 coord_worktree=coord_worktree,
                 coord_feature_dir=coord_fd,
             )
-            committed = True
-        except SafeCommitRecoveryFailed as exc:
+        except BaseException as exc:
             # A landed commit remains authoritative even when restoring the
-            # caller's staging failed. Match BookkeepingTransaction: retain
-            # its artifacts and propagate the recovery error without fan-out.
-            committed = exc.commit_sha is not None
+            # caller's staging failed (SafeCommitRecoveryFailed with a sha). Match
+            # BookkeepingTransaction: retain its artifacts and propagate the error
+            # without fan-out. Any other failure cuts the just-emitted rows back,
+            # and a refused rollback is appended to the error that propagates.
+            if not (isinstance(exc, SafeCommitRecoveryFailed) and exc.commit_sha is not None):
+                outcome = _restore_coord_status_artifacts(point, repo_root=identity.repo_root)
+                append_refusal_to_error(exc, outcome.message())
             raise
-        finally:
-            if not committed:
-                _restore_coord_status_artifacts(point, repo_root=identity.repo_root)
     _fan_out_committed_coord_tail(
         stream,
         mission_slug=mission_slug,
