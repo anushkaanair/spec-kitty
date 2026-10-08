@@ -253,6 +253,11 @@ Never bare `tests/architectural/` or `make test-full`. Classify unrelated reds p
 > Entries in chronological order (oldest first). Format: `- YYYY-MM-DDTHH:MM:SSZ – <agent_id> – <action>`.
 
 - 2026-10-06T19:30:00Z – system – Prompt created.
+- 2026-10-07T23:40:00Z – claude (python-pedro) – Step 0 campsite (separate commits): census routed via charter.packs (3de779ea); DEFAULT_KIND_GATE derived from CORE_KIND_PLURALS (frozen value pinned by test_kind_gates); retired-field allowlist category drained (names out of __all__); PRESET_ID_UNRESOLVED names the unfetched org pack + `spec-kitty charter fetch` (same code); skill-catalog seam via resolve_builtin_skill_catalog (+_BUILTIN_ONLY_ALLOWED entry, rationale); test_context_noop_stability fixture -> .kittify/charter-packs. YAML writer emptied-mapping fix NOT done (follow-up).
+- 2026-10-07T23:40:00Z – claude – Red-first 716552db: removed pending_until("WP14"); 59 failed / 4 passed (exempt invocations).
+- 2026-10-07T23:40:00Z – claude – T072 47bf0250: CLI-root LEGACY_CHARTER_STATE gate (exit 1, contract text, worktree sentence for a checkout finding). NotADirectoryError classification: ABSENT in both _load_prefiltered and the retired-root lstat (.kittify as a file -> no finding). Gate median 0.035 ms (5 runs, clean project). Discrepancy logged: test_fr011_shims_removed expects exit 2 for `tracker status --doctrine-mode` on a legacy fixture while contracts/cli.md says every non-exempt command exits 1; test wins (C-006): unknown options report as Click usage errors first (tokenizer-only probe on the refusal path).
+- 2026-10-07T23:40:00Z – claude – T071 e8097447: tracker doctrine key/--doctrine-mode/doctrine_mode removed.
+- 2026-10-07T23:40:00Z – claude – T070/T073/T074 dbc79355: read shims deleted; single-pack decision: canonical charter_packs.org.local_path form deleted (no test/doc/fixture used it) -> config error naming packs[]; WP11 rewrite of the legacy doctrine.org single-pack form names the pack from local_path (never 'default'), checked. ensure_pack_identity keyed on 'built-in'. Nested <pack>/doctrine/<plural>/<layer> org layout and the repo-root doctrine/ candidate retired (FR-011 decision). rc5 _retired_activation reads the retired org keys itself (runs before rc6 rewrite).
 
 ## Carry-over from WP11 review (cycle 2, non-blocking)
 

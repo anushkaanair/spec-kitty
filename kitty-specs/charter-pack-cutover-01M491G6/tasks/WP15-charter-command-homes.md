@@ -280,3 +280,5 @@ Also run `spec-kitty charter pack regenerate-graph --check` and `make test-quali
 ## Carry-over from WP13
 
 `validate_pack` already emits the `RETIRED_PACK_FIELD` finding for `accompanies_doctrine_pack` (scope `pack.yaml`); hook `charter pack validate` into it so `test_us3_4_accompanies_field_rejected` flips. WP13's hunks in `charter/pack.py` were deletions only.
+- From WP14: the `doctor doctrine` help docstring (`src/specify_cli/cli/commands/doctor.py:~1094,1100`, mirrored in `_completion_manifest.json` — regenerate, never hand-edit) still names `.kittify/doctrine`.
+- Local test environment (from WP14): lane worktrees resolve the project root to the main checkout, which still tracks `.kittify/doctrine` until the lanes merge, so in-process CLI tests there fail with `LEGACY_CHARTER_STATE`. Run CLI-heavy targeted tests in a standalone clone of your lane branch (`git clone --branch <lane> /home/user/spec-kitty <scratch>`; `uv sync --frozen --all-extras`). CI is unaffected.
