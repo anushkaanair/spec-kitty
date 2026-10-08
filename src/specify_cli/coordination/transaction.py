@@ -63,7 +63,7 @@ from specify_cli.git.commit_helpers import (
 )
 from specify_cli.lanes.branch_naming import coord_mission_dir_name
 from specify_cli.status import reducer as _reducer
-from specify_cli.status.mission_write import RollbackPoint, rollback_events_log
+from specify_cli.status.mission_write import STATUS_ROLLBACK_REFUSED, RollbackPoint, appended_event_ids, rollback_events_log
 from specify_cli.status.locking import (
     FeatureStatusLockTimeoutError,
     feature_status_lock,
@@ -477,6 +477,11 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         # Per-transaction mutable state.
         self._event_ids: list[str] = []
         self._seen_event_ids: set[str] = set()
+        # Ids of every unit this transaction tried to append, recorded BEFORE the append: a
+        # failure after the rows landed (readback, materialise) leaves them in the log, and
+        # the rollback must still recognise them as its own. Units whose rows never landed
+        # are pruned again (``_prune_unlanded_attempt``).
+        self._attempted_event_ids: list[str] = []
         # Snapshot of every artifact ever written via write_artifact().
         # None ⇒ file did not exist pre-write (rollback unlinks it).
         self._snapshots: dict[Path, bytes | None] = {}
@@ -933,6 +938,8 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                 )
                 if not recovery_after_commit:
                     self._rollback()
+                    if exc is not None:
+                        self._attach_refusal(exc)
         finally:
             self._release_lock()
         # Do not suppress exceptions (implicit None return).
@@ -993,13 +1000,18 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
             write_contract = EventLogWriteContract.primary_checkout_append(self.feature_dir)
         else:
             write_contract = EventLogWriteContract.coordination_transaction_append(self.feature_dir)
-        append_event_stream_log(
-            write_contract,
-            events,
-        )
-        # Re-materialise status.json so an external observer sees
-        # consistent state immediately after the event is durable.
-        _reducer.materialize(self.feature_dir)
+        self._attempted_event_ids.extend(unit_ids)
+        try:
+            append_event_stream_log(
+                write_contract,
+                events,
+            )
+            # Re-materialise status.json so an external observer sees
+            # consistent state immediately after the event is durable.
+            _reducer.materialize(self.feature_dir)
+        except BaseException:
+            self._prune_unlanded_attempt(unit_ids)
+            raise
 
         self._event_ids.extend(unit_ids)
         self._seen_event_ids.update(unit_ids)
@@ -1009,6 +1021,18 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
             if path not in self._staged_paths:
                 self._staged_paths.append(path)
         return [PendingEventHandle(event_id=event_id) for event_id in unit_ids]
+
+    def _prune_unlanded_attempt(self, unit_ids: list[str]) -> None:
+        """Forget *unit_ids* again when the failed append never put their rows in the log.
+
+        Called while the transaction still holds the lock. An unreadable tail keeps
+        the ids (the rollback then refuses rather than guesses).
+        """
+        landed = appended_event_ids(self._rollback_point())
+        if landed is None:
+            return
+        gone = {event_id for event_id in unit_ids if event_id not in landed}
+        self._attempted_event_ids = [event_id for event_id in self._attempted_event_ids if event_id not in gone]
 
     def write_artifact(self, path: Path, content: bytes) -> None:
         """Write ``content`` to ``path`` under snapshot-and-restore tracking.
@@ -1284,6 +1308,52 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         """The refused-rollback message appended to a commit failure (empty when the rollback succeeded)."""
         return f" [{self._rollback_refusal}]" if self._rollback_refusal else ""
 
+    def _rollback_point(self) -> RollbackPoint:
+        # Built here rather than captured: ``_acquire_locked`` already took the pre-emit
+        # measurements inside this transaction's own lock hold.
+        return RollbackPoint(
+            events_path=self._events_path,
+            status_path=self._snapshot_path,
+            pre_event_size=self._pre_emit_size,
+            pre_status_bytes=None,
+            events_existed=self._pre_emit_events_existed,
+        )
+
+    def _cut_event_log(self) -> bool:
+        """Cut the rows this transaction attempted to append; return whether the log was rolled back.
+
+        Goes through the Mission write primitive: it re-enters this transaction's lock,
+        refuses (leaving the log byte-identical) when the tail is not exactly the rows
+        this transaction attempted or is already committed, and never extends the file.
+        The refusal text lands in ``_rollback_refusal``.
+        """
+        try:
+            outcome = rollback_events_log(
+                self._rollback_point(),
+                expected_event_ids=self._attempted_event_ids or None,
+                repo_root=self.repo_root,
+            )
+        except (OSError, FeatureStatusLockTimeoutError) as exc:
+            # Tolerant like every other step: surface the failure on the commit error, keep going.
+            logger.error("BookkeepingTransaction rollback: cut of %s failed: %s", self._events_path, exc)
+            self._rollback_refusal = (
+                f"{STATUS_ROLLBACK_REFUSED}: could not cut {self._events_path}: {exc}; "
+                f"{self._events_path} may be unchanged. Inspect with: git diff HEAD -- {self._events_path}"
+            )
+            return False
+        self._rollback_refusal = outcome.message()
+        return outcome.rolled_back
+
+    def _attach_refusal(self, exc: BaseException) -> None:
+        """Append the refused-rollback text to *exc*, so callers that print the error show it (once)."""
+        suffix = self._refusal_suffix()
+        if not suffix or suffix in str(exc):
+            return
+        if exc.args and isinstance(exc.args[0], str):
+            exc.args = (f"{exc.args[0]}{suffix}", *exc.args[1:])
+        else:
+            exc.add_note(self._rollback_refusal)
+
     def _rollback(self) -> None:
         """Surgical rollback: truncate event log; restore artifacts.
 
@@ -1294,35 +1364,8 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
         guarded so a failing restore on one path still attempts the
         others.
         """
-        # 1. Surgical, verified cut of status.events.jsonl (FR-010) through the
-        # Mission write primitive: it re-enters this transaction's lock, refuses
-        # (leaving the log byte-identical) when the tail is not exactly the rows
-        # this transaction appended or is already committed, and never extends
-        # the file. The point is built here rather than captured because
-        # ``_acquire_locked`` already took the pre-emit measurements inside this
-        # transaction's own lock hold.
-        try:
-            outcome = rollback_events_log(
-                RollbackPoint(
-                    events_path=self._events_path,
-                    status_path=self._snapshot_path,
-                    pre_event_size=self._pre_emit_size,
-                    pre_status_bytes=None,
-                    events_existed=self._pre_emit_events_existed,
-                ),
-                expected_event_ids=self._event_ids or None,
-                repo_root=self.repo_root,
-            )
-            self._rollback_refusal = outcome.message()
-            log_rolled_back = outcome.rolled_back
-        except OSError as exc:
-            # Tolerant like every other step: surface the failure on the commit error, keep going.
-            logger.error("BookkeepingTransaction rollback: cut of %s failed: %s", self._events_path, exc)
-            self._rollback_refusal = (
-                f"STATUS_ROLLBACK_REFUSED: could not cut {self._events_path}: {exc}; "
-                f"{self._events_path} may be unchanged. Inspect with: git diff HEAD -- {self._events_path}"
-            )
-            log_rolled_back = False
+        # 1. Surgical, verified cut of status.events.jsonl (FR-010); see _cut_event_log.
+        log_rolled_back = self._cut_event_log()
 
         # 2. Restore status.json from the byte snapshot captured at
         # first append_event() (NOT a re-materialise — preserves SHA).
