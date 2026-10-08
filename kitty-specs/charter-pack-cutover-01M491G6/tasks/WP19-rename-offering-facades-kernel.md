@@ -390,3 +390,8 @@ Never bare `tests/architectural/` or `make test-full`.
 ### Updating Status
 
 Status is managed via `status.events.jsonl`. Use `spec-kitty agent tasks move-task <WPID> --to <status>` to change WP status.
+
+## Carry-over from WP15 review
+
+- Comment at `src/charter/activation/kind_vocabulary.py:~64` still names `specify_cli.cli.commands.doctrine`'s `new` (now `charter new` in `charter/authoring.py`).
+- Known slow tests (not a regression): `test_org_cascade_chain::TestNoOrgPackRegression::*` and `test_charter_activate_commands_cascade_output::TestCascadeOutputAbsence::*` take ~95–115 s each; under heavy `-n` on a loaded box they can hit `pytest.ini` timeout=240. Run them with `-n 4 --dist loadfile` or alone.
