@@ -62,7 +62,7 @@ import logging
 import subprocess
 import contextlib
 from pathlib import Path
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Annotated
 
 import typer
@@ -286,6 +286,7 @@ def _restore_status_artifacts(
     *,
     rollback_point: RollbackPoint,
     repo_root: Path | None = None,
+    expected_event_ids: Sequence[str] | None = None,
 ) -> RollbackOutcome:
     """Roll the canonical status files back to *rollback_point* after a failed workflow commit.
 
@@ -293,7 +294,7 @@ def _restore_status_artifacts(
     files left byte-identical) when the tail is not exactly that, e.g. because it is
     already committed (#5819, #5804). The caller reports the returned outcome.
     """
-    return rollback_status_artifacts(rollback_point, repo_root=repo_root)
+    return rollback_status_artifacts(rollback_point, repo_root=repo_root, expected_event_ids=expected_event_ids)
 
 
 def _safe_commit_recovery_commit_sha(exc: BaseException) -> str | None:

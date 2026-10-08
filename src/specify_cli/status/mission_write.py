@@ -57,6 +57,7 @@ __all__ = [
     "RollbackOutcome",
     "RollbackPoint",
     "RollbackRefusal",
+    "appended_event_ids",
     "capture_rollback_point",
     "locked_rewrite_text",
     "mission_write_lock",
@@ -156,6 +157,21 @@ def capture_rollback_point(feature_dir: Path, *, repo_root: Path | None = None) 
         pre_status_bytes=status_path.read_bytes() if status_path.exists() else None,
         events_existed=events_existed,
     )
+
+
+def appended_event_ids(point: RollbackPoint) -> list[str] | None:
+    """Event ids of the rows appended after *point*, or ``None`` when the tail is not whole JSON rows.
+
+    Read it while the Mission write lock is held to learn which rows are this
+    operation's own, then hand it to the rollback as ``expected_event_ids`` so a
+    rollback made later, under a re-acquired lock, still refuses a foreign row.
+    """
+    try:
+        with point.events_path.open("rb") as fh:
+            fh.seek(point.pre_event_size)
+            return _parse_tail_event_ids(fh.read())
+    except FileNotFoundError:
+        return []
 
 
 class RollbackRefusal(StrEnum):
