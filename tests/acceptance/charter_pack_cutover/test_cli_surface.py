@@ -46,7 +46,7 @@ class Leaf:
 #: research/runtime-seams.md §4 + contracts/cli.md command map. Data only (imported by the generator).
 DOCTRINE_LEAVES: tuple[Leaf, ...] = (
     Leaf("fetch", ("doctrine", "fetch"), ("charter", "fetch"), (r"Pack 'acme': \d+ artifacts",), None),
-    Leaf("regenerate_graph", ("doctrine", "regenerate-graph", "--check"), ("charter", "pack", "regenerate-graph", "--check"), (r"DRG graph is fresh",), "WP15"),
+    Leaf("regenerate_graph", ("doctrine", "regenerate-graph", "--check"), ("charter", "pack", "regenerate-graph", "--check"), (r"DRG graph is fresh",), None),
     Leaf("new", ("doctrine", "new", "tactic", "fixture-new-tactic"), ("charter", "new", "tactic", "fixture-new-tactic"), (r"Created stub artifact",), None),
     Leaf(
         "validate",
@@ -55,13 +55,13 @@ DOCTRINE_LEAVES: tuple[Leaf, ...] = (
         (r"\d+ artifact\(s\) passed validation",),
         None,
     ),
-    Leaf("pack_validate", ("doctrine", "pack", "validate", "orgpack"), ("charter", "pack", "validate", "orgpack"), (r"Pack validation: 0 errors",), "WP15"),
+    Leaf("pack_validate", ("doctrine", "pack", "validate", "orgpack"), ("charter", "pack", "validate", "orgpack"), (r"Pack validation: 0 errors",), None),
     Leaf(
         "pack_assemble",
         ("doctrine", "pack", "assemble", "assembled", "orgpack"),
         ("charter", "pack", "assemble", "assembled", "orgpack"),
         (r"Assembled 1 pack",),
-        "WP15",
+        None,
     ),
     Leaf("org_init", ("doctrine", "org", "init", "scaffolded-pack"), ("charter", "org", "init", "scaffolded-pack"), (r"Org pack scaffolded at",), None),
     Leaf("org_validate", ("doctrine", "org", "validate", "orgpack"), ("charter", "org", "validate", "orgpack"), (r"Pack validation: 0 errors",), None),
@@ -72,16 +72,16 @@ DOCTRINE_LEAVES: tuple[Leaf, ...] = (
         (r"software-dev", r"documentation", r"research", r"plan"),
         None,
     ),
-    Leaf("asset_list", ("doctrine", "asset", "list"), ("charter", "pack", "asset", "list"), (r"common-docs-structural-lint",), "WP15"),
+    Leaf("asset_list", ("doctrine", "asset", "list"), ("charter", "pack", "asset", "list"), (r"common-docs-structural-lint",), None),
     Leaf(
         "asset_path",
         ("doctrine", "asset", "path", "common-docs-structural-lint"),
         ("charter", "pack", "asset", "path", "common-docs-structural-lint"),
         (r"docs_structural_lint\.py",),
-        "WP15",
+        None,
     ),
-    Leaf("consistency_check", ("charter", "pack", "consistency-check"), ("charter", "consistency-check"), (r"coherent",), "WP15"),
-    Leaf("doctor", ("doctor", "doctrine", "--json"), ("doctor", "charter-packs", "--json"), (), "WP15", json_keys=True),
+    Leaf("consistency_check", ("charter", "pack", "consistency-check"), ("charter", "consistency-check"), (r"coherent",), None),
+    Leaf("doctor", ("doctor", "doctrine", "--json"), ("doctor", "charter-packs", "--json"), (), None, json_keys=True),
 )
 
 
@@ -118,9 +118,8 @@ def json_key_set(payload: object) -> list[str]:
 
 
 #: Literal markers (test_traceability requires a literal WP id at every call site).
-_FR006_PENDING = {"WP15": pending_until("WP15", "charter home of a former doctrine leaf (FR-006)")}
+_FR006_PENDING: dict[str, pytest.MarkDecorator] = {}
 _FR007_PENDING = {
-    "WP15": pending_until("WP15", "old spelling removed with its charter home (FR-006)"),
     "WP16": pending_until("WP16", "`spec-kitty doctrine` group removed (FR-007)"),
 }
 
@@ -182,7 +181,6 @@ OLD_SPELLINGS = ("spec-kitty doctrine", "doctor doctrine")
 
 @covers("FR-006", "EC:Saved script calling `spec-kitty doctrine fetch`")
 @pytest.mark.corpus
-@pending_until("WP15", "in-repo callers move to the charter spellings")
 def test_fr006_in_repo_callers_use_charter_spellings() -> None:
     files = [REPO_ROOT / rel for rel in IN_REPO_CALLERS]
     files += sorted(p for p in (REPO_ROOT / "packs" / "internal").rglob("*") if p.is_file() and p.suffix in {".md", ".yaml", ".yml", ".py"})
@@ -325,7 +323,6 @@ def test_fr005_no_default_yaml_reader_outside_migration_data(tmp_path: Path) -> 
 
 @covers("US3-4", "OD-2", "FR-005")
 @pytest.mark.integration
-@pending_until("WP15", "`charter pack validate` rejects accompanies_doctrine_pack")
 def test_us3_4_accompanies_field_rejected(tmp_path: Path) -> None:
     good = write_doctrine_pack(tmp_path / "good")
     (good / "pack.yaml").write_text("pack_id: acme\npack_version: 1.0.0\nname: acme\n", encoding="utf-8")
