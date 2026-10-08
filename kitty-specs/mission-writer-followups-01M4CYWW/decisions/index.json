@@ -173,6 +173,29 @@
       "status": "resolved",
       "step_id": null,
       "summary_json": null
+    },
+    {
+      "created_at": "2026-10-08T05:41:05.799768Z",
+      "decision_id": "01M4D0F447AFXMSGFDJ661P8A2",
+      "final_answer": "Confirmed with changes: as presented (rekey #5890's mission_write_lock onto the status transaction's Mission key; mission.yaml and the per-type templates stay on src per #2652, only the runtime step-order template moves to packs; in-flight software-dev runs keep their frozen step order with no analyze step) PLUS the built-in pack's software-dev mission prompts and step definitions are cleaned up as part of this Mission (operator, 2026-10-08).",
+      "input_key": "engineering_alignment_confirmed",
+      "mission_id": "01M4CYWW2JE17MK86TMYDR0FYH",
+      "mission_slug": "mission-writer-followups-01M4CYWW",
+      "opened_by": "cli",
+      "options": [
+        "Confirmed",
+        "Confirmed with changes"
+      ],
+      "origin_flow": "plan",
+      "other_answer": false,
+      "question": "Confirm the Engineering Alignment for mission-writer-followups",
+      "rationale": null,
+      "resolved_at": "2026-10-08T06:00:03.972362Z",
+      "resolved_by": null,
+      "slot_key": "plan.architecture.engineering-alignment",
+      "status": "resolved",
+      "step_id": null,
+      "summary_json": null
     }
   ],
   "mission_id": "01M4CYWW2JE17MK86TMYDR0FYH",
