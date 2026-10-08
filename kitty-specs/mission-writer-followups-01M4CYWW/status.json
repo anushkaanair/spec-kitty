@@ -1,7 +1,7 @@
 {
-  "event_count": 10,
-  "last_event_id": "01M4D388Y9D3H9QM96KA5A2NHQ",
-  "materialized_at": "2026-10-08T06:29:47.081771+00:00",
+  "event_count": 11,
+  "last_event_id": "01M4D38BS01RMZB6NT4AMGEJ2X",
+  "materialized_at": "2026-10-08T06:29:49.984276+00:00",
   "mission_number": "",
   "mission_slug": "mission-writer-followups-01M4CYWW",
   "mission_type": "software-dev",
@@ -15,7 +15,7 @@
     "for_review": 0,
     "in_progress": 0,
     "in_review": 0,
-    "planned": 10
+    "planned": 11
   },
   "work_packages": {
     "WP01": {
@@ -87,6 +87,13 @@
       "lane": "planned",
       "last_event_id": "01M4D388Y9D3H9QM96KA5A2NHQ",
       "last_transition_at": "2026-10-08T06:29:47.081771+00:00"
+    },
+    "WP11": {
+      "actor": "finalize-tasks",
+      "force_count": 0,
+      "lane": "planned",
+      "last_event_id": "01M4D38BS01RMZB6NT4AMGEJ2X",
+      "last_transition_at": "2026-10-08T06:29:49.984276+00:00"
     }
   }
 }
