@@ -33,7 +33,7 @@ from specify_cli.status.reducer import (
     reduce,
     review_result_from_state,
 )
-from specify_cli.status.store import append_annotations_atomic_verified, append_event
+from specify_cli.status.store import StoreError, append_annotations_atomic_verified, append_event
 from tests.reliability.fixtures import (
     MissionFixture,
     WorkPackageSpec,
@@ -720,6 +720,30 @@ class TestMaterializeFile:
         assert status_path.exists()
         assert snapshot.mission_slug == ""
         assert snapshot.event_count == 0
+
+    def test_issue_3531_lifecycle_only_log_refuses_empty_snapshot(self, tmp_path: Path) -> None:
+        """Schema-5 planning history must not be reported as an empty mission."""
+        feature_dir = tmp_path / "kitty-specs" / "planning-mission"
+        feature_dir.mkdir(parents=True)
+        events = [
+            {
+                "schema_version": "5.0.0",
+                "event_id": f"01LIFECYCLE{i:016d}",
+                "aggregate_id": "01MISSION000000000000000",
+                "aggregate_type": "Mission",
+                "event_type": event_type,
+                "timestamp": "2026-08-17T12:00:00Z",
+                "payload": {"mission_slug": "planning-mission"},
+                "project_uuid": "project-1",
+            }
+            for i, event_type in enumerate(("MissionCreated", "SpecifyCompleted", "WPCreated"))
+        ]
+        (feature_dir / "status.events.jsonl").write_text("".join(json.dumps(event) + "\n" for event in events), encoding="utf-8")
+
+        with pytest.raises(StoreError, match=r"schema_version 5\.0\.0.*no lane transitions"):
+            materialize(feature_dir)
+
+        assert not (feature_dir / SNAPSHOT_FILENAME).exists()
 
     def test_materialize_overwrites_existing(self, tmp_path: Path) -> None:
         """materialize() overwrites an existing status.json."""

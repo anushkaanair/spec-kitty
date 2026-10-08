@@ -374,6 +374,10 @@ def materialize_snapshot(feature_dir: Path) -> StatusSnapshot:
     stream = read_event_stream(feature_dir)
     raw_events = read_events_raw(feature_dir)
     snapshot = _state_to_snapshot(reduce_shared_state(raw_events))
+    lifecycle_versions = {str(event["schema_version"]) for event in raw_events if "event_type" in event and "schema_version" in event}
+    if snapshot.event_count == 0 and lifecycle_versions:
+        versions = ", ".join(sorted(lifecycle_versions))
+        raise StoreError(f"Cannot materialize {feature_dir / 'status.events.jsonl'}: schema_version {versions} lifecycle events but no lane transitions")
     _project_cancellation_provenance(stream.transitions, snapshot)
     # #4786 archive-freeze fix: the implementer-of-record projection is a NEW
     # derived field. Injecting it unconditionally would mean a canonical
