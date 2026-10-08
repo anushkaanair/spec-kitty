@@ -395,3 +395,10 @@ Status is managed via `status.events.jsonl`. Use `spec-kitty agent tasks move-ta
 
 - Comment at `src/charter/activation/kind_vocabulary.py:~64` still names `specify_cli.cli.commands.doctrine`'s `new` (now `charter new` in `charter/authoring.py`).
 - Known slow tests (not a regression): `test_org_cascade_chain::TestNoOrgPackRegression::*` and `test_charter_activate_commands_cascade_output::TestCascadeOutputAbsence::*` take ~95–115 s each; under heavy `-n` on a loaded box they can hit `pytest.ini` timeout=240. Run them with `-n 4 --dist loadfile` or alone.
+
+## Step 0 — gates red at WP16's base (separate commits, red → green, logged)
+
+- `tests/architectural/test_doctrine_census.py::test_no_reached_file_is_orphaned`: WP15's new `src/specify_cli/cli/commands/charter/pack_asset.py` and `pack_tooling.py` have no census owner/disposition. Add the correct census entries (same mechanism as the other charter command modules); no blanket exemption.
+- `tests/architectural/test_ruff_format_exclude_ratchet.py::test_every_exclude_entry_still_genuinely_reformats`: four `[tool.ruff.format].exclude` entries are already formatted — remove them from the exclude list (the ratchet only shrinks).
+- `tests/release/test_pinning_inventory_fresh.py`: regenerate with `scripts/ci/derive_pinning_inventory.py` (line drift in `test_workflow_coherence.py`).
+- `tests/cli/test_doctrine_*` / `tests/specify_cli/cli/commands/test_doctrine_*` file names: leave for WP21/WP23 per ownership unless your owned_files cover them.
