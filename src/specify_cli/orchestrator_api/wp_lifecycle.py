@@ -23,7 +23,7 @@ import typer
 
 from specify_cli.core.contract_gate import validate_outbound_payload
 from specify_cli.status import wp_state_for
-from specify_cli.status.locking import CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS, FeatureStatusLockTimeoutError
+from specify_cli.status import CHECKOUT_CLAIM_LOCK_TIMEOUT_SECONDS, FeatureStatusLockTimeoutError
 from specify_cli.status import Lane
 from specify_cli.status import ReviewResult
 from specify_cli.status import parse_review_result_json
