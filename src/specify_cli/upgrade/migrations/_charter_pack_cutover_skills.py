@@ -195,11 +195,22 @@ def _configured_skill_roots(project: Path) -> list[str]:
 
 
 def _shipped_skill_names() -> frozenset[str]:
-    """Names the installed CLI's skill catalog still ships (the upgrade finalizer installs those)."""
+    """Names the installed CLI's skill catalog still ships (the upgrade finalizer installs those).
+
+    Raises:
+        MigrationStateUnreadableError: no shipped skill catalog is found, so a
+            removed name the CLI still ships cannot be told apart; fail closed
+            rather than remove a skill the finalizer would reinstall.
+    """
     from specify_cli.skills.catalog import resolve_builtin_skill_catalog
 
     registry = resolve_builtin_skill_catalog()
-    return frozenset(skill.name for skill in registry.discover_skills()) if registry is not None else frozenset()
+    if registry is None:
+        raise MigrationStateUnreadableError(
+            "the installed CLI ships no skill catalog, so the removed skills it still ships cannot be told apart; "
+            "reinstall spec-kitty, then run `spec-kitty upgrade` again"
+        )
+    return frozenset(skill.name for skill in registry.discover_skills())
 
 
 def find_removed_skill_copies(project_path: Path) -> list[SkillCopy]:
