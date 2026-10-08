@@ -62,6 +62,8 @@ Text mode prints every coded error as one line `Error (<CODE>): <message>`, foll
 
 ## Unmigrated project (FR-011)
 
+Usage errors come first: a command line that Click would reject as a usage error (for example an unknown option such as the removed `--doctrine-mode`) exits 2 with Click's usage message even in a legacy project, because the gate checks parse-ability before refusing (amended 2026-10-08, WP14 review). Unknown commands are refused by the gate.
+
 Any command except `upgrade`, `init`, `--version`, `--help`, the git merge drivers (`merge-driver-*`) and the hook entry points (live-work and session-start hooks), run in a project (or current checkout) whose state matches the legacy predicate, exits 1 with code `LEGACY_CHARTER_STATE` and:
 
 ```
