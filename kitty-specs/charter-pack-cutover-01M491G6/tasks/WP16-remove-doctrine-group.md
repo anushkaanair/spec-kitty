@@ -304,3 +304,9 @@ Never run bare `tests/architectural/` or `make test-full`. Classify any unrelate
 ### Updating Status
 
 Status is managed via `status.events.jsonl`. Use `spec-kitty agent tasks move-task <WPID> --to <status>` to change WP status.
+
+## Carry-over from WP15 (approved pending review)
+
+- Delete `src/specify_cli/cli/commands/doctrine.py` (now a thin registrar re-registering the moved handlers) and its registrations; remove the WP16-marked FR-007 rows' markers; drop the `doctrine *` entries in `tests/architectural/test_json_contract_enumeration.py` (charter spellings already present).
+- Callers still invoking the `doctrine` app: `tests/.../test_no_shipped_layer_label.py:~196`, `tests/cli/test_doctrine_*`, `test_doctrine_*.py` suites — repoint to the charter homes or delete if they only tested the deprecated group.
+- Step 0: `charter fetch`'s "No org doctrine packs configured" remedy (now in `charter/authoring.py`) tells operators to add a `doctrine.org.packs` block, which WP14 removed — point it at `charter_packs.org.packs[]`; grep tests for the string.
