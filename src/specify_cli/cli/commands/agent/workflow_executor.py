@@ -449,8 +449,9 @@ def warn_shared_workspace_writers(
     Advisory only: the commands have no JSON mode, so the lines are human output;
     an unreadable status or lanes surface degrades to no warning, never a refusal.
     """
-    from specify_cli.lanes.checkout_occupancy import shared_workspace_writers
+    from specify_cli.lanes.checkout_occupancy import SharedWorkspaceWriter, shared_workspace_writers
 
+    writers: list[SharedWorkspaceWriter]
     try:
         writers = shared_workspace_writers(main_repo_root, mission_slug, wp_id, workspace, agent)
     except (OSError, ValueError, RuntimeError, StoreError):
