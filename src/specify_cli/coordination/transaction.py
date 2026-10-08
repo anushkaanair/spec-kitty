@@ -63,7 +63,7 @@ from specify_cli.git.commit_helpers import (
 )
 from specify_cli.lanes.branch_naming import coord_mission_dir_name
 from specify_cli.status import reducer as _reducer
-from specify_cli.status.mission_write import STATUS_ROLLBACK_REFUSED, RollbackPoint, appended_event_ids, rollback_events_log
+from specify_cli.status.mission_write import STATUS_ROLLBACK_REFUSED, RollbackPoint, append_refusal_to_error, appended_event_ids, rollback_events_log
 from specify_cli.status.locking import (
     FeatureStatusLockTimeoutError,
     feature_status_lock,
@@ -939,7 +939,7 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
                 if not recovery_after_commit:
                     self._rollback()
                     if exc is not None:
-                        self._attach_refusal(exc)
+                        append_refusal_to_error(exc, self._rollback_refusal)
         finally:
             self._release_lock()
         # Do not suppress exceptions (implicit None return).
@@ -1343,16 +1343,6 @@ class BookkeepingTransaction(AbstractContextManager["BookkeepingTransaction"]):
             return False
         self._rollback_refusal = outcome.message()
         return outcome.rolled_back
-
-    def _attach_refusal(self, exc: BaseException) -> None:
-        """Append the refused-rollback text to *exc*, so callers that print the error show it (once)."""
-        suffix = self._refusal_suffix()
-        if not suffix or suffix in str(exc):
-            return
-        if exc.args and isinstance(exc.args[0], str):
-            exc.args = (f"{exc.args[0]}{suffix}", *exc.args[1:])
-        else:
-            exc.add_note(self._rollback_refusal)
 
     def _rollback(self) -> None:
         """Surgical rollback: truncate event log; restore artifacts.

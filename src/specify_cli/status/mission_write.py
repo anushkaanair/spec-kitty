@@ -57,6 +57,7 @@ __all__ = [
     "RollbackOutcome",
     "RollbackPoint",
     "RollbackRefusal",
+    "append_refusal_to_error",
     "appended_event_ids",
     "capture_rollback_point",
     "locked_rewrite_text",
@@ -206,6 +207,20 @@ def _refuse(events_path: Path, refusal: RollbackRefusal) -> RollbackOutcome:
     outcome = RollbackOutcome(rolled_back=False, refusal=refusal, events_path=events_path)
     logger.warning("%s", outcome.message())
     return outcome
+
+
+def append_refusal_to_error(exc: BaseException, refusal: str) -> None:
+    """Append the refused-rollback text *refusal* to *exc* so callers that print the error show it (once).
+
+    Rewrites the first string argument as ``"<message> [<refusal>]"``; an exception
+    without one carries the text as a note instead.
+    """
+    if not refusal or refusal in str(exc):
+        return
+    if exc.args and isinstance(exc.args[0], str):
+        exc.args = (f"{exc.args[0]} [{refusal}]", *exc.args[1:])
+    else:
+        exc.add_note(refusal)
 
 
 def rollback_io_failure(point: RollbackPoint, exc: OSError) -> RollbackOutcome:

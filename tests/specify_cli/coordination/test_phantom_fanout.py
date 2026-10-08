@@ -172,10 +172,10 @@ def test_coord_fallback_holds_lock_through_commit_and_restore_but_not_fanout(
             raise RuntimeError("injected commit failure")
         real_commit(**kwargs)
 
-    def restore(*args: Any, **kwargs: Any) -> None:
+    def restore(*args: Any, **kwargs: Any) -> Any:
         assert key in _get_thread_locks(), "rollback escaped the mission status lock"
         restored.append(True)
-        real_restore(*args, **kwargs)
+        return real_restore(*args, **kwargs)
 
     def fanout(*args: Any, **kwargs: Any) -> None:
         assert key not in _get_thread_locks(), "outbound I/O holds the mission status lock"
