@@ -1,7 +1,8 @@
 """WP07 (design-phase-orchestrator-api-01M1HE6M) -- CONTRACT_VERSION bump to
 1.4.0.
 
-(Superseded: the pin below now reads ``1.13.0`` after ``start-implementation`` gained the ``STATUS_LOCK_HELD`` envelope (#5819); it read ``1.12.0`` after governed planning (#5846) added six verbs; it read ``1.11.0`` after ``accept-mission`` and
+(Superseded: the pin below now reads ``1.13.0`` after ``start-implementation`` gained the ``STATUS_LOCK_HELD`` envelope (#5819); it read ``1.12.0`` after
+governed planning (#5846) added six verbs; it read ``1.11.0`` after ``accept-mission`` and
 ``consolidate-mission`` gained ``--origin-check`` and the stale/unreachable-origin refusal with
 ``data.preflight_error_code(s)`` / ``data.origin_freshness``; it read ``1.10.0`` after
 ``consolidate-mission`` gained the pre-merge approved-bound refusal and its ``data.preflight_error_code`` (#5668); it read
